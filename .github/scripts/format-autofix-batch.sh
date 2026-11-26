@@ -30,8 +30,12 @@
 # Nothing here merges anything, and a run never publishes more than one batch. The commit is built in a
 # scratch index, so the checkout, the real index and HEAD are left alone.
 #
-# Outputs (to $GITHUB_OUTPUT when set): has_changes, total_files, batch_files, remaining_files,
-# skipped_files, frozen, pushed, held, branch_sha.
+# A branch that exists but cannot be fetched and inspected fails the run; it is never overwritten blind.
+#
+# Outputs (to $GITHUB_OUTPUT when set): has_changes, obsolete, total_files, batch_files, remaining_files,
+# skipped_files, frozen, pushed, held, branch_sha. obsolete=true: a pull request is open but nothing is
+# left to format (its files were formatted on the base or put on the skip list); held then says whether
+# a person has committed to the branch.
 set -euo pipefail
 
 if [ "$#" -lt 2 ]; then
@@ -101,8 +105,14 @@ remote_sha=$(git ls-remote "$push_remote" "refs/heads/$branch" | cut -f1)
 remote_known=false
 foreign=false
 : > "$scratch/remote.z"
-if [ -n "$remote_sha" ] && git fetch --quiet "$push_remote" "refs/heads/$branch" 2>/dev/null &&
-   git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
+if [ -n "$remote_sha" ]; then
+  # A branch that exists but cannot be read is never assumed to be this script's own: without its commits
+  # there is no telling whether a reviewer pushed to it, and the lease below would accept overwriting them.
+  if ! git fetch --quiet "$push_remote" "refs/heads/$branch" 2>/dev/null ||
+     ! git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
+    echo "::error::$branch exists on $push_remote ($remote_sha) but could not be fetched and inspected; nothing is pushed."
+    exit 1
+  fi
   if merge_base=$(git merge-base "$base" "$remote_sha" 2>/dev/null); then
     remote_known=true
     git diff --name-only -z "$merge_base" "$remote_sha" | sort -z > "$scratch/remote.z"
@@ -119,18 +129,27 @@ if [ -n "$remote_sha" ] && git fetch --quiet "$push_remote" "refs/heads/$branch"
 fi
 
 if [ "$total" -eq 0 ]; then
+  # An open batch with nothing left to format (its files were formatted on the base, or all of them went
+  # onto the skip list) is obsolete: the pull request step closes it, unless a person has committed to it.
+  obsolete=false
+  held=false
+  if [ "$open_pr" = true ] && [ -n "$remote_sha" ]; then
+    obsolete=true
+    held=$foreign
+  fi
   {
     echo "has_changes=false"
+    echo "obsolete=$obsolete"
     echo "total_files=0"
     echo "batch_files=0"
     echo "remaining_files=0"
     echo "skipped_files=$skipped"
     echo "frozen=false"
     echo "pushed=false"
-    echo "held=false"
+    echo "held=$held"
     echo "branch_sha=$remote_sha"
   } >> "$output"
-  echo "No formatting or line-ending drift ($skipped drifted file(s) on the skip list)."
+  echo "No formatting or line-ending drift ($skipped drifted file(s) on the skip list). Open batch obsolete: $obsolete."
   exit 0
 fi
 
@@ -190,6 +209,7 @@ fi
 
 {
   echo "has_changes=true"
+  echo "obsolete=false"
   echo "total_files=$total"
   echo "batch_files=$batch"
   echo "remaining_files=$remaining"

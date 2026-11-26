@@ -7,11 +7,13 @@
 #   FORMAT_BRANCH, FORMAT_BASE (default master), FORMAT_BATCH_MAX_FILES
 #   OPEN_PR_NUMBER    number of the open pull request for FORMAT_BRANCH, or empty
 #   BRANCH_SHA        commit FORMAT_BRANCH points at after the batch step
-#   BATCH_FILES, TOTAL_FILES, REMAINING_FILES, SKIPPED_FILES, HELD
+#   BATCH_FILES, TOTAL_FILES, REMAINING_FILES, SKIPPED_FILES, HELD, OBSOLETE
 #   HAS_PAT           'true' when the run authenticates with AUTOFIX_PAT rather than the job token
 #   AUTOFIX_REVIEWERS optional comma-separated reviewers; default is the repository owner
 #
 # Decisions:
+#   - OBSOLETE=true (an open batch with nothing left to format): the pull request is closed, unless HELD
+#     says a person has committed to its branch, in which case it is left open with a warning.
 #   - A pull request is open: its title and body are refreshed. A failure to do so is a warning, not a
 #     failed run: the batch itself is already published.
 #   - None is open, and a pull request for this exact commit was closed without merging: nothing is opened.
@@ -57,11 +59,35 @@ body="$workdir/body.md"
   else
     echo '**Checks.** `AUTOFIX_PAT` is not configured, so this was pushed and opened with the job token and GitHub'
     echo 'starts no workflows for it: the required `CI Gate` check will not appear until the secret is set (scopes'
-    echo '`repo` and `workflow`) and the workflow runs again, or the pull request is closed and reopened by a person.'
+    echo '`repo` and `workflow`) and the batch content changes, or the pull request is closed and reopened by a person.'
   fi
 } > "$body"
 
 number=${OPEN_PR_NUMBER:-}
+if [ "${OBSOLETE:-false}" = true ]; then
+  # Nothing the open batch holds needs formatting any more (formatted on the base, or on the skip list).
+  if [ -z "$number" ]; then
+    echo "pull_number=" >> "$output"
+    exit 0
+  fi
+  if [ "${HELD:-false}" = true ]; then
+    echo "::warning title=Obsolete formatting batch kept::PR #$number has nothing left to format, but its branch carries commits this workflow did not make; it is left open for the people working on it."
+    {
+      echo '### Formatting batch'
+      echo "PR #$number has nothing left to format but carries commits this workflow did not make; it was **not closed**."
+    } >> "$summary"
+  else
+    gh pr close "$number" --repo "$GITHUB_REPOSITORY" \
+      --comment 'Closed by the formatting workflow: none of the files in this batch needs formatting any more (they were formatted on the base branch or added to `.github/format-autofix-skip.txt`).' ||
+      echo "::warning::Could not close obsolete formatting PR #$number."
+    {
+      echo '### Formatting batch'
+      echo "PR #$number closed: nothing it held needs formatting any more (${SKIPPED_FILES} drifted file(s) on the skip list)."
+    } >> "$summary"
+  fi
+  echo "pull_number=$number" >> "$output"
+  exit 0
+fi
 if [ -n "$number" ]; then
   echo "Updating existing PR #$number"
   gh api -X PATCH "repos/$GITHUB_REPOSITORY/pulls/$number" -f title="$title" -F body=@"$body" --silent ||

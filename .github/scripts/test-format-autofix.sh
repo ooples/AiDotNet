@@ -158,6 +158,53 @@ check 'fixup, pull request open: warning names the reason' "$(grep -q 'Formattin
 run_batch 3 false
 expect 'fixup, no pull request: stale branch is replaced' "$(out pushed)" true
 
+# The branch exists but cannot be fetched (a transient failure after ls-remote succeeded). With a
+# reviewer's commit on it the lease would accept a push, so the run must stop instead of overwriting it.
+new_world; sync_work; run_batch 3
+git clone -q --branch auto/fmt "$root/remote.git" "$root/reviewer" 2>/dev/null
+( cd "$root/reviewer" && git config user.email reviewer@example.com && git config user.name reviewer &&
+  printf 'class C2 {} // fixed by hand\n// fmt\n' > a/2.cs && git commit -qam 'fix: repair a/2.cs' && git push -q origin HEAD:auto/fmt )
+fixup=$(branch_sha); rm -rf "$root/reviewer"
+mkdir -p "$root/failfetch"
+printf '#!/usr/bin/env bash\n[ "$1" = fetch ] && exit 1\nexec "%s" "$@"\n' "$(command -v git)" > "$root/failfetch/git"
+chmod +x "$root/failfetch/git"
+: > "$root/out"
+( cd "$root/work" && PATH="$root/failfetch:$PATH" FORMAT_OPEN_PR=true GITHUB_OUTPUT="$root/out" \
+  bash "$batch_script" auto/fmt 3 origin origin/master ) > "$root/log" 2>&1
+expect 'fetch fails: refused' "$?" 1
+expect 'fetch fails: reviewer commit is still the tip' "$(branch_sha)" "$fixup"
+expect 'fetch fails: nothing reported as pushed' "$(out pushed)" ''
+check 'fetch fails: says why' "$(grep -q 'could not be fetched and inspected' "$root/log"; echo $?)"
+run_batch 3 true
+expect 'fetch recovers: reviewer commit is held, not overwritten' "$(out held)" true
+expect 'fetch recovers: tip unchanged' "$(branch_sha)" "$fixup"
+
+# Every file of an open batch goes onto the skip list: the batch is obsolete and is reported as such so
+# the pull request step can close it; a branch a person committed to is reported as held.
+only_bracket_drift() {
+  ( cd "$root/work" && git fetch -q origin && git checkout -q -f --detach origin/master && git clean -qfd &&
+    printf '// fmt\n' >> 'a/w[1].cs' )
+}
+new_world; only_bracket_drift; run_batch 100
+expect 'obsolete setup: batch is the bracket file and the CRLF file' "$(branch_files)" 'a/crlf.cs a/w[1].cs '
+batch_tip=$(branch_sha)
+( cd "$root/dev" && mkdir -p .github && printf 'a/crlf.cs\na/w[1].cs\n' > .github/format-autofix-skip.txt )
+dev_commit 'skip the whole batch'; only_bracket_drift
+run_batch 100 true; expect 'obsolete: exit code' "$?" 0
+expect 'obsolete: no changes' "$(out has_changes)" false
+expect 'obsolete: reported' "$(out obsolete)" true
+expect 'obsolete: automation-owned branch is not held' "$(out held)" false
+expect 'obsolete: branch_sha is the batch' "$(out branch_sha)" "$batch_tip"
+run_batch 100 false
+expect 'no open pull request: nothing is obsolete' "$(out obsolete)" false
+git clone -q --branch auto/fmt "$root/remote.git" "$root/reviewer" 2>/dev/null
+( cd "$root/reviewer" && git config user.email reviewer@example.com && git config user.name reviewer &&
+  printf 'class B {} // by hand\n' > 'a/w[1].cs' && git commit -qam 'fix: by hand' && git push -q origin HEAD:auto/fmt )
+rm -rf "$root/reviewer"
+run_batch 100 true
+expect 'obsolete, reviewer commit: reported' "$(out obsolete)" true
+expect 'obsolete, reviewer commit: held' "$(out held)" true
+
 # Nothing drifted.
 new_world; ( cd "$root/work" && git checkout -q -f --detach origin/master )
 ( cd "$root/dev" && git ls-files -z | xargs -0 git add --renormalize && git commit -qm 'normalize' && git push -q origin HEAD:master )
@@ -217,6 +264,14 @@ expect 'no pull request: number reported' "$(out pull_number)" 42
 run_pr OPEN_PR_NUMBER= GH_STUB_EDIT_EXIT=1; expect 'labels and reviewers fail: run still succeeds' "$?" 0
 run_pr OPEN_PR_NUMBER= HAS_PAT=false AUTOFIX_REVIEWERS='a, b'
 expect 'reviewer list: spaces removed' "$(calls 'add-reviewer a,b$')" 1
+run_pr OPEN_PR_NUMBER=7 OBSOLETE=true; expect 'obsolete batch: exit code' "$?" 0
+expect 'obsolete batch: closed' "$(calls '^pr close 7 --repo o/r ')" 1
+expect 'obsolete batch: not patched' "$(calls '^api -X PATCH')" 0
+expect 'obsolete batch: none created' "$(calls '^pr create')" 0
+run_pr OPEN_PR_NUMBER=7 OBSOLETE=true HELD=true; expect 'obsolete batch, reviewer commits: exit code' "$?" 0
+expect 'obsolete batch, reviewer commits: not closed' "$(calls '^pr close')" 0
+check 'obsolete batch, reviewer commits: warning' "$(grep -q 'Obsolete formatting batch kept' "$root/log"; echo $?)"
+run_pr OPEN_PR_NUMBER= OBSOLETE=true; expect 'obsolete without a pull request: nothing created' "$(calls '^pr create')" 0
 
 if [ "$failures" -ne 0 ]; then
   echo "$failures of $cases format auto-fix cases failed."

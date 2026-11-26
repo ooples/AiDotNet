@@ -105,7 +105,7 @@ jobs:
       # The pull request is opened for review and is never merged from here: no auto-merge, no approval.
       # Merging a batch is what releases the next one.
       - name: Create or update PR
-        if: steps.batch.outputs.has_changes == 'true'
+        if: steps.batch.outputs.has_changes == 'true' || steps.batch.outputs.obsolete == 'true'
         env:
           GH_TOKEN: ${{ secrets.AUTOFIX_PAT || github.token }}
           OPEN_PR_NUMBER: ${{ steps.open.outputs.number }}
@@ -115,6 +115,7 @@ jobs:
           TOTAL_FILES: ${{ steps.batch.outputs.total_files }}
           SKIPPED_FILES: ${{ steps.batch.outputs.skipped_files }}
           HELD: ${{ steps.batch.outputs.held }}
+          OBSOLETE: ${{ steps.batch.outputs.obsolete }}
         shell: bash
         run: bash .github/scripts/format-autofix-pr.sh
 
