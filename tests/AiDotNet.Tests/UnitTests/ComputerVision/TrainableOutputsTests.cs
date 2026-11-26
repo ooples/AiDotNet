@@ -119,6 +119,29 @@ public class TrainableOutputsTests
         Assert.True(paddedAfter > paddedBefore);
     }
 
+    [Fact]
+    public void HalfLoss_SumsPastHalfRangeIntoTheTrueMean_AndKeepsTheMeanGradient()
+    {
+        // 40 000 predictions of 2 against a zero target: the squared errors sum to 160 000, past Half's 65504, but
+        // the mean is 4 and each prediction's gradient is 2 * 2 / 40 000.
+        const int n = 40_000;
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        var predicted = new Tensor<Half>(new[] { n });
+        predicted.Fill(ops.FromDouble(2.0));
+        var target = new Tensor<Half>(new[] { n });
+
+        using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<Half>();
+        var loss = CvTensorOps<Half>.MeanSquaredErrorOverPredictions(predicted, target, n);
+        var gradients = tape.ComputeGradients(loss, new[] { predicted });
+
+        Assert.Equal(4.0, ops.ToDouble(loss[0]), 12);
+        Assert.True(gradients.TryGetValue(predicted, out var gradient));
+        for (int i = 0; i < n; i += 997)
+        {
+            Assert.InRange(ops.ToDouble(gradient[i]), 4.0 / n * 0.99, 4.0 / n * 1.01);
+        }
+    }
+
     private static double RawStepLoss(int survivors, double error, int cap, int width)
     {
         var rows = new Tensor<double>(new[] { survivors, width });

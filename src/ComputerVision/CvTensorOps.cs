@@ -300,12 +300,34 @@ internal static class CvTensorOps<T>
     /// layout made a two-stage detector's loss rise whenever training let more proposals survive NMS, although
     /// every prediction's error fell.
     /// </summary>
+    /// <remarks>
+    /// Half cannot hold the sum before the division: 40 000 squared errors of 4 sum to 160 000, past Half's 65504,
+    /// although the mean is 4 (see <see cref="Mean"/>). For Half each term is divided by the count before the sum, so
+    /// the recorded graph never holds a value larger than the mean and its gradient, <c>2 (p - t) / count</c>, is the
+    /// same as the wide types'. That 16-bit sum still rounds at every step, so the value is then corrected to the mean
+    /// summed in float and divided in double, by adding a constant the gradient does not see.
+    /// </remarks>
     internal static Tensor<T> MeanSquaredErrorOverPredictions(Tensor<T> predicted, Tensor<T> target, int predictionCount)
     {
         var difference = Engine.TensorSubtract(predicted, target);
         var squared = Engine.TensorMultiply(difference, difference);
-        int count = predictionCount > 0 && predictionCount <= squared.Length ? predictionCount : squared.Length;
-        return Engine.TensorMultiplyScalar(Engine.ReduceSum(squared, null), NumOps.FromDouble(1.0 / Math.Max(1, count)));
+        int count = Math.Max(1, predictionCount > 0 && predictionCount <= squared.Length ? predictionCount : squared.Length);
+        var inverseCount = NumOps.FromDouble(1.0 / count);
+
+        if (typeof(T) != typeof(Half))
+        {
+            return Engine.TensorMultiplyScalar(Engine.ReduceSum(squared, null), inverseCount);
+        }
+
+        var mean = Engine.ReduceSum(Engine.TensorMultiplyScalar(squared, inverseCount), null);
+        double correction;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            double accurate = Engine.TensorSum(squared.Cast<float>()) / (double)count;
+            correction = accurate - NumOps.ToDouble(mean.Contiguous().GetFlat(0));
+        }
+
+        return correction == 0.0 ? mean : Engine.TensorAddScalar(mean, NumOps.FromDouble(correction));
     }
 
     /// <summary>
