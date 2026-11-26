@@ -8,6 +8,7 @@ counts of both sides, and the first and last training loss of both sides as evid
 --classical runs the classical-ML rows (ClassicalBench.cs against scikit-learn, XGBoost and LightGBM) the same way.
 """
 import argparse
+import contextlib
 import csv
 import ctypes
 import hashlib
@@ -160,6 +161,16 @@ def benchmark_gpu_id(torch):
     return uuid if uuid.startswith("GPU-") else f"GPU-{uuid}"
 
 
+def sole_gpu_id():
+    """The UUID of the only GPU nvidia-smi lists, or None when it lists none, several, or cannot be queried. With a
+    single GPU the benchmark GPU is known even when PyTorch does not report its UUID."""
+    if not shutil.which("nvidia-smi"):
+        return None
+    result = subprocess.run(["nvidia-smi", "--query-gpu=uuid", "--format=csv,noheader"], text=True, capture_output=True)
+    uuids = [line.strip() for line in result.stdout.splitlines() if line.strip()] if result.returncode == 0 else []
+    return uuids[0] if len(uuids) == 1 else None
+
+
 def nvidia_smi(*args):
     if not shutil.which("nvidia-smi"):
         return None
@@ -228,15 +239,22 @@ def settled_conditions(device):
 
 
 CLOCK_FIELDS = ["clocks.sm", "clocks.mem", "utilization.gpu", "temperature.gpu", "power.draw"]
+# The fields a clock sample needs; the others are optional telemetry a GPU may report as "[N/A]".
+REQUIRED_CLOCK_FIELDS = ("clocks.sm", "clocks.mem", "utilization.gpu")
 # GPU utilization (percent) at or above which a clock sample counts as taken under load.
 LOADED_GPU_PERCENT = 50.0
-# The locked clocks requested for this run ({"sm": MHz, "mem": MHz}); set by main() and read by clock_flags().
-LOCKED_CLOCKS = {}
+# The clock locks requested for this run ({"sm": MHz, "mem": MHz}), whether or not the driver accepted them; set by
+# main() and read by clock_flags(). What was actually acquired is lock_clocks()'s result, which reset_clocks() reads.
+REQUESTED_CLOCKS = {}
 
 
 def start_clock_sampler(stem, device):
-    """Sample the GPU's clocks every CLOCK_SAMPLE_SECONDS into STEM.clocks.csv while a CUDA launch runs."""
-    if device != "cuda" or not shutil.which("nvidia-smi"):
+    """Sample the GPU's clocks every CLOCK_SAMPLE_SECONDS into STEM.clocks.csv while a CUDA launch runs.
+
+    Only the benchmark GPU is sampled. Without its UUID (GPU_ID None) nvidia-smi would report every GPU in rows that do
+    not name the device, and another GPU's clocks could pass as this launch's, so nothing is sampled and the launch
+    records no clock evidence (main() records why in protocol.json)."""
+    if device != "cuda" or not shutil.which("nvidia-smi") or not GPU_ID:
         return None
     out = stem.with_suffix(".clocks.csv").open("w", encoding="utf-8")
     process = subprocess.Popen(["nvidia-smi", *gpu_selector(), f"--query-gpu={','.join(CLOCK_FIELDS)}", "--format=csv,noheader,nounits",
@@ -260,29 +278,36 @@ def stop_clock_sampler(sampler, stem):
         values = line.split(",")
         if len(values) != len(CLOCK_FIELDS):
             continue  # a line cut off by terminate()
-        try:
-            samples.append(dict(zip(CLOCK_FIELDS, (float(v) for v in values))))
-        except ValueError:
-            continue  # "[N/A]", or a field cut off by terminate()
+        sample = {}
+        for field, value in zip(CLOCK_FIELDS, values):
+            try:
+                sample[field] = float(value)
+            except ValueError:
+                sample[field] = None  # "[N/A]", or a field cut off by terminate()
+        if any(sample[field] is None for field in REQUIRED_CLOCK_FIELDS):
+            continue  # no usable clock reading; a missing temperature or power alone keeps the sample
+        samples.append(sample)
     loaded = [s for s in samples if s["utilization.gpu"] >= LOADED_GPU_PERCENT]
     if not loaded:
         return dict(samples=len(samples), loadedSamples=0)
     sm = [s["clocks.sm"] for s in loaded]
     return dict(samples=len(samples), loadedSamples=len(loaded), smMedianMhz=statistics.median(sm), smMinMhz=min(sm),
                 smMaxMhz=max(sm), memMedianMhz=statistics.median(s["clocks.mem"] for s in loaded),
-                maxTemperatureC=max(s["temperature.gpu"] for s in loaded))
+                maxTemperatureC=max((s["temperature.gpu"] for s in loaded if s["temperature.gpu"] is not None),
+                                    default=None))
 
 
 def clock_flags(clocks):
-    """clock-varied when the SM clock under load moved; clock-unlocked when it missed the requested lock."""
+    """clock-varied when the SM clock under load moved; clock-unlocked when it missed the requested lock, including a
+    lock the driver refused."""
     flags = set()
     if not clocks or not clocks.get("loadedSamples"):
         return flags
     if clocks["smMaxMhz"] / clocks["smMinMhz"] - 1 > CLOCK_TOLERANCE:
         flags.add("clock-varied")
-    if LOCKED_CLOCKS.get("sm") and abs(clocks["smMedianMhz"] / LOCKED_CLOCKS["sm"] - 1) > CLOCK_TOLERANCE:
+    if REQUESTED_CLOCKS.get("sm") and abs(clocks["smMedianMhz"] / REQUESTED_CLOCKS["sm"] - 1) > CLOCK_TOLERANCE:
         flags.add("clock-unlocked")
-    if LOCKED_CLOCKS.get("mem") and abs(clocks["memMedianMhz"] / LOCKED_CLOCKS["mem"] - 1) > CLOCK_TOLERANCE:
+    if REQUESTED_CLOCKS.get("mem") and abs(clocks["memMedianMhz"] / REQUESTED_CLOCKS["mem"] - 1) > CLOCK_TOLERANCE:
         flags.add("clock-unlocked")
     return flags
 
@@ -295,17 +320,24 @@ def lock_clocks(sm, mem, result):
         if value:
             done = subprocess.run(["nvidia-smi", *gpu_selector(), flag, f"{value},{value}"], text=True, capture_output=True)
             result[key] = dict(mhz=value, exitCode=done.returncode, output=(done.stdout + done.stderr).strip())
-            if done.returncode == 0:
-                LOCKED_CLOCKS[key] = value
-            else:
+            if done.returncode != 0:
                 print(f"nvidia-smi {flag} {value},{value} was refused: {result[key]['output']}", flush=True)
     return result
 
 
 def reset_clocks(locked):
+    """Reset every clock lock_clocks() acquired (exit code 0), never one it was refused, which this run does not own.
+    Every reset is attempted. Return ({key: result} for each reset, [failure messages])."""
+    results, failures = {}, []
     for key, flag in (("sm", "-rgc"), ("mem", "-rmc")):
-        if key in locked:
-            subprocess.run(["nvidia-smi", *gpu_selector(), flag], capture_output=True)
+        if (locked.get(key) or {}).get("exitCode") != 0:
+            continue
+        done = subprocess.run(["nvidia-smi", *gpu_selector(), flag], text=True, capture_output=True)
+        results[key] = dict(exitCode=done.returncode, output=(done.stdout + done.stderr).strip())
+        if done.returncode != 0:
+            failures.append(f"nvidia-smi {flag} exited {done.returncode}; the GPU's clocks may still be locked: "
+                            f"{results[key]['output']}")
+    return results, failures
 
 
 def run(cmd, stem, env, device=None, allow_battery=False):
@@ -359,6 +391,13 @@ class build_lock:
         self.file.close()
 
 
+def clock_lock_path(gpu_id):
+    """The cross-process lock an invocation that locks GPU clocks holds from its lock to its reset, so another
+    invocation on the same GPU cannot lock or reset those clocks while this one still measures under them."""
+    name = "".join(c if c.isalnum() or c == "-" else "_" for c in (gpu_id or "all-gpus"))
+    return HERE / f".run_matrix.clocks-{name}.lock"
+
+
 def row_arguments(model, smoke):
     """The benchmark arguments for one row: the core rows' shared schedule, or a family row's own shape."""
     spec = FAMILIES.get(model, {})
@@ -397,6 +436,11 @@ def measurements(path, side, model, device, common):
     precision = obj["Protocol"].get("Precision", "fp32") if ai else obj["protocol"].get("precision", "fp32")
     if precision != "fp32":
         raise ValueError(f"{side} ran at precision {precision!r}; the matrix compares fp32")
+    # The training timing is filed under the schedule's training batch, so the report must have trained at it.
+    train_batch = next(b for o, b in operations if o == "train")
+    recorded_batch = obj["Protocol"].get("BatchSize") if ai else obj["protocol"].get("batch_size")
+    if recorded_batch != train_batch:
+        raise ValueError(f"{side} trained at batch {recorded_batch!r}, expected {train_batch}")
     if ai:
         env = obj["Environment"]
         if (env["CpuThreads"], env["EngineDevice"]) != (THREADS, {"cpu": "CpuEngine", "cuda": "DirectGpuTensorEngine"}[device]):
@@ -612,6 +656,8 @@ def regenerate(run_directory):
 # The classical-ML rows (ClassicalBench.cs against pytorch/classical.py). Each launch fits every row --repeats times in
 # one process and reports the median; the summary is the median and IQR of those per-launch medians.
 CLASSICAL_LIBRARIES = ("scikit-learn", "xgboost", "lightgbm")
+# The report each classical side writes into its launch directory.
+CLASSICAL_REPORTS = {"aidotnet": "aidotnet_classical.json", "python": "python_classical.json"}
 
 
 def library_key(library):
@@ -636,7 +682,7 @@ def collect_classical(dest):
     info = json.loads((dest / "protocol.json").read_text(encoding="utf-8"))
     rows, problems = [], []
     for launch in range(1, info["launches"] + 1):
-        for side, report in (("aidotnet", "aidotnet_classical.json"), ("python", "python_classical.json")):
+        for side, report in CLASSICAL_REPORTS.items():
             stem = dest / f"classical-{side}-{launch}"
             try:
                 receipt = json.loads(stem.with_suffix(".receipt.json").read_text(encoding="utf-8"))
@@ -775,6 +821,12 @@ def resume_run(run_directory, torch_version):
     return info
 
 
+def require_cpp_tools(parser, classical):
+    """The model rows compile with torch.compile, which needs the MSVC compiler (cl) on Windows; classical runs do not."""
+    if os.name == "nt" and not classical and not shutil.which("cl"):
+        parser.error("Use Developer PowerShell for Visual Studio with the x64 C++ build tools.")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--devices", nargs="+", choices=["cuda", "cpu"], default=["cuda", "cpu"])
@@ -812,8 +864,6 @@ def main():
     import torch._dynamo.config as dynamo
     if dynamo.disable or dynamo.suppress_errors or os.environ.get("TORCH_COMPILE_DISABLE") == "1":
         parser.error("Enable torch.compile and disable silent compilation-error fallback.")
-    if os.name == "nt" and not shutil.which("cl") and not args.classical:
-        parser.error("Use Developer PowerShell for Visual Studio with the x64 C++ build tools.")
     if on_external_power() is False and not args.allow_battery:
         parser.error("The machine is on battery power. Connect external power or pass --allow-battery.")
     env = os.environ.copy()
@@ -825,8 +875,11 @@ def main():
     if args.resume:
         dest = args.resume.resolve()
         info = resume_run(dest, torch.__version__)
+        # The run's recorded mode decides, so a classical run resumes without repeating --classical.
+        require_cpp_tools(parser, info.get("classical"))
         print(f"Resuming: {dest}", flush=True)
     else:
+        require_cpp_tools(parser, args.classical)
         launches = args.launches if args.launches is not None else (1 if args.smoke else DEFAULT_LAUNCHES)
         if launches < 1 or len(set(args.devices)) != len(args.devices):
             parser.error("Select distinct devices and a positive launch count.")
@@ -891,31 +944,62 @@ def main():
         parser.error("CUDA unavailable. Select --devices cpu or install CUDA-enabled PyTorch.")
     global GPU_ID
     if "cuda" in info["devices"]:
-        GPU_ID = benchmark_gpu_id(torch)
+        GPU_ID = benchmark_gpu_id(torch) or sole_gpu_id()
         if args.resume and info.get("gpuId") not in (None, GPU_ID):
             parser.error(f"--resume needs the run's GPU {info['gpuId']}; this process sees {GPU_ID}.")
         info["gpuId"] = GPU_ID
-    lock_sm, lock_mem = args.lock_gpu_clock, args.lock_memory_clock
-    if args.resume and info.get("clockLocks"):
-        # Continue with the recorded request: the remaining launches get the same locks and the same clock checks.
-        requested = info["clockLocks"][0]
-        recorded_sm, recorded_mem = (requested.get(k, {}).get("mhz") for k in ("sm", "mem"))
-        if (lock_sm or lock_mem) and (lock_sm, lock_mem) != (recorded_sm, recorded_mem):
-            parser.error(f"--resume continues with the run's recorded clock locks (SM {recorded_sm}, memory "
-                         f"{recorded_mem} MHz); omit --lock-gpu-clock / --lock-memory-clock or pass the same values.")
-        lock_sm, lock_mem = recorded_sm, recorded_mem
-    locked = {}
+        if GPU_ID is None:
+            info["clockSampling"] = ("unavailable: PyTorch reports no device UUID and nvidia-smi lists more than one "
+                                     "GPU (or none), so launches record no GPU clocks")
     try:
-        if "cuda" in info["devices"] and (lock_sm or lock_mem):
-            lock_clocks(lock_sm, lock_mem, locked)
-            info.setdefault("clockLocks", []).append(dict(time=now(), **locked))
-            save(dest / "protocol.json", info)
-        problems = run_models(dest, info, env, args.allow_battery)
-    finally:
-        reset_clocks(locked)
-    if problems:
-        sys.exit("\n".join(problems))
+        lock_sm, lock_mem = resolve_clock_request(info, args.lock_gpu_clock, args.lock_memory_clock, bool(args.resume))
+    except ValueError as error:
+        parser.error(str(error))
+    info["clockLockRequest"] = dict(sm=lock_sm, mem=lock_mem)
+    REQUESTED_CLOCKS.clear()
+    REQUESTED_CLOCKS.update({k: v for k, v in info["clockLockRequest"].items() if v})
+    # Persisted before any launch, so a resume of this run (even an unlocked one) checks the same GPU and settings.
+    save(dest / "protocol.json", info)
+    locking = "cuda" in info["devices"] and bool(lock_sm or lock_mem)
+    problems, reset_failures = [], []
+    # Held from the lock to the reset, so another invocation on this GPU cannot reset the clocks under this one.
+    with build_lock(clock_lock_path(GPU_ID)) if locking else contextlib.nullcontext():
+        locked = {}
+        try:
+            if locking:
+                lock_clocks(lock_sm, lock_mem, locked)
+                info.setdefault("clockLocks", []).append(dict(time=now(), **locked))
+                save(dest / "protocol.json", info)
+            problems = run_models(dest, info, env, args.allow_battery)
+        finally:
+            resets, reset_failures = reset_clocks(locked)
+            if resets:
+                info.setdefault("clockResets", []).append(dict(time=now(), **resets))
+                save(dest / "protocol.json", info)
+            for failure in reset_failures:
+                print(failure, file=sys.stderr, flush=True)
+    if problems or reset_failures:
+        sys.exit("\n".join(problems + reset_failures))
     print(dest / "summary.md")
+
+
+def resolve_clock_request(info, sm, mem, resuming):
+    """The (SM, memory) clock locks for this invocation. A new run uses the flags. A resume uses the run's recorded
+    request, including an explicit no-lock request, and rejects flags that differ from it. Runs recorded before
+    clockLockRequest existed fall back to their first lock attempt, or to no lock when they made none."""
+    if not resuming:
+        return sm, mem
+    if "clockLockRequest" in info:
+        recorded = (info["clockLockRequest"].get("sm"), info["clockLockRequest"].get("mem"))
+    elif info.get("clockLocks"):
+        first = info["clockLocks"][0]
+        recorded = tuple((first.get(k) or {}).get("mhz") for k in ("sm", "mem"))
+    else:
+        recorded = (None, None)
+    if (sm or mem) and (sm, mem) != recorded:
+        raise ValueError(f"--resume continues with the run's recorded clock locks (SM {recorded[0]}, memory "
+                         f"{recorded[1]} MHz); omit --lock-gpu-clock / --lock-memory-clock or pass the same values.")
+    return recorded
 
 
 def run_models(dest, info, env, allow_battery):
@@ -974,7 +1058,7 @@ def run_classical(dest, info, env, allow_battery):
                     "python": [sys.executable, str(HERE / "pytorch/classical.py"), str(directory), "--repeats", repeats,
                                "--seed", "42"]}
         order = ["aidotnet", "python"] if launch % 2 else ["python", "aidotnet"]
-        if order[0] == "python" and not (directory / "train.csv").is_file():
+        if order[0] == "python" and not all((directory / name).is_file() for name in ("train.csv", "test.csv")):
             # The C# side writes the data (seeded, the same every launch); reuse launch 1's so Python can go first.
             seed = [dest / "classical-1" / name for name in ("train.csv", "test.csv")]
             if all(path.is_file() for path in seed):
@@ -986,8 +1070,8 @@ def run_classical(dest, info, env, allow_battery):
                 order.reverse()
         for side in order:
             stem = dest / f"classical-{side}-{launch}"
-            if succeeded(stem):
-                continue
+            if succeeded(stem) and (directory / CLASSICAL_REPORTS[side]).is_file():
+                continue  # only when resuming: this side exited 0 and wrote its report
             try:
                 run(commands[side], stem, env, "cpu", allow_battery)
             except RuntimeError as error:
