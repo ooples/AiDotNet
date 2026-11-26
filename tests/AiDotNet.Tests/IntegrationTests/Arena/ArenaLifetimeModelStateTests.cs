@@ -72,7 +72,8 @@ public class ArenaLifetimeModelStateTests
         var input = Filled<T>(shape, 0.25);
 
         network.SetTrainingMode(false);
-        _ = network.Predict(input);
+        // Copied out of the arena before the reset: the reference the model's persistent state must keep reproducing.
+        var firstPrediction = ToDoubles(network.Predict(input));
         arena.Reset();
 
         // Steady requests: each reissues the recycled buffers in the order the first request allocated them.
@@ -89,6 +90,17 @@ public class ArenaLifetimeModelStateTests
             _ = engine.TensorAdd(Filled<T>(new[] { 1, size }, 1.0), Filled<T>(new[] { 1, size }, -3.0));
         }
 
+        // A recycled selector, vocabulary or window still yields finite values, only wrong ones: the same input must
+        // give the first request's prediction after every buffer has been reissued.
+        var laterPrediction = ToDoubles(network.Predict(input));
+        Assert.Equal(firstPrediction.Length, laterPrediction.Length);
+        for (int i = 0; i < firstPrediction.Length; i++)
+        {
+            double tolerance = 1e-4 * Math.Max(1.0, Math.Abs(firstPrediction[i]));
+            Assert.True(Math.Abs(firstPrediction[i] - laterPrediction[i]) <= tolerance,
+                $"Prediction {i} changed across arena resets: {firstPrediction[i]} then {laterPrediction[i]}.");
+        }
+
         Tensor<T> target;
         using (new GradientTape<T>())
         {
@@ -102,6 +114,15 @@ public class ArenaLifetimeModelStateTests
         var gradients = tape.ComputeGradients(objective, sources: null);
         Assert.NotEmpty(gradients);
         Assert.False(double.IsNaN(Convert.ToDouble(objective.ToArray()[0])));
+    }
+
+    private static double[] ToDoubles<T>(Tensor<T> tensor)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var values = tensor.ToArray();
+        var result = new double[values.Length];
+        for (int i = 0; i < values.Length; i++) result[i] = ops.ToDouble(values[i]);
+        return result;
     }
 
     private static Tensor<T> Filled<T>(int[] shape, double value)
