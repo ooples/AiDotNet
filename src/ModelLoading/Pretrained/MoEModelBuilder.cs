@@ -170,6 +170,7 @@ public static class MoEModelBuilder<T>
         int vocab = config.VocabSize;
         int numExperts = config.NumLocalExperts;
         bool olmoe = IsOlmoe(config);
+        var scratch = new WeightLoadScratch<T>();
 
         // ---- load pretrained weights ----
         embedding.SetParameters(new Vector<T>(
@@ -207,13 +208,13 @@ public static class MoEModelBuilder<T>
             // Router: [numExperts, hidden]. Experts: gate and up [ffn, hidden]; down [hidden, ffn].
             string moePrefix = p + (olmoe ? "mlp." : "block_sparse_moe.");
             string gateName = olmoe ? "gate_proj" : "w1", upName = olmoe ? "up_proj" : "w3", downName = olmoe ? "down_proj" : "w2";
-            LlamaModelBuilder<T>.LoadDense(block.Moe.Router, weights, moePrefix + "gate.weight", outDim: numExperts, inDim: hidden);
+            LlamaModelBuilder<T>.LoadDense(block.Moe.Router, weights, moePrefix + "gate.weight", outDim: numExperts, inDim: hidden, scratch);
             for (int e = 0; e < numExperts; e++)
             {
                 string ep = moePrefix + $"experts.{e}.";
-                LlamaModelBuilder<T>.LoadDense(block.Moe.ExpertGate(e), weights, ep + gateName + ".weight", outDim: intermediate, inDim: hidden);
-                LlamaModelBuilder<T>.LoadDense(block.Moe.ExpertUp(e), weights, ep + upName + ".weight", outDim: intermediate, inDim: hidden);
-                LlamaModelBuilder<T>.LoadDense(block.Moe.ExpertDown(e), weights, ep + downName + ".weight", outDim: hidden, inDim: intermediate);
+                LlamaModelBuilder<T>.LoadDense(block.Moe.ExpertGate(e), weights, ep + gateName + ".weight", outDim: intermediate, inDim: hidden, scratch);
+                LlamaModelBuilder<T>.LoadDense(block.Moe.ExpertUp(e), weights, ep + upName + ".weight", outDim: intermediate, inDim: hidden, scratch);
+                LlamaModelBuilder<T>.LoadDense(block.Moe.ExpertDown(e), weights, ep + downName + ".weight", outDim: hidden, inDim: intermediate, scratch);
             }
             if (incremental) network.RegisterLoadedLayerWeights(block);
         }

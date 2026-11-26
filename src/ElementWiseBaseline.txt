@@ -4205,7 +4205,6 @@
 5	ADNELEM002|AiDotNet.ModelLoading.ONNXImporter<T>.ConvertToTensor(AiDotNet.ModelLoading.ONNXImporter<T>.ONNXInitializer)
 1	ADNELEM002|AiDotNet.ModelLoading.Pretrained.LlamaModelBuilder<T>.LoadGamma(AiDotNet.NeuralNetworks.Layers.RMSNormalizationLayer<T>, AiDotNet.Agentic.Models.Local.INamedTensorSource, string, int, bool)
 1	ADNELEM002|AiDotNet.ModelLoading.Pretrained.LlamaModelBuilder<T>.LoadLmHead(AiDotNet.Interfaces.ILayer<T>, AiDotNet.Agentic.Models.Local.INamedTensorSource, int, int, double)
-1	ADNELEM002|AiDotNet.ModelLoading.Pretrained.LlamaModelBuilder<T>.ReadTensor(AiDotNet.Agentic.Models.Local.INamedTensorSource, string, int)
 2	ADNELEM002|AiDotNet.ModelLoading.Pretrained.OnnxFullModelAdapter<T>.ExtractLastPositionVector(Microsoft.ML.OnnxRuntime.DisposableNamedOnnxValue)
 1	ADNELEM002|AiDotNet.ModelLoading.Pretrained.OnnxFullModelAdapter<T>.ForwardLogits(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 1	ADNELEM002|AiDotNet.ModelLoading.Pretrained.OnnxFullModelAdapter<T>.NextTokenLogits(System.Collections.Generic.IReadOnlyList<int>)
