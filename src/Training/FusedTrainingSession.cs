@@ -857,10 +857,15 @@ internal sealed class FusedTrainingSession<T>
         return Decline(reason);
     }
 
-    // Relative to the losses themselves, with no floor (see the first-replay check).
+    // Relative to the losses themselves, with no floor (see the first-replay check). Paired NaN losses agree; an
+    // infinite loss never does: the relative bound scales with the larger loss, so an infinite one would otherwise
+    // accept any finite partner (|inf - x| <= tol * inf).
     private static bool LossesAgree(double eager, double compiled)
-        => (double.IsNaN(eager) && double.IsNaN(compiled))
-            || Math.Abs(eager - compiled) <= ReplayAgreementTolerance * Math.Max(Math.Abs(eager), Math.Abs(compiled));
+    {
+        if (double.IsNaN(eager) && double.IsNaN(compiled)) return true;
+        if (double.IsInfinity(eager) || double.IsInfinity(compiled)) return false;
+        return Math.Abs(eager - compiled) <= ReplayAgreementTolerance * Math.Max(Math.Abs(eager), Math.Abs(compiled));
+    }
 
     // The eager loss of the request's step, without recording gradients, drawing per-step randomness or advancing
     // per-step state. Null when the forward cannot run outside a tape: the traced step then goes unchecked, and the

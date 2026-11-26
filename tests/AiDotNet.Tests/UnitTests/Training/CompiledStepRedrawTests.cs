@@ -513,9 +513,23 @@ public class CompiledStepRedrawTests
         double first = stepper.Step(Request(layers, Forward, Batch(1), Random(data, outputShape), optimizer));
         Assert.True(stepper.LastStepFused, $"fused path did not engage ({stepper.Session.LastMissReason}).");
         Assert.False(double.IsNaN(first));
+        // The trained tensors only: the batch-norm running statistics are buffers the forward updates on any step.
+        var beforeSecond = layer.GetTrainableParameters().Select(t => t.ToArray()).ToList();
         double second = stepper.Step(Request(layers, Forward, Batch(2), Random(data, outputShape), optimizer));
-        Assert.True(!stepper.LastStepFused || double.IsNaN(second),
-            $"a batch with two longer rows trained on a plan built for one (loss {second:R}).");
+        if (stepper.LastStepFused)
+        {
+            // The plan's NaN is the mismatch signal: the step must fail visibly and leave the weights untouched.
+            Assert.True(double.IsNaN(second), $"a batch with two longer rows trained on a plan built for one (loss {second:R}).");
+            var afterSecond = layer.GetTrainableParameters().Select(t => t.ToArray()).ToList();
+            Assert.Equal(beforeSecond.Count, afterSecond.Count);
+            for (int i = 0; i < beforeSecond.Count; i++)
+                Assert.Equal(beforeSecond[i], afterSecond[i]);
+        }
+        else
+        {
+            Assert.True(!double.IsNaN(second) && !double.IsInfinity(second),
+                $"the eager step on a batch with two longer rows did not produce a finite loss ({second:R}).");
+        }
     }
 
     /// <summary>
@@ -735,6 +749,12 @@ public class CompiledStepRedrawTests
             Assert.True(
                 Math.Abs(fusedLoss - eagerLoss) <= Tolerance * Math.Max(1.0, Math.Abs(eagerLoss)),
                 $"step {step}: fused loss {fusedLoss:R} differs from eager loss {eagerLoss:R}; the plan replays stale per-step state.");
+            double[] fusedParameters = fused.GetParameters().ToArray(), eagerParameters = eager.GetParameters().ToArray();
+            Assert.Equal(eagerParameters.Length, fusedParameters.Length);
+            for (int i = 0; i < eagerParameters.Length; i++)
+                Assert.True(
+                    Math.Abs(fusedParameters[i] - eagerParameters[i]) <= Tolerance * Math.Max(1.0, Math.Abs(eagerParameters[i])),
+                    $"step {step}: fused parameter {i} ({fusedParameters[i]:R}) differs from eager ({eagerParameters[i]:R}).");
             eagerLosses.Add(eagerLoss);
         }
         return eagerLosses;
