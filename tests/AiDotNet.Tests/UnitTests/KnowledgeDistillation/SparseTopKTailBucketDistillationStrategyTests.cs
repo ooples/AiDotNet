@@ -3,6 +3,7 @@ using AiDotNet.KnowledgeDistillation;
 using AiDotNet.KnowledgeDistillation.Strategies;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.KnowledgeDistillation;
@@ -121,5 +122,106 @@ public class SparseTopKTailBucketDistillationStrategyTests
                     $"Grad mismatch at [{r},{c}]: num={num:E8}, ana={anaGrad[r, c]:E8}");
             }
         }
+    }
+
+    [Theory]
+    [InlineData(40.0, 0.0, 0.25, -0.25)]
+    [InlineData(-40.0, 0.0, -0.75, 0.75)]
+    public void ExtremeStudentLogits_PreserveExactLogDomainLossAndGradient(
+        double selectedLogit,
+        double tailLogit,
+        double expectedSelectedGrad,
+        double expectedTailGrad)
+    {
+        var strategy = new SparseTopKTailBucketDistillationStrategy<double>(topK: 1, temperature: 1.0, alpha: 0.0);
+        var student = new Matrix<double>(1, 2);
+        student[0, 0] = selectedLogit;
+        student[0, 1] = tailLogit;
+
+        var topIdx = new Tensor<int>(new[] { 1, 1 });
+        topIdx[0, 0] = 0;
+        var topProbs = new Matrix<double>(1, 1);
+        topProbs[0, 0] = 0.75;
+
+        var anaGrad = strategy.ComputeGradientFromSparseTargets(student, topIdx, topProbs);
+        Assert.Equal(expectedSelectedGrad, anaGrad[0, 0], precision: 9);
+        Assert.Equal(expectedTailGrad, anaGrad[0, 1], precision: 9);
+
+        const double h = 1e-6;
+        for (int c = 0; c < 2; c++)
+        {
+            double orig = student[0, c];
+            student[0, c] = orig + h;
+            double lp = strategy.ComputeLossFromSparseTargets(student, topIdx, topProbs);
+            student[0, c] = orig - h;
+            double lm = strategy.ComputeLossFromSparseTargets(student, topIdx, topProbs);
+            student[0, c] = orig;
+
+            double num = (lp - lm) / (2.0 * h);
+            Assert.True(Math.Abs(num - anaGrad[0, c]) < 1e-6,
+                $"Extreme-logit grad mismatch at col={c}: num={num:E9}, ana={anaGrad[0, c]:E9}");
+        }
+    }
+
+    [Fact]
+    public void DuplicateRowClassIndices_ThrowsArgumentException()
+    {
+        var strategy = new SparseTopKTailBucketDistillationStrategy<double>(topK: 2, temperature: 1.0, alpha: 0.0);
+        var student = new Matrix<double>(1, 3);
+        var topIdx = new Tensor<int>(new[] { 1, 2 });
+        topIdx[0, 0] = 0;
+        topIdx[0, 1] = 0;
+        var topProbs = new Matrix<double>(1, 2);
+        topProbs[0, 0] = 0.4;
+        topProbs[0, 1] = 0.3;
+
+        Assert.Throws<ArgumentException>(() => strategy.ComputeLossFromSparseTargets(student, topIdx, topProbs));
+        Assert.Throws<ArgumentException>(() => strategy.ComputeGradientFromSparseTargets(student, topIdx, topProbs));
+    }
+
+    [Theory]
+    [InlineData(double.NaN, 0.2)]
+    [InlineData(double.PositiveInfinity, 0.2)]
+    [InlineData(double.NegativeInfinity, 0.2)]
+    [InlineData(-0.05, 0.2)]
+    [InlineData(1.05, 0.0)]
+    [InlineData(0.6, 0.5)]
+    public void InvalidSparseProbabilities_ThrowsArgumentException(double p0, double p1)
+    {
+        var strategy = new SparseTopKTailBucketDistillationStrategy<double>(topK: 2, temperature: 1.0, alpha: 0.0);
+        var student = new Matrix<double>(1, 4);
+        var topIdx = new Tensor<int>(new[] { 1, 2 });
+        topIdx[0, 0] = 0;
+        topIdx[0, 1] = 2;
+        var topProbs = new Matrix<double>(1, 2);
+        topProbs[0, 0] = p0;
+        topProbs[0, 1] = p1;
+
+        Assert.Throws<ArgumentException>(() => strategy.ComputeLossFromSparseTargets(student, topIdx, topProbs));
+        Assert.Throws<ArgumentException>(() => strategy.ComputeGradientFromSparseTargets(student, topIdx, topProbs));
+    }
+
+    [Fact]
+    public void FloatPrecisionExtractTopKTargets_PassesRowSumValidation()
+    {
+        var rng = RandomHelper.CreateSeededRandom(777);
+        var student = new Matrix<float>(4, 128);
+        var teacher = new Matrix<float>(4, 128);
+        for (int r = 0; r < 4; r++)
+        {
+            for (int c = 0; c < 128; c++)
+            {
+                student[r, c] = (float)((rng.NextDouble() - 0.5) * 4.0);
+                teacher[r, c] = (float)((rng.NextDouble() - 0.5) * 4.0);
+            }
+        }
+
+        var strategy = new SparseTopKTailBucketDistillationStrategy<float>(topK: 64, temperature: 1.0, alpha: 0.0);
+        float loss = strategy.ComputeLoss(student, teacher);
+        var grad = strategy.ComputeGradient(student, teacher);
+
+        Assert.False(float.IsNaN(loss) || float.IsInfinity(loss));
+        Assert.Equal(4, grad.Rows);
+        Assert.Equal(128, grad.Columns);
     }
 }

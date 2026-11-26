@@ -23,10 +23,10 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// </para>
 /// <para>
 /// This strategy evaluates the exact coarse-grained <c>(K + 1)</c>-outcome Kullback-Leibler divergence over
-/// <c>{top_1, ..., top_K, Tail}</c> using vectorized <see cref="IEngine"/> tensor operations, preserving the teacher's
-/// un-renormalized full-vocabulary top-<c>K</c> probabilities <c>q_{T,j} = softmax_V(z_T / T)[idx_j]</c> together with
-/// the exact remainder tail mass <c>q_{T,tail} = 1 - sum_{j=1}^K q_{T,j}</c> matched against
-/// <c>p_{S,tail} = 1 - sum_{j=1}^K p_S(idx_j)</c>. By the data-processing inequality,
+/// <c>{top_1, ..., top_K, Tail}</c> using vectorized <see cref="IEngine"/> log-domain tensor operations, preserving
+/// the teacher's un-renormalized full-vocabulary top-<c>K</c> probabilities <c>q_{T,j} = softmax_V(z_T / T)[idx_j]</c>
+/// together with the exact remainder tail mass <c>q_{T,tail} = 1 - sum_{j=1}^K q_{T,j}</c> matched against the
+/// log-sum-exp of unselected student log-probabilities. By the data-processing inequality,
 /// <c>KL_{K+1}(q_T || p_S) &gt;= 0</c> with <c>KL_{K+1} = 0</c> at <c>z_S = z_T + c</c>.
 /// </para>
 /// <example>
@@ -52,7 +52,6 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 [PipelineStage(PipelineStage.Training)]
 public class SparseTopKTailBucketDistillationStrategy<T> : DistillationStrategyBase<T>
 {
-    private const double ProbabilityFloor = 1e-12;
     private readonly int _topK;
 
     /// <summary>
@@ -127,7 +126,7 @@ public class SparseTopKTailBucketDistillationStrategy<T> : DistillationStrategyB
         Matrix<T> topProbabilities,
         Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateSparseTargets(studentBatchOutput, topIndices, topProbabilities);
+        var (qTop, _, isTopMaskBinary) = ValidateAndPrepareSparseTargets(studentBatchOutput, topIndices, topProbabilities);
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int rows = studentBatchOutput.Rows;
@@ -135,49 +134,50 @@ public class SparseTopKTailBucketDistillationStrategy<T> : DistillationStrategyB
         int k = topProbabilities.Columns;
 
         var studentDouble = Tensor<T>.FromMatrix(studentBatchOutput).Cast<double>();
-        var stuSoft = Engine.Softmax(Engine.TensorDivideScalar(studentDouble, Temperature), 1);
-        var qTop = Tensor<T>.FromMatrix(topProbabilities).Cast<double>();
+        var lsm = Engine.TensorLogSoftmax(Engine.TensorDivideScalar(studentDouble, Temperature), 1);
 
         var rowOffsets = Engine.TensorBroadcastTo(
             Engine.Reshape(Engine.TensorArange<int>(0, rows * cols, cols), [rows, 1]),
             [rows, k]);
         var flatIdx = Engine.Reshape(Engine.TensorAdd(rowOffsets, topIndices), [rows * k]);
-        var stuTop = Engine.Reshape(
-            Engine.TensorGather(Engine.Reshape(stuSoft, [rows * cols]), flatIdx, 0),
+        var stuTopLog = Engine.Reshape(
+            Engine.TensorGather(Engine.Reshape(lsm, [rows * cols]), flatIdx, 0),
             [rows, k]);
 
-        var mTeacher = Engine.ReduceSum(qTop, [1], keepDims: true);
-        var mStudent = Engine.ReduceSum(stuTop, [1], keepDims: true);
+        var zeroTop = Tensor<double>.CreateDefault([rows, k], 0.0);
+        var oneTop = Tensor<double>.CreateDefault([rows, k], 1.0);
+        var posTopMask = Engine.TensorGreaterThan(qTop, zeroTop);
+        var qTopForLog = BlendByMask(posTopMask, qTop, oneTop);
+        var topKl = Engine.TensorMultiply(qTop, Engine.TensorSubtract(Engine.TensorLog(qTopForLog), stuTopLog));
+        var sumTopKl = Engine.ReduceSum(topKl, [1], keepDims: true);
 
-        var zeroRow = Tensor<double>.CreateDefault([rows, 1], 0.0);
-        var floorRow = Tensor<double>.CreateDefault([rows, 1], ProbabilityFloor);
-        var floorTop = Tensor<double>.CreateDefault([rows, k], ProbabilityFloor);
+        Tensor<double> rowKl;
+        if (k == cols)
+        {
+            rowKl = sumTopKl;
+        }
+        else
+        {
+            var mTeacher = Engine.ReduceSum(qTop, [1], keepDims: true);
+            var zeroRow = Tensor<double>.CreateDefault([rows, 1], 0.0);
+            var oneRow = Tensor<double>.CreateDefault([rows, 1], 1.0);
+            var qTail = Engine.TensorMax(Engine.TensorAddScalar(Engine.TensorNegate(mTeacher), 1.0), zeroRow);
+            var (logTailStu, _) = ComputeUnselectedTailDistribution(lsm, isTopMaskBinary, rows, cols);
 
-        var qTail = Engine.TensorMax(Engine.TensorAddScalar(Engine.TensorNegate(mTeacher), 1.0), zeroRow);
-        var rawTailStu = Engine.TensorAddScalar(Engine.TensorNegate(mStudent), 1.0);
-        var pTailSafe = Engine.TensorMax(rawTailStu, floorRow);
-        var qTailSafe = Engine.TensorMax(qTail, floorRow);
+            var posTailMask = Engine.TensorGreaterThan(qTail, zeroRow);
+            var qTailForLog = BlendByMask(posTailMask, qTail, oneRow);
+            var tailKl = Engine.TensorMultiply(qTail, Engine.TensorSubtract(Engine.TensorLog(qTailForLog), logTailStu));
+            rowKl = Engine.TensorAdd(sumTopKl, tailKl);
+        }
 
-        var qTopSafe = Engine.TensorMax(qTop, floorTop);
-        var pTopSafe = Engine.TensorMax(stuTop, floorTop);
-
-        var topKlRaw = Engine.TensorMultiply(qTop, Engine.TensorSubtract(Engine.TensorLog(qTopSafe), Engine.TensorLog(pTopSafe)));
-        var topKl = Engine.TensorMultiply(Engine.TensorGreaterThan(qTop, floorTop), topKlRaw);
-
-        var tailKlRaw = Engine.TensorMultiply(qTail, Engine.TensorSubtract(Engine.TensorLog(qTailSafe), Engine.TensorLog(pTailSafe)));
-        var tailKl = Engine.TensorMultiply(Engine.TensorGreaterThan(qTail, floorRow), tailKlRaw);
-
-        Tensor<double> rowSoftLoss = Engine.TensorMultiplyScalar<double>(
-            Engine.TensorAdd(Engine.ReduceSum(topKl, [1], keepDims: true), tailKl),
-            Temperature * Temperature);
+        Tensor<double> rowSoftLoss = Engine.TensorMultiplyScalar<double>(rowKl, Temperature * Temperature);
 
         Tensor<double> rowTotalLoss;
         if (trueLabelsBatch is not null)
         {
             var labelsDouble = Tensor<T>.FromMatrix(trueLabelsBatch).Cast<double>();
-            var stuHard = Engine.Softmax(studentDouble, 1);
-            var stuHardSafe = Engine.TensorMax(stuHard, Tensor<double>.CreateDefault([rows, cols], ProbabilityFloor));
-            var hardCeTerms = Engine.TensorNegate(Engine.TensorMultiply(labelsDouble, Engine.TensorLog(stuHardSafe)));
+            var stuHardLog = Engine.TensorLogSoftmax(studentDouble, 1);
+            var hardCeTerms = Engine.TensorNegate(Engine.TensorMultiply(labelsDouble, stuHardLog));
             var rowHardLoss = Engine.ReduceSum(hardCeTerms, [1], keepDims: true);
             rowTotalLoss = Engine.TensorAdd(
                 Engine.TensorMultiplyScalar<double>(rowHardLoss, Alpha),
@@ -201,7 +201,7 @@ public class SparseTopKTailBucketDistillationStrategy<T> : DistillationStrategyB
         Matrix<T> topProbabilities,
         Matrix<T>? trueLabelsBatch = null)
     {
-        ValidateSparseTargets(studentBatchOutput, topIndices, topProbabilities);
+        var (qTop, oneHot, isTopMaskBinary) = ValidateAndPrepareSparseTargets(studentBatchOutput, topIndices, topProbabilities);
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int rows = studentBatchOutput.Rows;
@@ -209,55 +209,34 @@ public class SparseTopKTailBucketDistillationStrategy<T> : DistillationStrategyB
         int k = topProbabilities.Columns;
 
         var studentDouble = Tensor<T>.FromMatrix(studentBatchOutput).Cast<double>();
-        var stuSoft = Engine.Softmax(Engine.TensorDivideScalar(studentDouble, Temperature), 1);
-        var qTop = Tensor<T>.FromMatrix(topProbabilities).Cast<double>();
+        var lsm = Engine.TensorLogSoftmax(Engine.TensorDivideScalar(studentDouble, Temperature), 1);
+        var stuSoft = Engine.TensorExp(lsm);
 
-        var oneHot = Engine.Reshape(
-            Engine.TensorOneHot<double>(Engine.Reshape(topIndices, [rows * k]), cols),
-            [rows, k, cols]);
-        var isTopMask = Engine.ReduceSum(oneHot, [1], keepDims: false);
         var qTopFull = Engine.ReduceSum(
             Engine.TensorMultiply(oneHot, Engine.TensorBroadcastTo(Engine.Reshape(qTop, [rows, k, 1]), [rows, k, cols])),
             [1], keepDims: false);
-
-        var rowOffsets = Engine.TensorBroadcastTo(
-            Engine.Reshape(Engine.TensorArange<int>(0, rows * cols, cols), [rows, 1]),
-            [rows, k]);
-        var flatIdx = Engine.Reshape(Engine.TensorAdd(rowOffsets, topIndices), [rows * k]);
-        var stuTop = Engine.Reshape(
-            Engine.TensorGather(Engine.Reshape(stuSoft, [rows * cols]), flatIdx, 0),
-            [rows, k]);
-
         var mTeacher = Engine.ReduceSum(qTop, [1], keepDims: true);
-        var mStudent = Engine.ReduceSum(stuTop, [1], keepDims: true);
 
-        var zeroRow = Tensor<double>.CreateDefault([rows, 1], 0.0);
-        var floorRow = Tensor<double>.CreateDefault([rows, 1], ProbabilityFloor);
-        var qTail = Engine.TensorMax(Engine.TensorAddScalar(Engine.TensorNegate(mTeacher), 1.0), zeroRow);
-        var rawTailStu = Engine.TensorAddScalar(Engine.TensorNegate(mStudent), 1.0);
-        var pTailSafe = Engine.TensorMax(rawTailStu, floorRow);
+        Tensor<double> gradUnits;
+        if (k == cols)
+        {
+            var scaledStu = Engine.TensorMultiply(stuSoft, Engine.TensorBroadcastTo(mTeacher, [rows, cols]));
+            gradUnits = Engine.TensorSubtract(scaledStu, qTopFull);
+        }
+        else
+        {
+            var zeroRow = Tensor<double>.CreateDefault([rows, 1], 0.0);
+            var qTail = Engine.TensorMax(Engine.TensorAddScalar(Engine.TensorNegate(mTeacher), 1.0), zeroRow);
+            var totalMass = Engine.TensorAdd(mTeacher, qTail);
+            var (_, condTailProb) = ComputeUnselectedTailDistribution(lsm, isTopMaskBinary, rows, cols);
 
-        var bothPositive = Engine.TensorMultiply(
-            Engine.TensorGreaterThan(qTail, floorRow),
-            Engine.TensorGreaterThan(rawTailStu, floorRow));
+            var tailTargetFull = Engine.TensorMultiply(Engine.TensorBroadcastTo(qTail, [rows, cols]), condTailProb);
+            var totalTargetFull = Engine.TensorAdd(qTopFull, tailTargetFull);
+            var scaledStu = Engine.TensorMultiply(stuSoft, Engine.TensorBroadcastTo(totalMass, [rows, cols]));
+            gradUnits = Engine.TensorSubtract(scaledStu, totalTargetFull);
+        }
 
-        var tailFactor = BlendByMask(
-            bothPositive,
-            Engine.TensorDivide(Engine.TensorSubtract(mTeacher, mStudent), pTailSafe),
-            mTeacher);
-
-        var mTeacherFull = Engine.TensorBroadcastTo(mTeacher, [rows, cols]);
-        var bothPositiveFull = Engine.TensorBroadcastTo(bothPositive, [rows, cols]);
-        var topGradUnits = BlendByMask(
-            bothPositiveFull,
-            Engine.TensorSubtract(stuSoft, qTopFull),
-            Engine.TensorSubtract(Engine.TensorMultiply(stuSoft, mTeacherFull), qTopFull));
-
-        var tailGradUnits = Engine.TensorMultiply(stuSoft, Engine.TensorBroadcastTo(tailFactor, [rows, cols]));
-        var isTopMaskBinary = Engine.TensorGreaterThan(isTopMask, Tensor<double>.CreateDefault([rows, cols], 0.5));
-        Tensor<double> softGrad = Engine.TensorMultiplyScalar<double>(
-            BlendByMask(isTopMaskBinary, topGradUnits, tailGradUnits),
-            Temperature);
+        Tensor<double> softGrad = Engine.TensorMultiplyScalar<double>(gradUnits, Temperature);
 
         Tensor<double> totalGrad;
         if (trueLabelsBatch is not null)
@@ -277,6 +256,27 @@ public class SparseTopKTailBucketDistillationStrategy<T> : DistillationStrategyB
         return Engine.TensorDivideScalar(totalGrad, rows).Cast<T>().ToMatrix();
     }
 
+    private static (Tensor<double> LogTailStu, Tensor<double> CondTailProb) ComputeUnselectedTailDistribution(
+        Tensor<double> lsm,
+        Tensor<double> isTopMaskBinary,
+        int rows,
+        int cols)
+    {
+        var tailMask = Engine.TensorAddScalar(Engine.TensorNegate(isTopMaskBinary), 1.0);
+        var minLsm = Engine.TensorNegate(Engine.ReduceMax(Engine.TensorNegate(lsm), [1], keepDims: true));
+        var belowMin = Engine.TensorBroadcastTo(Engine.TensorAddScalar(minLsm, -1.0), [rows, cols]);
+        var lsmForMax = BlendByMask(isTopMaskBinary, belowMin, lsm);
+        var maxTailLog = Engine.ReduceMax(lsmForMax, [1], keepDims: true);
+
+        var shiftedForExp = Engine.TensorSubtract(lsmForMax, Engine.TensorBroadcastTo(maxTailLog, [rows, cols]));
+        var tailExp = Engine.TensorMultiply(tailMask, Engine.TensorExp(shiftedForExp));
+        var sumTailExp = Engine.ReduceSum(tailExp, [1], keepDims: true);
+
+        var logTailStu = Engine.TensorAdd(maxTailLog, Engine.TensorLog(sumTailExp));
+        var condTailProb = Engine.TensorDivide(tailExp, Engine.TensorBroadcastTo(sumTailExp, [rows, cols]));
+        return (logTailStu, condTailProb);
+    }
+
     private static Tensor<double> BlendByMask(Tensor<double> unitMask, Tensor<double> whenOne, Tensor<double> whenZero)
     {
         var oneMinusMask = Engine.TensorAddScalar(Engine.TensorNegate(unitMask), 1.0);
@@ -285,23 +285,59 @@ public class SparseTopKTailBucketDistillationStrategy<T> : DistillationStrategyB
             Engine.TensorMultiply(oneMinusMask, whenZero));
     }
 
-    private void ValidateSparseTargets(Matrix<T> studentBatchOutput, Tensor<int> topIndices, Matrix<T> topProbabilities)
+    private (Tensor<double> QTop, Tensor<double> OneHot, Tensor<double> IsTopMaskBinary) ValidateAndPrepareSparseTargets(
+        Matrix<T> studentBatchOutput,
+        Tensor<int> topIndices,
+        Matrix<T> topProbabilities)
     {
         if (studentBatchOutput is null) throw new ArgumentNullException(nameof(studentBatchOutput));
         if (topIndices is null) throw new ArgumentNullException(nameof(topIndices));
         if (topProbabilities is null) throw new ArgumentNullException(nameof(topProbabilities));
+
         int rows = studentBatchOutput.Rows;
         int cols = studentBatchOutput.Columns;
         if (rows <= 0 || cols <= 0)
             throw new ArgumentException("Student output must have positive dimensions.", nameof(studentBatchOutput));
         if (topIndices.Rank != 2 || topIndices.Shape[0] != rows || topProbabilities.Rows != rows)
             throw new ArgumentException("Sparse Top-K target batch size must match student batch size.");
+
         int k = topProbabilities.Columns;
         if (k <= 0 || k > cols || topIndices.Shape[1] != k)
             throw new ArgumentException("Sparse Top-K width must be in [1, numClasses] and match topIndices.");
+
         int minIdx = Engine.TensorMinValue(topIndices);
         int maxIdx = Engine.TensorMaxValue(topIndices);
         if (minIdx < 0 || maxIdx >= cols)
             throw new ArgumentOutOfRangeException(nameof(topIndices), $"Top-K class indices [{minIdx}, {maxIdx}] must lie within [0, {cols}).");
+
+        var oneHot = Engine.Reshape(
+            Engine.TensorOneHot<double>(Engine.Reshape(topIndices, [rows * k]), cols),
+            [rows, k, cols]);
+        var isTopMask = Engine.ReduceSum(oneHot, [1], keepDims: false);
+        if (Engine.TensorMaxValue(isTopMask) > 1.5)
+            throw new ArgumentException("Each row of topIndices must contain distinct class indices.", nameof(topIndices));
+
+        var qTop = Tensor<T>.FromMatrix(topProbabilities).Cast<double>();
+        double qAbsSum = Engine.TensorSum(Engine.TensorAbs(qTop));
+        if (double.IsNaN(qAbsSum) || double.IsInfinity(qAbsSum))
+            throw new ArgumentException("Sparse Top-K probabilities must be finite values in [0, 1].", nameof(topProbabilities));
+
+        double minProb = Engine.TensorMinValue(qTop);
+        double maxProb = Engine.TensorMaxValue(qTop);
+        if (minProb < 0.0 || maxProb > 1.0)
+            throw new ArgumentException("Sparse Top-K probabilities must lie within [0, 1].", nameof(topProbabilities));
+
+        var rowSums = Engine.ReduceSum(qTop, [1], keepDims: false);
+        double maxRowSum = Engine.TensorMaxValue(rowSums);
+        double rowSumTolerance = typeof(T) == typeof(double)
+            ? Math.Max(1e-9, k * 1e-14)
+            : Math.Max(1e-5, k * 1e-6);
+        if (maxRowSum > 1.0 + rowSumTolerance)
+            throw new ArgumentException(
+                $"Each row of topProbabilities must sum to at most 1 (max row sum was {maxRowSum:G9}).",
+                nameof(topProbabilities));
+
+        var isTopMaskBinary = Engine.TensorGreaterThan(isTopMask, Tensor<double>.CreateDefault([rows, cols], 0.5));
+        return (qTop, oneHot, isTopMaskBinary);
     }
 }
