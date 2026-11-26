@@ -203,6 +203,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         var trainLosses = new List<double>(options.Epochs);
         var validationLosses = new List<double>(options.Epochs);
         double bestValidation = double.PositiveInfinity;
+        Vector<T>? bestParameters = null;
+        bool lastEpochIsBest = true;
         int epochsWithoutImprovement = 0;
         bool earlyStop = false;
         string? stopReason = null;
@@ -254,6 +256,20 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     }
                     monitored = held / validation.Length;
                     validationLosses.Add(monitored);
+
+                    if (monitored < bestValidation)
+                    {
+                        bestValidation = monitored;
+                        epochsWithoutImprovement = 0;
+                        lastEpochIsBest = true;
+                        // A copy: GetParameters may return a view of storage the next step overwrites.
+                        if (options.RestoreBestModel) bestParameters = _model!.GetParameters().Clone();
+                    }
+                    else
+                    {
+                        epochsWithoutImprovement++;
+                        lastEpochIsBest = false;
+                    }
                 }
 
                 if (epochBridge is not null && !epochBridge.OnEpoch(epoch + 1, options.Epochs, numOps.FromDouble(monitored)))
@@ -263,19 +279,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     break;
                 }
 
-                if (validation.Length > 0 && options.EarlyStoppingPatience > 0)
+                if (validation.Length > 0 && options.EarlyStoppingPatience > 0
+                    && epochsWithoutImprovement >= options.EarlyStoppingPatience)
                 {
-                    if (monitored < bestValidation)
-                    {
-                        bestValidation = monitored;
-                        epochsWithoutImprovement = 0;
-                    }
-                    else if (++epochsWithoutImprovement >= options.EarlyStoppingPatience)
-                    {
-                        earlyStop = true;
-                        stopReason = $"The held-out objective did not improve for {options.EarlyStoppingPatience} epochs.";
-                        break;
-                    }
+                    earlyStop = true;
+                    stopReason = $"The held-out objective did not improve for {options.EarlyStoppingPatience} epochs.";
+                    break;
                 }
             }
         }
@@ -286,6 +295,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 InvokeTrainingCallbacksEnd(epochBridge.LastEpoch, options.Epochs, epochBridge.LastLoss, epochBridge.Elapsed);
             }
         }
+
+        // As the input/target path returns its best step's model: the epoch with the lowest held-out objective.
+        if (bestParameters is not null && !lastEpochIsBest) _model!.SetParameters(bestParameters);
 
         var history = new Dictionary<string, List<double>> { ["train_loss"] = trainLosses };
         if (validationLosses.Count > 0) history["validation_loss"] = validationLosses;

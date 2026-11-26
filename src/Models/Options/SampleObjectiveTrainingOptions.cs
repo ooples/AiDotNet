@@ -38,6 +38,7 @@ public class SampleObjectiveTrainingOptions : ModelOptions
         ShuffleEachEpoch = other.ShuffleEachEpoch;
         ValidationFraction = other.ValidationFraction;
         EarlyStoppingPatience = other.EarlyStoppingPatience;
+        RestoreBestModel = other.RestoreBestModel;
     }
 
     /// <summary>Gets or sets the maximum number of passes over the training samples.</summary>
@@ -62,6 +63,17 @@ public class SampleObjectiveTrainingOptions : ModelOptions
     /// </summary>
     /// <value>Defaults to 10. 0 turns early stopping off. It has no effect when no samples are held out.</value>
     public int EarlyStoppingPatience { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets whether the trained model is returned with the parameters of the epoch whose held-out objective
+    /// was lowest, rather than those of the last epoch.
+    /// </summary>
+    /// <value>
+    /// Defaults to <c>true</c>, as the builder's input/target path returns the model of its best step: when early
+    /// stopping ends training, the last <see cref="EarlyStoppingPatience"/> epochs were the ones that did not improve.
+    /// It has no effect when no samples are held out. Keeping the best parameters holds one copy of them in memory.
+    /// </value>
+    public bool RestoreBestModel { get; set; } = true;
 
     /// <summary>Throws when a setting is out of range.</summary>
     /// <exception cref="ArgumentOutOfRangeException">A setting is out of range.</exception>
