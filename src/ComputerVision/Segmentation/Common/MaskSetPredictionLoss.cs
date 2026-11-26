@@ -417,15 +417,14 @@ internal static class MaskSetPredictionLoss
     /// <param name="temperature">The similarity temperature tau (0.3).</param>
     /// <remarks>
     /// <para>
-    /// The target <c>same[k, j] / max(sum_k same[k, j], 1)</c> with <c>same = y^T y</c> is never materialized: with
-    /// <c>logsoftmax[k, j] = sim[k, j] - LSE_j</c>, the cross-entropy of column <c>j</c> is
-    /// <c>(c_j LSE_j - sum_m y[m, j] (g_m . f_j) / tau) / max(c_j, 1)</c>, where <c>c_j = sum_k same[k, j]</c> and
-    /// <c>g_m = sum_k y[m, k] f_k</c> is segment <c>m</c>'s summed sampled feature. It is the same function, but it
-    /// needs only the column log-sum-exp of the similarity, which <see cref="SimilarityLogSumExp"/> computes a block of
-    /// columns at a time, so no <c>[S, S]</c> tensor (the similarity, its log-softmax, the target built in double, their
-    /// product, or any of their gradients) is ever held. kMaX-DeepLab evaluates the loss for every decoder stage at
-    /// S = 4096, where those tensors made instance discrimination about 7 GB of the model's 9.8 GB census peak, past the
-    /// census's 8 GiB ceiling.
+    /// The target <c>same[k, j] / max(sum_k same[k, j], 1)</c> with <c>same = y^T y</c> and the similarity are never
+    /// materialized whole: <see cref="SimilarityCrossEntropy"/> walks a block of columns at a time, forming each block's
+    /// target from <c>y</c> and its log-softmax from the shifted logits, so no <c>[S, S]</c> tensor (the similarity, its
+    /// log-softmax, the target, their product, or any of their gradients) is ever held. kMaX-DeepLab evaluates the loss
+    /// for every decoder stage at S = 4096, where those tensors made instance discrimination about 7 GB of the model's
+    /// 9.8 GB census peak, past the census's 8 GiB ceiling. The cross-entropy is formed per element from the log-softmax
+    /// rather than as <c>LSE_j</c> minus an aligned similarity sum: at a small temperature both of those are huge and
+    /// their difference cancels (float features <c>[1, 1]</c> at tau = 1e-8 gave 0 instead of log 2).
     /// </para>
     /// <para>Half and BFloat16 keep the dense form, whose column sums accumulate in float.</para>
     /// </remarks>
@@ -446,70 +445,83 @@ internal static class MaskSetPredictionLoss
         var columnTotals = engine.ReduceSum(
             engine.TensorMultiply(yd, engine.TensorBroadcastTo(segmentTotals, yd.Shape.ToArray())), new[] { 0 }, false); // [S]
         var clamped = engine.TensorClampMin(columnTotals, 1.0);
-        var lseWeight = engine.TensorDivide(columnTotals, clamped).Cast<T>();                                  // [S]
-        var alignedWeight = engine.TensorDivide(
-            Tensor<double>.CreateDefault(clamped.Shape.ToArray(), 1.0 / temperature), clamped).Cast<T>();     // [S]
+        var inverseTotals = engine.TensorDivide(
+            Tensor<double>.CreateDefault(clamped.Shape.ToArray(), 1.0), clamped).Cast<T>();                   // [S]
         var y = yd.Cast<T>();                                                                                  // [M, S]
 
-        var logSumExp = SimilarityLogSumExp(f, temperature);                                                   // [S]
-        var segmentSums = engine.TensorMatMul(f, engine.TensorTranspose(y));                                   // [D, M]
-        var aligned = engine.ReduceSum(
-            engine.TensorMultiply(y, engine.TensorMatMul(engine.TensorTranspose(segmentSums), f)), new[] { 0 }, false); // [S]
-        var losses = engine.TensorSubtract(
-            engine.TensorMultiply(lseWeight, logSumExp), engine.TensorMultiply(alignedWeight, aligned));      // [S]
+        var losses = SimilarityCrossEntropy(f, y, inverseTotals, temperature);                                 // [S]
         int nonZero = engine.TensorSum(engine.TensorGreaterThan(engine.StopGradient(losses), ops.Zero).Cast<int>());
         return WideMean(losses, Math.Max(1, nonZero));
     }
 
-    /// <summary>Columns of the similarity computed together by <see cref="SimilarityLogSumExp"/>.</summary>
+    /// <summary>Columns of the similarity computed together by <see cref="SimilarityCrossEntropy"/>.</summary>
     private const int SimilarityColumnBlock = 256;
 
     /// <summary>
-    /// <c>LSE_j = log sum_k exp(f_k . f_j / tau)</c> for the columns <c>f_j</c> of <paramref name="f"/> <c>[D, S]</c>,
+    /// The cross-entropy <c>CE_j = -sum_k W[k, j] log softmax_k(f_k . f_j / tau)</c> of every column <c>f_j</c> of
+    /// <paramref name="f"/> <c>[D, S]</c> against the same-segment target <c>W[k, j] = (y^T y)[k, j] * inverse[j]</c>,
     /// recorded on the tape as one node. Forward and backward walk <see cref="SimilarityColumnBlock"/> columns at a
-    /// time through one reused <c>[S, 256]</c> block, so a call allocates a few MB however large S is; the backward
-    /// recomputes each block's softmax <c>P</c> and adds <c>(1 / tau) f (P g_J)</c> to the block's own columns and
-    /// <c>(1 / tau) (P g_J) f_J^T</c> to the transposed gradient of every column.
+    /// time through reused <c>[S, 256]</c> blocks (the similarity, the target), so a call allocates a few MB however
+    /// large S is. Each block's log-softmax is taken over its shifted logits, so the loss keeps its precision at any
+    /// temperature. The backward recomputes each block's softmax <c>P</c>; the similarity gradient of column <c>j</c>
+    /// is <c>g_j (P[:, j] w_j - W[:, j]) / tau</c> with <c>w_j = sum_k W[k, j]</c>, which adds <c>f B</c> to the
+    /// block's own columns and <c>B f_J^T</c> to the transposed gradient of every column.
     /// </summary>
-    internal static Tensor<T> SimilarityLogSumExp<T>(Tensor<T> f, double temperature)
+    /// <param name="f">The sampled features <c>[D, S]</c>.</param>
+    /// <param name="y">The sampled segment masks <c>[M, S]</c>, a constant of the loss.</param>
+    /// <param name="inverse">The reciprocal of each column's clamped target total <c>[S]</c>, a constant of the loss.</param>
+    /// <param name="temperature">The similarity temperature tau.</param>
+    internal static Tensor<T> SimilarityCrossEntropy<T>(Tensor<T> f, Tensor<T> y, Tensor<T> inverse, double temperature)
     {
         if (f is null) throw new ArgumentNullException(nameof(f));
+        if (y is null) throw new ArgumentNullException(nameof(y));
+        if (inverse is null) throw new ArgumentNullException(nameof(inverse));
         if (f.Rank != 2) throw new ArgumentException("Features must be [D, S].", nameof(f));
+        int d = f.Shape[0], s = f.Shape[1];
+        if (y.Rank != 2 || y.Shape[1] != s) throw new ArgumentException("Masks must be [M, S].", nameof(y));
+        if (inverse.Length != s) throw new ArgumentException("One inverse total per column is required.", nameof(inverse));
         var engine = AiDotNetEngine.Current;
         var scale = MathHelper.GetNumericOperations<T>().FromDouble(1.0 / temperature);
-        int d = f.Shape[0], s = f.Shape[1];
-        Tensor<T> logSumExp;
+        var masksByColumn = engine.TensorTranspose(y).Contiguous();                                           // [S, M]
+        Tensor<T> crossEntropy;
         using (new NoGradScope<T>())
         {
             var rows = engine.TensorTranspose(f).Contiguous();                                                // [S, D]
             var parts = new List<Tensor<T>>();
-            Tensor<T>? block = null;
+            Tensor<T>? block = null, target = null;
             for (int start = 0; start < s; start += SimilarityColumnBlock)
             {
                 int n = Math.Min(SimilarityColumnBlock, s - start);
                 block = SimilarityBlock(engine, rows, f, start, n, scale, block);                           // [S, n]
-                parts.Add(engine.TensorLogSumExp(block, 0, false));
+                target = TargetBlock(engine, masksByColumn, y, inverse, start, n, target);                  // [S, n]
+                engine.LogSoftmaxInto(block, block, 0);
+                engine.TensorMultiplyInPlace(block, target);
+                parts.Add(engine.TensorNegate(engine.ReduceSum(block, new[] { 0 }, false)));
             }
-            logSumExp = parts.Count == 1 ? parts[0] : engine.TensorConcatenate(parts.ToArray(), 0);
+            crossEntropy = parts.Count == 1 ? parts[0] : engine.TensorConcatenate(parts.ToArray(), 0);
         }
 
-        DifferentiableOps.RecordUnary("KMaXSimilarityLogSumExp", logSumExp, f, (gradOutput, inputs, _, _, eng, grads) =>
+        DifferentiableOps.RecordUnary("KMaXSimilarityCrossEntropy", crossEntropy, f, (gradOutput, inputs, _, _, eng, grads) =>
         {
             var x = inputs[0];
             var rows = eng.TensorTranspose(x).Contiguous();                                                   // [S, D]
             var transposedGradient = new Tensor<T>(new[] { s, d });                                           // [S, D]
             var contribution = new Tensor<T>(new[] { s, d });
             var ownColumns = new List<Tensor<T>>();
-            Tensor<T>? block = null;
+            Tensor<T>? block = null, target = null;
             for (int start = 0; start < s; start += SimilarityColumnBlock)
             {
                 int n = Math.Min(SimilarityColumnBlock, s - start);
                 block = SimilarityBlock(eng, rows, x, start, n, scale, block);                              // [S, n]
+                target = TargetBlock(eng, masksByColumn, y, inverse, start, n, target);                     // [S, n]
                 eng.SoftmaxInto(block, block, 0);
-                // P g_J / tau: one row of column weights scales every row of the block.
-                var columnWeights = eng.Reshape(
+                // B = P * (w_J g_J / tau) - W * (g_J / tau): rows of column weights scale every row of the block.
+                var scaledGradient = eng.Reshape(
                     eng.TensorMultiplyScalar(eng.TensorSlice(gradOutput, new[] { start }, new[] { n }), scale), new[] { 1, n });
-                eng.TensorBroadcastMultiplyInto(block, block, columnWeights);
+                var targetTotals = eng.ReduceSum(target, new[] { 0 }, true);                                 // [1, n]
+                eng.TensorBroadcastMultiplyInto(block, block, eng.TensorMultiply(targetTotals, scaledGradient));
+                eng.TensorBroadcastMultiplyInto(target, target, scaledGradient);
+                eng.TensorSubtractInPlace(block, target);
                 var columns = eng.TensorSlice(x, new[] { 0, start }, new[] { d, n });                       // [D, n]
                 eng.MatMulInto(contribution, block, eng.TensorTranspose(columns).Contiguous());             // [S, D]
                 eng.TensorAddInPlace(transposedGradient, contribution);
@@ -519,7 +531,23 @@ internal static class MaskSetPredictionLoss
             var own = ownColumns.Count == 1 ? ownColumns[0] : eng.TensorConcatenate(ownColumns.ToArray(), 1);
             DifferentiableOps.AccumulateGrad(grads, x, eng.TensorAdd(eng.TensorTranspose(transposedGradient), own), eng);
         });
-        return logSumExp;
+        return crossEntropy;
+    }
+
+    /// <summary>
+    /// The target columns <c>[start, start + n)</c>, <c>(y^T y_J) * inverse_J</c> <c>[S, n]</c>, written into
+    /// <paramref name="reuse"/> when it has that shape.
+    /// </summary>
+    private static Tensor<T> TargetBlock<T>(
+        AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> masksByColumn, Tensor<T> y, Tensor<T> inverse, int start, int n,
+        Tensor<T>? reuse)
+    {
+        int s = masksByColumn.Shape[0], m = masksByColumn.Shape[1];
+        var block = reuse is not null && reuse.Shape[0] == s && reuse.Shape[1] == n ? reuse : new Tensor<T>(new[] { s, n });
+        engine.MatMulInto(block, masksByColumn, engine.TensorSlice(y, new[] { 0, start }, new[] { m, n }).Contiguous());
+        engine.TensorBroadcastMultiplyInto(block, block,
+            engine.Reshape(engine.TensorSlice(inverse, new[] { start }, new[] { n }), new[] { 1, n }));
+        return block;
     }
 
     /// <summary>

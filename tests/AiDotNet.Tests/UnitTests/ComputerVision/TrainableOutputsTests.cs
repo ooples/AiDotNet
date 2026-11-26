@@ -119,6 +119,36 @@ public class TrainableOutputsTests
         Assert.True(paddedAfter > paddedBefore);
     }
 
+    [Fact]
+    public void PaddingAgain_KeepsThePredictionCount()
+    {
+        // Two predictions padded to four rows, then to six: rows 2 and 3 are padding, not predictions.
+        var rows = new Tensor<double>(new[] { 2, 1 });
+        rows.Fill(2.0);
+        var twice = CvTensorOps<double>.PadRows(CvTensorOps<double>.PadRows(rows, 4), 6);
+        Assert.Equal(2, CvTensorOps<double>.PredictionRows(twice));
+
+        var outputs = new List<Tensor<double>> { twice };
+        var target = new Tensor<double>(CvTensorOps<double>.ConcatenateOutputs(outputs).Shape.ToArray());
+        var trainable = CvTensorOps<double>.ConcatenateTrainableOutputs(outputs, Array.Empty<int>(), target, out int count);
+
+        Assert.Equal(2, count);
+        Assert.Equal(4.0, CvTensorOps<double>.MeanSquaredErrorOverPredictions(trainable, target, count)[0], 12);
+    }
+
+    [Fact]
+    public void HalfLoss_DoesNotOverflowWhenTheMeanIsRepresentable()
+    {
+        // 40,000 errors of 2: the squared-error sum, 160,000, exceeds Half's 65,504, but the mean, 4, does not.
+        var predicted = new Tensor<Half>(new[] { 40_000 });
+        predicted.Fill((Half)2);
+        var target = new Tensor<Half>(new[] { 40_000 });
+
+        double loss = (double)CvTensorOps<Half>.MeanSquaredErrorOverPredictions(predicted, target, 40_000)[0];
+
+        Assert.Equal(4.0, loss, 2);
+    }
+
     private static double RawStepLoss(int survivors, double error, int cap, int width)
     {
         var rows = new Tensor<double>(new[] { survivors, width });

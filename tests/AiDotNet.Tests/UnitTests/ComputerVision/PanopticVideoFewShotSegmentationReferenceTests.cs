@@ -762,6 +762,22 @@ public class PanopticVideoFewShotSegmentationReferenceTests
     }
 
     [Fact]
+    public void KMaXInstanceDiscrimination_KeepsItsPrecisionAtATinyFloatTemperature()
+    {
+        // Float features [1, 1] in one segment at tau = 1e-8: every logit is 1e8, so each column's softmax is 1/2 on
+        // both pixels against a target of 1/2 on both, and the cross-entropy is log 2. Forming it as LSE minus the
+        // aligned similarity cancels two values near 1e8 and returns 0.
+        var features = new Tensor<float>(new[] { 1f, 1f }, new[] { 1, 2 });
+        var segments = new MaskSetPredictionLoss.Segments<float>(new Tensor<float>(new[] { 1f, 1f }, new[] { 1, 2 }), new[] { 0 });
+
+        var factored = MaskSetPredictionLoss.InstanceDiscrimination(features, segments, new[] { 0, 1 }, 1e-8).ToArray()[0];
+        var dense = MaskSetPredictionLoss.DenseInstanceDiscrimination(features, segments, new[] { 0, 1 }, 1e-8).ToArray()[0];
+
+        Assert.Equal(Math.Log(2), factored, 5);
+        Assert.Equal(dense, factored, 5);
+    }
+
+    [Fact]
     public void KMaXSemanticLoss_IsTheMeanCrossEntropyOfTheSampledPixels()
     {
         // Two classes, two pixels: pixel 0 is class 0 with logits (1, 0), pixel 1 class 1 with logits (0, 0).
