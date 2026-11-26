@@ -612,6 +612,13 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     {
         // Runs from the base constructor too, before these fields exist.
         if (_weights1 is null || _weights2 is null || _bias1 is null || _bias2 is null) return;
+        // A strategy InitializeLayerWeights runs as configured even under a pinned seed (one that loads external
+        // weights, such as FromFile, or a custom strategy outside InitializationStrategyBase) cannot be re-seeded:
+        // a redraw would not use the seed, and a FromFile strategy would advance its per-instance cursor and
+        // overwrite this layer's loaded tensors with another layer's payloads.
+        if (InitializationStrategy is { IsLazy: false } configured
+            && (configured.LoadFromExternal || configured is not Initialization.InitializationStrategyBase<T>))
+            return;
         var drawn = new[] { _weights1, _weights2, _bias1, _bias2 };
         if (TryBeginSeededReinitialization(drawn, out _))
         {

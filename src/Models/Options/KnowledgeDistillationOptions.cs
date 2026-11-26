@@ -121,19 +121,35 @@ public class KnowledgeDistillationOptions<T, TInput, TOutput> : ModelOptions
 
     /// <summary>
     /// Gets or sets how many of the teacher's most likely classes the default large-vocabulary strategy matches
-    /// exactly (the rest are one tail bucket). Default 64.
+    /// exactly (the rest are one tail bucket).
     /// </summary>
+    /// <value>The number of top teacher classes kept exactly. Default is 64.</value>
     /// <remarks>
     /// <para>Used only when <see cref="Strategy"/> is null and the teacher's output has at least
-    /// <see cref="SparseTopKMinimumClasses"/> classes.</para>
+    /// <see cref="SparseTopKMinimumClasses"/> classes. An explicitly configured <see cref="Strategy"/> always takes
+    /// precedence, and this value is then ignored.</para>
+    /// <para><b>For Beginners:</b> A language model's teacher predicts a probability for every word in a vocabulary
+    /// that can hold tens of thousands of entries. Most of those probabilities are tiny. This setting keeps only the
+    /// teacher's 64 most likely words for the student to copy one by one, and groups everything else into a single
+    /// "other words" bucket. The student still learns how much probability belongs to that bucket, so no mass is lost,
+    /// but training is much cheaper. Larger values copy the teacher more closely and cost more memory and time.</para>
     /// </remarks>
     public int SparseTopK { get; set; } = 64;
 
     /// <summary>
     /// Gets or sets the output width (number of classes, a vocabulary size) from which the default strategy is sparse
-    /// Top-K tail-bucket distillation rather than response-based distillation. Default 1024. Set
-    /// <see cref="int.MaxValue"/> to always use response-based distillation.
+    /// Top-K tail-bucket distillation rather than response-based distillation.
     /// </summary>
+    /// <value>The minimum number of output classes that selects the sparse default. Default is 1024.</value>
+    /// <remarks>
+    /// <para>Used only when <see cref="Strategy"/> is null. An explicitly configured <see cref="Strategy"/> always
+    /// takes precedence, and this value is then ignored. Set <see cref="int.MaxValue"/> to always use response-based
+    /// distillation for the default.</para>
+    /// <para><b>For Beginners:</b> Small classifiers (for example 10 image classes) are distilled by matching the
+    /// teacher's full probability list. Models with very many outputs, such as a language model's vocabulary, switch
+    /// to the cheaper sparse Top-K method once the number of outputs reaches this value. You rarely need to change
+    /// it.</para>
+    /// </remarks>
     public int SparseTopKMinimumClasses { get; set; } = 1024;
 
     /// <summary>

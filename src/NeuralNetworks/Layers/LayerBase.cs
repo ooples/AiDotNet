@@ -3618,7 +3618,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                     }
                     else if (_shapeOnlyResolutionPendingFirstForward)
                     {
-                        if (_declaredFromSampleShapeProbe && input.Rank >= 2)
+                        // Any rank: SampleShapeOf keeps a rank-one input whole and drops the batch axis otherwise,
+                        // so an unbatched vector after a [1, n] probe reports [n] like the output it produces.
+                        if (_declaredFromSampleShapeProbe)
                         {
                             var actual = SampleShapeOf(input.Shape.ToArray());
                             ResolveShapes(actual, actual);

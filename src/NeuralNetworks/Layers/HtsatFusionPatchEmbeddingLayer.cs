@@ -292,6 +292,8 @@ public partial class HtsatFusionPatchEmbeddingLayer<T> : LayerBase<T>, IShapeCon
     /// <inheritdoc/>
     public override void ResetState()
     {
+        // A new session restarts the seeded longer-row draw sequence, so a reused layer matches a fresh seeded one.
+        System.Threading.Interlocked.Exchange(ref _forwardCounter, 0L);
         _projection.ResetState();
         _localProjection.ResetState();
         _fusion.ResetState();

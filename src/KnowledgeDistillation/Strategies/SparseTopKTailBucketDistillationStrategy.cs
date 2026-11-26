@@ -201,7 +201,7 @@ public class SparseTopKTailBucketDistillationStrategy<T> : DistillationStrategyB
         Matrix<T> topProbabilities,
         Matrix<T>? trueLabelsBatch = null)
     {
-        var (qTop, oneHot, isTopMaskBinary) = ValidateAndPrepareSparseTargets(studentBatchOutput, topIndices, topProbabilities);
+        var (qTop, qTopFull, isTopMaskBinary) = ValidateAndPrepareSparseTargets(studentBatchOutput, topIndices, topProbabilities);
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int rows = studentBatchOutput.Rows;
@@ -212,9 +212,6 @@ public class SparseTopKTailBucketDistillationStrategy<T> : DistillationStrategyB
         var lsm = Engine.TensorLogSoftmax(Engine.TensorDivideScalar(studentDouble, Temperature), 1);
         var stuSoft = Engine.TensorExp(lsm);
 
-        var qTopFull = Engine.ReduceSum(
-            Engine.TensorMultiply(oneHot, Engine.TensorBroadcastTo(Engine.Reshape(qTop, [rows, k, 1]), [rows, k, cols])),
-            [1], keepDims: false);
         var mTeacher = Engine.ReduceSum(qTop, [1], keepDims: true);
 
         Tensor<double> gradUnits;
@@ -285,7 +282,7 @@ public class SparseTopKTailBucketDistillationStrategy<T> : DistillationStrategyB
             Engine.TensorMultiply(oneMinusMask, whenZero));
     }
 
-    private (Tensor<double> QTop, Tensor<double> OneHot, Tensor<double> IsTopMaskBinary) ValidateAndPrepareSparseTargets(
+    private (Tensor<double> QTop, Tensor<double> QTopFull, Tensor<double> IsTopMaskBinary) ValidateAndPrepareSparseTargets(
         Matrix<T> studentBatchOutput,
         Tensor<int> topIndices,
         Matrix<T> topProbabilities)
@@ -310,11 +307,20 @@ public class SparseTopKTailBucketDistillationStrategy<T> : DistillationStrategyB
         if (minIdx < 0 || maxIdx >= cols)
             throw new ArgumentOutOfRangeException(nameof(topIndices), $"Top-K class indices [{minIdx}, {maxIdx}] must lie within [0, {cols}).");
 
-        var oneHot = Engine.Reshape(
-            Engine.TensorOneHot<double>(Engine.Reshape(topIndices, [rows * k]), cols),
-            [rows, k, cols]);
-        var isTopMask = Engine.ReduceSum(oneHot, [1], keepDims: false);
-        if (Engine.TensorMaxValue(isTopMask) > 1.5)
+        // Index-based [rows, cols] scatter instead of a dense [rows, k, cols] one-hot expansion:
+        // memory stays O(rows * cols) regardless of K, which matters for large vocabularies.
+        var rowOffsets = Engine.TensorBroadcastTo(
+            Engine.Reshape(Engine.TensorArange<int>(0, rows * cols, cols), [rows, 1]),
+            [rows, k]);
+        var flatIdx = Engine.Reshape(Engine.TensorAdd(rowOffsets, topIndices), [rows * k]);
+        var isTopCount = Engine.Reshape(
+            Engine.TensorScatterAdd(
+                Tensor<double>.CreateDefault([rows * cols], 0.0),
+                flatIdx,
+                Tensor<double>.CreateDefault([rows * k], 1.0),
+                0),
+            [rows, cols]);
+        if (Engine.TensorMaxValue(isTopCount) > 1.5)
             throw new ArgumentException("Each row of topIndices must contain distinct class indices.", nameof(topIndices));
 
         var qTop = Tensor<T>.FromMatrix(topProbabilities).Cast<double>();
@@ -337,7 +343,26 @@ public class SparseTopKTailBucketDistillationStrategy<T> : DistillationStrategyB
                 $"Each row of topProbabilities must sum to at most 1 (max row sum was {maxRowSum:G9}).",
                 nameof(topProbabilities));
 
-        var isTopMaskBinary = Engine.TensorGreaterThan(isTopMask, Tensor<double>.CreateDefault([rows, cols], 0.5));
-        return (qTop, oneHot, isTopMaskBinary);
+        // When K covers every class there is no tail bucket to absorb missing mass, so each row
+        // must be a complete distribution; sub-unit selected mass is only valid when k < cols.
+        if (k == cols)
+        {
+            double minRowSum = Engine.TensorMinValue(rowSums);
+            if (minRowSum < 1.0 - rowSumTolerance)
+                throw new ArgumentException(
+                    $"Each row of topProbabilities must sum to 1 when K covers all {cols} classes (min row sum was {minRowSum:G9}).",
+                    nameof(topProbabilities));
+        }
+
+        // Scatter the Top-K probabilities into their [rows, cols] slots (indices are distinct per row).
+        var qTopFull = Engine.Reshape(
+            Engine.TensorScatterAdd(
+                Tensor<double>.CreateDefault([rows * cols], 0.0),
+                flatIdx,
+                Engine.Reshape(qTop, [rows * k]),
+                0),
+            [rows, cols]);
+        var isTopMaskBinary = Engine.TensorGreaterThan(isTopCount, Tensor<double>.CreateDefault([rows, cols], 0.5));
+        return (qTop, qTopFull, isTopMaskBinary);
     }
 }

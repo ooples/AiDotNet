@@ -179,6 +179,100 @@ public class SparseTopKTailBucketDistillationStrategyTests
         Assert.Throws<ArgumentException>(() => strategy.ComputeGradientFromSparseTargets(student, topIdx, topProbs));
     }
 
+    [Fact]
+    public void TopKCoveringAllClasses_RejectsIncompleteRowMass()
+    {
+        var strategy = new SparseTopKTailBucketDistillationStrategy<double>(topK: 2, temperature: 1.0, alpha: 0.0);
+        var student = new Matrix<double>(1, 2);
+        var topIdx = new Tensor<int>(new[] { 1, 2 });
+        topIdx[0, 0] = 0;
+        topIdx[0, 1] = 1;
+        var topProbs = new Matrix<double>(1, 2);
+        topProbs[0, 0] = 0.2;
+        topProbs[0, 1] = 0.3;
+
+        Assert.Throws<ArgumentException>(() => strategy.ComputeLossFromSparseTargets(student, topIdx, topProbs));
+        Assert.Throws<ArgumentException>(() => strategy.ComputeGradientFromSparseTargets(student, topIdx, topProbs));
+
+        // The same sub-unit mass stays valid when a tail bucket exists (k < cols).
+        var wider = new Matrix<double>(1, 3);
+        double loss = strategy.ComputeLossFromSparseTargets(wider, topIdx, topProbs);
+        Assert.False(double.IsNaN(loss) || double.IsInfinity(loss));
+    }
+
+    [Fact]
+    public void UnsortedScatteredTopKIndices_MatchDenseReferenceLossAndGradient()
+    {
+        const int rows = 3;
+        const int cols = 7;
+        const int k = 3;
+        const double temperature = 1.5;
+        var rng = RandomHelper.CreateSeededRandom(31);
+        var student = new Matrix<double>(rows, cols);
+        for (int r = 0; r < rows; r++)
+            for (int c = 0; c < cols; c++)
+                student[r, c] = (rng.NextDouble() - 0.5) * 3.0;
+
+        int[,] idx = { { 5, 0, 3 }, { 1, 6, 2 }, { 4, 2, 6 } };
+        double[,] q = { { 0.30, 0.25, 0.10 }, { 0.50, 0.20, 0.05 }, { 0.40, 0.0, 0.35 } };
+        var topIdx = new Tensor<int>(new[] { rows, k });
+        var topProbs = new Matrix<double>(rows, k);
+        for (int r = 0; r < rows; r++)
+            for (int j = 0; j < k; j++)
+            {
+                topIdx[r, j] = idx[r, j];
+                topProbs[r, j] = q[r, j];
+            }
+
+        var strategy = new SparseTopKTailBucketDistillationStrategy<double>(topK: k, temperature: temperature, alpha: 0.0);
+        double loss = strategy.ComputeLossFromSparseTargets(student, topIdx, topProbs);
+        var grad = strategy.ComputeGradientFromSparseTargets(student, topIdx, topProbs);
+
+        // Dense scalar reference of the (K + 1)-outcome tail-bucket KL and its gradient.
+        double expectedLoss = 0.0;
+        var expectedGrad = new double[rows, cols];
+        for (int r = 0; r < rows; r++)
+        {
+            double max = double.NegativeInfinity;
+            for (int c = 0; c < cols; c++) max = Math.Max(max, student[r, c] / temperature);
+            double z = 0.0;
+            for (int c = 0; c < cols; c++) z += Math.Exp(student[r, c] / temperature - max);
+            var p = new double[cols];
+            for (int c = 0; c < cols; c++) p[c] = Math.Exp(student[r, c] / temperature - max) / z;
+
+            var target = new double[cols];
+            var isTop = new bool[cols];
+            double mass = 0.0;
+            double rowKl = 0.0;
+            for (int j = 0; j < k; j++)
+            {
+                int c = idx[r, j];
+                isTop[c] = true;
+                target[c] = q[r, j];
+                mass += q[r, j];
+                if (q[r, j] > 0.0) rowKl += q[r, j] * (Math.Log(q[r, j]) - Math.Log(p[c]));
+            }
+
+            double qTail = Math.Max(0.0, 1.0 - mass);
+            double tailP = 0.0;
+            for (int c = 0; c < cols; c++) if (!isTop[c]) tailP += p[c];
+            if (qTail > 0.0) rowKl += qTail * (Math.Log(qTail) - Math.Log(tailP));
+            expectedLoss += temperature * temperature * rowKl;
+
+            for (int c = 0; c < cols; c++)
+            {
+                double tgt = isTop[c] ? target[c] : qTail * p[c] / tailP;
+                expectedGrad[r, c] = temperature * (p[c] * (mass + qTail) - tgt) / rows;
+            }
+        }
+
+        expectedLoss /= rows;
+        Assert.Equal(expectedLoss, loss, precision: 10);
+        for (int r = 0; r < rows; r++)
+            for (int c = 0; c < cols; c++)
+                Assert.Equal(expectedGrad[r, c], grad[r, c], precision: 10);
+    }
+
     [Theory]
     [InlineData(double.NaN, 0.2)]
     [InlineData(double.PositiveInfinity, 0.2)]
