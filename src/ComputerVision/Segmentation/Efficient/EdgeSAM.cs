@@ -248,7 +248,8 @@ public partial class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
     /// <inheritdoc />
     public override PromptedSegmentationResult<T> SegmentFromPoints(Tensor<T> points, Tensor<T> labels)
     {
-        var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
+        var features = Common.SegmentationPostProcessing.PromptFeatures(
+            _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width])));
         int h = features.Shape[1], w = features.Shape[2];
         var attention = Common.SegmentationPostProcessing.PointAttention(
             points, labels, h, w, sigma: Math.Max(h, w) / 10.0);
@@ -260,7 +261,8 @@ public partial class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
     /// <inheritdoc />
     public override PromptedSegmentationResult<T> SegmentFromBox(Tensor<T> box)
     {
-        var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
+        var features = Common.SegmentationPostProcessing.PromptFeatures(
+            _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width])));
         int h = features.Shape[1], w = features.Shape[2];
         int bx1 = (int)NumOps.ToDouble(box[0]), by1 = (int)NumOps.ToDouble(box[1]);
         int bx2 = (int)NumOps.ToDouble(box[2]), by2 = (int)NumOps.ToDouble(box[3]);
@@ -272,7 +274,8 @@ public partial class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
     /// <inheritdoc />
     public override PromptedSegmentationResult<T> SegmentFromMask(Tensor<T> mask)
     {
-        var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
+        var features = Common.SegmentationPostProcessing.PromptFeatures(
+            _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width])));
         int h = features.Shape[1], w = features.Shape[2];
         var scoreMap = Common.SegmentationPostProcessing.GatedChannelMean(
             features, Common.SegmentationPostProcessing.PositiveMaskGate(mask, h, w));
@@ -282,7 +285,8 @@ public partial class EdgeSAM<T> : Common.PromptableSegmentationBase<T>
     /// <inheritdoc />
     public override List<PromptedSegmentationResult<T>> SegmentEverything()
     {
-        var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
+        var features = Common.SegmentationPostProcessing.PromptFeatures(
+            _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width])));
         var probs = _imageProbabilities ?? Common.SegmentationTensorOps.SoftmaxAlongClassDim(features);
         return Common.SegmentationPostProcessing.SegmentEveryClass(features, probs);
     }

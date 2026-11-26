@@ -788,4 +788,78 @@ public class SegmentationPostProcessingParityTests
         Assert.Equal(new[] { 0.0 }, only.Scores);
         Assert.Equal(new[] { 0.0 }, only.StabilityScores);
     }
+
+    [Theory]
+    [InlineData(new[] { 8, 8 })]
+    [InlineData(new[] { 8 })]
+    [InlineData(new[] { 1, 1, 2, 4, 4 })]
+    public void SingleImageLogits_RejectsRanksOtherThanThreeAndFour(int[] shape)
+    {
+        var logits = new Tensor<double>(shape);
+        Assert.Throws<ArgumentException>(() => SegmentationPostProcessing.SingleImageLogits(logits, "logits"));
+    }
+
+    [Fact]
+    public void PromptFeatures_DropsASingletonBatch_AndRejectsALargerOne()
+    {
+        var single = SegmentationPostProcessing.PromptFeatures(new Tensor<double>(new[] { 1, 2, 4, 6 }));
+        Assert.Equal(new[] { 2, 4, 6 }, single.Shape.ToArray());
+        Assert.Equal(new[] { 2, 4, 6 },
+            SegmentationPostProcessing.PromptFeatures(new Tensor<double>(new[] { 2, 4, 6 })).Shape.ToArray());
+        Assert.Throws<ArgumentException>(() => SegmentationPostProcessing.PromptFeatures(new Tensor<double>(new[] { 2, 2, 4, 6 })));
+    }
+
+    [Fact]
+    public void GatedChannelMean_RejectsFeaturesAndGatesOfTheWrongShape()
+    {
+        var gate = new Tensor<double>(new[] { 4, 6 });
+        Assert.Throws<ArgumentException>(() => SegmentationPostProcessing.GatedChannelMean(new Tensor<double>(new[] { 1, 2, 4, 6 }), gate));
+        Assert.Throws<ArgumentException>(() => SegmentationPostProcessing.GatedChannelMean(new Tensor<double>(new[] { 2, 4, 6 }), new Tensor<double>(new[] { 2, 4 })));
+    }
+
+    [Fact]
+    public void PointAttention_RejectsMalformedPointsAndLabels_ButAcceptsAnEmptyPrompt()
+    {
+        Assert.Throws<ArgumentException>(() => SegmentationPostProcessing.PointAttention(
+            new Tensor<double>(new[] { 1, 1, 2 }), new Tensor<double>(new[] { 1 }), 4, 4, 1.0));
+        Assert.Throws<ArgumentException>(() => SegmentationPostProcessing.PointAttention(
+            new Tensor<double>(new[] { 2, 3 }), new Tensor<double>(new[] { 2 }), 4, 4, 1.0));
+        Assert.Throws<ArgumentException>(() => SegmentationPostProcessing.PointAttention(
+            new Tensor<double>(new[] { 2, 2 }), new Tensor<double>(new[] { 3 }), 4, 4, 1.0));
+
+        var empty = SegmentationPostProcessing.PointAttention(
+            new Tensor<double>(new[] { 0, 2 }), new Tensor<double>(new[] { 0 }), 4, 4, 1.0);
+        Assert.Equal(new[] { 4, 4 }, empty.Shape.ToArray());
+        Assert.All(Flat(empty), v => Assert.Equal(0.0, v));
+    }
+
+    [Fact]
+    public void PositiveMaskGate_RejectsANonRankTwoMask()
+    {
+        Assert.Throws<ArgumentException>(() => SegmentationPostProcessing.PositiveMaskGate(new Tensor<double>(new[] { 1, 2, 2 }), 1, 2));
+    }
+
+#if NET5_0_OR_GREATER
+    [Fact]
+    public void ConnectedComponentInstances_KeepsComponentIdsExactBeyondTheHalfIntegerRange()
+    {
+        // 2 classes over a 1 x 4101 strip: class 1 on every even pixel, so 2051 isolated class-1 components. Half
+        // stores integers exactly only up to 2048; a Half label map would merge or overflow the last ids.
+        int w = 4101;
+        var logits = new Tensor<Half>(new[] { 2, 1, w });
+        for (int x = 0; x < w; x++)
+        {
+            bool thing = x % 2 == 0;
+            logits[0, 0, x] = (Half)(thing ? 0.0 : 4.0);
+            logits[1, 0, x] = (Half)(thing ? 4.0 : 0.0);
+        }
+
+        var instances = SegmentationPostProcessing.ConnectedComponentInstances(
+            logits, numClasses: 2, maxInstances: int.MaxValue, minArea: 1, confidenceThreshold: 0.0);
+
+        Assert.Equal(2051, instances.Count);
+        // Every instance is exactly one pixel: no two components share an id.
+        Assert.All(instances, instance => Assert.Equal(1.0, Flat(instance.Mask).Sum(v => (double)v)));
+    }
+#endif
 }

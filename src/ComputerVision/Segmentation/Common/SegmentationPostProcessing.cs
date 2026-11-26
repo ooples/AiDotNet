@@ -35,15 +35,30 @@ internal static class SegmentationPostProcessing
     /// The logits of one image <c>[C, H, W]</c>: a rank-3 tensor as it is, a batch of one <c>[1, C, H, W]</c>
     /// without its batch axis.
     /// </summary>
-    /// <exception cref="ArgumentException">The logits hold a batch of more than one image.</exception>
+    /// <exception cref="ArgumentException">
+    /// The logits are not rank 3 or 4, or hold a batch of more than one image.
+    /// </exception>
     internal static Tensor<T> SingleImageLogits<T>(Tensor<T> logits, string parameterName)
     {
         if (logits is null) throw new ArgumentNullException(nameof(logits));
+        if (logits.Rank != 3 && logits.Rank != 4)
+            throw new ArgumentException(
+                $"Logits must be [C, H, W] or [1, C, H, W]; got rank {logits.Rank}.", parameterName);
         if (logits.Rank == 4 && logits.Shape[0] != 1)
             throw new ArgumentException(
                 $"This method takes one image; the logits hold a batch of {logits.Shape[0]}.", parameterName);
         return SegmentationTensorOps.EnsureUnbatched(logits);
     }
+
+    /// <summary>
+    /// The feature map of one image <c>[C, H, W]</c> a prompt is scored against: a rank-3 map as it is, a batch of
+    /// one <c>[1, C, H, W]</c> without its batch axis.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// The features are not rank 3 or 4, or hold a batch of more than one image.
+    /// </exception>
+    internal static Tensor<T> PromptFeatures<T>(Tensor<T> features)
+        => SingleImageLogits(features, nameof(features));
 
     /// <summary>
     /// The per-pixel class <c>[HW]</c> (int) and the probability each pixel gives that class <c>[HW]</c> (double),
@@ -55,8 +70,9 @@ internal static class SegmentationPostProcessing
         var engine = AiDotNetEngine.Current;
         int channels = logits.Shape[0], hw = logits.Shape[1] * logits.Shape[2];
         var labels = engine.Reshape(engine.TensorArgMax(logits, 0), [hw]);
-        var perPixel = engine.TensorPermute(engine.Reshape(probabilities, [channels, hw]), [1, 0]);
-        var own = engine.TensorGatherClassValues(perPixel, labels.Cast<T>()).Cast<double>();
+        // probabilities[labels[p], p] read in place from the [C, HW] layout: no [HW, C] transposed copy.
+        var own = engine.TensorTakeAlongDim(
+            engine.Reshape(probabilities, [channels, hw]), engine.Reshape(labels, [1, hw]), 0).Cast<double>();
         return (labels, engine.Reshape(own, [hw]));
     }
 
@@ -95,7 +111,7 @@ internal static class SegmentationPostProcessing
 
         // One id map for all instances: a class's components are numbered after those of the classes before it.
         int thingEnd = Math.Min(numClasses, channels);
-        var (instanceIdArray, instanceClass) = ComponentIds(semanticMap, Math.Max(numStuffClasses, 0), thingEnd, classArea);
+        var (instanceIdArray, instanceClass) = ComponentIds(engine.Reshape(labels, [h, w]), Math.Max(numStuffClasses, 0), thingEnd, classArea);
         var instanceIds = new Tensor<int>(instanceIdArray, [hw]);
         int instances = instanceClass.Count;
 
@@ -179,7 +195,6 @@ internal static class SegmentationPostProcessing
 
         var engine = AiDotNetEngine.Current;
         int channels = logits.Shape[0], h = logits.Shape[1], w = logits.Shape[2], hw = h * w;
-        var classMap = SegmentationTensorOps.ArgmaxAlongClassDim(logits);
         var (labels, own) = LabelsAndOwnProbability(logits, SegmentationTensorOps.SoftmaxAlongClassDim(logits));
         int[] classArea = engine.TensorBinCount(labels, channels).ToArray();
 
@@ -195,7 +210,7 @@ internal static class SegmentationPostProcessing
         int classEnd = Math.Min(numClasses, channels);
         // Every component of every class in one id map (class order, then component order), reduced once per
         // statistic: one bin count, one ordered scatter-add and four scatter-reduces, each read back once.
-        var (idArray, componentClass) = ComponentIds(classMap, 1, classEnd, classArea);
+        var (idArray, componentClass) = ComponentIds(engine.Reshape(labels, [h, w]), 1, classEnd, classArea);
         int count = componentClass.Count;
         if (count == 0) return instances;
         var ids = new Tensor<int>(idArray, [hw]);
@@ -249,8 +264,8 @@ internal static class SegmentationPostProcessing
     /// order, then in each class's component order. Classes with no pixel (<paramref name="classArea"/>) are skipped.
     /// </summary>
     /// <returns>The id map and the class of each id (<c>ComponentClass[id - 1]</c>).</returns>
-    private static (int[] Ids, List<int> ComponentClass) ComponentIds<T>(
-        Tensor<T> classMap, int classStart, int classEnd, int[] classArea)
+    private static (int[] Ids, List<int> ComponentClass) ComponentIds(
+        Tensor<int> classMap, int classStart, int classEnd, int[] classArea)
     {
         int hw = classMap.Length;
         var ids = new int[hw];
@@ -261,12 +276,12 @@ internal static class SegmentationPostProcessing
             var (labelMap, count) = SegmentationTensorOps.LabelConnectedComponents(classMap, cls);
             if (count == 0) continue;
 
-            // The component labels are whole numbers; the classes' pixels are disjoint, so each pixel is set once.
-            double[] local = ReadAsDouble(labelMap);
+            // Integer labels (exact for any count); the classes' pixels are disjoint, so each pixel is set once.
+            int[] local = labelMap.ToArray();
             int offset = componentClass.Count;
             for (int i = 0; i < hw; i++)
             {
-                if (local[i] > 0) ids[i] = (int)local[i] + offset;
+                if (local[i] > 0) ids[i] = local[i] + offset;
             }
 
             for (int k = 0; k < count; k++) componentClass.Add(cls);
@@ -287,7 +302,7 @@ internal static class SegmentationPostProcessing
         for (int slot = 0; slot < slots; slot++)
         {
             masks[slot] = new T[ids.Length];
-            if (!EqualityComparer<T>.Default.Equals(zero, default!)) masks[slot].AsSpan().Fill(zero);
+            masks[slot].AsSpan().Fill(zero);
         }
 
         for (int i = 0; i < ids.Length; i++)
@@ -360,12 +375,17 @@ internal static class SegmentationPostProcessing
         if (points is null) throw new ArgumentNullException(nameof(points));
         if (labels is null) throw new ArgumentNullException(nameof(labels));
 
-        var engine = AiDotNetEngine.Current;
+        if (points.Rank != 2 || points.Shape[1] != 2)
+            throw new ArgumentException("Points must have shape [N, 2].", nameof(points));
         int count = points.Shape[0];
+        if (labels.Rank != 1 || labels.Shape[0] != count)
+            throw new ArgumentException($"Labels must have shape [{count}], one per point.", nameof(labels));
+
+        var engine = AiDotNetEngine.Current;
         var attention = new Tensor<T>([height, width]);
         if (count == 0) return attention;
 
-        int stride = points.Length / count;
+        const int stride = 2;
         double[] coordinates = points.Cast<double>().ToArray();
         double[] label = labels.Cast<double>().ToArray();
         for (int i = 0; i < count; i++)
@@ -387,8 +407,12 @@ internal static class SegmentationPostProcessing
     {
         if (features is null) throw new ArgumentNullException(nameof(features));
         if (gate is null) throw new ArgumentNullException(nameof(gate));
+        if (features.Rank != 3)
+            throw new ArgumentException($"Features must be [C, H, W]; got rank {features.Rank}.", nameof(features));
 
         int channels = features.Shape[0], h = features.Shape[1], w = features.Shape[2], hw = h * w;
+        if (gate.Rank != 2 || gate.Shape[0] != h || gate.Shape[1] != w)
+            throw new ArgumentException($"The gate must be [{h}, {w}], the features' spatial grid.", nameof(gate));
         // Each pixel's channels added in channel order, in double, without a widened copy of the features.
         var sum = new double[hw];
         object data = features.GetReadOnlyDataArray();
@@ -423,6 +447,8 @@ internal static class SegmentationPostProcessing
     internal static Tensor<T> PositiveMaskGate<T>(Tensor<T> mask, int height, int width)
     {
         if (mask is null) throw new ArgumentNullException(nameof(mask));
+        if (mask.Rank != 2)
+            throw new ArgumentException($"Mask must have shape [H, W]; got rank {mask.Rank}.", nameof(mask));
 
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
