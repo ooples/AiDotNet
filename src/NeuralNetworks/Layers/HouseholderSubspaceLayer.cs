@@ -213,6 +213,45 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
         return entry;
     }
 
+    private delegate Tensor<T> HouseholderChainEngineDelegate(
+        IEngine engine,
+        Tensor<T> input,
+        Tensor<T> reflectors,
+        bool transpose,
+        double normFloor);
+
+    private static readonly HouseholderChainEngineDelegate? s_householderChainDelegate = ResolveHouseholderChainDelegate();
+
+    private static HouseholderChainEngineDelegate? ResolveHouseholderChainDelegate()
+    {
+        try
+        {
+            const System.Reflection.BindingFlags Flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance;
+            foreach (var m in typeof(IEngine).GetMethods(Flags))
+            {
+                if (m.Name != "HouseholderChain" || !m.IsGenericMethodDefinition) continue;
+                var ps = m.GetParameters();
+                if (ps.Length != 4 || ps[2].ParameterType != typeof(bool) || ps[3].ParameterType != typeof(double))
+                    continue;
+                var closed = m.MakeGenericMethod(typeof(T));
+                var engParam = System.Linq.Expressions.Expression.Parameter(typeof(IEngine), "engine");
+                var inParam = System.Linq.Expressions.Expression.Parameter(typeof(Tensor<T>), "input");
+                var refParam = System.Linq.Expressions.Expression.Parameter(typeof(Tensor<T>), "reflectors");
+                var transParam = System.Linq.Expressions.Expression.Parameter(typeof(bool), "transpose");
+                var floorParam = System.Linq.Expressions.Expression.Parameter(typeof(double), "normFloor");
+                var body = System.Linq.Expressions.Expression.Call(engParam, closed, inParam, refParam, transParam, floorParam);
+                return System.Linq.Expressions.Expression.Lambda<HouseholderChainEngineDelegate>(
+                    body, engParam, inParam, refParam, transParam, floorParam).Compile();
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"[AiDotNet] HouseholderSubspaceLayer<{typeof(T).Name}> failed to bind IEngine.HouseholderChain: {ex.GetType().Name}: {ex.Message}");
+        }
+        return null;
+    }
+
     /// <summary>
     /// Applies the matrix-free product of Householder reflections stored in <paramref name="reflectors"/>
     /// (<c>[k, D]</c>) to <paramref name="input"/> (<c>[..., D]</c>) using pure tape-tracked <see cref="IEngine"/> ops.
@@ -245,7 +284,10 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
         // and k > 1 normalize by sqrt(denom), backward divides by denom (not denom^2), so 1e-30 keeps float reflectors
         // exact down to ||u|| = 1e-15 while keeping 1 / (2 * denom) well below float.MaxValue on sub-floor inputs.
         double floorValue = ReflectorNormFloor();
-
+        if (s_householderChainDelegate is { } fusedChain)
+        {
+            return fusedChain(engine, input, reflectors, transpose, floorValue);
+        }
         Tensor<T> current = input.Rank == 2
             ? input
             : engine.Reshape(input, [rowCount, d]);

@@ -10412,6 +10412,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     private bool _checkpointCachedParamsResolved;
     private int _checkpointParameterSurfaceEpoch = -1;
     private Func<Tensor<T>, Tensor<T>, bool>? _activeCheckpointGradientConsumer;
+    private Action? _activeCheckpointSegmentFlush;
 
     private void InvalidateCheckpointParameterCache()
     {
@@ -10614,9 +10615,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 && active(param, grad);
         }
 
-        Tensor<T> output = s_checkpointSegmentsDelegate is { } checkpointSegments
-            ? checkpointSegments(_checkpointLayerFunctions, input, _checkpointSegmentParameters, segmentSize, consumer)
-            : CheckpointSegmentsFallback(_checkpointLayerFunctions, input, _checkpointSegmentParameters, _checkpointAllParametersFactory, segmentSize, consumer);
+        Tensor<T> output = s_checkpointSegmentsWithFlushDelegate is { } checkpointSegmentsWithFlush
+            ? checkpointSegmentsWithFlush(
+                _checkpointLayerFunctions,
+                input,
+                _checkpointSegmentParameters,
+                segmentSize,
+                consumer,
+                () => _activeCheckpointSegmentFlush?.Invoke())
+            : s_checkpointSegmentsDelegate is { } checkpointSegments
+                ? checkpointSegments(_checkpointLayerFunctions, input, _checkpointSegmentParameters, segmentSize, consumer)
+                : CheckpointSegmentsFallback(_checkpointLayerFunctions, input, _checkpointSegmentParameters, _checkpointAllParametersFactory, segmentSize, consumer);
         if (!_firstForwardCompleted)
         {
             _firstForwardCompleted = true;
@@ -10632,8 +10641,57 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         IReadOnlyList<IReadOnlyList<Tensor<T>>>,
         int,
         Func<Tensor<T>, Tensor<T>, bool>?,
+        Action?,
+        Tensor<T>>? s_checkpointSegmentsWithFlushDelegate = ResolveCheckpointSegmentsWithFlushDelegate();
+
+    private static readonly Func<
+        IReadOnlyList<Func<Tensor<T>, Tensor<T>>>,
+        Tensor<T>,
+        IReadOnlyList<IReadOnlyList<Tensor<T>>>,
+        int,
+        Func<Tensor<T>, Tensor<T>, bool>?,
         Tensor<T>>? s_checkpointSegmentsDelegate = ResolveCheckpointSegmentsDelegate();
 
+    private static Func<
+        IReadOnlyList<Func<Tensor<T>, Tensor<T>>>,
+        Tensor<T>,
+        IReadOnlyList<IReadOnlyList<Tensor<T>>>,
+        int,
+        Func<Tensor<T>, Tensor<T>, bool>?,
+        Action?,
+        Tensor<T>>? ResolveCheckpointSegmentsWithFlushDelegate()
+    {
+        var method = typeof(AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>).GetMethod(
+            "CheckpointSegmentsWithFlush",
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static,
+            binder: null,
+            types: new[]
+            {
+                typeof(IReadOnlyList<Func<Tensor<T>, Tensor<T>>>),
+                typeof(Tensor<T>),
+                typeof(IReadOnlyList<IReadOnlyList<Tensor<T>>>),
+                typeof(int),
+                typeof(Func<Tensor<T>, Tensor<T>, bool>),
+                typeof(Action)
+            },
+            modifiers: null);
+        if (method is null) return null;
+        return (Func<
+            IReadOnlyList<Func<Tensor<T>, Tensor<T>>>,
+            Tensor<T>,
+            IReadOnlyList<IReadOnlyList<Tensor<T>>>,
+            int,
+            Func<Tensor<T>, Tensor<T>, bool>?,
+            Action?,
+            Tensor<T>>)Delegate.CreateDelegate(typeof(Func<
+                IReadOnlyList<Func<Tensor<T>, Tensor<T>>>,
+                Tensor<T>,
+                IReadOnlyList<IReadOnlyList<Tensor<T>>>,
+                int,
+                Func<Tensor<T>, Tensor<T>, bool>?,
+                Action?,
+                Tensor<T>>), method);
+    }
     private static Func<
         IReadOnlyList<Func<Tensor<T>, Tensor<T>>>,
         Tensor<T>,
@@ -10777,6 +10835,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
                     detachedGradients = new List<(Tensor<T>, Tensor<T>)>(segGrads.Count);
                     bool hasInputGrad = false;
+                    bool anyConsumed = false;
                     foreach (var kvp in segGrads)
                     {
                         if (ReferenceEquals(kvp.Key, gradOutput) || kvp.Value is null) continue;
@@ -10792,11 +10851,23 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                             {
                                 consumed = tryConsumeParameterGradient(kvp.Key, kvp.Value);
                             }
-                            if (consumed) continue;
+                            if (consumed)
+                            {
+                                anyConsumed = true;
+                                continue;
+                            }
                         }
                         var key = isSegmentInput ? reInput : kvp.Key;
                         var copied = recomputeGpuScope.Keep(CloneCheckpointBoundaryFallback(kvp.Value, eng));
                         detachedGradients.Add((key, copied));
+                    }
+
+                    if (anyConsumed && _activeCheckpointSegmentFlush is { } segFlush)
+                    {
+                        using (TensorScope.Suspend())
+                        {
+                            segFlush();
+                        }
                     }
 
                     if (!hasInputGrad && ReferenceEquals(reOutput, reInputDetached))
@@ -14755,37 +14826,84 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Tensor<T> Regularize(Tensor<T> source, Tensor<T> grad)
             => regularization is null ? grad : RegularizeGradient(regularization, source, grad, decayExcluded ??= DecayExcludedParameters());
 
+        const long MaxStreamBatchElements = 4_194_304;
+        // Checkpoint-segment batching activates when paired with AiDotNet.Tensors >= #1841 (CheckpointSegmentsWithFlush);
+        // against older packages without the segment-flush overload, gradients execute per-parameter synchronously.
+        bool canBatchCheckpointSegment = s_checkpointSegmentsWithFlushDelegate is not null;
+
         if (!clip)
         {
-            void ApplyUnclipped(Tensor<T> source, Tensor<T> grad)
+            var pendingSources = new List<Tensor<T>>(64);
+            var pendingGrads = new List<Tensor<T>>(64);
+            long pendingElements = 0;
+
+            void FlushUnclippedBatch()
+            {
+                if (pendingSources.Count == 0) return;
+                MarkTrainMutationStarted();
+                using (TensorScope.Suspend())
+                {
+                    streamingOptimizer.ApplyBatch(pendingSources, pendingGrads);
+                }
+                if (Engine is DirectGpuTensorEngine _sg)
+                {
+                    for (int i = 0; i < pendingSources.Count; i++)
+                    {
+                        var src = pendingSources[i];
+                        if (!src.HasPendingGpuData)
+                            _sg.InvalidateResidentWeightBuffer(src);
+                    }
+                }
+                pendingSources.Clear();
+                pendingGrads.Clear();
+                pendingElements = 0;
+            }
+
+            void EnqueueUnclipped(Tensor<T> source, Tensor<T> grad, bool allowDefer)
             {
                 if (grad is null || grad.Length == 0) return;
                 RetainStreamingGradient(source, grad);
                 if (!regularizeAfterClip) grad = Regularize(source, grad);
                 ClampStreamingGradientByValue(grad, optimizerClipValue);
                 if (regularizeAfterClip) grad = Regularize(source, grad);
-                MarkTrainMutationStarted();
-                using (TensorScope.Suspend())
+                if (!allowDefer)
                 {
-                    streamingOptimizer.Apply(source, grad);
+                    MarkTrainMutationStarted();
+                    using (TensorScope.Suspend())
+                    {
+                        streamingOptimizer.Apply(source, grad);
+                    }
+                    if (Engine is DirectGpuTensorEngine _sg && !source.HasPendingGpuData)
+                        _sg.InvalidateResidentWeightBuffer(source);
+                    return;
                 }
-                if (Engine is DirectGpuTensorEngine _sg && !source.HasPendingGpuData)
-                    _sg.InvalidateResidentWeightBuffer(source);
+                pendingSources.Add(source);
+                pendingGrads.Add(grad);
+                pendingElements += grad.Length;
+                if (pendingElements >= MaxStreamBatchElements)
+                {
+                    FlushUnclippedBatch();
+                }
             }
 
+            void ApplyUnclipped(Tensor<T> source, Tensor<T> grad) => EnqueueUnclipped(source, grad, allowDefer: false);
+
+            _activeCheckpointSegmentFlush = FlushUnclippedBatch;
             _activeCheckpointGradientConsumer = (source, grad) =>
             {
                 if (!sourceSet.Contains(source) || grad is null || grad.Length == 0) return false;
-                ApplyUnclipped(source, grad);
+                EnqueueUnclipped(source, grad, allowDefer: canBatchCheckpointSegment);
                 return true;
             };
             try
             {
                 tape.ComputeGradientsStreaming(lossTensor, sources, ApplyUnclipped);
+                FlushUnclippedBatch();
             }
             finally
             {
                 _activeCheckpointGradientConsumer = null;
+                _activeCheckpointSegmentFlush = null;
             }
         }
         else if (twoPass)
@@ -14866,78 +14984,202 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             double emaNorm = _fastClipEmaNorm;            // < 0 until seeded
             bool haveEma = emaNorm >= 0.0;
             bool scaleDown = haveEma && emaNorm > fastClipBound;
+            double scaleDouble = scaleDown ? fastClipBound / (emaNorm + 1e-6) : 1.0;
             T scale = scaleDown
-                ? NumOps.FromDouble(fastClipBound / (emaNorm + 1e-6))
+                ? NumOps.FromDouble(scaleDouble)
                 : NumOps.One;
 
             double curNormSq = 0.0;
             bool gpuAccumNorm = Engine is DirectGpuTensorEngine;
             Tensor<T>? gpuNormSqAcc = null;
-            void ApplyFastClipped(Tensor<T> source, Tensor<T> grad)
+            List<AiDotNet.Tensors.Engines.Gpu.DeviceGradientNorm>? deferredGpuNorms = null;
+            var pendingSources = new List<Tensor<T>>(64);
+            var pendingGrads = new List<Tensor<T>>(64);
+            var pendingClipGrads = new List<Tensor<T>>(64);
+            List<Tensor<float>>? pendingFloatClipGrads = typeof(T) == typeof(float) ? new List<Tensor<float>>(64) : null;
+            long pendingElements = 0;
+
+            void AccumulateSingleNormAndScale(Tensor<T> grad)
+            {
+                if (gpuAccumNorm)
+                {
+                    if (s_tryAccumulateSumOfSquares is { } accumFn && accumFn((DirectGpuTensorEngine)Engine, grad, ref gpuNormSqAcc))
+                    {
+                    }
+                    else
+                    {
+                        using var suspendScope = TensorScope.Suspend();
+                        using var noGrad = new NoGradScope<T>();
+                        Tensor<T> sum;
+                        using (var sq = Engine.TensorMultiply(grad, grad))
+                        {
+                            sum = Engine.ReduceSum(sq, Enumerable.Range(0, sq.Rank).ToArray(), keepDims: false);
+                        }
+                        if (gpuNormSqAcc is null)
+                        {
+                            gpuNormSqAcc = sum;
+                        }
+                        else
+                        {
+                            Tensor<T> nextAcc;
+                            using (sum)
+                            {
+                                nextAcc = Engine.TensorAdd(gpuNormSqAcc, sum);
+                            }
+                            gpuNormSqAcc.Dispose();
+                            gpuNormSqAcc = nextAcc;
+                        }
+                    }
+                }
+                else
+                {
+                    curNormSq += ComputeStreamingGradNormSquared(grad);
+                }
+                if (scaleDown) ScaleStreamingGradInPlace(grad, scale);
+            }
+
+            void FlushFastClippedBatch()
+            {
+                if (pendingSources.Count == 0) return;
+
+                if (pendingClipGrads.Count > 0)
+                {
+                    bool handledMultiNorm = false;
+                    if (gpuAccumNorm && pendingFloatClipGrads is not null && pendingFloatClipGrads.Count > 0)
+                    {
+                        var normHandle = AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryGradientSumOfSquares(pendingFloatClipGrads);
+                        if (normHandle is not null)
+                        {
+                            (deferredGpuNorms ??= new List<AiDotNet.Tensors.Engines.Gpu.DeviceGradientNorm>(8)).Add(normHandle);
+                            handledMultiNorm = true;
+                        }
+                    }
+
+                    if (!handledMultiNorm)
+                    {
+                        for (int i = 0; i < pendingClipGrads.Count; i++)
+                        {
+                            var g = pendingClipGrads[i];
+                            if (gpuAccumNorm && s_tryAccumulateSumOfSquares is { } accumFn && accumFn((DirectGpuTensorEngine)Engine, g, ref gpuNormSqAcc))
+                            {
+                            }
+                            else
+                            {
+                                curNormSq += ComputeStreamingGradNormSquared(g);
+                            }
+                        }
+                    }
+
+                    if (scaleDown)
+                    {
+                        bool handledMultiScale = gpuAccumNorm
+                            && pendingFloatClipGrads is not null
+                            && Training.GpuMultiTensorAdamBridge.TryScaleGradientsMultiTensor is { } scaleFn
+                            && scaleFn(pendingFloatClipGrads, (float)scaleDouble);
+                        if (!handledMultiScale)
+                        {
+                            for (int i = 0; i < pendingClipGrads.Count; i++)
+                            {
+                                ScaleStreamingGradInPlace(pendingClipGrads[i], scale);
+                            }
+                        }
+                    }
+                }
+
+                for (int i = 0; i < pendingGrads.Count; i++)
+                {
+                    var g = pendingGrads[i];
+                    ClampStreamingGradientByValue(g, optimizerClipValue);
+                    if (regularizeAfterClip)
+                        pendingGrads[i] = Regularize(pendingSources[i], g);
+                }
+
+                MarkTrainMutationStarted();
+                using (TensorScope.Suspend())
+                {
+                    streamingOptimizer.ApplyBatch(pendingSources, pendingGrads);
+                }
+                if (Engine is DirectGpuTensorEngine _sg)
+                {
+                    for (int i = 0; i < pendingSources.Count; i++)
+                    {
+                        var src = pendingSources[i];
+                        if (!src.HasPendingGpuData)
+                            _sg.InvalidateResidentWeightBuffer(src);
+                    }
+                }
+
+                pendingSources.Clear();
+                pendingGrads.Clear();
+                pendingClipGrads.Clear();
+                pendingFloatClipGrads?.Clear();
+                pendingElements = 0;
+            }
+
+            void EnqueueFastClipped(Tensor<T> source, Tensor<T> grad, bool allowDefer)
             {
                 if (grad is null || grad.Length == 0) return;
                 RetainStreamingGradient(source, grad);
                 if (!regularizeAfterClip) grad = Regularize(source, grad);
-                if (clipSet.Contains(source))
+                bool inClipSet = clipSet.Contains(source);
+
+                if (!allowDefer)
                 {
-                    if (gpuAccumNorm)
+                    if (inClipSet)
+                        AccumulateSingleNormAndScale(grad);
+                    ClampStreamingGradientByValue(grad, optimizerClipValue);
+                    if (regularizeAfterClip) grad = Regularize(source, grad);
+                    MarkTrainMutationStarted();
+                    using (TensorScope.Suspend())
                     {
-                        if (s_tryAccumulateSumOfSquares is { } accumFn && accumFn((DirectGpuTensorEngine)Engine, grad, ref gpuNormSqAcc))
-                        {
-                        }
-                        else
-                        {
-                            using var suspendScope = TensorScope.Suspend();
-                            using var noGrad = new NoGradScope<T>();
-                            // using releases the temporaries even when ReduceSum or TensorAdd throws.
-                            Tensor<T> sum;
-                            using (var sq = Engine.TensorMultiply(grad, grad))
-                            {
-                                sum = Engine.ReduceSum(sq, Enumerable.Range(0, sq.Rank).ToArray(), keepDims: false);
-                            }
-                            if (gpuNormSqAcc is null)
-                            {
-                                gpuNormSqAcc = sum;
-                            }
-                            else
-                            {
-                                Tensor<T> nextAcc;
-                                using (sum)
-                                {
-                                    nextAcc = Engine.TensorAdd(gpuNormSqAcc, sum);
-                                }
-                                gpuNormSqAcc.Dispose();
-                                gpuNormSqAcc = nextAcc;
-                            }
-                        }
+                        streamingOptimizer.Apply(source, grad);
                     }
-                    else
-                    {
-                        curNormSq += ComputeStreamingGradNormSquared(grad);
-                    }
-                    if (scaleDown) ScaleStreamingGradInPlace(grad, scale);
+                    if (Engine is DirectGpuTensorEngine _sg && !source.HasPendingGpuData)
+                        _sg.InvalidateResidentWeightBuffer(source);
+                    return;
                 }
-                ClampStreamingGradientByValue(grad, optimizerClipValue);
-                if (regularizeAfterClip) grad = Regularize(source, grad);
-                MarkTrainMutationStarted();
-                using (TensorScope.Suspend())
+
+                pendingSources.Add(source);
+                pendingGrads.Add(grad);
+                if (inClipSet)
                 {
-                    streamingOptimizer.Apply(source, grad);
+                    pendingClipGrads.Add(grad);
+                    pendingFloatClipGrads?.Add(System.Runtime.CompilerServices.Unsafe.As<Tensor<T>, Tensor<float>>(ref grad));
                 }
-                if (Engine is DirectGpuTensorEngine _sg && !source.HasPendingGpuData)
-                    _sg.InvalidateResidentWeightBuffer(source);
+                pendingElements += grad.Length;
+                if (pendingElements >= MaxStreamBatchElements)
+                {
+                    FlushFastClippedBatch();
+                }
             }
 
+            void ApplyFastClipped(Tensor<T> source, Tensor<T> grad) => EnqueueFastClipped(source, grad, allowDefer: false);
+
+            _activeCheckpointSegmentFlush = FlushFastClippedBatch;
             _activeCheckpointGradientConsumer = (source, grad) =>
             {
                 if (!sourceSet.Contains(source) || grad is null || grad.Length == 0) return false;
-                ApplyFastClipped(source, grad);
+                EnqueueFastClipped(source, grad, allowDefer: canBatchCheckpointSegment);
                 return true;
             };
             try
             {
                 tape.ComputeGradientsStreaming(lossTensor, sources, ApplyFastClipped);
-                if (gpuNormSqAcc is not null)
+                FlushFastClippedBatch();
+                if (deferredGpuNorms is not null)
+                {
+                    for (int i = 0; i < deferredGpuNorms.Count; i++)
+                    {
+                        var normHandle = deferredGpuNorms[i];
+                        if (!normHandle.IsFinite)
+                        {
+                            curNormSq = double.PositiveInfinity;
+                            break;
+                        }
+                        curNormSq += normHandle.TotalNormSquared;
+                    }
+                }
+                if (gpuNormSqAcc is not null && !double.IsInfinity(curNormSq))
                 {
                     curNormSq += NumOps.ToDouble(gpuNormSqAcc[0]);
                 }
@@ -14945,7 +15187,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             finally
             {
                 _activeCheckpointGradientConsumer = null;
+                _activeCheckpointSegmentFlush = null;
                 gpuNormSqAcc?.Dispose();
+                if (deferredGpuNorms is not null)
+                {
+                    for (int i = 0; i < deferredGpuNorms.Count; i++)
+                    {
+                        deferredGpuNorms[i].Dispose();
+                    }
+                }
             }
             double curNorm = Math.Sqrt(curNormSq);
             // The device accumulator sums squares in T, which overflows for finite float gradients near 1.8e19. This
