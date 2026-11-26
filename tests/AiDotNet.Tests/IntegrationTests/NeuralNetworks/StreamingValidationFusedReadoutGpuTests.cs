@@ -58,7 +58,8 @@ public class StreamingValidationFusedReadoutGpuTests
             Assert.Equal(fusedBefore + 1, DenseLayer<float>.FusedReadoutLossCount);
             float second = AiModelBuilder<float, Tensor<float>, Tensor<float>>.SampleLoss(network, loss, x, ids);
             Assert.Equal(fusedBefore + 2, DenseLayer<float>.FusedReadoutLossCount);
-            Assert.Equal(BitConverter.SingleToInt32Bits(second), BitConverter.SingleToInt32Bits(first));
+            // Bit-for-bit (BitConverter.SingleToInt32Bits does not exist on net471).
+            Assert.Equal(BitConverter.ToInt32(BitConverter.GetBytes(second), 0), BitConverter.ToInt32(BitConverter.GetBytes(first), 0));
         }
         finally { AiDotNetEngine.Current = previous; }
     }
@@ -239,7 +240,11 @@ public class StreamingValidationFusedReadoutGpuTests
             losses[s] = network.GetLastLoss();
         }
         if (validate)
-            Assert.True(float.IsFinite(AiModelBuilder<float, Tensor<float>, Tensor<float>>.SampleLoss(network, loss, held, heldIds)));
+        {
+            // float.IsFinite does not exist on net471.
+            float score = AiModelBuilder<float, Tensor<float>, Tensor<float>>.SampleLoss(network, loss, held, heldIds);
+            Assert.False(float.IsNaN(score) || float.IsInfinity(score), $"validation loss {score} is not finite");
+        }
         long replays = AiDotNet.Tensors.Engines.Compilation.CompiledTrainingPlan<float>.GraphReplayCount;
         for (int s = StepsBefore; s < StepsBefore + StepsAfter; s++)
         {

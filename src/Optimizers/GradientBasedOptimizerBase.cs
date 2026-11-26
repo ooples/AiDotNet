@@ -2770,6 +2770,18 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <paramref name="eagerParameters"/>, the order the eager step indexes them by, without consuming them. A compiled
     /// step calls this first so <see cref="TryInstallEagerStateIntoPlan"/> can find each parameter's moments.
     /// </summary>
+    /// <summary>
+    /// True while eager moments restored from a checkpoint still wait for <see cref="BindPendingTapeState"/>: a caller
+    /// checks this before it builds the parameter list, so a step with nothing to bind skips that walk.
+    /// </summary>
+    internal bool HasPendingTapeState
+    {
+        get
+        {
+            lock (_tapeStateSync) return _pendingTapeTensorStates.Count > 0;
+        }
+    }
+
     internal void BindPendingTapeState(IReadOnlyList<Tensor<T>> eagerParameters)
     {
         Guard.NotNull(eagerParameters);

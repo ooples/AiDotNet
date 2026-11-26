@@ -10304,13 +10304,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return _forwardForTrainingOverridden == 0 ? head : null;
     }
 
-    // The types declaring this model's Predict and PredictCore, resolved on first use.
-    private Type? _predictDeclarer, _predictCoreDeclarer;
+    // The types declaring this model's Predict, PredictCore and PredictEager, resolved on first use.
+    private Type? _predictDeclarer, _predictCoreDeclarer, _predictEagerDeclarer;
 
     /// <summary>
     /// True when this model's <see cref="Predict(Tensor{T})"/> is the base funnel and its <see cref="PredictCore"/>
     /// is the one <paramref name="type"/> declares: a type whose <see cref="PredictCore"/> runs the layer chain uses
     /// this to keep <see cref="InferenceForwardIsLayerChain"/> false for a subclass that overrides it again.
+    /// The base <see cref="PredictCore"/> runs <see cref="PredictEager"/>, so for the base type an override of
+    /// <see cref="PredictEager"/> also makes the forward something other than the layer chain.
     /// </summary>
     private protected bool InferenceForwardDeclaredBy(Type type)
     {
@@ -10320,10 +10322,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
             _predictDeclarer = GetType().GetMethod(nameof(Predict), Instance, null, [typeof(Tensor<T>)], null)?.DeclaringType
                 ?? typeof(object);
+            _predictEagerDeclarer = GetType().GetMethod(nameof(PredictEager), Instance, null, [typeof(Tensor<T>)], null)?.DeclaringType
+                ?? typeof(object);
             _predictCoreDeclarer = GetType().GetMethod(nameof(PredictCore), Instance, null, [typeof(Tensor<T>)], null)?.DeclaringType
                 ?? typeof(object);
         }
-        return _predictDeclarer == typeof(NeuralNetworkBase<T>) && _predictCoreDeclarer == type;
+        return _predictDeclarer == typeof(NeuralNetworkBase<T>) && _predictCoreDeclarer == type
+            && (type != typeof(NeuralNetworkBase<T>) || _predictEagerDeclarer == typeof(NeuralNetworkBase<T>));
     }
 
     /// <summary>
@@ -10343,12 +10348,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// for a language-model head that is the <c>[rows, vocabulary]</c> logits and the loss's intermediates over them
     /// (five 384 MiB tensors at 2048 x 49152), which a validation pass allocated on top of a resident training step.
     /// The same value as <c>loss.ComputeTapeLoss(Predict(input), target)</c> up to the order of the float reductions.
-    /// False (nothing run) when the model's inference forward is not that layer chain, a tape or graph trace is
-    /// recording, or the readout declines this loss and target; the caller then scores <see cref="Predict(Tensor{T})"/>.
+    /// False (nothing run) when the model's inference forward is not that layer chain or a tape or graph trace is
+    /// recording; the caller then scores <see cref="Predict(Tensor{T})"/>. When the readout declines this loss and
+    /// target, the prefix has already run, so the loss is finished from that one prefix result (the readout's forward,
+    /// shaped as <see cref="Predict(Tensor{T})"/> returns it, then <c>loss.ComputeTapeLoss</c>) rather than declined:
+    /// a declined call would make the caller run the prefix a second time through <see cref="Predict(Tensor{T})"/>,
+    /// advancing any per-call state a prefix layer keeps twice and scoring the second output.
     /// </summary>
     internal bool TryFusedReadoutInferenceLoss(Tensor<T> input, Tensor<T> target, ILossFunction<T> loss, out T value)
     {
-        value = default!;
+        value = NumOps.Zero;
         if (loss is not LossFunctions.LossFunctionBase<T>
             || Tensors.Engines.Compilation.GraphMode.IsActive
             || AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.AnyTapeActive()
@@ -10382,6 +10391,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             BindInputContract(input.Shape.ToArray()).Validate(input);
             // The base PredictCore promotes an unbatched sample; an override that runs the chain takes its input as given.
             var current = InferenceForwardDeclaredBy(typeof(NeuralNetworkBase<T>)) ? NormalizeInputBatchDim(input) : input;
+            bool promoted = !ReferenceEquals(current, input);
             // A layer that keeps nothing between calls runs in its own scope: its intermediates are freed as its forward
             // returns, and only its output outlives it. They were left to finalization, so a validation pass held every
             // layer's intermediates at once (13-50 MiB per layer of a 74M-parameter MoE language model) until a collection
@@ -10407,9 +10417,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // Its weights outlive this call: created outside every scope, as its own first forward creates them.
                 using (TensorScope.Suspend())
                     lazyHead.InitializeFromInputWithoutForward(current);
-                if (FusedReadoutForTraining() is null) return false;
+                if (FusedReadoutForTraining() is null)
+                {
+                    value = ReadoutForwardLoss(current, target, loss, promoted);
+                    return true;
+                }
             }
-            if (head.TryComputeFusedLoss(current, target, loss) is not { } fused) return false;
+            if (head.TryComputeFusedLoss(current, target, loss) is not { } fused)
+            {
+                value = ReadoutForwardLoss(current, target, loss, promoted);
+                return true;
+            }
             value = fused.Data.Span[0];
             return true;
         }
@@ -10435,9 +10453,36 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
     }
 
+    /// <summary>
+    /// The inference loss of one batch from the readout's input when the fused readout declines it: the readout's
+    /// forward, with the unit batch axis removed as <see cref="PredictCore"/> removes it for a promoted unbatched input,
+    /// then <paramref name="loss"/> as the ordinary validation scores <see cref="Predict(Tensor{T})"/>. A loss that may
+    /// keep a device result between calls runs with every scope suspended, so no enclosing scope frees what it keeps.
+    /// </summary>
+    private T ReadoutForwardLoss(Tensor<T> readoutInput, Tensor<T> target, ILossFunction<T> loss, bool promoted)
+    {
+        var prediction = Layers[^1].Forward(readoutInput);
+        if (promoted && prediction.Rank > 1 && prediction.Shape[0] == 1)
+        {
+            int[] squeezed = new int[prediction.Rank - 1];
+            for (int i = 0; i < squeezed.Length; i++)
+                squeezed[i] = prediction.Shape[i + 1];
+            prediction = prediction.Reshape(squeezed);
+        }
+        if (loss is LossFunctions.LossFunctionBase<T> { KeepsResultsBetweenCalls: false })
+        {
+            using var lossScope = TensorScope.Begin();
+            return loss.ComputeTapeLoss(prediction, target).Data.Span[0];
+        }
+        using (TensorScope.Suspend())
+            return loss.ComputeTapeLoss(prediction, target).Data.Span[0];
+    }
+
     /// <summary>The training forward through every layer but the last: the input of a fused readout.</summary>
     private Tensor<T> ForwardForTrainingToReadout(Tensor<T> input)
     {
+        // As ForwardForTraining: a failed earlier step's checkpoint auxiliary term must not reach this forward's objective.
+        _checkpointAuxiliaryLoss = null;
         EnsureLayerRandomSeedsWired();
         int prefixCount = Layers.Count - 1;
         int segmentSize = GetEffectiveCheckpointSegmentSize(prefixCount);
@@ -10503,6 +10548,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Outside this network's own step the forward belongs to someone else's objective, whose compiled plan may hold
         // this network's parameter tensors; from now on a training step must leave their storage as it is.
         if (System.Threading.Volatile.Read(ref _trainInFlight) == 0) _parametersReadOutsideOwnStep = true;
+
+        // The checkpointed forward's auxiliary term belongs to the forward that produced it and the objective after it.
+        // A step that threw between the two (its loss failed) left it in the slot; a later forward that produces no
+        // checkpointed term must not hand that stale tensor to its own objective.
+        _checkpointAuxiliaryLoss = null;
 
         // Propagate the architecture's RandomSeed to every layer once, before the first training
         // forward, so stochastic layers (notably DropoutLayer, whose mask derives from
@@ -10912,6 +10962,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </summary>
     private Tensor<T>? _checkpointAuxiliaryLoss;
 
+    // Checkpoint segments recorded on a persistent tape: their preserved values outlive one backward walk, because the
+    // tape may be walked again, and are released by ReleaseRetainedCheckpointSegments.
+    private readonly List<AiDotNet.Training.Memory.GradientCheckpointingContext.SegmentState> _retainedCheckpointSegments = new();
+
+    /// <summary>
+    /// Releases the preserved values of checkpoint segments recorded on a persistent tape: called when the step whose
+    /// tape walks them again has finished its last backward, and before the next checkpointed forward.
+    /// </summary>
+    private void ReleaseRetainedCheckpointSegments()
+    {
+        lock (_retainedCheckpointSegments)
+        {
+            foreach (var state in _retainedCheckpointSegments)
+                state.Release();
+            _retainedCheckpointSegments.Clear();
+        }
+    }
+
     private Tensor<T>? TakeCheckpointAuxiliaryLoss()
     {
         var term = _checkpointAuxiliaryLoss;
@@ -10976,6 +11044,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             return cur;
         }
 
+        // The previous checkpointed forward's tape is done with its segments by the time a new forward starts.
+        ReleaseRetainedCheckpointSegments();
+        bool releaseAfterBackward = !tape.Options.Persistent;
         var engine = Engine;
         int numSegments = (functions.Count + segmentSize - 1) / segmentSize;
         var current = input;
@@ -10987,6 +11058,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             int endIdx = Math.Min(startIdx + segmentSize, functions.Count);
             var segmentInput = current;
             var segmentState = new AiDotNet.Training.Memory.GradientCheckpointingContext.SegmentState();
+            if (!releaseAfterBackward)
+                lock (_retainedCheckpointSegments) _retainedCheckpointSegments.Add(segmentState);
 
             Tensor<T> segmentOutput;
             Tensor<T>? segmentAuxiliary = null;
@@ -11146,7 +11219,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 }
                 finally
                 {
-                    segmentState.Release();
+                    // A persistent tape can be walked backward again (the exact-clipping streaming step runs a norm
+                    // pass, then an update pass), and each walk recomputes this segment from the same preserved
+                    // snapshot, so its copies stay until the next checkpointed forward or the end of that step
+                    // (ReleaseRetainedCheckpointSegments). A non-persistent tape is walked once: release them now.
+                    if (releaseAfterBackward) segmentState.Release();
                     (auxiliaryGradient[0] as IDisposable)?.Dispose();
                     auxiliaryGradient[0] = null;
                 }
@@ -15325,6 +15402,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     if (Engine is DirectGpuTensorEngine _sg && !source.HasPendingGpuData)
                         _sg.InvalidateResidentWeightBuffer(source);
                 });
+            // The update pass was the last walk over this persistent tape: its checkpoint segments' preserved values
+            // (kept for both passes' recomputes) can go now.
+            ReleaseRetainedCheckpointSegments();
         }
         else
         {
@@ -17527,18 +17607,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // and only while tracing; repeat it for this batch so an invalid label still throws.
         if (LossFunction is AiDotNet.LossFunctions.LossFunctionBase<T> indexLoss)
             indexLoss.ValidateIndexTargetOutsidePlan(expected);
-        // Gradient checkpointing runs inside the compiled plan on a GPU engine: the trace marks each segment
-        // (RunCheckpointSegmentsInTrace) and the plan releases the segment's activations after its forward and
-        // recomputes them in its backward, as torch.compile does with torch.utils.checkpoint. A plan is traced with one
-        // segmentation, so changing it after the plan committed (its optimizer moments cannot move to the eager
-        // optimizer, or to a plan traced again) would silently change the trajectory.
-        int checkpointSegmentSize = CompiledCheckpointSegmentSize();
-        if (FusedSession.IsCommitted && _fusedCheckpointSegmentSize >= 0 && checkpointSegmentSize != _fusedCheckpointSegmentSize)
-            throw new InvalidOperationException(
-                $"Gradient checkpointing on {GetType().Name} changed (segment size {_fusedCheckpointSegmentSize} -> " +
-                $"{checkpointSegmentSize}) after fused training had committed. The compiled plan was traced with the " +
-                "earlier segments and its optimizer moments cannot move to another plan or the eager optimizer, so the " +
-                "switch would change the training trajectory. Configure checkpointing before the first Train call.");
         if (IsGradientCheckpointingEnabled && Engine is not DirectGpuTensorEngine)
         {
             if (FusedSession.IsCommitted)
@@ -17668,6 +17736,20 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // for every base class. What stays here is what only a NeuralNetworkBase knows: its gates above, its
         // target alignment and composite objective, its gradient publication, and its post-step bookkeeping.
         var fusedReadoutHead = FusedReadoutForTraining();
+        // Gradient checkpointing runs inside the compiled plan on a GPU engine: the trace marks each segment
+        // (RunCheckpointSegmentsInTrace) and the plan releases the segment's activations after its forward and
+        // recomputes them in its backward, as torch.compile does with torch.utils.checkpoint. A plan is traced with one
+        // segmentation, so changing it after the plan committed (its optimizer moments cannot move to the eager
+        // optimizer, or to a plan traced again) would silently change the trajectory. Sampled after the readout is
+        // selected: the custom-selection warm-up above can initialize a lazy readout head, which removes it from the
+        // segmented prefix, so a sample taken before it could differ from the prefix this step traces.
+        int checkpointSegmentSize = CompiledCheckpointSegmentSize();
+        if (FusedSession.IsCommitted && _fusedCheckpointSegmentSize >= 0 && checkpointSegmentSize != _fusedCheckpointSegmentSize)
+            throw new InvalidOperationException(
+                $"Gradient checkpointing on {GetType().Name} changed (segment size {_fusedCheckpointSegmentSize} -> " +
+                $"{checkpointSegmentSize}) after fused training had committed. The compiled plan was traced with the " +
+                "earlier segments and its optimizer moments cannot move to another plan or the eager optimizer, so the " +
+                "switch would change the training trajectory. Configure checkpointing before the first Train call.");
         var fusedForwardInput = input;
         var request = new Training.FusedTrainingStepRequest<T>
         {
@@ -17700,7 +17782,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         // Eager moments restored from a checkpoint are held by eager parameter index; bind them to the parameters now
         // so a freshly configured plan can take them over (by reference) instead of restarting the optimizer.
-        if (resolvedOptimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> restoredEager)
+        // The parameter walk runs only while restored moments wait to be bound; an ordinary fused step skips it.
+        if (resolvedOptimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> { HasPendingTapeState: true } restoredEager)
             restoredEager.BindPendingTapeState(CollectLayerOwnedTrainableTensorsForClipping(CollectModelTrainableTensors()));
 
         bool committedBefore = FusedSession.IsCommitted;

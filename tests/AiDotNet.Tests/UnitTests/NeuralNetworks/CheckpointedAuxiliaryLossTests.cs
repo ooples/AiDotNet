@@ -303,6 +303,69 @@ public class CheckpointedAuxiliaryLossTests
         Assert.All(ckptScales, s => Assert.Equal(1.5f, s));
     }
 
+    /// <summary>
+    /// A persistent tape walked backward twice (the exact-clipping streaming step's norm pass, then its update pass)
+    /// recomputes every segment twice. Both recomputes recall the snapshot the first forward preserved, so the second
+    /// walk gives the first walk's gradients; the preserved values were released after the first walk, and the second
+    /// recompute's recall threw.
+    /// </summary>
+    [Fact]
+    public void PersistentTape_SecondBackwardWalk_RecallsThePreservedStateAgain()
+    {
+        var (plain, checkpointed, input, target) = Pair(drifting: true);
+        var (plainLoss, plainGrads) = LossAndGradients(plain, input, target, mainScale: 1f);
+
+        checkpointed.SetTrainingMode(true);
+        var parameters = Parameters(checkpointed);
+        using var tape = new GradientTape<float>(new GradientTapeOptions { Persistent = true });
+        var loss = checkpointed.Objective(input, target, mainScale: 1f);
+        float[][] Walk()
+        {
+            var gradients = tape.ComputeGradients(loss, parameters);
+            var result = new float[parameters.Count][];
+            for (int i = 0; i < parameters.Count; i++)
+                result[i] = gradients.TryGetValue(parameters[i], out var g) && g is not null
+                    ? g.ToArray()
+                    : new float[parameters[i].Length];
+            return result;
+        }
+
+        var first = Walk();
+        float[][] second = Array.Empty<float[]>();
+        var ex = Record.Exception(() => second = Walk());
+        Assert.Null(ex);
+
+        AssertClose(plainLoss, loss.ToArray()[0], "loss");
+        AssertSameGradients(plainGrads, first, "first walk");
+        AssertSameGradients(plainGrads, second, "later walk");
+        Assert.All(checkpointed.Layers.OfType<DriftingScaleLayer>(), l => Assert.Equal(1.5f, l.Scale));
+    }
+
+    /// <summary>
+    /// A checkpointed forward whose loss then fails leaves its segments' auxiliary term behind. The next forward, with
+    /// checkpointing off, must score only its own terms: the stale term used to be added to its objective.
+    /// </summary>
+    [Fact]
+    public void FailedCheckpointedStep_DoesNotLeakItsAuxiliaryTermIntoTheNextObjective()
+    {
+        var (plain, checkpointed, input, target) = Pair();
+        var (plainLoss, plainGrads) = LossAndGradients(plain, input, target, mainScale: 1f);
+
+        checkpointed.SetTrainingMode(true);
+        using (new GradientTape<float>())
+        {
+            // The forward ran; the loss threw before ApplyCompositeObjective took the checkpointed auxiliary term.
+            _ = checkpointed.ForwardForTraining(input);
+        }
+        checkpointed.DisableGradientCheckpointing();
+        Assert.False(checkpointed.IsGradientCheckpointingEnabled);
+
+        var (retryLoss, retryGrads) = LossAndGradients(checkpointed, input, target, mainScale: 1f);
+
+        AssertClose(plainLoss, retryLoss, "loss after the failed checkpointed step");
+        AssertSameGradients(plainGrads, retryGrads, "gradient after the failed checkpointed step");
+    }
+
     [Fact]
     public void CheckpointRecompute_WithoutTheContract_SeesTheChangedStateAndDiverges()
     {

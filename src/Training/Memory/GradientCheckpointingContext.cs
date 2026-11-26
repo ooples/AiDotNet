@@ -106,7 +106,16 @@ public static class GradientCheckpointingContext
     internal static Scope EnterSegmentForward(SegmentState segment) => new(segment, recomputing: false);
 
     /// <summary>Marks the calling thread as re-running a segment's forward until disposed.</summary>
-    internal static Scope EnterRecompute(SegmentState segment) => new(segment, recomputing: true);
+    /// <remarks>
+    /// Every recompute reads the snapshot the first forward preserved from its start: a persistent tape walked backward
+    /// twice (the exact-clipping norm pass, then the update pass) recomputes the segment twice, and the second recompute
+    /// must recall the same values as the first.
+    /// </remarks>
+    internal static Scope EnterRecompute(SegmentState segment)
+    {
+        segment.RewindRecalls();
+        return new(segment, recomputing: true);
+    }
 
     // A segment's forward runs inside a TensorScope and (on the CPU) a TensorArena that both release their tensors when
     // the forward ends, so the copy is made outside both: device to device on the GPU, a fresh array on the CPU.
@@ -130,7 +139,14 @@ public static class GradientCheckpointingContext
     {
         internal List<PreservedValue> Preserved { get; } = new();
 
-        /// <summary>Releases the preserved copies once the recompute that needed them is done.</summary>
+        /// <summary>Makes every preserved value recallable again, for a further recompute of the same segment.</summary>
+        internal void RewindRecalls()
+        {
+            foreach (var entry in Preserved)
+                entry.Recalled = false;
+        }
+
+        /// <summary>Releases the preserved copies once the last recompute that needs them is done.</summary>
         internal void Release()
         {
             foreach (var entry in Preserved)

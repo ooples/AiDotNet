@@ -503,4 +503,61 @@ public class FusedReadoutLossTests
         Assert.Equal(expected, got, 12);
         Assert.Equal(1, head.ForwardCalls);
     }
+
+    /// <summary>A pass-through layer that counts its forwards, standing in for a layer with per-call state.</summary>
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+    private sealed class CountingPassthroughLayer : LayerBase<double>, IShapeContract
+    {
+        public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => inputRank == 2
+            ? new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Features, AxisRelation.Same(TensorAxis.Features)),
+            }
+            : null;
+
+        public int ForwardCalls;
+        public CountingPassthroughLayer(int width) : base(new[] { width }, new[] { width }) { }
+        public override bool SupportsTraining => false;
+        public override void ResetState() { }
+        protected override Tensor<double> ForwardTraced(Tensor<double> input)
+        {
+            ForwardCalls++;
+            return input;
+        }
+    }
+
+    /// <summary>
+    /// A readout that declines after the prefix ran is scored from that prefix result: the prefix runs once, as in
+    /// Predict, so a layer that advances per-call state is not advanced twice and the first output is the one scored.
+    /// </summary>
+    [Fact]
+    public void ValidationLoss_DeclinedReadout_RunsThePrefixOnce()
+    {
+        var head = new FusableHead(seed: 125) { Fuse = false };
+        var counter = new CountingPassthroughLayer(Width);
+        var layers = new List<ILayer<double>>
+        {
+            new FullyConnectedLayer<double>(Dim, Width, new TanhActivation<double>()),
+            counter,
+            head,
+        };
+        var arch = new NeuralNetworkArchitecture<double>(inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification, complexity: NetworkComplexity.Simple,
+            inputSize: Dim, outputSize: Vocab, layers: layers) { RandomSeed = 25 };
+        var net = new NeuralNetwork<double>(arch, lossFunction: new CrossEntropyWithLogitsLoss<double>());
+        var (x, ids) = Data(seed: 26);
+        var loss = new CrossEntropyWithLogitsLoss<double>();
+        double expected = loss.ComputeTapeLoss(net.Predict(x), ids).GetFlat(0);
+        counter.ForwardCalls = 0;
+        head.ForwardCalls = 0;
+
+        double got = AiModelBuilder<double, Tensor<double>, Tensor<double>>.SampleLoss(net, loss, x, ids);
+
+        Assert.Equal(expected, got, 12);
+        Assert.Equal(1, counter.ForwardCalls);
+        Assert.Equal(1, head.ForwardCalls);
+        Assert.Equal(0, head.FusedCalls);
+    }
 }
