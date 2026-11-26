@@ -893,6 +893,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     // Set while RandomSeed is one a composed parent handed down, which that parent's next seed may replace.
     private bool _randomSeedInherited;
 
+    /// <summary>
+    /// True for a child its parent built while resolving itself on its first input (a forward or the shape-only walk).
+    /// Its seed is the one the parent derives for its registration position, and the model's seed wiring leaves it and
+    /// its own children out of the sequence it draws.
+    /// </summary>
+    /// <remarks>
+    /// The wiring draws one seed per layer in traversal order. A child that exists at wiring only when something
+    /// resolved its parent first took a draw of its own, which moved the seed of every layer after it: the same seeded
+    /// DenseNet-121 initialised every layer after its first transition differently depending on whether a shape walk
+    /// had run before <c>Train</c>.
+    /// </remarks>
+    internal bool TakesSeedFromParentOnly { get; private set; }
+
     // True while this layer resolves itself on its first forward (OnFirstForward or the shape-only reconciliation), when
     // a lazy composite builds children outside any model's construction.
     [AiDotNet.Attributes.Scratch]
@@ -930,6 +943,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         clone._seededRandom = shareRandomState && _seededRandom is not null
             ? LayerCloning.CloneRandom(_seededRandom)
             : null;
+        clone.TakesSeedFromParentOnly = TakesSeedFromParentOnly;
         clone.SetTrainingMode(IsTrainingMode);
     }
 
@@ -2981,9 +2995,63 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         var shape = input.Shape.ToArray();
         if (shape.Length < 2) return;
 
-        var perSample = new int[shape.Length - 1];
-        Array.Copy(shape, 1, perSample, 0, perSample.Length);
-        ResolveShapes(perSample, perSample);
+        ResolveShapes(SampleShapeOf(shape), SampleShapeOf(shape));
+    }
+
+    /// <summary>
+    /// The per-sample shape a rank-agnostic layer declares for <paramref name="inputShape"/>: the shape without its
+    /// leading batch axis, or the whole shape when the shape being resolved already is one sample's
+    /// (<see cref="ShapeProbeIsSampleShape"/>).
+    /// </summary>
+    private protected int[] SampleShapeOf(int[] inputShape)
+    {
+        // Only a layer that declares through this rule records the walk's per-sample shape as its declaration; a
+        // layer with its own resolution (a transformer block keeping its sequence axis dynamic) declared something
+        // else, and replacing that with the first input's concrete shape pinned an axis it never fixes.
+        if (ShapeProbeIsSampleShape) _declaredFromSampleShapeProbe = true;
+        if (ShapeProbeIsSampleShape || inputShape.Length < 2) return (int[])inputShape.Clone();
+        var perSample = new int[inputShape.Length - 1];
+        Array.Copy(inputShape, 1, perSample, 0, perSample.Length);
+        return perSample;
+    }
+
+    /// <summary>
+    /// True while <see cref="ResolveShapesOnlyFromSampleShape"/> is on the stack: the shape reaching
+    /// <see cref="OnFirstForward"/> is one sample's, with no batch axis in front.
+    /// </summary>
+    /// <remarks>
+    /// A layer that accepts any rank reads its sample shape as "the input without its leading axis", which is right
+    /// for a real input and wrong for a per-sample shape: after a convolution reporting <c>[64, 32, 32]</c> an
+    /// activation declared <c>[32, 32]</c>, the next layer rejected a rank-2 image, and the network's shape walk
+    /// stopped there with every later layer unsized.
+    /// </remarks>
+    private protected bool ShapeProbeIsSampleShape { get; private set; }
+
+    // Set when the rank-agnostic rule (SampleShapeOf) declared this layer from a per-sample shape during a shape-only
+    // walk. That shape is the walk's inference, so the first real input replaces it, exactly as if the walk had not
+    // run. A layer that resolves itself another way keeps its own declaration.
+    private bool _declaredFromSampleShapeProbe;
+
+    /// <summary>
+    /// <see cref="ResolveShapesOnly"/> for a shape that describes one sample (another layer's
+    /// <see cref="GetOutputShape"/>), not a batched input. Only layers that read
+    /// <see cref="ShapeProbeIsSampleShape"/> treat it differently.
+    /// </summary>
+    internal void ResolveShapesOnlyFromSampleShape(int[] sampleShape)
+    {
+        if (IsShapeResolved) return;
+        _declaredFromSampleShapeProbe = false;
+        ShapeProbeIsSampleShape = true;
+        try
+        {
+            ResolveShapesOnly(sampleShape);
+        }
+        finally
+        {
+            ShapeProbeIsSampleShape = false;
+        }
+
+        _declaredFromSampleShapeProbe &= IsShapeResolved;
     }
 
     /// <summary>
@@ -3550,6 +3618,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                     }
                     else if (_shapeOnlyResolutionPendingFirstForward)
                     {
+                        if (_declaredFromSampleShapeProbe && input.Rank >= 2)
+                        {
+                            var actual = SampleShapeOf(input.Shape.ToArray());
+                            ResolveShapes(actual, actual);
+                        }
+
                         ReconcileShapeOnlyResolution(input);
                     }
                 }
@@ -9042,6 +9116,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 childSeed = subSeedRng.Next();
             lateChild.AssignInheritedSeed(childSeed);
         }
+
+        if (_resolvingOnFirstForward && subLayer is LayerBase<T> builtLate)
+            builtLate.TakesSeedFromParentOnly = true;
 
         // Sub-layer's ParameterCount contributes to ours; invalidate the
         // cache so the next query picks up the addition.

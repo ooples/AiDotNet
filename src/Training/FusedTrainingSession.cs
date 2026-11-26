@@ -45,6 +45,18 @@ internal enum ClosureGraphBreakPolicy
 internal sealed class FusedTrainingStepRequest<T>
 {
     public required IReadOnlyList<ITrainableLayer<T>> Layers { get; init; }
+
+    /// <summary>
+    /// Collects the trainable layers again, in the same order as <see cref="Layers"/>, once the step's
+    /// lazy-initialization forward has run. Null = <see cref="Layers"/> is already final.
+    /// </summary>
+    /// <remarks>
+    /// A composite layer whose shape is unknown until its first input builds its children on that forward, so the set
+    /// collected before the step is short. Trained from the short set, the step remembered it, the next step arrived
+    /// with the full set, and the difference read as a different model: the first step's plan and its optimizer moments
+    /// were dropped and a second plan compiled.
+    /// </remarks>
+    public Func<IReadOnlyList<ITrainableLayer<T>>>? LayersAfterLazyInitialization { get; init; }
     public required Tensor<T> Input { get; init; }
     public required Tensor<T> Target { get; init; }
     public required Func<Tensor<T>, Tensor<T>> Forward { get; init; }
@@ -210,8 +222,17 @@ internal sealed class FusedTrainingSession<T>
     private readonly Action? _onReset;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _lastOptimizer;
     private bool _persistenceVerified;
-    // The plan whose update the numeric probe last saw land; a later plan is verified numerically again.
-    private object? _verifiedPlan;
+    // The plan whose update the numeric probe last saw land; a later plan is verified numerically again. Held weakly:
+    // it is only ever compared by identity, and a strong reference kept a replaced plan and every activation buffer
+    // it owns (2.3 GB for DenseNet-121 at batch 64) alive until the next check, up to PersistenceRecheckInterval
+    // steps later.
+    private WeakReference<object>? _verifiedPlan;
+
+    /// <summary>Persistence checks answered by comparing the configured plan with the verified one.</summary>
+    internal int StructuralPersistenceRecheckCount { get; private set; }
+
+    /// <summary>Persistence checks that sampled the parameters and read them back.</summary>
+    internal int NumericPersistenceProbeCount { get; private set; }
     private int _stepsSincePersistenceCheck;
     private bool _replayAgreementVerified;
     private object? _objectiveKey;
@@ -498,8 +519,11 @@ internal sealed class FusedTrainingSession<T>
         // reduction per parameter plus a synchronous readback that drains the device (6-14 ms every 16 steps on
         // the parity Transformer, a fifth of its CUDA step time); it runs only when that comparison cannot answer.
         bool structuralRecheck = verifyPersistence && _persistenceVerified && _verifiedPlan is not null
-            && ReferenceEquals(_verifiedPlan, CompiledTapeTrainingStep<T>.ConfiguredPlanIdentity);
+            && _verifiedPlan.TryGetTarget(out var verifiedPlan)
+            && ReferenceEquals(verifiedPlan, CompiledTapeTrainingStep<T>.ConfiguredPlanIdentity);
         using var probe = verifyPersistence && !structuralRecheck ? SampleParameters(request) : null;
+        if (structuralRecheck) StructuralPersistenceRecheckCount++;
+        else if (verifyPersistence) NumericPersistenceProbeCount++;
         bool gradientsObserved = false;
         bool gradientNonZero = false;
         void OnGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
@@ -627,7 +651,8 @@ internal sealed class FusedTrainingSession<T>
                 verifyDistributedReplay: isDistributed && checkReplay,
                 distributedEagerReplayLoss: distributedEagerReplayLoss,
                 distributedReplayTolerance: ReplayAgreementTolerance,
-                closureObjective: request.ClosureObjective);
+                closureObjective: request.ClosureObjective,
+                layersAfterLazyInitialization: request.LayersAfterLazyInitialization);
         }
         finally
         {
@@ -786,7 +811,9 @@ internal sealed class FusedTrainingSession<T>
             {
                 _persistenceVerified = true;
                 _stepsSincePersistenceCheck = 0;
-                _verifiedPlan = CompiledTapeTrainingStep<T>.ConfiguredPlanIdentity;
+                _verifiedPlan = CompiledTapeTrainingStep<T>.ConfiguredPlanIdentity is { } configured
+                    ? new WeakReference<object>(configured)
+                    : null;
             }
         }
 

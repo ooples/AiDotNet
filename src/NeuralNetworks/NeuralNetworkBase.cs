@@ -6218,6 +6218,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // auto-detect, ShouldUseStreamingTraining, ConfigureInferenceForScale —
         // for exactly the foundation-scale models that need them, #1688). Robust
         // across ALL model families, not just whichever layer breaks first.
+        int[] architectureShape = currentShape;
         int[] lastGoodShape = currentShape;
         // A raw architecture input is only a candidate; do not rewrite its feature axis
         // from rank-1 declarations until a layer has established a sequence shape.
@@ -6261,7 +6262,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 continue;
             }
 
-            if (!TryAdvanceLayerShapeCore(layer, ref currentShape, ref lastGoodShape, ref lastGoodShapeComesFromLayer))
+            if (!TryAdvanceLayerShapeCore(layer, ref currentShape, ref lastGoodShape, ref lastGoodShapeComesFromLayer, architectureShape))
             {
                 // This layer resolved from NEITHER the running shape NOR the last
                 // good shape (the backtrack above already tried both). Its true
@@ -6295,7 +6296,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             foreach (var extra in GetExtraTrainableLayers())
             {
                 if (extra is null) continue;
-                TryAdvanceLayerShapeCore(extra, ref currentShape, ref lastGoodShape, ref lastGoodShapeComesFromLayer);
+                TryAdvanceLayerShapeCore(extra, ref currentShape, ref lastGoodShape, ref lastGoodShapeComesFromLayer, architectureShape);
             }
 
         // After the whole walk, so the tally covers every transition including the extra layers.
@@ -6317,14 +6318,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     private bool TryAdvanceLayerShape(ILayer<T> layer, ref int[] currentShape, ref int[] lastGoodShape)
     {
         bool lastGoodShapeComesFromLayer = false;
-        return TryAdvanceLayerShapeCore(layer, ref currentShape, ref lastGoodShape, ref lastGoodShapeComesFromLayer);
+        return TryAdvanceLayerShapeCore(layer, ref currentShape, ref lastGoodShape, ref lastGoodShapeComesFromLayer,
+            batchedArchitectureShape: null);
     }
 
     private bool TryAdvanceLayerShapeCore(
         ILayer<T> layer,
         ref int[] currentShape,
         ref int[] lastGoodShape,
-        ref bool lastGoodShapeComesFromLayer)
+        ref bool lastGoodShapeComesFromLayer,
+        int[]? batchedArchitectureShape)
     {
         var candidates = ReferenceEquals(lastGoodShape, currentShape)
             ? new[] { currentShape }
@@ -6338,7 +6341,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     // Shape-only resolution — does NOT allocate or initialize weights,
                     // so we don't consume RNG state and perturb training. Weight
                     // allocation still happens lazily on the first real Forward.
-                    lb.ResolveShapesOnly(tryShape);
+                    // The architecture's shape carries a unit batch; every shape after it is a layer's
+                    // GetOutputShape, which describes one sample. A rank-agnostic layer has to be told which
+                    // it is given, or it drops the channel axis of a per-sample image as if it were the batch.
+                    if (batchedArchitectureShape is not null && !ReferenceEquals(tryShape, batchedArchitectureShape))
+                        lb.ResolveShapesOnlyFromSampleShape(tryShape);
+                    else
+                        lb.ResolveShapesOnly(tryShape);
                 }
                 int[] outShape = layer.GetOutputShape();
 
@@ -10175,6 +10184,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (!visited.Add(layer)) return;
         if (layer is Layers.LayerBase<T> baseLayer)
         {
+            // A child its parent built on its first input is seeded by that parent, whenever it gets built. Drawing
+            // for it here would give every later layer a different seed once it exists.
+            if (baseLayer.TakesSeedFromParentOnly) return;
             // Draw for every layer, so skipping a caller-chosen one does not shift the seeds the others get.
             int next = seedRng.Next();
             if (callerChosen is null || !callerChosen.Contains(layer))
@@ -17351,9 +17363,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     // context. Still recorded rather than swallowed silently -- an invisible
                     // failure here shows up later as an unexplained fused miss. Same channel the
                     // GPU-forward fallbacks in this class already use.
-                    AiDotNet.Configuration.GpuDiagnosticsConfig.Emit(
-                        AiDotNet.Configuration.GpuDiagnosticLevel.Minimal,
-                        $"[NeuralNetworkBase] shape-resolution warm-up forward failed ({ex.GetType().Name}): {ex.Message}");
+                    System.Diagnostics.Trace.TraceWarning(
+                        "[AiDotNet] {0}: the shape-resolution warm-up forward before parameter selection failed, so " +
+                        "the selection may be taken from layers that are not sized yet. {1}", GetType().Name, ex);
                 }
                 finally
                 {
@@ -17391,6 +17403,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         var request = new Training.FusedTrainingStepRequest<T>
         {
             Layers = trainableLayers,
+            // A layer the shape walk cannot size builds its children on the step's own first forward.
+            LayersAfterLazyInitialization =
+                () => Training.TapeTrainingStep<T>.CollectTrainableLayers(Layers, _layerStructureVersion),
             Input = input,
             Target = expected,
             // The composite objective re-runs the heads on the traced INPUT; passing the prediction ran the model on

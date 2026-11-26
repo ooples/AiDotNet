@@ -280,7 +280,7 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
     {
         // Lazy ctor leaves _conv null until OnFirstForward observes the
         // input channel count and allocates it from compressionFactor.
-        if (!IsShapeResolved) OnFirstForward(input);
+        if (!IsShapeResolved) BuildLateSubLayers(() => OnFirstForward(input));
         var conv = _conv ?? throw new InvalidOperationException("OnFirstForward did not allocate _conv.");
 
         // Store original shape for any-rank tensor support
