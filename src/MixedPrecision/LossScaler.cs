@@ -117,7 +117,9 @@ public class LossScaler<T>
 
     private void PullDeviceState()
     {
-        if (_deviceState is not { } read || _pullingDeviceState) return;
+        // A restored or reset host state that the owner has not yet pushed to the device is the authoritative state:
+        // pulling now would overwrite it with the device's pre-restore values, and the next step would install those.
+        if (_restoredSinceAttach || _deviceState is not { } read || _pullingDeviceState) return;
         _pullingDeviceState = true;
         try
         {
