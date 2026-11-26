@@ -390,8 +390,8 @@ internal static class ClusteringTensorOps
             ref System.Runtime.CompilerServices.Unsafe.As<T, double>(
                 ref System.Runtime.InteropServices.MemoryMarshal.GetReference(values)), values.Length);
 
-    /// <summary>A writable span of T as doubles; only valid when T is double.</summary>
-    internal static Span<double> AsWritableDoubles<T>(Span<T> values)
+    /// <summary>A writable span of T as doubles; only valid when T is double (only <see cref="ClusterSums{T}(Tensor{T}, int[], int, out Vector{T})"/> needs it).</summary>
+    private static Span<double> AsWritableDoubles<T>(Span<T> values)
         => System.Runtime.InteropServices.MemoryMarshal.CreateSpan(
             ref System.Runtime.CompilerServices.Unsafe.As<T, double>(
                 ref System.Runtime.InteropServices.MemoryMarshal.GetReference(values)), values.Length);
@@ -428,10 +428,16 @@ internal static class ClusteringTensorOps
 
     /// <summary>Gathers the row of <paramref name="centers"/> assigned to every sample ([n, d]); invalid labels give zero rows.</summary>
     internal static Tensor<T> AssignedRows<T>(Vector<T> labels, Matrix<T> centers, out Tensor<T> valid)
+        => AssignedRows(ToIntArray(labels), centers, out valid);
+
+    /// <summary>
+    /// Gathers the row of <paramref name="centers"/> named by every cluster index ([n, d]); indices outside the centers
+    /// give zero rows.
+    /// </summary>
+    internal static Tensor<T> AssignedRows<T>(int[] ids, Matrix<T> centers, out Tensor<T> valid)
     {
         var engine = Engine;
-        int n = labels.Length;
-        var ids = ToIntArray(labels);
+        int n = ids.Length;
         if (n > 0 && AllWithin(ids, centers.Rows))
         {
             // Every label names a center: gather the rows instead of multiplying by an [n, k] mask.
@@ -439,28 +445,39 @@ internal static class ClusteringTensorOps
             return engine.TensorIndexSelect(ToTensor(centers), Vector<int>.Wrap(ids).AsTensor(), 0);
         }
 
-        var mask = OneHotMask(labels, centers.Rows);
+        var mask = OneHotRows<T>(ids, centers.Rows);
         valid = engine.ReduceSum(mask, new[] { 1 }, false);
         return engine.TensorMatMul(mask, ToTensor(centers));
     }
 
     /// <summary>Squared distance of every sample to its assigned center; zero for invalid labels.</summary>
     internal static Vector<T> AssignedSquaredDistances<T>(Matrix<T> x, Vector<T> labels, Matrix<T> centers)
+        => AssignedSquaredDistances(x, ToIntArray(labels), centers);
+
+    /// <summary>Squared distance of every sample to the center its cluster index names; zero for invalid indices.</summary>
+    internal static Vector<T> AssignedSquaredDistances<T>(Matrix<T> x, int[] ids, Matrix<T> centers)
     {
         var engine = Engine;
-        var assigned = AssignedRows(labels, centers, out var valid);
+        var assigned = AssignedRows(ids, centers, out var valid);
         return engine.TensorMultiply(RowSquaredEuclidean(ToTensor(x), assigned), valid).ToVector();
     }
 
     /// <summary>Within-cluster sum of squared distances to the assigned centers (labels outside the centers are skipped).</summary>
     internal static T Inertia<T>(Matrix<T> x, Vector<T> labels, Matrix<T> centers)
+        => Inertia(x, ToIntArray(labels), centers);
+
+    /// <summary>
+    /// <see cref="Inertia{T}(Matrix{T}, Vector{T}, Matrix{T})"/> from <see cref="int"/> cluster indices, which stay exact
+    /// where a label in <typeparamref name="T"/> would not (above 2048 in half precision).
+    /// </summary>
+    internal static T Inertia<T>(Matrix<T> x, int[] ids, Matrix<T> centers)
     {
         if (x.Rows == 0 || centers.Rows == 0)
         {
             return MathHelper.GetNumericOperations<T>().Zero;
         }
 
-        return Engine.TensorSum(AssignedSquaredDistances(x, labels, centers).AsTensor());
+        return Engine.TensorSum(AssignedSquaredDistances(x, ids, centers).AsTensor());
     }
 
     /// <summary>Row-major flattening of a matrix.</summary>
@@ -620,9 +637,16 @@ internal static class ClusteringTensorOps
 
     /// <summary>Distance (configured metric) from every sample to the center of its label; zero for invalid labels.</summary>
     internal static Vector<T> AssignedDistances<T>(IDistanceMetric<T> metric, Matrix<T> x, Vector<T> labels, Matrix<T> centers)
+        => AssignedDistances(metric, x, ToIntArray(labels), centers);
+
+    /// <summary>
+    /// <see cref="AssignedDistances{T}(IDistanceMetric{T}, Matrix{T}, Vector{T}, Matrix{T})"/> from <see cref="int"/>
+    /// cluster indices.
+    /// </summary>
+    internal static Vector<T> AssignedDistances<T>(IDistanceMetric<T> metric, Matrix<T> x, int[] ids, Matrix<T> centers)
     {
         var engine = Engine;
-        var mask = OneHotMask(labels, centers.Rows);
+        var mask = OneHotRows<T>(ids, centers.Rows);
         var distances = Tensor<T>.FromMatrix(metric.ComputePairwise(x, centers));
 
         // Selected, not multiplied: 0 * inf for an infinite distance to another center would make the row NaN.

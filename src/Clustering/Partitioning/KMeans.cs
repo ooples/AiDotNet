@@ -289,9 +289,10 @@ public partial class KMeans<T> : ClusteringBase<T>
         if (iterations > 0 && !unchanged)
             labels = AssignLabelIndices(data, centers);
 
-        var labelVector = ClusteringTensorOps.FromIntArray<T>(labels);
-        T inertia = iterations > 0 ? ComputeInertia(data, labelVector, centers) : NumOps.Zero;
-        return (centers, labelVector, inertia, iterations);
+        // Scored from the int assignments that produced the centers: a label in T is not exact above 2048 in half
+        // precision, so scoring the converted labels could use another membership than the update step did.
+        T inertia = iterations > 0 ? ComputeInertia(data, labels, centers) : NumOps.Zero;
+        return (centers, ClusteringTensorOps.FromIntArray<T>(labels), inertia, iterations);
     }
 
     /// <summary>
@@ -425,7 +426,8 @@ public partial class KMeans<T> : ClusteringBase<T>
     /// </summary>
     /// <remarks>
     /// Every value is the engine form's, operation for operation: the engine's cumulative sum, column sums, row norms
-    /// and matrix product all accumulate in index order without fused multiply-adds, its sorted search returns the first
+    /// and multi-candidate matrix product all accumulate in index order without fused multiply-adds (a single-center
+    /// pass, whose product the engine reduces in SIMD lanes, is taken from the engine itself), its sorted search returns the first
     /// running sum at or above the threshold, and its arg-min the first minimum. So the draws, the chosen centers and
     /// the fit are identical to that form's for a given seed. As engine operations (a gather, a transpose, a product,
     /// broadcasts, a cumulative sum and a search per draw) seeding took a quarter of a k-means fit (#2524).
@@ -438,51 +440,55 @@ public partial class KMeans<T> : ClusteringBase<T>
         int columns = values.Shape[1];
         int blocks = (rows + NearestBlockRows - 1) / NearestBlockRows;
 
+        // O(rows + trials) workspace whatever the trial count: candidates are scored one at a time into a reusable row
+        // buffer, so a large KMeansPlusPlusLocalTrials cannot overflow (or exhaust memory with) a rows * trials array.
         var minDistances = new double[rows];
         var cumulative = new double[rows];
-        var lowered = new double[rows * trials];
-        var potentials = new double[trials];
+        var lowered = new double[rows];
+        var bestLowered = new double[rows];
         var candidates = new int[trials];
-        var candidateNorms = new double[trials];
 
-        // [rows, count] of min(current nearest, squared distance to candidate t), or the bare distance on the first
-        // pass, written into lowered; rows are independent, so blocks of them run in parallel.
-        void LowerTo(int count, bool first)
+        // One center's squared distances lowered into minDistances by the engine form itself: a single-center product
+        // reduces across features in the engine's order (SIMD lanes), which a sequential dot product does not
+        // reproduce, and the sampling weights must be the engine form's for the seeded draws to match it.
+        void LowerByEngine(int candidate, bool first)
+        {
+            var distances = (double[])(object)SquaredDistancesToRows(data, new[] { candidate }).ToArray();
+            for (int r = 0; r < rows; r++)
+                minDistances[r] = first ? distances[r] : Math.Min(minDistances[r], distances[r]);
+        }
+
+        // min(current nearest, squared distance to the candidate) for every row, written into lowered; rows are
+        // independent, so blocks of them run in parallel. Each value is the engine's multi-candidate product's, which
+        // accumulates every dot product in feature order.
+        void LowerTo(int candidate)
         {
             var points = ClusteringTensorOps.AsDoubles(values.AsSpan());
-            for (int t = 0; t < count; t++)
-            {
-                var point = points.Slice(candidates[t] * columns, columns);
-                double norm = 0.0;
-                for (int j = 0; j < columns; j++) norm += point[j] * point[j];
-                candidateNorms[t] = norm;
-            }
+            var candidatePoint = points.Slice(candidate * columns, columns);
+            double candidateNorm = 0.0;
+            for (int j = 0; j < columns; j++) candidateNorm += candidatePoint[j] * candidatePoint[j];
 
-            AiDotNet.Tensors.Helpers.CpuParallelSettings.ParallelForOrSerial(0, blocks, (long)rows * columns * count, block =>
+            var target = lowered;
+            AiDotNet.Tensors.Helpers.CpuParallelSettings.ParallelForOrSerial(0, blocks, (long)rows * columns, block =>
             {
                 var x = ClusteringTensorOps.AsDoubles(values.AsSpan());
                 var norms = ClusteringTensorOps.AsDoubles(rowNorms.AsSpan());
+                var point = x.Slice(candidate * columns, columns);
                 int end = Math.Min(rows, (block + 1) * NearestBlockRows);
                 for (int r = block * NearestBlockRows; r < end; r++)
                 {
                     var row = x.Slice(r * columns, columns);
-                    for (int t = 0; t < count; t++)
-                    {
-                        var point = x.Slice(candidates[t] * columns, columns);
-                        double dot = 0.0;
-                        for (int j = 0; j < columns; j++) dot += row[j] * point[j];
+                    double dot = 0.0;
+                    for (int j = 0; j < columns; j++) dot += row[j] * point[j];
 
-                        // ||x||^2 + ||c||^2 - 2 x.c, clamped at zero (rounding can leave a coincident row below it).
-                        double distance = Math.Max(norms[r] + candidateNorms[t] - dot * 2.0, 0.0);
-                        lowered[r * count + t] = first ? distance : Math.Min(minDistances[r], distance);
-                    }
+                    // ||x||^2 + ||c||^2 - 2 x.c, clamped at zero (rounding can leave a coincident row below it).
+                    double distance = Math.Max(norms[r] + candidateNorm - dot * 2.0, 0.0);
+                    target[r] = Math.Min(minDistances[r], distance);
                 }
             });
         }
 
-        candidates[0] = chosen[0];
-        LowerTo(1, first: true);
-        Array.Copy(lowered, minDistances, rows);
+        LowerByEngine(chosen[0], first: true);
 
         for (int k = 1; k < chosen.Length; k++)
         {
@@ -505,31 +511,32 @@ public partial class KMeans<T> : ClusteringBase<T>
                 candidates[t] = low < rows ? low : 0;
             }
 
-            LowerTo(trials, first: false);
-
-            // The candidate whose potential (the summed lowered distances) is lowest, the first drawn on a tie.
-            int best = 0;
-            if (trials > 1)
+            // One trial is classic k-means++: the drawn row, lowered as the engine form lowers it.
+            if (trials == 1)
             {
-                Array.Clear(potentials, 0, trials);
-                for (int r = 0; r < rows; r++)
-                    for (int t = 0; t < trials; t++)
-                        potentials[t] += lowered[r * trials + t];
+                chosen[k] = candidates[0];
+                LowerByEngine(candidates[0], first: false);
+                continue;
+            }
 
-                double bestPotential = double.IsNaN(potentials[0]) ? double.PositiveInfinity : potentials[0];
-                for (int t = 1; t < trials; t++)
+            // The candidate whose potential (the summed lowered distances, in row order) is lowest, the first drawn on
+            // a tie; a NaN potential never wins. The best candidate's lowered distances are kept by swapping buffers.
+            double bestPotential = double.PositiveInfinity;
+            for (int t = 0; t < trials; t++)
+            {
+                LowerTo(candidates[t]);
+                double potential = 0.0;
+                for (int r = 0; r < rows; r++) potential += lowered[r];
+                if (double.IsNaN(potential)) potential = double.PositiveInfinity;
+                if (t == 0 || potential < bestPotential)
                 {
-                    double potential = double.IsNaN(potentials[t]) ? double.PositiveInfinity : potentials[t];
-                    if (potential < bestPotential)
-                    {
-                        bestPotential = potential;
-                        best = t;
-                    }
+                    bestPotential = potential;
+                    chosen[k] = candidates[t];
+                    (lowered, bestLowered) = (bestLowered, lowered);
                 }
             }
 
-            chosen[k] = candidates[best];
-            for (int r = 0; r < rows; r++) minDistances[r] = lowered[r * trials + best];
+            (minDistances, bestLowered) = (bestLowered, minDistances);
         }
     }
 #endif
@@ -598,6 +605,16 @@ public partial class KMeans<T> : ClusteringBase<T>
         var halfCenterNorms = Engine.TensorMultiplyScalar(
             Engine.Reshape(Engine.ReduceSum(Engine.TensorSquare(centersT), new[] { 0 }, false), new[] { 1, clusters }),
             NumOps.FromDouble(0.5));
+
+#if NET7_0_OR_GREATER
+        // The double kernel blocks the rows itself and has no [rows, clusters] intermediates: one call packs the
+        // center table once for every row instead of once per engine-sized block.
+        if (typeof(T) == typeof(double) && data.Values.IsContiguous && centersT.IsContiguous
+            && halfCenterNorms.IsContiguous)
+        {
+            return NearestCentersOfDoubles(data.Values, centersT, halfCenterNorms);
+        }
+#endif
 
         // Rows are scored in cache-sized blocks so the [rows, clusters] intermediates stay small.
         int rowsPerBlock = Math.Max(1, Math.Min(rows, AssignmentBlockElements / clusters));
@@ -752,7 +769,7 @@ public partial class KMeans<T> : ClusteringBase<T>
     }
 
     /// <summary>Sum of squared distances from every row to the center its label names.</summary>
-    private T ComputeInertia(KMeansData data, Vector<T> labels, Matrix<T> centers)
+    private T ComputeInertia(KMeansData data, int[] labels, Matrix<T> centers)
     {
         if (data.Euclidean)
         {
