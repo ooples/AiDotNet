@@ -9,6 +9,7 @@ internal interface IStreamingOptimizer<T>
 {
     void BeginStep();
     void Apply(Tensor<T> param, Tensor<T> grad);
+    void ApplyBatch(IReadOnlyList<Tensor<T>> parameters, IReadOnlyList<Tensor<T>> gradients);
 
     /// <summary>
     /// Called once after every parameter's gradient has been handed to <see cref="Apply"/> for

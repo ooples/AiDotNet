@@ -75,6 +75,7 @@ public partial class GoogleSpeechV2<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
     private BestRqNetwork<T>? _network;
     private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
     internal BestRqNetwork<T>? Network => _network;
+    /// <inheritdoc/>
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />
     public bool SupportsStreaming => false;
@@ -113,7 +114,9 @@ public partial class GoogleSpeechV2<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
 
     /// <inheritdoc />
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+    /// <inheritdoc/>
     public string DetectLanguage(Tensor<T> audio) { var logits = Logits(PreprocessAudio(audio), training: false); var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
+    /// <inheritdoc/>
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; T primaryValue = NumOps.FromDouble(primaryProb); T otherValue = NumOps.FromDouble(otherProb); foreach (var lang in SupportedLanguages) result[lang] = lang == detected ? primaryValue : otherValue; return result; }
     /// <inheritdoc />
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("GoogleSpeechV2 does not support streaming.");
@@ -138,8 +141,10 @@ public partial class GoogleSpeechV2<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
     // CTC logits [frames, vocab] for a waveform [S], or [batch, frames, vocab] for [batch, S].
     private Tensor<T> Logits(Tensor<T> input, bool training) => ForwardNativeWaveformBatch(input, _network, (net, wave) => net.CtcLogits(net.Encode(net.FeatureTensor(wave), training)));
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input, training: true);
 
     /// <summary>
@@ -171,6 +176,7 @@ public partial class GoogleSpeechV2<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "GoogleSpeechV2-Native" : "GoogleSpeechV2-ONNX", Description = "Google Speech-to-Text V2: the USM-CTC network its Chirp models use (Google, 2023)", FeatureCount = 1, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
 

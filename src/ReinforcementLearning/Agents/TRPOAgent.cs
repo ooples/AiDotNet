@@ -622,6 +622,7 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         }
     }
 
+    /// <inheritdoc/>
     public override Dictionary<string, T> GetMetrics()
     {
         return new Dictionary<string, T>

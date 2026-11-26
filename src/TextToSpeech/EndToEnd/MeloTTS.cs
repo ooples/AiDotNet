@@ -31,6 +31,22 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// the recording, its <see cref="TtsTrainingSample{T}.Text"/> and the speaker. Released voices load with
 /// <see cref="LoadCheckpoint"/> plus <see cref="LoadBertWeights"/> for the language's BERT.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a MeloTTS model for high-quality multilingual end-to-end TTS
+/// // with VITS backbone, language-specific G2P, and mixed-language support
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MeloTTS&lt;double&gt;(architecture, "melotts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MeloTTS&lt;double&gt;(architecture, new MeloTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

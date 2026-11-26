@@ -15,6 +15,22 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// tokenizer, causal token LM, token diffusion model, timbre conditioner, and acoustic vocoder. It only adapts the
 /// general Seed-TTS prompt API to <see cref="IVoiceCloner{T}"/>.
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Seed-TTS model for diffusion-based zero-shot voice cloning
+/// // with speaker factorization for high-fidelity synthesis
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SeedTTSClone&lt;double&gt;(architecture, "seed_tts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SeedTTSClone&lt;double&gt;(architecture, new SeedTTSCloneOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

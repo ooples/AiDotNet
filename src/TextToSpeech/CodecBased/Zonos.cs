@@ -33,6 +33,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 /// <example>
 /// <code>
+/// var recording = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var model = new Zonos&lt;float&gt;(architecture, new ZonosOptions());
 /// model.LoadReferenceWeights("Zonos-v0.1-transformer/model.safetensors");

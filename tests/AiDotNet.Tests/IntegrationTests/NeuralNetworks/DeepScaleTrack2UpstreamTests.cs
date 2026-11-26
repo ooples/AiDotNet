@@ -69,6 +69,7 @@ public sealed class DeepScaleTrack2UpstreamTests
 
     [Theory]
     [InlineData(1)]
+    [InlineData(2)]
     [InlineData(4)]
     [InlineData(7)]
     public void HouseholderSubspaceLayer_IsExactOrthogonalIsometryAndMatchesNumericalGradients(int numReflectors)
@@ -293,6 +294,7 @@ public sealed class DeepScaleTrack2UpstreamTests
 
     [Theory]
     [InlineData(1)]
+    [InlineData(2)]
     [InlineData(4)]
     public void HouseholderSubspaceLayer_FloatTinyAndZeroReflectors_KeepExactReflectionAndFiniteBackward(int numReflectors)
     {
@@ -549,6 +551,8 @@ public sealed class DeepScaleTrack2UpstreamTests
 
     [Theory]
     [InlineData(1, false)]
+    [InlineData(2, false)]
+    [InlineData(2, true)]
     [InlineData(4, false)]
     [InlineData(4, true)]
     public void HouseholderSubspaceLayer_FloatZeroAndTinyReflectors_HaveFiniteGradients_AndTransposeMatchesFiniteDifference(
@@ -564,9 +568,19 @@ public sealed class DeepScaleTrack2UpstreamTests
 
         if (numReflectors >= 2)
         {
-            // Row 0: identically zero; Row 1: sub-floor (1e-20f); Row 2: small exact reflector (1e-6f); Row 3: normal.
-            layer.Reflectors.SetFlat(1 * dim + 0, 1e-20f);
+            // Row 0: identically zero; Row 1: sub-floor (1e-20f) or normal reflector when k=2; Rows 2..3 when k>=4.
+            layer.Reflectors.SetFlat(1 * dim + 0, numReflectors == 2 ? 1.25f : 1e-20f);
+            if (numReflectors == 2)
+            {
+                layer.Reflectors.SetFlat(1 * dim + 1, -0.5f);
+            }
+        }
+        if (numReflectors >= 3)
+        {
             layer.Reflectors.SetFlat(2 * dim + 1, 1e-6f);
+        }
+        if (numReflectors >= 4)
+        {
             layer.Reflectors.SetFlat(3 * dim + 2, 1.75f);
             layer.Reflectors.SetFlat(3 * dim + 3, -0.5f);
         }

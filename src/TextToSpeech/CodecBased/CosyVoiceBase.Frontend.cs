@@ -8,6 +8,7 @@ public abstract partial class CosyVoiceBase<T>
 {
     private OnnxModel<T>? _releasedSpeechTokenizer, _releasedSpeakerEncoder;
 
+    /// <summary>Opens the released ONNX speech tokenizer and speaker encoder named in the settings, when given.</summary>
     protected void InitializeReleasedFrontends()
     {
         if (Settings.MaxReferenceSeconds <= 0) throw new ArgumentOutOfRangeException(nameof(Settings.MaxReferenceSeconds));

@@ -27,6 +27,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <para><b>For Beginners:</b> BigVGAN turns spectrograms into audio for any voice, language or instrument; its
 /// activations ripple periodically like sound does, and a filter keeps them from adding high-frequency artefacts.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a BigVGAN universal vocoder with anti-aliased
+/// // multi-periodicity composition (AMP) and Snake activation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new BigVGAN&lt;double&gt;(architecture, "bigvgan.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new BigVGAN&lt;double&gt;(architecture, new BigVGANOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]

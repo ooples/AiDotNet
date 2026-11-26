@@ -84,8 +84,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         if (distBackend is null || distBackend.WorldSize <= 1)
         {
-            bool canWarmupBeforePipelineFit = distBackend is not null
-                || _streamingTrainingOptions?.ResumeFromLatestCheckpoint == true
+            // One rank is no backend: with an unfitted pipeline the layers size themselves on the first transformed
+            // batch, not here on the raw sample shape.
+            bool canWarmupBeforePipelineFit = _streamingTrainingOptions?.ResumeFromLatestCheckpoint == true
                 || _preprocessingPipeline is not { IsFitted: false };
             if (canWarmupBeforePipelineFit && neuralNet.HasLazyUninitializedLayers())
             {

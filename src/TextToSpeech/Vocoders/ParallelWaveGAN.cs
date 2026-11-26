@@ -28,6 +28,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <para><b>For Beginners:</b> Parallel WaveGAN shapes random noise into speech in a single pass, guided by the
 /// spectrogram; matching spectrograms at several resolutions teaches it quickly, and a critic polishes the result.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Parallel WaveGAN vocoder for non-autoregressive synthesis
+/// // with multi-resolution STFT loss for stable adversarial training
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new ParallelWaveGAN&lt;double&gt;(architecture, "parallelwavegan.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new ParallelWaveGAN&lt;double&gt;(architecture, new ParallelWaveGANOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]

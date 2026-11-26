@@ -58,6 +58,7 @@ public sealed class SpiritLmContent<T>
 /// </remarks>
 /// <example>
 /// <code>
+/// var recording16kHz = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var model = new SpiritLM&lt;float&gt;(architecture, new SpiritLMOptions());
 /// model.LoadReleasedWeights("spiritlm_model/spirit-lm-base-7b", "speech_tokenizer");

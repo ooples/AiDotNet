@@ -39,6 +39,7 @@ namespace AiDotNet.Video.Segmentation;
 /// </remarks>
 /// <example>
 /// <code>
+/// var frames = new List&lt;Tensor&lt;float&gt;&gt; { Tensor&lt;float&gt;.CreateRandom(3, 1024, 1024), Tensor&lt;float&gt;.CreateRandom(3, 1024, 1024) };
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,

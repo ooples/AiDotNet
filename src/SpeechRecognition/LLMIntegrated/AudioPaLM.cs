@@ -28,13 +28,18 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// </remarks>
 /// <example>
 /// <code>
+/// var recordings = new List&lt;Tensor&lt;float&gt;&gt; { Tensor&lt;float&gt;.CreateRandom(1, 16000), Tensor&lt;float&gt;.CreateRandom(1, 16000) };
+/// var recording = recordings[0];
+/// var transcriptIds = new Tensor&lt;float&gt;(new[] { 4 }, new Vector&lt;float&gt;(new float[] { 651, 4320, 2185, 1 }));   // Gemma token ids
 /// var options = AudioPaLMOptions.Gemma2B();
 /// var model = new AudioPaLM&lt;float&gt;(new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional,
 ///     NeuralNetworkTaskType.SpeechRecognition, inputSize: 1, outputSize: 1), options);
 /// model.LoadGemmaWeights("gemma-2b");
-/// model.FitSpeechTokenizer(recordings);
-/// model.Train(recording, transcriptIds);
-/// var result = model.Transcribe(recording, "en");
+/// model.FitSpeechTokenizer(recordings);   // the audio tokens' k-means codebook
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(model)
+///     .Build(recording, transcriptIds);
+/// var logits = result.Predict(recording);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

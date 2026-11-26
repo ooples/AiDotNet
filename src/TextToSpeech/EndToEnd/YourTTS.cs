@@ -31,6 +31,22 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// <para><b>For Beginners:</b> YourTTS can speak in the voice of someone it has never heard before: give it a few
 /// seconds of their speech and it extracts a "voice fingerprint" that steers every part of the synthesis.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a YourTTS model for multilingual zero-shot multi-speaker TTS
+/// // with VITS backbone and speaker/language conditioning
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new YourTTS&lt;double&gt;(architecture, "yourtts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new YourTTS&lt;double&gt;(architecture, new YourTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

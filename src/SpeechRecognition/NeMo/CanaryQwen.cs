@@ -37,6 +37,7 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// </remarks>
 /// <example>
 /// <code>
+/// var waveform = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
@@ -72,9 +73,11 @@ public partial class CanaryQwen<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     // The paper network on the native path; null in ONNX mode or with custom layers.
     private CanaryQwenNetwork<T>? _network;
     internal CanaryQwenNetwork<T>? Network => _network;
+    /// <inheritdoc/>
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />
     public bool SupportsStreaming => false;
+    /// <inheritdoc/>
     public bool SupportsWordTimestamps => false;
 
     public CanaryQwen(NeuralNetworkArchitecture<T> architecture, string modelPath, CanaryQwenOptions? options = null) : base(architecture)
@@ -118,9 +121,13 @@ public partial class CanaryQwen<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         };
     }
 
+    /// <inheritdoc/>
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+    /// <inheritdoc/>
     public string DetectLanguage(Tensor<T> audio) => _options.Language;
+    /// <inheritdoc/>
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
+    /// <inheritdoc/>
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("Canary-Qwen does not support streaming.");
 
     // Qwen's tokenizer decodes when the vocabulary is Qwen's; otherwise each token is its vocabulary entry or code point.
@@ -167,10 +174,13 @@ public partial class CanaryQwen<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         ForwardNativeWaveformBatch(input, _network, (net, wave) =>
             net.FirstLogits(net.Prompt(net.Speech(TruncateAudioWaveform(wave, _options.MaxAudioLengthSeconds), training), _options.Instruction)));
 
+    /// <inheritdoc/>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return FirstLogits(input, training: false); }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : FirstLogits(input, training: true);
 
     private int[] Transcript(CanaryQwenNetwork<T> network, Tensor<T> target) =>
@@ -216,6 +226,7 @@ public partial class CanaryQwen<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "CanaryQwen-Native" : "CanaryQwen-ONNX", Description = "Canary-Qwen-2.5B: Fast Conformer, linear projection and Qwen3-1.7B with LoRA (NVIDIA 2025)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(CanaryQwen<T>)); }

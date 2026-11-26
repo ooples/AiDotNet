@@ -34,6 +34,9 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// </remarks>
 /// <example>
 /// <code>
+/// var prompt22kHz = Tensor&lt;float&gt;.CreateRandom(1, 16000);
+/// var promptTranscript = "example";
+/// var promptDurations = new int[] { 0, 1, 2 };
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var model = new MegaTTS&lt;float&gt;(architecture, new MegaTTSOptions());
 /// model.LoadVocoderWeights("generator_v1");   // a HiFi-GAN V1 generator trained on this model's mel spectrograms

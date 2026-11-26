@@ -25,6 +25,22 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// <para>Like the release, every synthesized waveform carries Resemble's Perth implicit watermark (a frozen PerthNet run
 /// natively; see <see cref="ChatterboxOptions.Watermark"/> and <see cref="ChatterboxOptions.WatermarkModelPath"/>).</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Chatterbox model for emotion-controllable zero-shot TTS
+/// // with watermarking and exaggeration control from Resemble AI
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Chatterbox&lt;double&gt;(architecture, "chatterbox.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Chatterbox&lt;double&gt;(architecture, new ChatterboxOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -101,14 +117,18 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         return FromDoubles(Watermarker.Apply(TensorCopyHelper.CastLogical<T, double>(waveform).ToArray(), _options.SampleRate));
     }
 
+    /// <inheritdoc/>
     protected override CosyVoiceFamilyOptions Settings => _options;
+    /// <inheritdoc/>
     protected override int TextVocabularySize => _options.VocabSize;
+    /// <inheritdoc/>
     protected override TtsSupervision RequiredVoice => TtsSupervision.ReferenceRecording;
 
     internal ChatterboxT3<T>? T3Model => _t3;
     internal ChatterboxVoiceEncoder<T>? VoiceEncoderModel => _voiceEncoder;
     internal IReadOnlyList<LayerBase<T>> VoiceEncoderLayers => _voiceEncoderLayers;
 
+    /// <inheritdoc/>
     public override int[] Tokenize(string text)
     {
         if (text is null) throw new ArgumentNullException(nameof(text));
@@ -122,6 +142,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
     // Turbo and Nano: GPT-2 T3, GPT-2 text tokens, the mean-flow S3Gen.
     private bool IsTurbo => _options.Variant is ChatterboxVariant.Turbo or ChatterboxVariant.Nano;
 
+    /// <inheritdoc/>
     public override string Detokenize(IEnumerable<int> ids) =>
         IsTurbo ? Gpt2Tokenizer.Decode(ids.ToList(), skipSpecialTokens: false) : Tokenizer.Decode(ids);
 
@@ -185,6 +206,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         return voice;
     }
 
+    /// <inheritdoc/>
     public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
@@ -196,6 +218,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         return IsOnnxMode && OnnxModel is not null ? Watermarked(OnnxModel.Run(input)) : Predict(input);
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var waveform = base.PredictCore(input);
@@ -262,9 +285,11 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
             Lookahead: _options.Lookahead,
             MeanFlow: IsTurbo);
 
+    /// <inheritdoc/>
     protected override void BuildLanguageModel(List<LayerBase<T>> layers, Random initialization) =>
         _t3 = new ChatterboxT3<T>(Engine, layers, _options, initialization);
 
+    /// <inheritdoc/>
     protected override int[] GenerateWithLanguageModel(
         IReadOnlyList<int> text,
         IReadOnlyList<int> promptText,
@@ -306,11 +331,13 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         }
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> FlowTrainingLoss(IReadOnlyList<int> speech, Tensor<T> target, Tensor<T> xvector, bool training, Random random) =>
         IsTurbo
             ? Flow.DistillationLoss(TeacherFlow, speech, target, xvector, training, random, _options.DistillationTeacherSteps)
             : base.FlowTrainingLoss(speech, target, xvector, training, random);
 
+    /// <inheritdoc/>
     protected override Tensor<T> LanguageModelLoss(
         IReadOnlyList<int> text,
         IReadOnlyList<int> speech,
@@ -352,6 +379,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
     }
 
 
+    /// <inheritdoc/>
     protected override T TrainOnSample(TtsTrainingSample<T> sample)
     {
         if (CurrentStage != CosyVoiceTrainingStage.LanguageModel)
@@ -363,6 +391,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => T3.Loss(text, speech, condition), _t3Optimizer);
     }
 
+    /// <inheritdoc/>
     public override T EvaluateTrainingObjective(TtsTrainingSample<T> sample)
     {
         if (CurrentStage != CosyVoiceTrainingStage.LanguageModel)
@@ -410,6 +439,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         return (text, speech, new ChatterboxT3Condition<T>(condition.SpeakerEmbedding, condition.PromptSpeechTokens, _options.Exaggeration));
     }
 
+    /// <inheritdoc/>
     public override void SetTrainingMode(bool isTraining)
     {
         base.SetTrainingMode(isTraining);
@@ -484,6 +514,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         InvalidateWeightCachesAfterSuccessfulWeightUpdate();
     }
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

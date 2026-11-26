@@ -31,6 +31,22 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// <para><b>For Beginners:</b> E2 TTS learns to fill in masked parts of a spectrogram from the text alone — no phoneme
 /// alignment, no duration model — and to speak it fills in everything after a voice prompt.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an E2 TTS model for flow-matching speech synthesis
+/// // with character-level text input and non-autoregressive generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new E2TTS&lt;double&gt;(architecture, "e2tts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new E2TTS&lt;double&gt;(architecture, new E2TTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -107,20 +123,26 @@ public partial class E2TTS<T> : FlowMatchingTtsModelBase<T>, IAcousticModel<T>
     int ITtsModel<T>.SampleRate => _options.SampleRate;
     /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc/>
     public new int MelChannels => _options.MelChannels;
+    /// <inheritdoc/>
     public new int HopSize => _options.HopSize;
+    /// <inheritdoc/>
     public int FftSize => _options.FftSize;
 
     /// <summary>Generates a mel spectrogram from text (paired with a Vocos vocoder in the reproduction).</summary>
     public Tensor<T> TextToMel(string text) => Synthesize(text);
 
+    /// <inheritdoc/>
     protected override FlowMatchingSettings Settings => new(_options.VocabSize, _options.MelChannels, _options.MaskFractionMin,
         _options.MaskFractionMax, _options.AudioDropProbability, _options.ConditionDropProbability,
         _options.NumFunctionEvaluations, _options.CfgStrength, _options.SwayCoefficient, _options.FramesPerCharacter,
         _options.Speed, _options.SamplingSeed);
 
+    /// <inheritdoc/>
     protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
+    /// <inheritdoc/>
     protected override bool HasPaperBackbone => _time is not null;
 
     protected override void InitializeLayers()
@@ -194,6 +216,7 @@ public partial class E2TTS<T> : FlowMatchingTtsModelBase<T>, IAcousticModel<T>
             }));
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     /// <inheritdoc />
@@ -202,6 +225,7 @@ public partial class E2TTS<T> : FlowMatchingTtsModelBase<T>, IAcousticModel<T>
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -215,6 +239,7 @@ public partial class E2TTS<T> : FlowMatchingTtsModelBase<T>, IAcousticModel<T>
         return m;
     }
 
+    /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

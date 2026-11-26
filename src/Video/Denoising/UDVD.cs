@@ -42,13 +42,15 @@ namespace AiDotNet.Video.Denoising;
 /// </remarks>
 /// <example>
 /// <code>
+/// var noisyFrames = Tensor&lt;double&gt;.CreateRandom(8, 3, 128, 128);   // [T, 3, H, W], pixel values 0-255
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 128, inputWidth: 128, inputDepth: 3);
-/// var udvd = new UDVD&lt;double&gt;(architecture, new UDVDOptions());
-/// udvd.Train(noisyFrames, noisyFrames);           // unsupervised: the noisy video is its own target
-/// var clean = udvd.Denoise(noisyFrames);          // [T, 3, H, W], pixel values 0-255
+/// var result = new AiModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
+///     .ConfigureModel(new UDVD&lt;double&gt;(architecture, new UDVDOptions()))
+///     .Build(noisyFrames, noisyFrames);   // unsupervised: the noisy video is its own target
+/// var clean = result.Predict(noisyFrames);   // [T, 3, H, W]
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

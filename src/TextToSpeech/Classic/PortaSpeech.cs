@@ -50,14 +50,22 @@ public enum PortaSpeechTrainingPhase
 /// </remarks>
 /// <example>
 /// <code>
+/// var tokens = new Tensor&lt;double&gt;(new[] { 3 }, new Vector&lt;double&gt;(new double[] { 12, 40, 7 }));   // phoneme ids
+/// var durations = new[] { 4, 6, 5 };                                                             // frames per phoneme
+/// var mel = Tensor&lt;double&gt;.CreateRandom(15, 80);                                                // [frames, 80]
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 200, outputSize: 80);
 /// var model = new PortaSpeech&lt;double&gt;(architecture, new PortaSpeechOptions());
-/// model.Train(new TtsTrainingSample&lt;double&gt; { Tokens = tokens, Mel = mel, Durations = durations });
+/// var result = new AiModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
+///     .ConfigureModel(model)
+///     .Build(new List&lt;TtsTrainingSample&lt;double&gt;&gt;
+///     {
+///         new TtsTrainingSample&lt;double&gt; { Tokens = tokens, Mel = mel, Durations = durations }
+///     });
 /// model.CurrentPhase = PortaSpeechTrainingPhase.PostNet;   // after the generator has converged
-/// var mel = model.TextToMel("hello world");
+/// var spectrogram = model.TextToMel("hello world");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
@@ -559,6 +567,7 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         return (mel, Objective);
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     /// <inheritdoc />
@@ -567,6 +576,7 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

@@ -42,6 +42,22 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
 /// <para><b>For Beginners:</b> Give StyleTTS-ZS a few seconds of anyone's speech and some text; it speaks the text in
 /// that voice, choosing a natural rhythm and intonation in one fast step.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a StyleTTS-ZS model for zero-shot voice cloning
+/// // with distilled time-varying style diffusion for efficient synthesis
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new StyleTTSZS&lt;double&gt;(architecture, "styletts_zs.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new StyleTTSZS&lt;double&gt;(architecture, new StyleTTSZSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]

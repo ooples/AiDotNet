@@ -21,6 +21,7 @@ public partial class DiTToTTS<T>
             $"{GetType().Name} trains on its {CurrentStage} objective, which a token/mel pair does not drive; " +
             "use Train(TtsTrainingSample) instead.");
 
+    /// <inheritdoc/>
     protected override T TrainOnSample(TtsTrainingSample<T> sample)
     {
         ThrowIfDisposed(); RequirePaperModel();
@@ -43,6 +44,7 @@ public partial class DiTToTTS<T>
         return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => LengthObjective(example), _optimizer!);
     }
 
+    /// <inheritdoc/>
     public override T EvaluateTrainingObjective(TtsTrainingSample<T> sample)
     {
         ThrowIfDisposed(); RequirePaperModel();

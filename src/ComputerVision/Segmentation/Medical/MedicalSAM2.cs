@@ -34,6 +34,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 /// </remarks>
 /// <example>
 /// <code>
+/// var images = new List&lt;Tensor&lt;float&gt;&gt; { Tensor&lt;float&gt;.CreateRandom(3, 256, 256), Tensor&lt;float&gt;.CreateRandom(3, 256, 256) };
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
@@ -89,6 +90,7 @@ public partial class MedicalSAM2<T> : Common.MedicalSegmentationBase<T>, ITraini
         InitializeLayers();
     }
 
+    /// <inheritdoc/>
     protected override void InitializeLayers()
     {
         if (_options is null || _runtime is not null) return;
@@ -287,6 +289,7 @@ public partial class MedicalSAM2<T> : Common.MedicalSegmentationBase<T>, ITraini
         return hasBatch ? logits : RemoveBatchDimension(logits);
     }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
     /// <summary>An image set <c>[B, C, H, W]</c> (or one image) as RGB frames <c>[B, 3, H, W]</c> with its masks.</summary>
@@ -358,6 +361,7 @@ public partial class MedicalSAM2<T> : Common.MedicalSegmentationBase<T>, ITraini
     /// <inheritdoc />
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>

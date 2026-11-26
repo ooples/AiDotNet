@@ -32,6 +32,7 @@ public partial class Voicebox<T>
         _tokenizer = tokenizer;
     }
 
+    /// <inheritdoc/>
     protected override void OnMutableConstructorConfigurationRestored()
     {
         base.OnMutableConstructorConfigurationRestored();

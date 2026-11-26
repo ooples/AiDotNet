@@ -18,6 +18,7 @@ public partial class E3TTS<T>
         return false;
     }
 
+    /// <inheritdoc/>
     protected override T TrainOnSample(TtsTrainingSample<T> sample)
     {
         ThrowIfDisposed();
@@ -27,6 +28,7 @@ public partial class E3TTS<T>
         return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => DiffusionObjective(example), _optimizer);
     }
 
+    /// <inheritdoc/>
     public override T EvaluateTrainingObjective(TtsTrainingSample<T> sample)
     {
         ThrowIfDisposed();

@@ -23,6 +23,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// prenet, and the released four-stage DAC WaveGenerator. Voice cloning uses the official 32-global-token prompt
 /// grammar; controllable synthesis asks the LM to generate those global tokens from gender, pitch and speed labels.
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Spark-TTS model for LLM-based zero-shot synthesis
+/// // with BiCodec decoupled speech tokens for controllable generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SparkTTS&lt;double&gt;(architecture, "sparktts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SparkTTS&lt;double&gt;(architecture, new SparkTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -101,8 +117,11 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
     public int CodebookSize => _options.CodebookSize;
     /// <inheritdoc />
     public int CodecFrameRate => _options.CodecFrameRate;
+    /// <inheritdoc/>
     public override int CodecTokenCodebooks => 1;
+    /// <inheritdoc/>
     public override int CodecTokenVocabulary => _options.CodebookSize;
+    /// <inheritdoc/>
     protected override int OutputFeatureWidth => _options.VocabSize;
 
     /// <summary>Whether this instance owns the official Qwen/BiCodec component graph.</summary>
@@ -223,8 +242,10 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
         return _biCodec!.Decode(semanticTokens, globalTokens);
     }
 
+    /// <inheritdoc/>
     protected override TtsSupervision RequiredSupervision => _options.TrainingComponent == SparkTTSTrainingComponent.BiCodec
         ? TtsSupervision.Recording : TtsSupervision.Text | TtsSupervision.Recording;
+    /// <inheritdoc/>
     public override bool TrainsOnSampleObjective => true;
 
     /// <summary>Trains both zero-shot and controllable samples for one annotated recording (paper Eq. 2/3).</summary>
@@ -260,6 +281,7 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
     private sealed record ControlAnnotation(bool Female, SparkTTSControlLevel Pitch, SparkTTSControlLevel Speed,
         int PitchMel, int SyllablesPerSecond);
 
+    /// <inheritdoc/>
     protected override T TrainOnSample(TtsTrainingSample<T> sample)
     {
         RequirePipeline();
@@ -289,6 +311,7 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
         return loss;
     }
 
+    /// <inheritdoc/>
     public override T EvaluateTrainingObjective(TtsTrainingSample<T> sample)
     {
         RequirePipeline();
@@ -343,6 +366,7 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
                 WeightDecay = _options.WeightDecay, Beta1 = 0.8, Beta2 = 0.9 });
     }
 
+    /// <inheritdoc/>
     protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
     {
         if (_biCodec is null) return parameters;
@@ -365,9 +389,12 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
         return current;
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
+    /// <inheritdoc/>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

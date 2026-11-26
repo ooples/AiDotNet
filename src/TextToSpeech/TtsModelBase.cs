@@ -43,7 +43,8 @@ namespace AiDotNet.TextToSpeech;
     Note = "One frame per input position: the input's second axis is carried through as TIME and the "
          + "width is appended. Models whose Predict ends somewhere else state their own width through "
          + "OutputFeatureWidth, or decline by leaving it at 0.")]
-public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeContract
+public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeContract,
+    ISampleObjectiveModel<T, TtsTrainingSample<T>>
 {
     /// <summary>
     /// The width of this model's <c>Predict</c> output, or 0 for "not stated".
@@ -339,6 +340,7 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     /// ids, as this model's front end reads text).</summary>
     public Tensor<T> TextToTokens(string text) => PreprocessText(text);
 
+    /// <summary>Synthesizes <paramref name="text"/>: tokenizes it, runs the model (ONNX or native) and post-processes the output into audio.</summary>
     public virtual Tensor<T> Synthesize(string text)
     {
         var tokens = PreprocessText(text);

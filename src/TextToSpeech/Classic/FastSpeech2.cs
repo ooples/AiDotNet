@@ -38,6 +38,22 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// it is, stretches the phoneme features to that many frames, and turns them into a mel spectrogram all at once.
 /// A vocoder (e.g. HiFi-GAN) turns the spectrogram into audio.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a FastSpeech 2 model for non-autoregressive TTS
+/// // with variance adaptor for explicit pitch, energy, and duration control
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new FastSpeech2&lt;double&gt;(architecture, "fastspeech2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new FastSpeech2&lt;double&gt;(architecture, new FastSpeech2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -110,6 +126,7 @@ public partial class FastSpeech2<T> : VarianceAdaptorTtsModelBase<T>, IAcousticM
     /// <inheritdoc />
     public int FftSize => _options.FftSize;
 
+    /// <inheritdoc/>
     protected override Tensor<T> PreprocessText(string text)
     {
         var ids = FrontEnd.ClassicTtsText.Phonemes(text, true, _options.TextSymbols, _options.VocabSize, _options.MaxTextLength);
@@ -158,6 +175,7 @@ public partial class FastSpeech2<T> : VarianceAdaptorTtsModelBase<T>, IAcousticM
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

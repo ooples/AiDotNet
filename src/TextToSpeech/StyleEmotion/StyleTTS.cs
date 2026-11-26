@@ -40,6 +40,22 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
 /// <para><b>For Beginners:</b> Give the model a short recording of how you want the speech to sound and the text to say;
 /// it copies the speaking style — pitch movement, speed, emotion — onto the new sentence.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a StyleTTS model for style-based expressive speech synthesis
+/// // with style diffusion and adversarial training for diverse prosody
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new StyleTTS&lt;double&gt;(architecture, "styletts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new StyleTTS&lt;double&gt;(architecture, new StyleTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]

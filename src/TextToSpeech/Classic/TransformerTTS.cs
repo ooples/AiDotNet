@@ -37,6 +37,22 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para><b>For Beginners:</b> Like Tacotron 2, but every recurrent network is replaced by attention, so training
 /// runs over all frames in parallel.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Transformer TTS model for multi-head self-attention based speech synthesis
+/// // replacing RNN-based sequence modeling with pure transformer architecture
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new TransformerTTS&lt;double&gt;(architecture, "transformer_tts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new TransformerTTS&lt;double&gt;(architecture, new TransformerTTSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -379,6 +395,7 @@ public partial class TransformerTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITr
         return Engine.ReduceMean(Engine.TensorAdd(positive, negative), new[] { 0 }, keepDims: false);
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     /// <inheritdoc />
@@ -387,6 +404,7 @@ public partial class TransformerTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITr
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

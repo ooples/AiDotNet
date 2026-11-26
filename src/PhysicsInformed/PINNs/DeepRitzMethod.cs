@@ -63,7 +63,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
     ///     inputType: InputType.OneDimensional,
     ///     taskType: NeuralNetworkTaskType.Regression,
     ///     inputSize: 2, outputSize: 1);
-    /// var deepRitz = new DeepRitzMethod&lt;float&gt;(architecture, DeepRitzEnergy&lt;float&gt;.Poisson());
+    /// var deepRitz = new DeepRitzMethod&lt;float&gt;(architecture, DeepRitzEnergy&lt;float&gt;.Poisson(1.0f));   // -laplacian u = 1
     /// </code>
     /// </example>
     [ModelDomain(ModelDomain.Science)]
