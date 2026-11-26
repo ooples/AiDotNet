@@ -77,7 +77,7 @@ The tables combine four runs:
 | CPU ViT | `709c001a` | 21:41, November 24 | ViT was fixed after these runs; see [the ViT fix](#the-vit-fix). |
 | CUDA ViT | `9dc1c828` | 12:15, November 26 | As above. |
 
-Between `b23d88ba` and `9dc1c828` the only changes to the measured code are the ViT fix and the benchmark runner (large-data mode, GPU clock checks and flags). The runner's main-comparison protocol did not change.
+Between `b23d88ba` and `9dc1c828` the only changes to the measured code are the ViT fix and the benchmark runner (large-data mode, GPU clock checks and flags). The runner's main-comparison protocol did not change. Later commits on this branch merge AiDotNet master, which moved to AiDotNet.Tensors 0.152.1 and changed other library code; none of these runs measured that. To reproduce them, check out `9dc1c828`, as AiDotNet.Tensors' [model-family launcher](https://github.com/ooples/AiDotNet.Tensors/tree/main/parity/model-families) does with `--snapshot 2026-11-26`.
 
 **CUDA**: PyTorch time ÷ AiDotNet time, median of launches (range of launches). Above 1 means AiDotNet took less time. ⚑ marks a row with a flag in summary.csv.
 
