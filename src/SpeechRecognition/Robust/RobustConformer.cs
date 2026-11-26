@@ -38,8 +38,12 @@ namespace AiDotNet.SpeechRecognition.Robust;
 /// <code>
 /// var noisyWaveforms = Tensor&lt;float&gt;.CreateRandom(1, 16000);   // 16 kHz
 /// var cleanWaveforms = Tensor&lt;float&gt;.CreateRandom(1, 16000);
-/// var waveform = Tensor&lt;float&gt;.CreateRandom(1, 16000);
-/// var transcriptCodePoints = new Tensor&lt;float&gt;(new[] { 5 }, new Vector&lt;float&gt;(new float[] { 104, 101, 108, 108, 111 }));   // "hello"
+/// // The builder splits and shuffles along the first axis, so it must be recordings:
+/// // waveforms [recordings, 1, samples] at 16 kHz, transcripts [recordings, tokens]. Noise stands in for the audio.
+/// var waveforms = Tensor&lt;float&gt;.CreateRandom(new[] { 8, 1, 16000 });
+/// var transcriptCodePoints = new Tensor&lt;float&gt;(new[] { 8, 5 },   // "hello" in each
+///     new Vector&lt;float&gt;(Enumerable.Repeat(new float[] { 104, 101, 108, 108, 111 }, 8).SelectMany(c =&gt; c).ToArray()));
+/// var waveform = Tensor&lt;float&gt;.CreateRandom(1, 16000);   // a recording to transcribe
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
@@ -48,8 +52,8 @@ namespace AiDotNet.SpeechRecognition.Robust;
 /// model.ContinualPretrain(noisyWaveforms, cleanWaveforms);   // the paper's robustness pretraining
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
 ///     .ConfigureModel(model)
-///     .Build(waveform, transcriptCodePoints);
-/// var logits = result.Predict(waveform);   // per-frame character logits
+///     .Build(waveforms, transcriptCodePoints);
+/// var text = model.Transcribe(waveform).Text;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
