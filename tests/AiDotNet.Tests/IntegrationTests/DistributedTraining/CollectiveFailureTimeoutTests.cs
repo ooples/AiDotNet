@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using System.Globalization;
 using System.Threading.Tasks;
 using AiDotNet.DistributedTraining;
 using AiDotNet.LinearAlgebra;
@@ -21,22 +20,15 @@ public sealed class CollectiveFailureTimeoutTests
     private const int SchedulingSlackMs = 20_000;
     private static readonly TimeSpan Guard = TimeSpan.FromSeconds(30);
 
-    private static (string? Addr, string? Port) UseLoopbackRendezvous()
+    // A free loopback port for an explicit rendezvous. Not the process-wide AIDOTNET_MASTER_* variables: tests in
+    // parallel collections set them too, and a port changed between one test's set and its Initialize hung that test.
+    private static int FreeLoopbackPort()
     {
         var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
         listener.Start();
         int port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
         listener.Stop();
-        var previous = (Environment.GetEnvironmentVariable("AIDOTNET_MASTER_ADDR"), Environment.GetEnvironmentVariable("AIDOTNET_MASTER_PORT"));
-        Environment.SetEnvironmentVariable("AIDOTNET_MASTER_ADDR", "127.0.0.1");
-        Environment.SetEnvironmentVariable("AIDOTNET_MASTER_PORT", port.ToString(CultureInfo.InvariantCulture));
-        return previous;
-    }
-
-    private static void Restore((string? Addr, string? Port) previous)
-    {
-        Environment.SetEnvironmentVariable("AIDOTNET_MASTER_ADDR", previous.Addr);
-        Environment.SetEnvironmentVariable("AIDOTNET_MASTER_PORT", previous.Port);
+        return port;
     }
 
     // Runs the surviving rank's collective and returns what it threw, failing if it is still blocked after the guard.
@@ -54,9 +46,9 @@ public sealed class CollectiveFailureTimeoutTests
     [Fact(Timeout = 120000)]
     public async Task Gloo_APeerThatHangs_FailsTheCollectiveWithinTheTimeout()
     {
-        var previous = UseLoopbackRendezvous();
-        var g0 = new GlooCommunicationBackend<float>(0, 2) { TimeoutMilliseconds = TimeoutMs };
-        var g1 = new GlooCommunicationBackend<float>(1, 2) { TimeoutMilliseconds = TimeoutMs };
+        int port = FreeLoopbackPort();
+        var g0 = new GlooCommunicationBackend<float>(0, 2) { TimeoutMilliseconds = TimeoutMs, MasterAddress = "127.0.0.1", MasterPort = port };
+        var g1 = new GlooCommunicationBackend<float>(1, 2) { TimeoutMilliseconds = TimeoutMs, MasterAddress = "127.0.0.1", MasterPort = port };
         try
         {
             await Task.WhenAll(Task.Run(() => g0.Initialize()), Task.Run(() => g1.Initialize()));
@@ -69,16 +61,15 @@ public sealed class CollectiveFailureTimeoutTests
         {
             try { g0.Shutdown(); } catch (Exception) { /* already broken */ }
             try { g1.Shutdown(); } catch (Exception) { /* already broken */ }
-            Restore(previous);
         }
     }
 
     [Fact(Timeout = 120000)]
     public async Task Gloo_APeerThatDies_FailsTheCollective()
     {
-        var previous = UseLoopbackRendezvous();
-        var g0 = new GlooCommunicationBackend<float>(0, 2) { TimeoutMilliseconds = TimeoutMs };
-        var g1 = new GlooCommunicationBackend<float>(1, 2) { TimeoutMilliseconds = TimeoutMs };
+        int port = FreeLoopbackPort();
+        var g0 = new GlooCommunicationBackend<float>(0, 2) { TimeoutMilliseconds = TimeoutMs, MasterAddress = "127.0.0.1", MasterPort = port };
+        var g1 = new GlooCommunicationBackend<float>(1, 2) { TimeoutMilliseconds = TimeoutMs, MasterAddress = "127.0.0.1", MasterPort = port };
         try
         {
             await Task.WhenAll(Task.Run(() => g0.Initialize()), Task.Run(() => g1.Initialize()));
@@ -90,15 +81,14 @@ public sealed class CollectiveFailureTimeoutTests
         finally
         {
             try { g0.Shutdown(); } catch (Exception) { /* already broken */ }
-            Restore(previous);
         }
     }
 
     [Fact]
     public void Gloo_ARankThatNeverStarts_FailsRendezvous()
     {
-        var previous = UseLoopbackRendezvous();
-        var g0 = new GlooCommunicationBackend<float>(0, 2) { TimeoutMilliseconds = TimeoutMs };
+        int port = FreeLoopbackPort();
+        var g0 = new GlooCommunicationBackend<float>(0, 2) { TimeoutMilliseconds = TimeoutMs, MasterAddress = "127.0.0.1", MasterPort = port };
         try
         {
             var error = Surfaced(() => g0.Initialize(), out var took);
@@ -108,7 +98,6 @@ public sealed class CollectiveFailureTimeoutTests
         finally
         {
             try { g0.Shutdown(); } catch (Exception) { /* never initialized */ }
-            Restore(previous);
         }
     }
 

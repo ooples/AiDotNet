@@ -153,6 +153,45 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     private int _timeoutMilliseconds = DefaultTimeoutMilliseconds;
 
     /// <summary>
+    /// Rank 0's address for the TCP rendezvous (PyTorch's <c>init_method="tcp://addr:port"</c>). Null reads
+    /// AIDOTNET_MASTER_ADDR. Set it before <c>Initialize</c>; an explicit value lets several process groups in one
+    /// process rendezvous independently, which a process-wide environment variable cannot.
+    /// </summary>
+    public string? MasterAddress { get; set; }
+
+    /// <summary>The rendezvous base port (each rank listens on it + rank). Null reads AIDOTNET_MASTER_PORT.</summary>
+    public int? MasterPort { get; set; }
+
+    private static int s_environmentRendezvousWarned;
+
+    private string? ResolveMasterAddress() => MasterAddress ?? ReadDeprecatedRendezvousVariable("AIDOTNET_MASTER_ADDR", nameof(MasterAddress));
+
+    private string? ResolveMasterPort()
+        => MasterPort is { } port ? port.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : ReadDeprecatedRendezvousVariable("AIDOTNET_MASTER_PORT", nameof(MasterPort));
+
+    // The process-wide variables are a deprecated fallback: the typed properties win whenever they are set, and a read
+    // of a variable that is set warns once per process.
+    private static string? ReadDeprecatedRendezvousVariable(string variable, string property)
+    {
+        string? value = Environment.GetEnvironmentVariable(variable);
+        if (!string.IsNullOrEmpty(value) && System.Threading.Interlocked.Exchange(ref s_environmentRendezvousWarned, 1) == 0)
+        {
+            string message = $"GlooCommunicationBackend: the rendezvous came from {variable}, which is deprecated; set "
+                + $"{property} (and its pair) on the backend instead.";
+            System.Diagnostics.Trace.TraceWarning(message);
+            Console.Error.WriteLine(message);
+        }
+        return value;
+    }
+
+    /// <summary>Test hook: whether a deprecated rendezvous variable has been read (and warned about) in this process.</summary>
+    internal static bool EnvironmentRendezvousWarned => System.Threading.Volatile.Read(ref s_environmentRendezvousWarned) != 0;
+
+    /// <summary>The rendezvous this backend would use, typed properties first (test hook).</summary>
+    internal (string? Address, string? Port) ResolvedRendezvous => (ResolveMasterAddress(), ResolveMasterPort());
+
+    /// <summary>
     /// How long any single blocking wait (rendezvous accept, socket send and receive, the background send worker) may
     /// take before it throws, so a hung or dead peer surfaces as an exception on every rank instead of a hang
     /// (PyTorch's process-group timeout). Set it before <c>Initialize</c>.
@@ -333,8 +372,8 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             }
             else
             {
-                string hostname = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_ADDR") ?? "localhost";
-                string portStr = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_PORT") ?? "29500";
+                string hostname = ResolveMasterAddress() ?? "localhost";
+                string portStr = ResolveMasterPort() ?? "29500";
                 int port = int.TryParse(portStr, out int p) ? p : 29500;
 
                 var createTCP = _glooTransportType?.GetMethod("CreateTCP",
@@ -501,13 +540,13 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     /// </remarks>
     private void InitializeTCPConnections()
     {
-        string? masterAddr = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_ADDR");
-        string? masterPortStr = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_PORT");
+        string? masterAddr = ResolveMasterAddress();
+        string? masterPortStr = ResolveMasterPort();
 
         if (string.IsNullOrEmpty(masterAddr) || string.IsNullOrEmpty(masterPortStr))
         {
             throw new InvalidOperationException(
-                "GlooCommunicationBackend TCP mode requires environment variables:\n" +
+                "GlooCommunicationBackend TCP mode requires MasterAddress/MasterPort or the environment variables:\n" +
                 "- AIDOTNET_MASTER_ADDR: IP address of rank 0 (e.g., 192.168.1.10 or localhost)\n" +
                 "- AIDOTNET_MASTER_PORT: Base port number (e.g., 29500)\n" +
                 "Each rank will use port = MASTER_PORT + rank");

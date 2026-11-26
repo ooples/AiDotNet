@@ -263,9 +263,7 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
 
         if (spec.BackendKind == "GlooTcp")
         {
-            Environment.SetEnvironmentVariable("AIDOTNET_MASTER_ADDR", "127.0.0.1");
-            Environment.SetEnvironmentVariable("AIDOTNET_MASTER_PORT", spec.MasterPort.ToString(CultureInfo.InvariantCulture));
-            return new GlooCommunicationBackend<float>(spec.Rank, spec.WorldSize);
+            return new GlooCommunicationBackend<float>(spec.Rank, spec.WorldSize) { MasterAddress = "127.0.0.1", MasterPort = spec.MasterPort };
         }
 
         return new SharedMemoryCommunicationBackend<float>(

@@ -1890,14 +1890,12 @@ public sealed partial class StreamingDistributedEnablersTests : IDisposable
         int freePort = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
         listener.Stop();
 
-        string? prevAddr = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_ADDR");
-        string? prevPort = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_PORT");
-        Environment.SetEnvironmentVariable("AIDOTNET_MASTER_ADDR", "127.0.0.1");
-        Environment.SetEnvironmentVariable("AIDOTNET_MASTER_PORT", freePort.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        try
+        // An explicit rendezvous: the process-wide AIDOTNET_MASTER_* variables are also set by tests in other,
+        // parallel collections, and a port changed between this test's set and its Initialize sent the ranks to
+        // different rendezvous (a 90 s hang).
         {
-            var g0 = new GlooCommunicationBackend<float>(rank: 0, worldSize: 2);
-            var g1 = new GlooCommunicationBackend<float>(rank: 1, worldSize: 2);
+            var g0 = new GlooCommunicationBackend<float>(rank: 0, worldSize: 2) { MasterAddress = "127.0.0.1", MasterPort = freePort };
+            var g1 = new GlooCommunicationBackend<float>(rank: 1, worldSize: 2) { MasterAddress = "127.0.0.1", MasterPort = freePort };
             try
             {
                 await Task.WhenAll(Task.Run(() => g0.Initialize()), Task.Run(() => g1.Initialize()));
@@ -1919,11 +1917,6 @@ public sealed partial class StreamingDistributedEnablersTests : IDisposable
                 g0.Shutdown();
                 g1.Shutdown();
             }
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("AIDOTNET_MASTER_ADDR", prevAddr);
-            Environment.SetEnvironmentVariable("AIDOTNET_MASTER_PORT", prevPort);
         }
     }
 
@@ -2411,11 +2404,7 @@ public sealed partial class StreamingDistributedEnablersTests : IDisposable
         int freePort = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
         listener.Stop();
 
-        string? prevAddr = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_ADDR");
-        string? prevPort = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_PORT");
-        Environment.SetEnvironmentVariable("AIDOTNET_MASTER_ADDR", "127.0.0.1");
-        Environment.SetEnvironmentVariable("AIDOTNET_MASTER_PORT", freePort.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        try
+        // An explicit rendezvous (see the dynamic-broadcast test): not the process-wide AIDOTNET_MASTER_* variables.
         {
             const int scatterChunk = 3001;
             var fullScatterPayload = new Half[scatterChunk * 2];
@@ -2424,8 +2413,8 @@ public sealed partial class StreamingDistributedEnablersTests : IDisposable
                 fullScatterPayload[i] = (Half)((i % 97) * 0.25f - 6.0f);
             }
 
-            var g0 = new GlooCommunicationBackend<Half>(rank: 0, worldSize: 2);
-            var g1 = new GlooCommunicationBackend<Half>(rank: 1, worldSize: 2);
+            var g0 = new GlooCommunicationBackend<Half>(rank: 0, worldSize: 2) { MasterAddress = "127.0.0.1", MasterPort = freePort };
+            var g1 = new GlooCommunicationBackend<Half>(rank: 1, worldSize: 2) { MasterAddress = "127.0.0.1", MasterPort = freePort };
             try
             {
                 await Task.WhenAll(Task.Run(() => g0.Initialize()), Task.Run(() => g1.Initialize()));
@@ -2450,11 +2439,6 @@ public sealed partial class StreamingDistributedEnablersTests : IDisposable
                 g0.Shutdown();
                 g1.Shutdown();
             }
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("AIDOTNET_MASTER_ADDR", prevAddr);
-            Environment.SetEnvironmentVariable("AIDOTNET_MASTER_PORT", prevPort);
         }
     }
 

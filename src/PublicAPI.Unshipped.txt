@@ -26663,6 +26663,10 @@ AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.TokensPerSa
 const AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.DefaultTimeoutMilliseconds = 1800000 -> int
 AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.TimeoutMilliseconds.get -> int
 AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.TimeoutMilliseconds.set -> void
+AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.MasterAddress.get -> string?
+AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.MasterAddress.set -> void
+AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.MasterPort.get -> int?
+AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.MasterPort.set -> void
 static AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.FromEnvironment() -> AiDotNet.DistributedTraining.GlooCommunicationBackend<T>!
 AiDotNet.MixedPrecision.MixedPrecisionConfig.MatMulAutocastMode.get -> AiDotNet.Tensors.Engines.Gpu.MatMulAutocastMode
 AiDotNet.MixedPrecision.MixedPrecisionConfig.MatMulAutocastMode.set -> void
