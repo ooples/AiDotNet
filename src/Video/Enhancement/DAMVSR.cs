@@ -57,12 +57,11 @@ namespace AiDotNet.Video.Enhancement;
 ///
 /// // The reference frames come from an image super-resolver (the paper uses ResShift, SUPIR or InvSR);
 /// // bicubic upscaling when unset. Any [3, h, w] -> [3, 4h, 4w] model plugs in, here Real-ESRGAN at 4x:
+/// // A trained model: the released Real-ESRGAN x4 weights exported to ONNX (github.com/xinntao/Real-ESRGAN).
 /// var imageSuperResolver = new RealESRGAN&lt;float&gt;(
 ///     new NeuralNetworkArchitecture&lt;float&gt;(inputType: InputType.ThreeDimensional,
 ///         taskType: NeuralNetworkTaskType.Generative, inputHeight: 64, inputWidth: 64, inputDepth: 3),
-///     new NeuralNetworkArchitecture&lt;float&gt;(inputType: InputType.ThreeDimensional,
-///         taskType: NeuralNetworkTaskType.Generative, inputHeight: 256, inputWidth: 256, inputDepth: 3),
-///     InputType.ThreeDimensional,
+///     "realesrgan_x4.onnx",
 ///     new RealESRGANOptions { ScaleFactor = 4 });
 /// model.ReferenceUpscaler = frame =&gt; imageSuperResolver.Upscale(frame);
 ///
@@ -371,10 +370,21 @@ public partial class DAMVSR<T> : VideoSuperResolutionBase<T>, ITrainingObjective
     }
 
     // The reference frame from the image super-resolution model (bicubic when none): [3, h, w] in [0, 1] to [3, sh, sw].
-    private Tensor<T> UpscaleReference(Tensor<T> frame)
+    internal Tensor<T> UpscaleReference(Tensor<T> frame)
     {
-        if (ReferenceUpscaler is { } upscaler) return upscaler(frame);
         int h = frame.Shape[1], w = frame.Shape[2];
+        if (ReferenceUpscaler is { } upscaler)
+        {
+            int scale = _options.ScaleFactor;
+            var reference = upscaler(frame)
+                ?? throw new InvalidOperationException("ReferenceUpscaler returned null instead of a reference frame.");
+            if (reference.Rank != 3 || reference.Shape[0] != 3 || reference.Shape[1] != h * scale || reference.Shape[2] != w * scale)
+                throw new InvalidOperationException(
+                    $"ReferenceUpscaler must map a [3, {h}, {w}] frame to [3, {h * scale}, {w * scale}]; it returned "
+                    + $"[{string.Join(", ", reference._shape)}].");
+            // The reference frames are read as [0, 1] images, as the bicubic path below produces them.
+            return Engine.TensorClamp(reference, NumOps.Zero, NumOps.One);
+        }
         var up = Engine.Interpolate(Engine.Reshape(frame, new[] { 1, 3, h, w }), new[] { h * _options.ScaleFactor, w * _options.ScaleFactor },
             InterpolateMode.Bicubic, false);
         return Engine.Reshape(Engine.TensorClamp(up, NumOps.Zero, NumOps.One), up._shape.Skip(1).ToArray());

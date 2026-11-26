@@ -19,10 +19,13 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 1, outputSize: 1);
 /// var model = new MetaVoice1B&lt;double&gt;(architecture, new MetaVoice1BOptions());
-/// model.LoadSpeakerEncoderCheckpoint("metavoice-1B-v0.1/speaker_encoder.pt");   // the released speaker encoder
+/// // The release: both language models, the speaker encoder, the EnCodec and multi-band decoders and the enhancer.
+/// model.LoadPretrainedWeights("metavoice-1B-v0.1",   // first_stage.pt, second_stage.pt, speaker_encoder.pt
+///     "encodec_24khz/model.safetensors",   // Hugging Face EnCodec 24 kHz
+///     "mbd_comp_8.pt",                     // AudioCraft multi-band diffusion, 8 codebooks
+///     "model_120.ckpt.best");              // DeepFilterNet3 enhancer
 /// var reference = Tensor&lt;double&gt;.CreateRandom(1, 30 * model.SampleRate);   // stands in for 30 s of the target speaker (the minimum)
-/// Tensor&lt;double&gt; audio = model.SynthesizeWithVoice("Hello there.", reference);
-/// // Untrained native layers; the MetaVoice1B(architecture, modelPath) constructor runs an exported ONNX checkpoint.
+/// Tensor&lt;double&gt; audio = model.SynthesizeWithVoice("Hello there.", reference, model.SampleRate);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

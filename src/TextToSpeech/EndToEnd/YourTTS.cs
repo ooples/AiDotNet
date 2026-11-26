@@ -41,6 +41,9 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 ///     inputSize: 200, outputSize: 80);
 ///
 /// var model = new YourTTS&lt;double&gt;(architecture, new YourTTSOptions());
+/// // Zero-shot: a few seconds of the target speaker at the model's sample rate (16 kHz). Noise stands in for it.
+/// var reference = Tensor&lt;double&gt;.CreateRandom(3 * model.SampleRate);
+/// model.Voice = new TtsVoice&lt;double&gt; { ReferenceAudio = reference };
 /// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
 /// </code>
 /// </example>

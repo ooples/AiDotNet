@@ -55,7 +55,7 @@ public enum CoMoSpeechTrainingPhase
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 1, outputSize: 1);
 /// var model = new CoMoSpeech&lt;double&gt;(architecture, new CoMoSpeechOptions());
-/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel frames [frames, MelChannels]; a vocoder turns them into audio
 /// // Untrained native layers; the CoMoSpeech(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>

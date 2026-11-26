@@ -50,6 +50,9 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
 ///     inputSize: 200, outputSize: 80);
 ///
 /// var model = new StyleTTS&lt;double&gt;(architecture, new StyleTTSOptions());
+/// // The style comes from a reference recording: mono, at the model's sample rate. Noise stands in for it.
+/// var reference = Tensor&lt;double&gt;.CreateRandom(3 * model.SampleRate);
+/// model.Voice = model.CreateVoice(reference);
 /// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel frames, for a vocoder
 /// </code>
 /// </example>

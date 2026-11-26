@@ -45,7 +45,7 @@ namespace AiDotNet.Video.Enhancement;
 /// // 8 clips of 15 consecutive frames. The builder splits and shuffles whole clips (the first axis), so the
 /// // frames of a clip stay together and in order for the recurrent propagation.
 /// var degradedClips = Tensor&lt;float&gt;.CreateRandom(8, 15, 3, 64, 64).Multiply(255f);    // [clips, frames, 3, H, W], 0-255
-/// var cleanClips = Tensor&lt;float&gt;.CreateRandom(8, 15, 3, 256, 256).Multiply(255f); // the same frames at 4x
+/// var cleanClips = Tensor&lt;float&gt;.CreateRandom(8, 15, 3, 256, 256).Multiply(255f); // placeholder: real training needs the same footage at 4x
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputType: InputType.FourDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression, inputFrames: 15, inputHeight: 64, inputWidth: 64, inputDepth: 3);
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()

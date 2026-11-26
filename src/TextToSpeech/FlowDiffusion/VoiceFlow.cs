@@ -42,7 +42,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 1, outputSize: 1);
 /// var model = new VoiceFlow&lt;double&gt;(architecture, new VoiceFlowOptions());
-/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel frames [frames, MelChannels]; a vocoder turns them into audio
 /// // Untrained native layers; the VoiceFlow(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>

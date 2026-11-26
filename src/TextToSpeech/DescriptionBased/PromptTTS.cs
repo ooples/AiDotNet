@@ -48,6 +48,7 @@ namespace AiDotNet.TextToSpeech.DescriptionBased;
 ///     inputSize: 200, outputSize: 80);
 ///
 /// var model = new PromptTTS&lt;double&gt;(architecture, new PromptTTSOptions());
+/// model.Voice = model.CreateVoice("A woman speaks slowly in a low, calm voice.");   // the style description
 /// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel frames, for a vocoder
 /// </code>
 /// </example>

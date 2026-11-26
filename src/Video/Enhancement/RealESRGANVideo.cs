@@ -43,15 +43,16 @@ namespace AiDotNet.Video.Enhancement;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Each frame is upscaled on its own, so frames are independent samples and the builder may split them.
-/// var degradedFrames = Tensor&lt;float&gt;.CreateRandom(4, 3, 64, 64).Multiply(255f);   // [frames, 3, H, W], 0-255
-/// var cleanFrames = Tensor&lt;float&gt;.CreateRandom(4, 3, 256, 256).Multiply(255f);  // the same frames at 4x
+/// // 8 clips of 4 frames. Each frame is upscaled on its own, but the builder splits and shuffles the first axis,
+/// // so it indexes whole clips: no clip has frames on both sides of the train/validation/test split.
+/// var degradedClips = Tensor&lt;float&gt;.CreateRandom(8, 4, 3, 64, 64).Multiply(255f);   // [clips, frames, 3, H, W], 0-255
+/// var cleanClips = Tensor&lt;float&gt;.CreateRandom(8, 4, 3, 256, 256).Multiply(255f);  // placeholder: real training needs the same footage at 4x
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputType: InputType.FourDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression, inputFrames: 4, inputHeight: 64, inputWidth: 64, inputDepth: 3);
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
 ///     .ConfigureModel(new RealESRGANVideo&lt;float&gt;(arch, new RealESRGANVideoOptions()))
-///     .Build(degradedFrames, cleanFrames);
-/// var upscaled = result.Predict(degradedFrames);   // [4, 3, 256, 256]
+///     .Build(degradedClips, cleanClips);
+/// var upscaled = result.Predict(degradedClips);   // [8, 4, 3, 256, 256]
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

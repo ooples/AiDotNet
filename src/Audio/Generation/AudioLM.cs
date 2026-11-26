@@ -40,10 +40,15 @@ namespace AiDotNet.Audio.Generation;
 /// </remarks>
 /// <example>
 /// <code>
-/// // The semantic tokenizer: a w2v-BERT (pre-trained, see W2vBert) whose k-means tokenizer is fitted on speech.
+/// // The semantic tokenizer: a w2v-BERT, pre-trained on unlabeled speech (self-supervised: the recordings are their
+/// // own target), whose k-means tokenizer is then fitted on its features. Noise stands in for real speech here.
+/// var unlabeledSpeech = Tensor&lt;float&gt;.CreateRandom(32, 32000);   // 32 recordings of 2 s at 16 kHz
 /// var w2vBert = new W2vBert&lt;float&gt;(new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 1, outputSize: 1024), new W2vBertOptions());
+/// new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(w2vBert)
+///     .Build(unlabeledSpeech, unlabeledSpeech);
 /// var speech = new List&lt;Tensor&lt;float&gt;&gt;();
-/// for (int i = 0; i &lt; 32; i++) speech.Add(Tensor&lt;float&gt;.CreateRandom(1, 32000));   // 2 s recordings at 16 kHz
+/// for (int i = 0; i &lt; unlabeledSpeech.Shape[0]; i++) speech.Add(unlabeledSpeech.Slice(i).Reshape(1, 32000));
 /// w2vBert.FitSemanticTokenizer(speech);
 /// var threeSecondPrompt = Tensor&lt;float&gt;.CreateRandom(1, 48000);   // 3 s at 16 kHz
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional,

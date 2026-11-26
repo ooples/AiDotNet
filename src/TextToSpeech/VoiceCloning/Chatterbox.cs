@@ -32,8 +32,10 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 1, outputSize: 1);
 /// var model = new Chatterbox&lt;double&gt;(architecture, new ChatterboxOptions());
+/// model.LoadPretrainedWeights("chatterbox");   // the release directory: weights and tokenizer.json
+/// var reference = Tensor&lt;double&gt;.CreateRandom(1, 10 * model.SampleRate);   // stands in for 10 s of the target speaker
+/// model.Voice = model.CreateVoice(reference, model.SampleRate);
 /// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
-/// // Untrained native layers; the Chatterbox(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

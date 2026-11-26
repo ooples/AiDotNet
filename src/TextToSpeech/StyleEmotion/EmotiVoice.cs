@@ -44,6 +44,7 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
 ///     inputSize: 200, outputSize: 80);
 ///
 /// var model = new EmotiVoice&lt;double&gt;(architecture, new EmotiVoiceOptions());
+/// model.Voice = model.CreateVoice("8051", "开心");   // a released speaker and an emotion prompt ("happy")
 /// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
 /// </code>
 /// </example>
