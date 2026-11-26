@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
@@ -47,8 +48,9 @@ public class AdamTapeStepStateTests
     }
 
     [Fact(Timeout = 60000)]
-    public void ValueClip_WithOptInNorm_ReportsThePreClipNorm()
+    public async Task ValueClip_WithOptInNorm_ReportsThePreClipNorm()
     {
+        await Task.CompletedTask;
         // Gradients [3, 4] clamp to [1, 1]: the monitored norm is the pre-clip 5, not the clamped sqrt(2).
         var adam = Adam(valueClip: true);
         adam.ComputeGradientNormEveryStep = true;
@@ -61,8 +63,9 @@ public class AdamTapeStepStateTests
     }
 
     [Fact(Timeout = 60000)]
-    public void ValueClip_WithoutOptInNorm_ReportsNoNormRatherThanThePostClampOne()
+    public async Task ValueClip_WithoutOptInNorm_ReportsNoNormRatherThanThePostClampOne()
     {
+        await Task.CompletedTask;
         // Adam's anomaly guard reduces the norm after the value clamp; that is not the pre-clip norm, so none is
         // reported.
         var adam = Adam(valueClip: true);
@@ -74,8 +77,9 @@ public class AdamTapeStepStateTests
     }
 
     [Fact(Timeout = 60000)]
-    public void WithoutValueClip_ReportsTheGuardsNorm()
+    public async Task WithoutValueClip_ReportsTheGuardsNorm()
     {
+        await Task.CompletedTask;
         var adam = Adam(valueClip: false);
         var parameter = new Tensor<float>(new[] { 2 }, new Vector<float>(new[] { 0.5f, -0.5f }));
 
@@ -86,8 +90,9 @@ public class AdamTapeStepStateTests
     }
 
     [Fact(Timeout = 60000)]
-    public void RestoredMoments_ReachTheFp32FastPath()
+    public async Task RestoredMoments_ReachTheFp32FastPath()
     {
+        await Task.CompletedTask;
         // A steps once, is checkpointed, steps again (which caches its moment arrays for the fast path), then restores
         // the checkpoint. Its next step must use the restored moments, exactly as a fresh optimizer restored from the
         // same checkpoint does, and not the arrays it cached before the restore.

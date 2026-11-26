@@ -193,8 +193,9 @@ public sealed partial class StreamingDistributedEnablersTests
     /// and counter draw the same sequence of masks; changing only the stream changes the masks drawn.
     /// </summary>
     [Fact(Timeout = 60000)]
-    public void Dropout_SameSeedStreamAndCounter_DrawsTheSameMasks_AnotherStreamDrawsOthers()
+    public async Task Dropout_SameSeedStreamAndCounter_DrawsTheSameMasks_AnotherStreamDrawsOthers()
     {
+        await Task.CompletedTask;
         const int Draws = 4;
         var input = new Tensor<float>(new[] { 1, 64 }, new Vector<float>(Enumerable.Repeat(1.5f, 64).ToArray()));
 

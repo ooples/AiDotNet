@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using AiDotNet.DistributedTraining;
 using AiDotNet.LossFunctions;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -23,8 +24,9 @@ public class MeanReductionCaptureTests
     }
 
     [Fact(Timeout = 60000)]
-    public void ScoredObjective_CountsTheSupervisedRowsOfItsOwnLayout()
+    public async Task ScoredObjective_CountsTheSupervisedRowsOfItsOwnLayout()
     {
+        await Task.CompletedTask;
         var loss = new CrossEntropyWithLogitsLoss<float>();
         var target = ClassIndexTargets();
         MeanReductionRecord<float>? scored;
@@ -46,8 +48,9 @@ public class MeanReductionCaptureTests
     }
 
     [Fact(Timeout = 60000)]
-    public void ObjectiveWithoutAReportingLoss_CountsEveryTargetElement()
+    public async Task ObjectiveWithoutAReportingLoss_CountsEveryTargetElement()
     {
+        await Task.CompletedTask;
         var target = ClassIndexTargets();
         MeanReductionRecord<float>? scored;
         using (var scope = MeanReductionCapture<float>.Begin())
@@ -62,8 +65,9 @@ public class MeanReductionCaptureTests
     }
 
     [Fact(Timeout = 60000)]
-    public void ScoringOutsideAScope_IsNotRecorded_AndNestedScopesKeepTheirOwn()
+    public async Task ScoringOutsideAScope_IsNotRecorded_AndNestedScopesKeepTheirOwn()
     {
+        await Task.CompletedTask;
         var outerLoss = new CrossEntropyWithLogitsLoss<float>();
         var innerLoss = new CrossEntropyWithLogitsLoss<float>();
         outerLoss.ComputeTapeLoss(Logits(4, 3), ClassIndexTargets());   // no scope open: nothing to record into

@@ -324,17 +324,19 @@ public class TrainingMonitoringIntegrationTests : IDisposable
     }
 
     [Fact(Timeout = 120000)]
-    public async Task TrainingMonitor_CheckForIssues_DetectsHighGpuMemory()
+    public async Task TrainingMonitor_CheckForIssues_GpuMemoryIsMegabytes_AndNeverAnIssue()
     {
-        var monitor = new TrainingMonitor<double>();
+        await Task.CompletedTask;
+        // GPU memory is logged in MB of the whole device. 98 MB was once read as 98% and stopped the run; a nearly
+        // full device is a trace warning, never an issue, because the streaming loop stops on any issue.
+        var monitor = new TrainingMonitor<double> { GpuDeviceTotalMemoryMBOverrideForTest = 1000 };
         var sessionId = monitor.StartSession("TestSession");
 
-        // Log critical GPU memory usage (>95%)
         monitor.LogResourceUsage(sessionId, cpuUsage: 50.0, memoryUsage: 50.0, gpuUsage: 80.0, gpuMemory: 98.0);
+        Assert.DoesNotContain(monitor.CheckForIssues(sessionId), i => i.Contains("GPU memory", StringComparison.OrdinalIgnoreCase));
 
-        var issues = monitor.CheckForIssues(sessionId);
-
-        Assert.Contains(issues, i => i.Contains("GPU memory", StringComparison.OrdinalIgnoreCase));
+        monitor.LogResourceUsage(sessionId, cpuUsage: 50.0, memoryUsage: 50.0, gpuUsage: 80.0, gpuMemory: 999.0);
+        Assert.DoesNotContain(monitor.CheckForIssues(sessionId), i => i.Contains("GPU memory", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact(Timeout = 120000)]
