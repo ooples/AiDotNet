@@ -1495,6 +1495,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.Diagnostics.BroadcastBackwardRankTests.|
       FullyQualifiedName~AiDotNet.Tests.GateTests.Phase4GateTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.ActivationCacheGuardAnalyzerTests.|
+      FullyQualifiedName~AiDotNet.Tests.Generators.ElementWiseAnalyzerTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.CloneAutomationAnalyzerTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.GeneratedHeavyFixtureRuntimeTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.GeneratedLayerScaffoldPrecisionTests.|
@@ -1780,6 +1781,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.Performance.Phase1GateTests.|
       FullyQualifiedName~AiDotNet.Tests.Performance.Phase2GateTests.|
       FullyQualifiedName~AiDotNet.Tests.Pruning.PruningStrategyTests.|
+      FullyQualifiedName~AiDotNet.Tests.Pruning.PruningWriteBackParityTests.|
       FullyQualifiedName~AiDotNet.Tests.SelfSupervisedLearning.ContrastiveObjectiveGradientTests.|
       FullyQualifiedName~AiDotNet.Tests.SelfSupervisedLearning.SelfSupervisedLearningMetricsTests.|
       FullyQualifiedName~AiDotNet.Tests.SelfSupervisedLearning.SelfSupervisedTrainingContractTests.|
