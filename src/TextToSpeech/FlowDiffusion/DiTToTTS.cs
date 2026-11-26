@@ -29,15 +29,13 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a DiTTo-TTS model for efficient zero-shot TTS
-/// // using diffusion transformer architecture for scalable synthesis
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputSize: 200, outputSize: 80);
-///
+///     inputSize: 1, outputSize: 1);
 /// var model = new DiTToTTS&lt;double&gt;(architecture, new DiTToTTSOptions());
 /// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// // Untrained native layers; the DiTToTTS(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

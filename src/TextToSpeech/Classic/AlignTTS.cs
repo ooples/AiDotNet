@@ -25,15 +25,13 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para><b>For Beginners:</b> AlignTTS is a non-autoregressive text-to-speech model that converts text input into speech audio output.</para>
 /// <example>
 /// <code>
-/// // Create an AlignTTS model for alignment-free non-autoregressive speech synthesis
-/// // with feed-forward transformer and mix density network alignment
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 200, outputSize: 80);
-///
 /// var model = new AlignTTS&lt;double&gt;(architecture, new AlignTTSOptions());
-/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel frames, for a vocoder
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel spectrogram; a vocoder turns it into audio
+/// // Untrained native layers; the AlignTTS(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 /// </remarks>

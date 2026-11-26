@@ -32,15 +32,14 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Voicebox model for universal speech generation at scale
-/// // with non-autoregressive flow matching and infilling objective
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputSize: 200, outputSize: 80);
-///
-/// var model = new Voicebox&lt;double&gt;(architecture, new VoiceboxOptions());
+///     inputSize: 1, outputSize: 1);
+/// // Raw text needs a phonemizer: a checkpoint's MFA PhoneVocabulary, or the built-in English ARPAbet front end.
+/// var model = new Voicebox&lt;double&gt;(architecture, new VoiceboxOptions { UseNativeEnglishFallback = true });
 /// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// // Untrained native layers; the Voicebox(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

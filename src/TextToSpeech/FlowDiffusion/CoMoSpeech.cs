@@ -50,15 +50,13 @@ public enum CoMoSpeechTrainingPhase
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a CoMoSpeech model for one-step speech synthesis
-/// // using consistency model distillation for ultra-fast generation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputSize: 200, outputSize: 80);
-///
+///     inputSize: 1, outputSize: 1);
 /// var model = new CoMoSpeech&lt;double&gt;(architecture, new CoMoSpeechOptions());
-/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel frames, for a vocoder
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// // Untrained native layers; the CoMoSpeech(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

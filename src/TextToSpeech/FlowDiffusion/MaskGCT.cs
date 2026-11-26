@@ -42,8 +42,8 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// </remarks>
 /// <example>
 /// <code>
-/// var promptAudio = Tensor&lt;float&gt;.CreateRandom(1, 3 * 24000);   // 3 s at 24 kHz
 /// var promptSampleRate = 24000;
+/// var promptAudio = Tensor&lt;float&gt;.CreateRandom(1, 3 * promptSampleRate);   // stands in for 3 s of the target voice
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var model = new MaskGCT&lt;float&gt;(architecture, new MaskGCTOptions { Language = "en" });
 /// model.LoadReferenceWeights("MaskGCT", "w2v-bert-2.0/model.safetensors", "wav2vec2bert_stats.pt");

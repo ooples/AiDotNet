@@ -39,15 +39,13 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Transformer TTS model for multi-head self-attention based speech synthesis
-/// // replacing RNN-based sequence modeling with pure transformer architecture
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 200, outputSize: 80);
-///
 /// var model = new TransformerTTS&lt;double&gt;(architecture, new TransformerTTSOptions());
-/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel frames, for a vocoder
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel spectrogram; a vocoder turns it into audio
+/// // Untrained native layers; the TransformerTTS(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

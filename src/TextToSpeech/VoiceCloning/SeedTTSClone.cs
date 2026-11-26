@@ -17,17 +17,14 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Seed-TTS model for diffusion-based zero-shot voice cloning
-/// // with speaker factorization for high-fidelity synthesis
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputSize: 200, outputSize: 80);
-///
+///     inputSize: 1, outputSize: 1);
 /// var model = new SeedTTSClone&lt;double&gt;(architecture, new SeedTTSCloneOptions());
-/// // a few seconds of the target speaker, recorded at the model's sample rate
-/// var referenceAudio = Tensor&lt;double&gt;.CreateRandom(3 * model.SampleRate);
-/// Tensor&lt;double&gt; audio = model.SynthesizeWithVoice("Hello there.", referenceAudio);
+/// var reference = Tensor&lt;double&gt;.CreateRandom(1, 3 * model.SampleRate);   // stands in for 3 s of the target speaker
+/// Tensor&lt;double&gt; audio = model.SynthesizeWithVoice("Hello there.", reference);
+/// // Untrained native layers; the SeedTTSClone(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

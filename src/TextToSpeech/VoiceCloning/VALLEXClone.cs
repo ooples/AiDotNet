@@ -19,17 +19,14 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a VALL-E X model for cross-lingual zero-shot voice cloning
-/// // with language ID conditioning for multi-language synthesis
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputSize: 200, outputSize: 80);
-///
+///     inputSize: 1, outputSize: 1);
 /// var model = new VALLEXClone&lt;double&gt;(architecture, new VALLEXCloneOptions());
-/// // a few seconds of the target speaker, recorded at the model's sample rate
-/// var referenceAudio = Tensor&lt;double&gt;.CreateRandom(3 * model.SampleRate);
-/// Tensor&lt;double&gt; audio = model.SynthesizeWithVoice("Hello there.", referenceAudio);
+/// var reference = Tensor&lt;double&gt;.CreateRandom(1, 3 * model.SampleRate);   // stands in for 3 s of the target speaker
+/// Tensor&lt;double&gt; audio = model.SynthesizeWithVoice("Hello there.", "the reference's transcript", reference);
+/// // Untrained native layers; the VALLEXClone(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

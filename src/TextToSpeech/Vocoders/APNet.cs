@@ -27,17 +27,14 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create an APNet vocoder for amplitude-phase spectrum prediction
-/// // with separate amplitude and phase branches reconstructed via iSTFT
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputSize: 200, outputSize: 80);
-///
+///     inputSize: 80, outputSize: 1);
 /// var model = new APNet&lt;double&gt;(architecture, new APNetOptions());
-/// // a mel-spectrogram from an acoustic model: [mel bands, frames]
-/// var mel = Tensor&lt;double&gt;.CreateRandom(model.MelChannels, 100);
+/// var mel = Tensor&lt;double&gt;.CreateRandom(model.MelChannels, 100);   // stands in for a [mel bins, frames] spectrogram
 /// Tensor&lt;double&gt; waveform = model.MelToWaveform(mel);
+/// // Untrained native layers; the APNet(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

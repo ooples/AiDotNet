@@ -40,15 +40,13 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a FastSpeech 2 model for non-autoregressive TTS
-/// // with variance adaptor for explicit pitch, energy, and duration control
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 200, outputSize: 80);
-///
 /// var model = new FastSpeech2&lt;double&gt;(architecture, new FastSpeech2Options());
-/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel frames, for a vocoder
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel spectrogram; a vocoder turns it into audio
+/// // Untrained native layers; the FastSpeech2(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

@@ -47,15 +47,15 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create an AdaSpeech 2 model for adaptive TTS using untranscribed speech data
-/// // with mel-to-phoneme pipeline for semi-supervised adaptation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputSize: 200, outputSize: 80);
-///
+///     inputSize: 1, outputSize: 1);
 /// var model = new AdaSpeech2&lt;double&gt;(architecture, new AdaSpeech2Options());
-/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel frames, for a vocoder
+/// var referenceMel = Tensor&lt;double&gt;.CreateRandom(120, model.MelChannels);   // stands in for the target speaker's speech
+/// model.Voice = new TtsVoice&lt;double&gt; { SpeakerId = 0, Reference = referenceMel };
+/// Tensor&lt;double&gt; spectrogram = model.Synthesize("Hello there.");
+/// // Untrained native layers; the AdaSpeech2(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

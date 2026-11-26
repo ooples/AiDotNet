@@ -30,17 +30,16 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create an XTTS v2 model for multilingual zero-shot TTS
-/// // using GPT-2 backbone to autoregressively predict VQ-VAE audio tokens
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputSize: 200, outputSize: 80);
-///
+///     inputSize: 1, outputSize: 1);
 /// var model = new XTTSv2&lt;double&gt;(architecture, new XTTSv2Options());
-/// // a few seconds of the target speaker, recorded at the model's sample rate
-/// var referenceAudio = Tensor&lt;double&gt;.CreateRandom(3 * model.SampleRate);
-/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.", "en", referenceAudio);
+/// model.LoadTokenizer("XTTS-v2/vocab.json");   // the BPE tokenizer released with coqui/XTTS-v2
+/// var reference = Tensor&lt;double&gt;.CreateRandom(1, 6 * model.SampleRate);   // stands in for 6 s of the target speaker (the minimum)
+/// model.Voice = model.CreateVoice(reference);
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// // Untrained native layers; the XTTSv2(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

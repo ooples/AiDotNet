@@ -25,15 +25,13 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create an E3 TTS model for simple non-autoregressive diffusion TTS
-/// // without explicit duration modeling for streamlined synthesis
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputSize: 200, outputSize: 80);
-///
+///     inputSize: 1, outputSize: 1);
 /// var model = new E3TTS&lt;double&gt;(architecture, new E3TTSOptions());
 /// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// // Untrained native layers; the E3TTS(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

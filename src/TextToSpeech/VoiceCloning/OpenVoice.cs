@@ -15,17 +15,14 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "OpenVoice: Versatile Instant Voice Cloning" (Qin et al., 2023)</item></list></para><para><b>For Beginners:</b> OpenVoice: versatile instant voice cloning with decoupled tone color conversion.. This model converts text input into speech audio output.</para></remarks>
 /// <example>
 /// <code>
-/// // Create an OpenVoice model for versatile instant voice cloning
-/// // with decoupled tone color conversion for flexible synthesis
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputSize: 200, outputSize: 80);
-///
+///     inputSize: 1, outputSize: 1);
 /// var model = new OpenVoice&lt;double&gt;(architecture, new OpenVoiceOptions());
-/// // a few seconds of the target speaker, recorded at the model's sample rate
-/// var referenceAudio = Tensor&lt;double&gt;.CreateRandom(3 * model.SampleRate);
-/// Tensor&lt;double&gt; audio = model.SynthesizeWithVoice("Hello there.", referenceAudio);
+/// var reference = Tensor&lt;double&gt;.CreateRandom(1, 3 * model.SampleRate);   // stands in for 3 s of the target speaker
+/// Tensor&lt;double&gt; audio = model.SynthesizeWithVoice("Hello there.", reference);
+/// // Untrained native layers; the OpenVoice(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
