@@ -362,8 +362,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     // The seed sequence this model's construction armed; layers it builds on first use continue it.
     private Random? _constructionSequence;
 
-    private void RecordConstructionScope()
+    private void RecordConstructionScope(int? constructionSeed)
     {
+        _constructionSeed = constructionSeed;
         _constructionScopePosition = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.Position;
         _constructionSequence = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CurrentSequence;
     }
@@ -1004,7 +1005,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(architecture.RandomSeed);
         _modelRandom = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CreateComponentRandom(architecture.RandomSeed);
         SeedCallerBuiltLayers();
-        RecordConstructionScope();
+        RecordConstructionScope(architecture.RandomSeed);
         // Most models keep their options in a field of their own and expose them only through GetOptions(), which
         // the derived constructor fills after this one returns, so their Options.Seed reached nothing. The first
         // layer to ask for a seed once those options exist applies their seed (see TryApplyConstructionOptionsSeed).
@@ -1612,6 +1613,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <inheritdoc />
     public virtual IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
     {
+        // Enumerating the chunks materialises lazy weights, so the seeds training would use go on first.
+        CompleteOwnOptionsSeedDeferral();
         ResolveLazyLayerShapes();
 
         // SCOPE CONTRACT: chunks must match exactly the parameter set that
@@ -9971,6 +9974,44 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     private void CompleteOwnOptionsSeedDeferral()
     {
+        CompleteOwnOptionsSeedDeferralCore();
+        WireLayerSeedsBeforeMaterializing();
+    }
+
+    // The seed and layer count the layers were last wired for by a read; see WireLayerSeedsBeforeMaterializing.
+    private int? _readWiredSeed;
+    private int _readWiredLayerCount = -1;
+
+    /// <summary>
+    /// Wires the layer seeds training would wire (<see cref="WireLayerRandomSeeds"/>) before a parameter read or a
+    /// prediction materialises lazily drawn weights, so reading a model first does not change what it trains to.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Most layers draw their weights on first use. The training forward wires every layer's seed first, but a read
+    /// that came earlier (<see cref="GetParameters"/>, <see cref="Models.ModelBase{T, TInput, TOutput}.TrainableParameterCount"/>,
+    /// a prediction) drew them from the construction seeds, and the wiring that followed changed the seeds of layers
+    /// whose weights already existed: the same seeded model trained to different weights depending on whether its
+    /// parameter count had been read first.
+    /// </para>
+    /// <para>
+    /// It does not latch the way the training wiring does: the wiring is a function of the seed and the layers, so a
+    /// later wiring gives the same layers the same seeds, and an options seed or a layer that arrives after a read is
+    /// still wired. It runs again only when the seed or the number of layers changed.
+    /// </para>
+    /// </remarks>
+    private void WireLayerSeedsBeforeMaterializing()
+    {
+        if (_layerRandomSeedsWired || EffectiveRandomSeed is not int seed) return;
+        int layerCount = Layers.Count;
+        if (_readWiredSeed == seed && _readWiredLayerCount == layerCount) return;
+        _readWiredSeed = seed;
+        _readWiredLayerCount = layerCount;
+        WireLayerRandomSeeds();
+    }
+
+    private void CompleteOwnOptionsSeedDeferralCore()
+    {
         if (_optionsSeedAwaitsWiring)
         {
             _optionsSeedAwaitsWiring = false;
@@ -10060,7 +10101,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(Architecture?.RandomSeed);
             _modelRandom = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CreateComponentRandom(Architecture?.RandomSeed);
             SeedCallerBuiltLayers();
-            RecordConstructionScope();
+            RecordConstructionScope(Architecture?.RandomSeed);
             return;
         }
 
@@ -10068,7 +10109,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(value);
         _modelRandom = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CreateComponentRandom(value);
         SeedCallerBuiltLayers();
-        RecordConstructionScope();
+        RecordConstructionScope(value);
     }
 
     // The caller-built layers this model gave a seed, so a later options seed can replace those seeds and no others.
@@ -10149,13 +10190,22 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         var seedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var visited = new HashSet<ILayer<T>>(Helpers.TensorReferenceComparer<ILayer<T>>.Instance);
         var callerChosen = CallerChosenLayerSeeds();
+        // The seeds the layers took when this model built or registered them stand while the model's seed is the one
+        // it was built with: replacing them here changed the seed of every layer whose weights a read had already
+        // drawn, so the same model trained to different weights depending on whether its parameters were read
+        // first. Only a seed that changed since (an options seed arriving after the layers were built) re-seeds all.
+        bool keepConstructionSeeds = _constructionSeed == seed;
         foreach (var layer in Layers)
         {
-            WireLayerRandomSeedRecursive(layer, seedRng, visited, callerChosen);
+            WireLayerRandomSeedRecursive(layer, seedRng, visited, callerChosen, keepConstructionSeeds);
         }
         foreach (var layer in GetExtraTrainableLayers())
-            if (layer is not null) WireLayerRandomSeedRecursive(layer, seedRng, visited, callerChosen);
+            if (layer is not null) WireLayerRandomSeedRecursive(layer, seedRng, visited, callerChosen, keepConstructionSeeds);
     }
+
+    // The seed this model's construction scope was armed with (RecordConstructionScope): the seed its layers took when
+    // they were built or registered.
+    private int? _constructionSeed;
 
     /// <summary>
     /// The caller-built layers (<see cref="NeuralNetworkArchitecture{T}.Layers"/>, with their sub-layers) whose
@@ -10201,18 +10251,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     private static void WireLayerRandomSeedRecursive(
-        ILayer<T> layer, Random seedRng, HashSet<ILayer<T>> visited, HashSet<ILayer<T>>? callerChosen)
+        ILayer<T> layer, Random seedRng, HashSet<ILayer<T>> visited, HashSet<ILayer<T>>? callerChosen,
+        bool keepConstructionSeeds)
     {
         if (!visited.Add(layer)) return;
         if (layer is Layers.LayerBase<T> baseLayer)
         {
-            // Draw for every layer, so skipping a caller-chosen one does not shift the seeds the others get.
+            // Draw for every layer, so skipping a caller-chosen one (or one keeping its construction seed) does not
+            // shift the seeds the others get.
             int next = seedRng.Next();
-            if (callerChosen is null || !callerChosen.Contains(layer))
+            if ((callerChosen is null || !callerChosen.Contains(layer))
+                && !(keepConstructionSeeds && baseLayer.RandomSeed.HasValue))
                 baseLayer.RandomSeed = next;
             foreach (var sub in baseLayer.GetSubLayers())
             {
-                WireLayerRandomSeedRecursive(sub, seedRng, visited, callerChosen);
+                WireLayerRandomSeedRecursive(sub, seedRng, visited, callerChosen, keepConstructionSeeds);
             }
         }
     }

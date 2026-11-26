@@ -23,6 +23,8 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed;
 /// Reference checks of the physics-informed models against their papers. Each test pins a behavior the old code
 /// got wrong; the comment on each says what the old code did.
 /// </summary>
+// It clears the process-wide fallback seed for its unseeded models; see MultiScalePinn_ExplicitRandomSeed_...
+[Collection(AiDotNet.Tests.Fixtures.SeedFallbackGlobalStateCollection.Name)]
 public class PhysicsInformedPaperReferenceTests
 {
     private const double Tolerance = 1e-9;
@@ -1339,9 +1341,20 @@ public class PhysicsInformedPaperReferenceTests
             seededA.ScaleNetworks[1].GetParameters().ToArray(),
             seededOther.ScaleNetworks[1].GetParameters().ToArray());
 
-        var unseededA = Build(null);
-        var unseededB = Build(null);
-        Assert.NotEqual(unseededA.GetParameters().ToArray(), unseededB.GetParameters().ToArray());
+        // Unseeded means no fallback seed either: under the process-wide fallback another test sets, both models take
+        // that seed and are equal by design.
+        var savedFallback = NeuralNetworkArchitecture<float>.DefaultRandomSeedOverride;
+        NeuralNetworkArchitecture<float>.DefaultRandomSeedOverride = null;
+        try
+        {
+            var unseededA = Build(null);
+            var unseededB = Build(null);
+            Assert.NotEqual(unseededA.GetParameters().ToArray(), unseededB.GetParameters().ToArray());
+        }
+        finally
+        {
+            NeuralNetworkArchitecture<float>.DefaultRandomSeedOverride = savedFallback;
+        }
     }
 
     [Fact]
