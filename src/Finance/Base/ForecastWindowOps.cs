@@ -30,10 +30,11 @@ internal static class ForecastWindowOps
     /// <param name="predictions">The predictions <c>[at least batch, at least steps, at least features]</c>.</param>
     /// <param name="length">The window length.</param>
     /// <param name="steps">How many steps the window moves forward, from 0 to <paramref name="length"/>.</param>
-    internal static Tensor<T> ShiftWindow<T>(Tensor<T> input, Tensor<T> predictions, int length, int steps)
+    internal static Tensor<T> ShiftWindow<T>(Tensor<T> input, Tensor<T>? predictions, int length, int steps)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
-        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        // Predictions are read only when the window moves: with steps == 0 they may be null, as before.
+        if (predictions is null && steps != 0) throw new ArgumentNullException(nameof(predictions));
 
         int batch = input.Shape[0], features = input.Shape[2];
         if (batch <= 0 || features <= 0)
@@ -48,7 +49,7 @@ internal static class ForecastWindowOps
             throw new ArgumentOutOfRangeException(nameof(input), "The input is shorter than the window.");
         if (steps > 0)
         {
-            if (predictions.Rank != 3)
+            if (predictions!.Rank != 3)
                 throw new ArgumentException("Predictions must be rank 3 [batch, time, features].", nameof(predictions));
             if (predictions.Shape[0] < batch || predictions.Shape[1] < steps || predictions.Shape[2] < features)
                 throw new ArgumentOutOfRangeException(nameof(predictions), "The predictions do not cover the shifted steps.");
@@ -61,7 +62,7 @@ internal static class ForecastWindowOps
         using var noGrad = new NoGradScope<T>();
         if (steps == 0)
             return engine.TensorSlice(input, [0, 0, 0], [batch, length, features]).Contiguous();
-        var newest = engine.TensorSlice(predictions, [0, 0, 0], [batch, steps, features]);
+        var newest = engine.TensorSlice(predictions!, [0, 0, 0], [batch, steps, features]);
         if (keep == 0)
             return newest.Contiguous();
         return engine.TensorConcatenate([engine.TensorSlice(input, [0, steps, 0], [batch, keep, features]), newest], 1);
@@ -82,7 +83,6 @@ internal static class ForecastWindowOps
             return new Tensor<T>([1, totalSteps, features]);
 
         int batch = predictions[0].Shape[0];
-        var zero = new Tensor<T>([batch, totalSteps, features]);
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
         var parts = new List<Tensor<T>>();
@@ -101,7 +101,7 @@ internal static class ForecastWindowOps
         }
 
         if (parts.Count == 0)
-            return zero;
+            return new Tensor<T>([batch, totalSteps, features]);   // only when no chunk contributes a step
         if (filled < totalSteps)
             parts.Add(new Tensor<T>([batch, totalSteps - filled, features]));
         return parts.Count == 1 ? parts[0].Contiguous() : engine.TensorConcatenate(parts.ToArray(), 1);

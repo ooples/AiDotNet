@@ -282,32 +282,4 @@ public abstract class RegularizationBase<T, TInput, TOutput> : IRegularization<T
         return NumOps.LessThan(factor, NumOps.Zero) ? NumOps.Zero : factor;
     }
 
-    /// <summary>
-    /// Applies the soft-thresholding (L1 proximal) operator to every element of a tensor:
-    /// sign(v) * max(|v| - threshold, 0).
-    /// </summary>
-    /// <param name="values">The values to shrink.</param>
-    /// <param name="threshold">The amount each value's magnitude is reduced by.</param>
-    /// <returns>A tensor of the same shape holding the thresholded values.</returns>
-    /// <remarks>
-    /// <para>
-    /// Runs as whole-tensor engine operations. The sign is (v &gt; 0) - (v &lt; 0), which is -1, 0 or 1
-    /// exactly as <c>SignOrZero</c> gives per element, and the magnitude keeps |v| - threshold only
-    /// where it is strictly positive, so the result matches the element-by-element definition.
-    /// </para>
-    /// <para><b>For Beginners:</b> Soft thresholding pulls every value toward zero by a fixed amount
-    /// and sets values that were already closer to zero than that amount to exactly zero. This is how
-    /// L1 regularization produces sparse data.</para>
-    /// </remarks>
-    private protected Tensor<T> SoftThreshold(Tensor<T> values, T threshold)
-    {
-        var engine = Engine;
-        var sign = engine.TensorSubtract(
-            engine.TensorGreaterThan(values, NumOps.Zero), engine.TensorLessThan(values, NumOps.Zero));
-        var reduced = engine.TensorSubtractScalar(engine.TensorAbs(values), threshold);
-        var magnitude = engine.TensorWhere(
-            engine.TensorGreaterThan(reduced, NumOps.Zero), reduced, engine.TensorZerosLike(reduced));
-        return engine.TensorMultiply(sign, magnitude);
-    }
-
 }

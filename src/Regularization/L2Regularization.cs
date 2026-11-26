@@ -137,7 +137,10 @@ public class L2Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
             return new Matrix<T>(data.Rows, data.Columns);
         }
 
-        return Engine.MatrixMultiplyScalar(data, shrinkageFactor);
+        // Through the tensor op, not MatrixMultiplyScalar: a GPU engine runs the matrix op through its float32
+        // scale kernel whatever T is, which cost a double normal-equation matrix half its digits (and overflowed
+        // entries above float.MaxValue). The tensor op keeps T's precision on every engine.
+        return Engine.TensorMultiplyScalar(Tensor<T>.FromMatrix(data), shrinkageFactor).ToMatrix();
     }
 
     /// <summary>

@@ -35,14 +35,32 @@ public class SphericalSoftmaxStabilisedNormTests
 
     [Theory]
     [MemberData(nameof(Inputs))]
-    public void VectorOverload_ReturnsExactlyWhatTheTensorOverloadReturns(double[] values)
+    public void VectorOverload_AgreesWithTheTensorOverloadToRounding(double[] values)
     {
+        // The vector overload is computed directly, the tensor overload through the engine: equal up to the
+        // rounding of a different evaluation order, a few ulps of a probability.
         var activation = new SphericalSoftmaxActivation<double>();
 
         double[] fromVector = activation.Activate(new Vector<double>(values)).ToArray();
         double[] fromTensor = activation.Activate(new Tensor<double>(values, new[] { values.Length })).ToArray();
 
-        Assert.Equal(fromTensor, fromVector);
+        Assert.Equal(fromTensor.Length, fromVector.Length);
+        for (int i = 0; i < values.Length; i++)
+            Assert.True(Math.Abs(fromTensor[i] - fromVector[i]) <= 2e-15,
+                $"[{i}]: tensor {fromTensor[i]:R} vector {fromVector[i]:R}");
+    }
+
+    [Fact]
+    public void VectorOverload_Float_AgreesWithTheTensorOverloadToRounding()
+    {
+        var activation = new SphericalSoftmaxActivation<float>();
+        float[] values = { 0.3f, -1.1f, 2.0f, 0.0f, 0.7f, 1e-20f, 3e19f };
+
+        float[] fromVector = activation.Activate(new Vector<float>(values)).ToArray();
+        float[] fromTensor = activation.Activate(new Tensor<float>(values, new[] { values.Length })).ToArray();
+
+        for (int i = 0; i < values.Length; i++)
+            Assert.True(Math.Abs(fromTensor[i] - fromVector[i]) <= 1e-6f, $"[{i}]: tensor {fromTensor[i]:R} vector {fromVector[i]:R}");
     }
 
     [Theory]

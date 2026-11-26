@@ -26638,3 +26638,5 @@ override AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>.TryApplyLearningRule(Ai
 override AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> bool
 override AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> bool
 override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> bool
+*REMOVED*override AiDotNet.Finance.Forecasting.Neural.DeepAR<T>.ConcatenatePredictions(System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! predictions, int totalSteps) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.Finance.Forecasting.Neural.DeepAR<T>.ShiftInputWithPredictions(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! prediction, int stepsUsed) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!

@@ -428,12 +428,6 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         return new Tensor<T>(output.ToArray().Select(v => NumOps.FromDouble(v)).ToArray(), output.Dimensions.ToArray());
     }
 
-    protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> prediction, int stepsUsed)
-        => ForecastWindowOps.ShiftWindow(input, prediction, input.Shape[1], stepsUsed);
-
-    protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
-        => ForecastWindowOps.ConcatenateLeadingSteps(predictions, totalSteps, NumFeatures);
-
     protected override void Dispose(bool disposing)
     {
         if (disposing) OnnxSession?.Dispose();

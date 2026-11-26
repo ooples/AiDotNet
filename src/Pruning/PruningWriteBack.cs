@@ -61,7 +61,9 @@ internal static class PruningWriteBack
         if (weights.Length == 0)
             return;
 
-        var source = pruned.IsContiguous ? pruned : pruned.Contiguous();
+        // A custom mask may return a sparse tensor of the same shape; it has no dense span, so densify it first.
+        var source = pruned is SparseTensor<T> sparse ? sparse.ToDense()
+            : pruned.IsContiguous ? pruned : pruned.Contiguous();
         if (weights.IsContiguous)
         {
             source.AsSpan().CopyTo(weights.AsWritableSpan());
@@ -77,7 +79,10 @@ internal static class PruningWriteBack
         + "its own storage position")]
     private static void CopyIntoView<T>(Tensor<T> source, Tensor<T> weights)
     {
-        var values = source.AsSpan();
+        // Read every value before the first write: a mask result may share storage with the strided destination
+        // (a view over the same array, with no copy-on-write family to detach it), and an earlier write would
+        // otherwise overwrite a value a later one still reads.
+        var values = source.ToArray();
         for (int i = 0; i < values.Length; i++)
         {
             weights.SetFlat(i, values[i]);

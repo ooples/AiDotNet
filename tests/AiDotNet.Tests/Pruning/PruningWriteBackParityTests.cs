@@ -116,7 +116,7 @@ public class PruningWriteBackParityTests
         strategy.ApplyPruning(weights, mask);
 
         AssertBitwise(expected, weights.ToArray());
-        Assert.True(weights.Version > versionBefore, "an in-place write must bump the tensor version");
+        Assert.True(weights.Version == versionBefore + 1, $"one block write bumps the version once (was {versionBefore} -> {weights.Version})");
     }
 
     [Theory]
@@ -127,10 +127,41 @@ public class PruningWriteBackParityTests
         var weights = new Tensor<float>(values.ToArray(), new[] { 3, 4 });
         var mask = new PruningMask<float>(Keep2D(3, 4));
         var expected = mask.Apply(new Tensor<float>(values.ToArray(), new[] { 3, 4 })).ToArray();
+        var versionBefore = weights.Version;
 
         strategy.ApplyPruning(weights, mask);
 
         AssertBitwise(expected, weights.ToArray());
+        Assert.True(weights.Version == versionBefore + 1, $"one block write bumps the version once (was {versionBefore} -> {weights.Version})");
+    }
+
+    [Fact]
+    public void Tensor_SparseMaskResult_IsWrittenBackDensely()
+    {
+        // A custom mask may return a SparseTensor of the destination's shape: the diagonal of a 2 x 2.
+        var weights = new Tensor<double>(new[] { 9.0, 9.0, 9.0, 9.0 }, new[] { 2, 2 });
+        var pruned = new SparseTensor<double>(2, 2, new[] { 0, 1 }, new[] { 0, 1 }, new[] { 3.0, 4.0 });
+
+        PruningWriteBack.Copy(pruned, weights);
+
+        AssertBitwise(new[] { 3.0, 0.0, 0.0, 4.0 }, weights.ToArray());
+    }
+
+    [Fact]
+    public void Tensor_StridedDestinationSharingTheSourceStorage_ReadsEverySourceValueFirst()
+    {
+        // The destination is the transposed [2, 3] view of a [3, 2] array, the source the same six elements read flat.
+        // Destination element 1 is storage slot 2, so a write-back without a snapshot overwrites source value 2 (7)
+        // before it is read.
+        var backing = new[] { 5.0, 0.0, 7.0, 0.0, 7.0, 0.0 };
+        var destination = Tensor<double>.FromMemory(new Memory<double>(backing), new[] { 3, 2 }).Transpose(new[] { 1, 0 });
+        Assert.False(destination.IsContiguous, "the test needs a strided destination");
+        var source = Tensor<double>.FromMemory(new Memory<double>(backing), new[] { 2, 3 });
+        var expected = source.ToArray();
+
+        PruningWriteBack.Copy(source, destination);
+
+        AssertBitwise(expected, destination.ToArray());
     }
 
     [Fact]
@@ -192,8 +223,10 @@ public class PruningWriteBackParityTests
         Assert.Equal(expected.Length, actual.Length);
         for (int i = 0; i < expected.Length; i++)
         {
+            // Float bits, not widened doubles: widening is exact for finite values but need not keep a NaN payload.
             Assert.Equal(
-                BitConverter.DoubleToInt64Bits(expected[i]), BitConverter.DoubleToInt64Bits(actual[i]));
+                BitConverter.ToInt32(BitConverter.GetBytes(expected[i]), 0),
+                BitConverter.ToInt32(BitConverter.GetBytes(actual[i]), 0));
         }
     }
 }

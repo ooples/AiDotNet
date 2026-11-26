@@ -57,18 +57,24 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     private readonly int _nodeCount;
 
     /// <summary>
-    /// <c>[numClasses, nodes]</c>: 1 where the path to the class turns right at the node, 0 elsewhere.
+    /// The longest root-to-leaf path: <c>ceil(log2(numClasses))</c> decisions.
     /// </summary>
-    private readonly Tensor<T> _rightTurns;
+    private readonly int _depth;
 
     /// <summary>
-    /// <c>[numClasses, nodes]</c>: 1 where the path to the class turns left at the node, 0 elsewhere.
+    /// <c>[numClasses * depth]</c>, row-major by class: the decision at each step of the class's path, as a column of
+    /// <c>concat(right, left, zero)</c> over the nodes: <c>n</c> for a right turn at node <c>n</c>, <c>nodes + n</c>
+    /// for a left turn, and <c>2 * nodes</c> (the zero column) past the end of a shorter path. O(C log C) entries, where
+    /// dense turn tables were C x (C - 1).
     /// </summary>
-    private readonly Tensor<T> _leftTurns;
+    private readonly Tensor<int> _pathSlots;
 
     /// <summary>
-    /// The weight vector of every internal node, <c>[nodes, inputDim]</c>.
+    /// <c>[numClasses * depth]</c>: the node at each step of the class's path, or <c>nodes</c> (a zero weight row)
+    /// past its end.
     /// </summary>
+    private readonly Tensor<int> _pathNodes;
+
     private Tensor<T> _nodeWeights;
 
     /// <summary>
@@ -90,7 +96,15 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// not change the activation.
     /// </para>
     /// </remarks>
-    public Tensor<T> NodeWeightsTensor => new Tensor<T>(_nodeWeights.ToArray(), new[] { _nodeCount, _weightInputDim });
+    public Tensor<T> NodeWeightsTensor
+    {
+        get
+        {
+            // Before any forward pass the weights are those for an input as wide as the class count.
+            if (_weightInputDim < 0) EnsureWeights(_numClasses);
+            return new Tensor<T>(_nodeWeights.ToArray(), new[] { _nodeCount, _weightInputDim });
+        }
+    }
 
     /// <summary>
     /// Initializes a new instance of the Hierarchical Softmax activation function.
@@ -117,9 +131,11 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
 
         _numClasses = numClasses;
         _nodeCount = numClasses - 1;
-        (_rightTurns, _leftTurns) = BuildPaths(numClasses);
-        _weightInputDim = numClasses;
-        _nodeWeights = CreateWeights(_nodeCount, numClasses);
+        (_depth, _pathSlots, _pathNodes) = BuildPaths(numClasses);
+        // The weights are drawn when the input width is known (the first forward pass, or a read of
+        // NodeWeightsTensor): a draw for numClasses inputs would be replaced as soon as the hidden width differs.
+        _weightInputDim = -1;
+        _nodeWeights = new Tensor<T>(new[] { 0, 0 });
     }
 
     /// <summary>
@@ -229,12 +245,19 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
         var takeRight = Engine.Sigmoid(scores);
         var takeLeft = Engine.Sigmoid(Engine.TensorNegate(scores));
 
-        // d log P_c / d s_n: (1 - sigma_n) on a right turn, -sigma_n on a left turn, 0 off the path.
-        var logSlope = Engine.TensorSubtract(
-            Engine.TensorMultiply(_rightTurns, takeLeft),
-            Engine.TensorMultiply(_leftTurns, takeRight));
+        // d log P_c / d x = sum over the path of slope_n w_n, with slope (1 - sigma_n) on a right turn and -sigma_n on
+        // a left turn. Gathered per step of each path: O(C log C x inputDim), not a C x nodes matmul.
+        var slopes = Engine.TensorConcatenate(new[]
+        {
+            takeLeft, Engine.TensorNegate(takeRight), new Tensor<T>(new[] { 1, 1 }),
+        }, 1);
+        var pathSlopes = Engine.Reshape(Engine.TensorIndexSelect(slopes, _pathSlots, 1), new[] { _numClasses, _depth, 1 });
+        var paddedWeights = Engine.TensorConcatenate(new[] { _nodeWeights, new Tensor<T>(new[] { 1, inputDim }) }, 0);
+        var pathWeights = Engine.Reshape(Engine.TensorIndexSelect(paddedWeights, _pathNodes, 0),
+            new[] { _numClasses, _depth, inputDim });
+        var logGradient = Engine.ReduceSum(Engine.TensorMultiply(pathWeights, pathSlopes), new[] { 1 }, keepDims: false);
         var probabilities = Engine.Reshape(PathProbabilities(row), new[] { _numClasses, 1 });
-        return Engine.TensorMultiply(Engine.TensorMatMul(logSlope, _nodeWeights), probabilities).ToMatrix();
+        return Engine.TensorMultiply(logGradient, probabilities).ToMatrix();
     }
 
     /// <summary>
@@ -249,10 +272,12 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
         var scores = NodeScores(rows);
         var logRight = Engine.TensorLogSigmoid(scores);
         var logLeft = Engine.TensorSubtract(logRight, scores);
-        var logProbability = Engine.TensorAdd(
-            Engine.TensorMatMul(logRight, Engine.TensorPermute(_rightTurns, new[] { 1, 0 })),
-            Engine.TensorMatMul(logLeft, Engine.TensorPermute(_leftTurns, new[] { 1, 0 })));
-        return Engine.TensorExp(logProbability);
+        // log P_c: the sum of the log decisions along the class's path, gathered from concat(right, left, zero) and
+        // summed over the depth. O(rows x C log C), where a matmul by dense turn tables was O(rows x C^2).
+        int batch = rows.Shape[0];
+        var decisions = Engine.TensorConcatenate(new[] { logRight, logLeft, new Tensor<T>(new[] { batch, 1 }) }, 1);
+        var onPaths = Engine.Reshape(Engine.TensorIndexSelect(decisions, _pathSlots, 1), new[] { batch, _numClasses, _depth });
+        return Engine.TensorExp(Engine.ReduceSum(onPaths, new[] { 2 }, keepDims: false));
     }
 
     /// <summary>
@@ -288,7 +313,7 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     private static Tensor<T> CreateWeights(int nodes, int inputDim)
     {
         var random = RandomHelper.CreateSecureRandom();
-        var values = new double[nodes * inputDim];
+        var values = new double[checked(nodes * inputDim)];
         for (int i = 0; i < values.Length; i++)
             values[i] = random.NextDouble() - 0.5;
         return new Tensor<double>(values, new[] { nodes, inputDim }).Cast<T>();
@@ -298,34 +323,46 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// Builds the balanced tree over the classes and returns, per class and internal node, whether the path to the
     /// class turns right or left there.
     /// </summary>
-    private static (Tensor<T> RightTurns, Tensor<T> LeftTurns) BuildPaths(int numClasses)
+    private static (int Depth, Tensor<int> Slots, Tensor<int> Nodes) BuildPaths(int numClasses)
     {
         int nodes = numClasses - 1;
-        var right = new double[numClasses * nodes];
-        var left = new double[numClasses * nodes];
+        // ceil(log2(numClasses)): halving sends ceil(n / 2) left, so the deepest leaf is on the left-most path.
+        int depth = 0;
+        for (int span = numClasses; span > 1; span = (span + 1) / 2) depth++;
+        int width = Math.Max(depth, 1);
+        var slots = new int[checked(numClasses * width)];
+        var pathNodes = new int[slots.Length];
+        slots.AsSpan().Fill(2 * nodes);
+        pathNodes.AsSpan().Fill(nodes);
 
-        // Pre-order: a node covering [low, high) is numbered before its left subtree, which comes before its right.
-        var pending = new Stack<(int Low, int High)>();
-        pending.Push((0, numClasses));
+        // Pre-order: a node covering [low, high) at a given depth is numbered before its left subtree, which comes
+        // before its right.
+        var pending = new Stack<(int Low, int High, int Level)>();
+        pending.Push((0, numClasses, 0));
         int next = 0;
         while (pending.Count > 0)
         {
-            var (low, high) = pending.Pop();
+            var (low, high, level) = pending.Pop();
             if (high - low < 2)
                 continue;
 
             int node = next++;
             int middle = low + (high - low + 1) / 2;
             for (int c = low; c < middle; c++)
-                left[c * nodes + node] = 1.0;
+            {
+                slots[c * width + level] = nodes + node;
+                pathNodes[c * width + level] = node;
+            }
             for (int c = middle; c < high; c++)
-                right[c * nodes + node] = 1.0;
+            {
+                slots[c * width + level] = node;
+                pathNodes[c * width + level] = node;
+            }
 
-            pending.Push((middle, high));
-            pending.Push((low, middle));
+            pending.Push((middle, high, level + 1));
+            pending.Push((low, middle, level + 1));
         }
 
-        var shape = new[] { numClasses, nodes };
-        return (new Tensor<double>(right, shape).Cast<T>(), new Tensor<double>(left, shape).Cast<T>());
+        return (width, new Tensor<int>(slots, new[] { slots.Length }), new Tensor<int>(pathNodes, new[] { pathNodes.Length }));
     }
 }

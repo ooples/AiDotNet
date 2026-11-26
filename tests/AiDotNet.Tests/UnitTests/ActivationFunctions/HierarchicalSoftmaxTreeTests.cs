@@ -222,6 +222,20 @@ public class HierarchicalSoftmaxTreeTests
     }
 
     [Fact]
+    public void LargeVocabulary_PastTheDenseTableOverflow_ConstructsAndNormalizes()
+    {
+        // 50,000 classes: dense [classes, classes - 1] path tables overflow int at 46,342 classes. The path slots are
+        // [classes, ceil(log2 classes)], and the weights are drawn for the real input width (8), not for 50,000.
+        var activation = new HierarchicalSoftmaxActivation<double>(50000);
+        double[] probabilities = activation.Activate(new Vector<double>(Input(8))).ToArray();
+
+        Assert.Equal(50000, probabilities.Length);
+        Assert.All(probabilities, p => Assert.True(p > 0 && p < 1, $"probability {p:R} is outside (0, 1)"));
+        Assert.Equal(1.0, probabilities.Sum(), 9);
+        Assert.Equal(new[] { 49999, 8 }, activation.NodeWeightsTensor.Shape.ToArray());
+    }
+
+    [Fact]
     public void NodeWeightsTensor_IsACopy()
     {
         var activation = new HierarchicalSoftmaxActivation<double>(4);

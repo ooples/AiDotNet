@@ -147,18 +147,28 @@ public class ElasticNetRegularization<T, TInput, TOutput> : RegularizationBase<T
         var regularizationStrength = NumOps.FromDouble(Options.Strength);
         var l1Ratio = NumOps.FromDouble(Options.L1Ratio);
         var l2Ratio = NumOps.FromDouble(1 - Options.L1Ratio);
+        var result = new Matrix<T>(data.Rows, data.Columns);
 
         var l2ShrinkageFactor = ShrinkTowardZero(NumOps.Multiply(regularizationStrength, l2Ratio));
-        if (data.Rows == 0 || data.Columns == 0)
+
+        for (int i = 0; i < data.Rows; i++)
         {
-            return new Matrix<T>(data.Rows, data.Columns);
+            for (int j = 0; j < data.Columns; j++)
+            {
+                var value = data[i, j];
+                // Step 1: L1 soft thresholding
+                var subPart = NumOps.Subtract(NumOps.Abs(value), NumOps.Multiply(regularizationStrength, l1Ratio));
+                var l1Result = NumOps.Multiply(
+                    NumOps.SignOrZero(value),
+                    NumOps.GreaterThan(subPart, NumOps.Zero) ? subPart : NumOps.Zero
+                );
+
+                // Step 2: L2 shrinkage applied to the L1 result
+                result[i, j] = NumOps.Multiply(l1Result, l2ShrinkageFactor);
+            }
         }
 
-        // Step 1: L1 soft thresholding
-        var l1Result = SoftThreshold(Tensor<T>.FromMatrix(data), NumOps.Multiply(regularizationStrength, l1Ratio));
-
-        // Step 2: L2 shrinkage applied to the L1 result
-        return Engine.TensorMultiplyScalar(l1Result, l2ShrinkageFactor).ToMatrix();
+        return result;
     }
 
     /// <summary>
@@ -178,17 +188,24 @@ public class ElasticNetRegularization<T, TInput, TOutput> : RegularizationBase<T
         var regularizationStrength = NumOps.FromDouble(Options.Strength);
         var l1Ratio = NumOps.FromDouble(Options.L1Ratio);
         var l2Ratio = NumOps.FromDouble(1 - Options.L1Ratio);
+        var result = new Vector<T>(data.Length);
 
         var l2ShrinkageFactor = ShrinkTowardZero(NumOps.Multiply(regularizationStrength, l2Ratio));
-        if (data.Length == 0)
+
+        for (int i = 0; i < data.Length; i++)
         {
-            return new Vector<T>(0);
+            var value = data[i];
+            // Step 1: L1 soft thresholding
+            var subPart = NumOps.Subtract(NumOps.Abs(value), NumOps.Multiply(regularizationStrength, l1Ratio));
+            var l1Result = NumOps.Multiply(
+                NumOps.SignOrZero(value),
+                NumOps.GreaterThan(subPart, NumOps.Zero) ? subPart : NumOps.Zero
+            );
+
+            // Step 2: L2 shrinkage applied to the L1 result
+            result[i] = NumOps.Multiply(l1Result, l2ShrinkageFactor);
         }
 
-        // Step 1: L1 soft thresholding
-        var l1Result = SoftThreshold(Tensor<T>.FromVector(data), NumOps.Multiply(regularizationStrength, l1Ratio));
-
-        // Step 2: L2 shrinkage applied to the L1 result
-        return Engine.TensorMultiplyScalar(l1Result, l2ShrinkageFactor).ToVector();
+        return result;
     }
 }
