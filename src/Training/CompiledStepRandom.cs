@@ -438,8 +438,9 @@ public static class CompiledStepRandom<T>
         }
     }
 
-    // Box-Muller, two samples per pair of uniforms, in the order an eager host loop would write them.
-    private static void FillStandardNormal(Tensor<T> tensor, Random random)
+    // Box-Muller, two samples per pair of uniforms, in the order an eager host loop would write them. Internal so
+    // SyntheticTensorOps<T>.StandardNormalPairTensor shares this one definition for its eager (unrecorded) draws.
+    internal static void FillStandardNormal(Tensor<T> tensor, Random random)
     {
         var span = tensor.AsWritableSpan();
         for (int i = 0; i < span.Length; i += 2)
