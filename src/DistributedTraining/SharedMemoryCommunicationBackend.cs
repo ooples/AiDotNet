@@ -2127,8 +2127,20 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         if (typeof(T) == typeof(float))
         {
             Span<float> dest = AsWritableTypedSpan<float>(destination, count);
-            GetMappedReadOnlySpan<float>(SlotByteOffset(0) + byteSubOffset, count).CopyTo(dest);
-            for (int r = 1; r < _worldSize; r++)
+            int firstPeer = 1;
+            if (_worldSize >= 2 && operation is ReductionOperation.Sum or ReductionOperation.Average)
+            {
+                // slot 0 + slot 1 in one pass (the same additions, in the same order, as copying slot 0 and adding slot
+                // 1): the copy pass over the whole buffer was a third of the reduce's memory traffic.
+                TensorPrimitives.Add(GetMappedReadOnlySpan<float>(SlotByteOffset(0) + byteSubOffset, count),
+                    GetMappedReadOnlySpan<float>(SlotByteOffset(1) + byteSubOffset, count), dest);
+                firstPeer = 2;
+            }
+            else
+            {
+                GetMappedReadOnlySpan<float>(SlotByteOffset(0) + byteSubOffset, count).CopyTo(dest);
+            }
+            for (int r = firstPeer; r < _worldSize; r++)
             {
                 ReadOnlySpan<float> peer = GetMappedReadOnlySpan<float>(SlotByteOffset(r) + byteSubOffset, count);
                 CombineFloatSpanInPlace(dest, peer, operation);
