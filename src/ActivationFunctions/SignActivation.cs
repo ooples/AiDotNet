@@ -99,13 +99,12 @@ public class SignActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivati
     /// </remarks>
     public override Vector<T> Activate(Vector<T> input)
     {
-        Vector<T> output = new Vector<T>(input.Length);
-        for (int i = 0; i < input.Length; i++)
+        if (input.Length == 0)
         {
-            output[i] = Activate(input[i]);
+            return new Vector<T>(0);
         }
 
-        return output;
+        return Activate(Tensor<T>.FromVector(input)).ToVector();
     }
 
     /// <summary>
@@ -128,18 +127,9 @@ public class SignActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivati
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
     {
+        // The Jacobian matrix is all zeros, which is how a new matrix starts out
         int n = input.Length;
-        Matrix<T> jacobian = new Matrix<T>(n, n);
-        // The Jacobian matrix will be all zeros
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                jacobian[i, j] = NumOps.Zero;
-            }
-        }
-
-        return jacobian;
+        return new Matrix<T>(n, n);
     }
 
     /// <summary>
@@ -160,15 +150,17 @@ public class SignActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivati
     /// </remarks>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        Tensor<T> output = new Tensor<T>(input._shape);
-        int totalElements = input.Length;
-
-        for (int i = 0; i < totalElements; i++)
+        if (input.Length == 0)
         {
-            output[i] = Activate(input[i]);
+            // Nothing to compute, and a zero-length device buffer cannot be created on the GPU engine.
+            return new Tensor<T>(input._shape);
         }
 
-        return output;
+        // (x > 0) - (x < 0): 1 for positive, -1 for negative and 0 for everything else, the same three
+        // branches as the scalar function
+        var engine = Engine;
+        return engine.TensorSubtract(
+            engine.TensorGreaterThan(input, NumOps.Zero), engine.TensorLessThan(input, NumOps.Zero));
     }
 
     /// <summary>
@@ -195,30 +187,8 @@ public class SignActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivati
         Array.Copy(input._shape, outputShape, input.Shape.Length);
         outputShape[outputShape.Length - 1] = input.Shape[input.Shape.Length - 1];
 
-        Tensor<T> output = new Tensor<T>(outputShape);
-        int batchSize = input.Shape[0];
-        int vectorLength = input.Shape[1];
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            Vector<T> vector = new Vector<T>(vectorLength);
-            for (int j = 0; j < vectorLength; j++)
-            {
-                vector[j] = input[i, j];
-            }
-
-            Matrix<T> jacobian = Derivative(vector);
-
-            for (int j = 0; j < vectorLength; j++)
-            {
-                for (int k = 0; k < vectorLength; k++)
-                {
-                    output[i, j, k] = jacobian[j, k];
-                }
-            }
-        }
-
-        return output;
+        // Every per-vector Jacobian is all zeros, so the stacked result is a zero tensor
+        return new Tensor<T>(outputShape);
     }
 
 }

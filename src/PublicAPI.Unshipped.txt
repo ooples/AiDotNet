@@ -26673,3 +26673,5 @@ AiDotNet.Models.Options.KnowledgeDistillationOptions<T, TInput, TOutput>.SparseT
 AiDotNet.Models.Options.KnowledgeDistillationOptions<T, TInput, TOutput>.SparseTopKMinimumClasses.get -> int
 AiDotNet.Models.Options.KnowledgeDistillationOptions<T, TInput, TOutput>.SparseTopKMinimumClasses.set -> void
 static AiDotNet.KnowledgeDistillation.DistillationStrategyFactory<T>.ResolveStrategyForOutputWidth(AiDotNet.Interfaces.IDistillationStrategy<T>? strategy, double temperature, double alpha, int outputClasses, int sparseTopK, int sparseTopKMinimumClasses) -> AiDotNet.Interfaces.IDistillationStrategy<T>!
+override AiDotNet.ActivationFunctions.ELUActivation<T>.Derivative(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.ActivationFunctions.SwishActivation<T>.Derivative(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!

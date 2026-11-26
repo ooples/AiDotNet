@@ -159,13 +159,34 @@ public class GELUActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivati
     /// <returns>A new tensor containing the derivatives of the GELU function for each input element.</returns>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
-        // Use the tensor-level derivative computation
-        Tensor<T> output = new Tensor<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
+        if (input.Length == 0)
         {
-            output[i] = Derivative(input[i]);
+            // Nothing to compute, and a zero-length device buffer cannot be created on the GPU engine.
+            return new Tensor<T>(input._shape);
         }
-        return output;
+
+        // d/dx GELU(x) = 0.5 * tanh(0.0356774 * x^3 + 0.797885 * x) +
+        //                (0.0535161 * x^3 + 0.398942 * x) * sech^2(0.0356774 * x^3 + 0.797885 * x) + 0.5
+        var engine = Engine;
+        var x3 = engine.TensorMultiply(engine.TensorMultiply(input, input), input);
+
+        var term1 = engine.TensorAdd(
+            engine.TensorMultiplyScalar(x3, NumOps.FromDouble(0.0356774)),
+            engine.TensorMultiplyScalar(input, NumOps.FromDouble(0.797885)));
+
+        var term2 = engine.TensorAdd(
+            engine.TensorMultiplyScalar(x3, NumOps.FromDouble(0.0535161)),
+            engine.TensorMultiplyScalar(input, NumOps.FromDouble(0.398942)));
+
+        var tanhTerm = engine.Tanh(term1);
+        var sech2Term = engine.TensorAddScalar(
+            engine.TensorNegate(engine.TensorMultiply(tanhTerm, tanhTerm)), NumOps.One);
+
+        return engine.TensorAddScalar(
+            engine.TensorAdd(
+                engine.TensorMultiplyScalar(tanhTerm, NumOps.FromDouble(0.5)),
+                engine.TensorMultiply(term2, sech2Term)),
+            NumOps.FromDouble(0.5));
     }
 
     #region GPU Training Support

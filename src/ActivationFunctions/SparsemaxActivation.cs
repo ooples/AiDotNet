@@ -79,32 +79,21 @@ public class SparsemaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Vector<T> Activate(Vector<T> input)
     {
-        int d = input.Length;
-        var z = input.OrderByDescending(x => x).ToArray();
-
-        // Find k(z) = max{k in [d] : 1 + k * z_(k) > sum_{j<=k} z_(j)}
-        T cumulativeSum = NumOps.Zero;
-        int k = 1;
-
-        for (int i = 0; i < d; i++)
+        if (input.Length == 0)
         {
-            cumulativeSum = NumOps.Add(cumulativeSum, z[i]);
-            T lhs = NumOps.Add(NumOps.One, NumOps.Multiply(NumOps.FromDouble(i + 1), z[i]));
-            if (NumOps.GreaterThan(lhs, cumulativeSum))
-            {
-                k = i + 1;
-            }
+            return new Vector<T>(0);
         }
 
-        // Compute threshold tau = (sum_{j=1}^{k} z_(j) - 1) / k
-        T sumK = NumOps.Zero;
-        for (int i = 0; i < k; i++)
-        {
-            sumK = NumOps.Add(sumK, z[i]);
-        }
-        T tau = NumOps.Divide(NumOps.Subtract(sumK, NumOps.One), NumOps.FromDouble(k));
-
-        return input.Transform(x => MathHelper.Max(NumOps.Zero, NumOps.Subtract(x, tau)));
+        // Sort descending, find k(z) = max{k in [d] : 1 + k * z_(k) > sum_{j<=k} z_(j)}, take the
+        // threshold tau = (sum_{j=1}^{k} z_(j) - 1) / k and return max(0, z - tau): the engine's
+        // sparsemax, the same operation the tensor overload uses
+        // sparsemax(z) = sparsemax(z - c): taking the maximum off first keeps the support test
+        // 1 + k z_(k) > sum_{j<=k} z_(j) away from magnitudes where the 1 is absorbed (2e7 in float), where the
+        // unshifted projection returned the raw inputs. A NaN input stays NaN instead of becoming 0.
+        var engine = Engine;
+        var z = Tensor<T>.FromVector(input);
+        var shifted = engine.TensorSubtractScalar(z, engine.TensorMaxValue(z));
+        return engine.TensorAdd(engine.Sparsemax(shifted, axis: -1), NaNOrZero(z)).ToVector();
     }
 
     /// <summary>
@@ -132,9 +121,14 @@ public class SparsemaxActivation<T> : ActivationFunctionBase<T>
     /// 
     /// Some key points about the Sparsemax derivative:
     /// - For outputs that are zero, the derivatives are also zero (these outputs don't respond to small input changes)
-    /// - For non-zero outputs, the derivatives form a specific pattern:
-    ///   - When i=j (diagonal elements): the derivative is 1
-    ///   - When i?j: the derivative is negative and depends on the output values
+    /// - The non-zero outputs (the "support", k of them) all equal their input minus one shared threshold, and that
+    ///   threshold is the average of the support's inputs minus 1/k. So:
+    ///   - When i=j (diagonal elements): the derivative is 1 - 1/k
+    ///   - When i and j are different members of the support: the derivative is -1/k
+    ///   - When j is outside the support: the derivative is 0
+    ///
+    /// In matrix form this is diag(s) - s s^T / k, where s is 1 on the support and 0 elsewhere (Martins and
+    /// Astudillo, 2016, equation 11).
     /// 
     /// During neural network training, this matrix helps determine how to adjust the weights based on errors.
     /// The sparsity of Sparsemax can make training more efficient because many derivatives will be zero.
@@ -142,30 +136,78 @@ public class SparsemaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
     {
-        var output = Activate(input);
         int d = input.Length;
-        var jacobian = new Matrix<T>(d, d);
+        if (d == 0)
+        {
+            return new Matrix<T>(0, 0);
+        }
 
+        var engine = Engine;
+        if (UseScalarJacobian(d))
+        {
+            return ScalarJacobian(Activate(input));
+        }
+
+        var output = Tensor<T>.FromVector(Activate(input));
+
+        // s[i] = 1 where the output is positive (the support), 0 elsewhere
+        var support = engine.TensorGreaterThan(output, NumOps.Zero);
+        T supportSize = engine.TensorSum(support);
+        if (!NumOps.GreaterThan(supportSize, NumOps.Zero))
+        {
+            // Only a NaN input leaves the support empty; there is nothing to differentiate
+            return new Matrix<T>(d, d);
+        }
+
+        // On the support the output is input - tau with tau = (sum of the support's inputs - 1) / |S|,
+        // so J = diag(s) - s s^T / |S|
+        var shared = engine.TensorDivideScalar(engine.TensorOuter(support, support), supportSize);
+        return Matrix<T>.FromMemory(engine.TensorSubtract(engine.TensorDiag(support), shared).ToArray(), d, d);
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("host vector in, host matrix out: below the measured break-even length, and on a device engine at any "
+        + "length, the fixed cost of the engine operations exceeds the scalar arithmetic")]
+    private Matrix<T> ScalarJacobian(Vector<T> output)
+    {
+        int d = output.Length;
+        var o = output.AsSpan();
+        int supportSize = 0;
         for (int i = 0; i < d; i++)
         {
+            if (NumOps.GreaterThan(o[i], NumOps.Zero))
+            {
+                supportSize++;
+            }
+        }
+
+        var jacobian = new Matrix<T>(d, d);
+        if (supportSize == 0)
+        {
+            return jacobian;
+        }
+
+        // diag(s) - s s^T / |S| with s the support indicator
+        T shared = NumOps.Divide(NumOps.One, NumOps.FromDouble(supportSize));
+        T offDiagonal = NumOps.Negate(shared);
+        T diagonal = NumOps.Subtract(NumOps.One, shared);
+        var cells = jacobian.AsWritableSpan();
+        for (int i = 0; i < d; i++)
+        {
+            if (!NumOps.GreaterThan(o[i], NumOps.Zero))
+            {
+                continue;
+            }
+
+            int row = i * d;
             for (int j = 0; j < d; j++)
             {
-                if (NumOps.GreaterThan(output[i], NumOps.Zero))
+                if (NumOps.GreaterThan(o[j], NumOps.Zero))
                 {
-                    if (i == j)
-                    {
-                        jacobian[i, j] = NumOps.One;
-                    }
-                    else
-                    {
-                        jacobian[i, j] = NumOps.Negate(NumOps.Divide(output[j], output[i]));
-                    }
-                }
-                else
-                {
-                    jacobian[i, j] = NumOps.Zero;
+                    cells[row + j] = offDiagonal;
                 }
             }
+
+            cells[row + i] = diagonal;
         }
 
         return jacobian;
