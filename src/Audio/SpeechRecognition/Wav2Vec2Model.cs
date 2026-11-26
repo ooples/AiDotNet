@@ -623,6 +623,7 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         return field;
     }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
         => RunModel(input, training: true);
 
@@ -674,6 +675,7 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     }
 
 
+    /// <inheritdoc/>
     protected override AiDotNet.Models.Parameters.ParameterSlotRole ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared)
     {
         if (declared != AiDotNet.Models.Parameters.ParameterSlotRole.Trainable || !_options.FreezeFeatureEncoder || _network is null)
@@ -689,6 +691,7 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
         => _useNativeMode ? ObservedLayerActivations(input) : new Dictionary<string, Tensor<T>>();
 
+    /// <inheritdoc/>
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <summary>
     /// Gets metadata about the model.

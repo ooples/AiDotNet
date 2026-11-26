@@ -1998,6 +1998,54 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     AiModelResult<T, TInput, TOutput> Build(TInput features);
 
     /// <summary>
+    /// Trains the configured model on typed samples with the objective its paper defines.
+    /// </summary>
+    /// <typeparam name="TSample">The model's training sample, such as <c>TtsTrainingSample&lt;T&gt;</c>.</typeparam>
+    /// <param name="samples">The training samples.</param>
+    /// <returns>The trained result; <c>GetTrainingMetricsHistory()</c> holds the per-epoch <c>"train_loss"</c> and,
+    /// when samples were held out, <c>"validation_loss"</c>.</returns>
+    /// <remarks>
+    /// <para>
+    /// For a model whose paper trains it on more supervision than an input/target pair carries
+    /// (<see cref="ISampleObjectiveModel{T, TSample}"/>): text-to-speech models on durations, codec tokens or a
+    /// reference recording, MusicGen on a clip and its description. By default the builder reshuffles every epoch,
+    /// holds 10% of the samples out, stops early when their objective stops improving and reports every epoch to
+    /// the configured training callbacks; <see cref="ConfigureSampleObjectiveTraining"/> changes any of it.
+    /// </para>
+    /// </remarks>
+    AiModelResult<T, TInput, TOutput> Build<TSample>(IReadOnlyList<TSample> samples);
+
+    /// <summary>
+    /// Trains the configured model on typed samples with the objective its paper defines.
+    /// </summary>
+    /// <typeparam name="TSample">The model's training sample, such as <c>TtsTrainingSample&lt;T&gt;</c>.</typeparam>
+    /// <param name="samples">The training samples.</param>
+    /// <returns>A task whose result is the trained result.</returns>
+    /// <remarks>The asynchronous form of <see cref="Build{TSample}(IReadOnlyList{TSample})"/>.</remarks>
+    Task<AiModelResult<T, TInput, TOutput>> BuildAsync<TSample>(IReadOnlyList<TSample> samples);
+
+    /// <summary>
+    /// Trains the configured model on typed samples with the objective its paper defines, observing a cancellation
+    /// token.
+    /// </summary>
+    /// <typeparam name="TSample">The model's training sample, such as <c>TtsTrainingSample&lt;T&gt;</c>.</typeparam>
+    /// <param name="samples">The training samples.</param>
+    /// <param name="cancellationToken">Stops training at the next epoch boundary; the model trained so far is returned.</param>
+    /// <returns>A task whose result is the trained result.</returns>
+    /// <remarks>The asynchronous form of <see cref="Build{TSample}(IReadOnlyList{TSample})"/>.</remarks>
+    Task<AiModelResult<T, TInput, TOutput>> BuildAsync<TSample>(
+        IReadOnlyList<TSample> samples, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Changes how <see cref="Build{TSample}(IReadOnlyList{TSample})"/> trains: epochs, shuffling, the held-out
+    /// fraction and early stopping. Optional; the defaults are on without it.
+    /// </summary>
+    /// <param name="options">The settings to use.</param>
+    /// <returns>This builder, for chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureSampleObjectiveTraining(
+        AiDotNet.Models.Options.SampleObjectiveTrainingOptions options);
+
+    /// <summary>
     /// Wraps an already-trained model in a result, without training it.
     /// </summary>
     /// <returns>A result over the configured model, with the same prediction surface a built one has.</returns>

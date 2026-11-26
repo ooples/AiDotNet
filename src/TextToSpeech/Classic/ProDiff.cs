@@ -49,6 +49,22 @@ public enum ProDiffTrainingPhase
 /// <para><b>For Beginners:</b> Diffusion models usually clean up a noisy spectrogram over hundreds of small steps.
 /// ProDiff predicts the clean spectrogram outright and learns from a slower teacher, so two steps suffice.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a ProDiff model for progressive fast diffusion TTS
+/// // with knowledge distillation for high-quality generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new ProDiff&lt;double&gt;(architecture, "prodiff.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new ProDiff&lt;double&gt;(architecture, new ProDiffOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -411,6 +427,7 @@ public partial class ProDiff<T> : VarianceAdaptorTtsModelBase<T>, IAcousticModel
         return x;
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     /// <inheritdoc />
@@ -419,6 +436,7 @@ public partial class ProDiff<T> : VarianceAdaptorTtsModelBase<T>, IAcousticModel
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

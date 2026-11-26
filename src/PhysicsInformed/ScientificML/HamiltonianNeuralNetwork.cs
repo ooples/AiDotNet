@@ -73,7 +73,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     /// <example>
     /// <code>
     /// var hnn = new HamiltonianNeuralNetwork&lt;float&gt;();
-    /// float[] derivatives = hnn.ComputeTimeDerivative(new float[] { 1.0f, 0.0f, 0.0f, 1.0f });
+    /// Vector&lt;float&gt; derivatives = hnn.ComputeTimeDerivative(new Vector&lt;float&gt;(new float[] { 1.0f, 0.0f, 0.0f, 1.0f }));
     /// </code>
     /// </example>
     [ModelDomain(ModelDomain.Science)]

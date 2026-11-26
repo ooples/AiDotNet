@@ -37,6 +37,7 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// </remarks>
 /// <example>
 /// <code>
+/// var waveform = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
@@ -73,6 +74,7 @@ public partial class SenseVoice<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     private SanmEncoder<T>? _encoder;
     private EmbeddingLayer<T>? _queries;
     private DenseLayer<T>? _ctcOutput;
+    /// <inheritdoc/>
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />
     public bool SupportsStreaming => false;
@@ -122,12 +124,15 @@ public partial class SenseVoice<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         };
     }
 
+    /// <inheritdoc/>
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
 
     /// <summary>The configured language: the vocabulary's language tokens belong to the tokenizer, so the rich output
     /// (<see cref="RichTokenIds"/>) is returned as token ids rather than named here.</summary>
     public string DetectLanguage(Tensor<T> audio) => _options.Language;
+    /// <inheritdoc/>
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
+    /// <inheritdoc/>
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("SenseVoice does not support streaming.");
 
     /// <summary>The most likely vocabulary token at each of the four query positions (language, emotion, event, text
@@ -213,8 +218,10 @@ public partial class SenseVoice<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     private Tensor<T> Logits(Tensor<T> input) =>
         ForwardNativeWaveformBatch(input, _encoder, (_, wave) => TranscriptLogits(wave, LanguageQuery(_options.Language)));
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input); }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _encoder is null ? base.ForwardForTraining(input) : Logits(input);
 
     private (List<int> Tokens, double Confidence) GreedyCtc(Tensor<T> logits)
@@ -286,6 +293,7 @@ public partial class SenseVoice<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "SenseVoice-Native" : "SenseVoice-ONNX", Description = "SenseVoice-Small: a SAN-M encoder with task queries and a CTC head (An et al. 2024)", FeatureCount = 1, Complexity = _options.NumEncoderLayers + _options.NumTpEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(SenseVoice<T>)); }

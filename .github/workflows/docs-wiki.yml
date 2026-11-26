@@ -97,8 +97,12 @@ jobs:
       #
       # 1702 -> 1715 (#2389): the samples that used an input they never declared now declare it, and one
       # sample's syntax error no longer hides the semantic errors of the others compiled with it.
+      #
+      # 1715 -> 1731 (#2390): #2294 and later changes added examples on undeclared inputs and stale
+      # constructors (144 failing) and dropped 72 type examples; the inputs are declared, the calls match the
+      # current API, and the dropped examples are restored. Every example compiles.
       - name: Compile-check doc + wiki snippets
-        run: dotnet run --project tools/DocSnippetVerify $TOOL_ARGS -- website --min-pass 1715 --max-fail 0
+        run: dotnet run --project tools/DocSnippetVerify $TOOL_ARGS -- website --min-pass 1731 --max-fail 0
 
       # Compile-check the <example> blocks in the source XML doc comments. These are the examples a user
       # sees in IntelliSense and on the API reference pages, and they were never gated: this step's
@@ -115,8 +119,10 @@ jobs:
       # 1424 -> 1439 (#2389): this step never ran while the markdown pass above failed, so 17 broken examples
       # accumulated unseen (14 clustering examples on an undeclared dataMatrix, three builder examples on undeclared
       # network/optimizer/builder variables). All 17 compile now.
+      #
+      # 1439 -> 1441 (#2390): AiModelBuilder.Build(samples) and ConfigureSampleObjectiveTraining ship with examples.
       - name: Compile-check XML doc-comment examples (ratchet)
-        run: dotnet run --project tools/DocSnippetVerify $TOOL_ARGS -- "$DOC_XML" --min-pass 1439 --max-fail 0
+        run: dotnet run --project tools/DocSnippetVerify $TOOL_ARGS -- "$DOC_XML" --min-pass 1441 --max-fail 0
 
       # AiModelBuilder and AiModelResult are the whole supported surface. An example that trains or
       # predicts on the model object teaches readers to reach past the facade, skipping the validation,
@@ -132,6 +138,10 @@ jobs:
       # that may only fall: above it, a change added undocumented API; below it, the ceiling must be lowered to the
       # reported number in the same change so the gain cannot regress. Members of public interfaces are held at
       # zero in every folder. Runs even when an earlier gate failed, so its number is always reported.
+      #
+      # 5306 -> 4887 (#2390): the TTS/ASR rewrites (#2294 and after) left 1155 members undocumented, 1043 of
+      # them overrides and interface implementations; those now carry <inheritdoc/> and the new public members
+      # have summaries.
       - name: XML documentation coverage (ratchet)
         if: ${{ !cancelled() }}
-        run: dotnet run --project tools/XmlDocCoverage $TOOL_ARGS -- --max-undocumented 5306
+        run: dotnet run --project tools/XmlDocCoverage $TOOL_ARGS -- --max-undocumented 4887

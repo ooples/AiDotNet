@@ -50,10 +50,13 @@ namespace AiDotNet.Video.Enhancement;
 /// </remarks>
 /// <example>
 /// <code>
+/// var lowResClip = Tensor&lt;float&gt;.CreateRandom(14, 3, 64, 64);
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputType: InputType.FourDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression, inputFrames: 14, inputHeight: 64, inputWidth: 64, inputDepth: 3);
 /// var model = new DAMVSR&lt;float&gt;(arch, new DAMVSROptions());
-/// model.ReferenceUpscaler = frame =&gt; myImageSuperResolver.Upscale(frame);
+/// // The reference frames come from an image super-resolver (the paper uses ResShift, SUPIR or InvSR);
+/// // bicubic upscaling when unset. Plug one in as a [3, h, w] -> [3, 4h, 4w] function:
+/// // model.ReferenceUpscaler = frame =&gt; myImageSuperResolver.Upscale(frame);
 /// var upscaled = model.Upscale(lowResClip);      // [14, 3, 64, 64] -> [14, 3, 256, 256], pixel values 0-255
 /// </code>
 /// </example>

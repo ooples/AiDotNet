@@ -13,6 +13,13 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 /// <para><b>For Beginners:</b> <c>new AzureNeuralTTS&lt;float&gt;(new AzureNeuralTTSOptions { ApiKey = "…", Region = "westeurope" })
 /// .Synthesize("Hello")</c> returns the spoken audio.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // A client of the hosted API: no local model, the service does the synthesis.
+/// var tts = new AzureNeuralTTS&lt;float&gt;(new AzureNeuralTTSOptions { ApiKey = "your-speech-key", Region = "westeurope" });
+/// Tensor&lt;float&gt; audio = tts.Synthesize("Hello from Azure neural voices!");
+/// </code>
+/// </example>
 public class AzureNeuralTTS<T> : CloudTtsClientBase<T>
 {
     /// <summary>Creates the client; a supplied <see cref="HttpClient"/> is used as is and not disposed.</summary>

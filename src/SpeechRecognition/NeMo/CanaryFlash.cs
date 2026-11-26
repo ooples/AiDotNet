@@ -29,6 +29,7 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// </remarks>
 /// <example>
 /// <code>
+/// var waveform = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
@@ -63,9 +64,11 @@ public partial class CanaryFlash<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     private ConformerAsrNetwork<T>? _network;
     private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
     internal ConformerAsrNetwork<T>? Network => _network;
+    /// <inheritdoc/>
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />
     public bool SupportsStreaming => false;
+    /// <inheritdoc/>
     public bool SupportsWordTimestamps => false;
 
     public CanaryFlash(NeuralNetworkArchitecture<T> architecture, string modelPath, CanaryFlashOptions? options = null) : base(architecture)
@@ -110,7 +113,9 @@ public partial class CanaryFlash<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
 
     /// <inheritdoc />
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+    /// <inheritdoc/>
     public string DetectLanguage(Tensor<T> audio) => _options.Language;
+    /// <inheritdoc/>
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
 
     /// <inheritdoc />
@@ -154,8 +159,10 @@ public partial class CanaryFlash<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
         return network.DecoderLogits(new[] { network.StartToken }, encoded);
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input, training: true);
 
     // The labels a training target names: label ids [length], or one distribution per encoder frame [frames, vocabulary]
@@ -187,6 +194,7 @@ public partial class CanaryFlash<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "CanaryFlash-Native" : "CanaryFlash-ONNX", Description = "Canary-1B-Flash: NVIDIA's Canary (Puvvada et al. 2024) with a deeper encoder and a 4-layer decoder for fast decoding", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(CanaryFlash<T>)); }

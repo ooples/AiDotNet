@@ -27,6 +27,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <para><b>For Beginners:</b> WaveNet writes audio one sample at a time, each time choosing among 256 loudness levels
 /// with probabilities computed from everything it has written so far and the spectrogram.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a WaveNet vocoder for autoregressive raw audio generation
+/// // using dilated causal convolutions with gated activations
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new WaveNet&lt;double&gt;(architecture, "wavenet.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new WaveNet&lt;double&gt;(architecture, new WaveNetOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]

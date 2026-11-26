@@ -51,6 +51,7 @@ public partial class VariancePredictorLayer<T> : LayerBase<T>, IShapeContract
     private readonly DropoutLayer<T>? _dropout1;
     private readonly DropoutLayer<T>? _dropout2;
 
+    /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
     /// <summary>

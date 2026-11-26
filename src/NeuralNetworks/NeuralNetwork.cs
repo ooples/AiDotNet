@@ -176,6 +176,7 @@ public partial class NeuralNetwork<T> : SequentialVectorModelLayoutBase<T>
     /// <remarks>From <see cref="NeuralNetworkDefaultOptions.MaxGradNorm"/>; 0 leaves clipping to the optimizer.</remarks>
     public override double MaxGradNormValue => _options?.MaxGradNorm ?? base.MaxGradNormValue;
 
+    /// <inheritdoc/>
     protected override void InitializeLayers()
     {
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)

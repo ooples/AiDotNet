@@ -35,6 +35,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 /// <example>
 /// <code>
+/// var reference = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var model = new NaturalSpeech2&lt;float&gt;(architecture, new NaturalSpeech2Options());
 /// // train model.Codec on recordings, then model.Train(new TtsTrainingSample&lt;float&gt; { Tokens = ids, Durations = frames, Audio = wave })

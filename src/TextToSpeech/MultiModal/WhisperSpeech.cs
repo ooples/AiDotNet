@@ -28,6 +28,22 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// <para><b>For Beginners:</b> WhisperSpeech first decides "what is said" as the tokens a speech recognizer would hear,
 /// then "how it sounds" as audio-codec tokens in a chosen voice, and finally turns those into a waveform.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a WhisperSpeech model for TTS using Whisper encoder features
+/// // as semantic tokens with acoustic generation for high-quality output
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new WhisperSpeech&lt;double&gt;(architecture, "whisperspeech.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new WhisperSpeech&lt;double&gt;(architecture, new WhisperSpeechOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]

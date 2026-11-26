@@ -30,6 +30,26 @@ namespace AiDotNet.NeuralNetworks;
 /// Model", ICML 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     InputType.ThreeDimensional, NeuralNetworkTaskType.ImageClassification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 10);
+/// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 224, 224 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new VisionMambaModel&lt;float&gt;(
+///         architecture,
+///         new AiDotNet.NeuralNetworks.Options.VisionMambaOptions
+///         {
+///             ImageHeight = 224, ImageWidth = 224, PatchSize = 16,
+///             ModelDimension = 384, NumLayers = 24
+///         }))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(image);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.RecurrentNetwork)]
@@ -52,14 +72,22 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
     /// <summary>Draws stochastic-depth decisions during training.</summary>
     private Random _trainingRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
 
+    /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
+    /// <summary>Input image height in pixels.</summary>
     public int ImageHeight => _configuration.ImageHeight;
+    /// <summary>Input image width in pixels.</summary>
     public int ImageWidth => _configuration.ImageWidth;
+    /// <summary>Side length of the square patches the image is split into.</summary>
     public int PatchSize => _configuration.PatchSize;
+    /// <summary>Embedding width of every Vim block.</summary>
     public int ModelDimension => _configuration.Dim;
+    /// <summary>Number of bidirectional Vim blocks.</summary>
     public int NumLayers => _configuration.Depth;
+    /// <summary>Number of output classes.</summary>
     public int NumClasses => _options.NumClasses;
+    /// <summary>Number of patch tokens per image.</summary>
     public int NumPatches => _configuration.Patches;
 
     /// <summary>The network, shared with the Vision Mamba segmenter.</summary>
@@ -142,6 +170,7 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
         return Forward(input);
     }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
     /// <inheritdoc />
@@ -153,6 +182,7 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
     /// <inheritdoc />
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

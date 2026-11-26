@@ -29,6 +29,7 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 /// </remarks>
 /// <example>
 /// <code>
+/// var waveform = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
@@ -66,6 +67,7 @@ public partial class StreamingConformer<T> : AudioNeuralNetworkBase<T>, ISpeechR
     private ConformerAsrNetwork<T>? _network;
     private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
     internal ConformerAsrNetwork<T>? Network => _network;
+    /// <inheritdoc/>
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />
     public bool SupportsStreaming => true;
@@ -114,9 +116,12 @@ public partial class StreamingConformer<T> : AudioNeuralNetworkBase<T>, ISpeechR
 
     /// <inheritdoc />
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+    /// <inheritdoc/>
     public string DetectLanguage(Tensor<T> audio) => _options.Language;
+    /// <inheritdoc/>
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
 
+    /// <inheritdoc/>
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => new BufferedSession(this, language ?? _options.Language);
 
     // Each token is its vocabulary entry; tokens past the vocabulary list decode as Unicode code points.
@@ -158,8 +163,10 @@ public partial class StreamingConformer<T> : AudioNeuralNetworkBase<T>, ISpeechR
         return Engine.Reshape(joint, new[] { encoded.Shape[0], _options.VocabSize });
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input, training: true);
 
     // The labels a training target names: label ids [length], or one distribution per encoder frame [frames, vocabulary]
@@ -192,6 +199,7 @@ public partial class StreamingConformer<T> : AudioNeuralNetworkBase<T>, ISpeechR
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "StreamingConformer-Native" : "StreamingConformer-ONNX", Description = "Streaming Conformer: the Conformer of Gulati et al. 2020 with attention limited to fixed chunks", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(StreamingConformer<T>)); }

@@ -262,6 +262,7 @@ public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
         GetType() == typeof(MobileNetV2Network<T>) && Architecture.Layers is not { Count: > 0 }
         && LayersMatchTheGeneratedStack();
 
+    /// <inheritdoc/>
     protected sealed override void InitializeLayers()
     {
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)

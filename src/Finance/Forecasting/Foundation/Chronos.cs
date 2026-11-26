@@ -37,6 +37,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// </remarks>
 /// <example>
 /// <code>
+/// var context = Tensor&lt;double&gt;.CreateRandom(2, 4);
 /// var options = new ChronosFinanceOptions&lt;double&gt;(ChronosOptions&lt;double&gt;.FromPretrainedConfig("chronos-t5-small/config.json"));
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression, inputSize: options.ContextLength, outputSize: options.PredictionLength);

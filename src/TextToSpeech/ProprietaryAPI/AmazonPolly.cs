@@ -13,6 +13,13 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 /// <para><b>For Beginners:</b> <c>new AmazonPolly&lt;float&gt;(new AmazonPollyOptions { AccessKeyId = "…", SecretAccessKey = "…" })
 /// .Synthesize("Hello")</c> returns the spoken audio.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // A client of the hosted API: no local model, the service does the synthesis.
+/// var tts = new AmazonPolly&lt;float&gt;(new AmazonPollyOptions { Region = "us-east-1", AccessKeyId = "your-access-key-id", SecretAccessKey = "your-secret-key" });
+/// Tensor&lt;float&gt; audio = tts.Synthesize("Hello from Amazon Polly!");
+/// </code>
+/// </example>
 public class AmazonPolly<T> : CloudTtsClientBase<T>
 {
     /// <summary>Creates the client; a supplied <see cref="HttpClient"/> is used as is and not disposed.</summary>

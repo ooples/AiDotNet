@@ -175,9 +175,13 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     int ITtsModel<T>.SampleRate => Settings.SampleRate;
+    /// <inheritdoc/>
     public int MaxTextLength => Settings.MaxTextLength;
+    /// <inheritdoc/>
     public int NumCodebooks => Settings.NumCodebooks;
+    /// <inheritdoc/>
     public int CodebookSize => Settings.CodebookSize;
+    /// <inheritdoc/>
     public int CodecFrameRate => Settings.CodecFrameRate;
 
     /// <summary>The network a training step trains; the recipe trains the language model, the flow, then the vocoder.</summary>
@@ -391,6 +395,7 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
         return new TtsVoice<T> { SpeakerEmbedding = speakerEmbedding };
     }
 
+    /// <summary>Flattens <paramref name="audio"/> and resamples it from <paramref name="from"/> Hz to <paramref name="to"/> Hz (band-limited).</summary>
     protected Tensor<T> ResampleAudio(Tensor<T> audio, int from, int to)
     {
         var flat = Engine.Reshape(audio, new[] { audio.Length });

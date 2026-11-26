@@ -38,6 +38,8 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 /// <example>
 /// <code>
+/// var promptAudio = Tensor&lt;float&gt;.CreateRandom(1, 16000);
+/// var promptSampleRate = 24000;
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Generative, inputSize: 1, outputSize: 1);
 /// var model = new FireRedTTS&lt;float&gt;(architecture, new FireRedTTSOptions());
 /// model.LoadReferenceWeights("FireRedTTS");          // fireredtts_gpt.pt, fireredtts_token2wav.pt, fireredtts_speaker.bin

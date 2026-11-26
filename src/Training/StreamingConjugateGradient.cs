@@ -66,6 +66,14 @@ internal sealed class StreamingConjugateGradient<T> : IStreamingOptimizer<T>, IS
         _writeOffset = 0;
     }
 
+    public void ApplyBatch(IReadOnlyList<Tensor<T>> parameters, IReadOnlyList<Tensor<T>> gradients)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (gradients is null) throw new ArgumentNullException(nameof(gradients));
+        for (int i = 0; i < parameters.Count; i++)
+            Apply(parameters[i], gradients[i]);
+    }
+
     public void Apply(Tensor<T> param, Tensor<T> grad)
     {
         if (param is null) throw new ArgumentNullException(nameof(param));

@@ -11,6 +11,13 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 /// <para><b>For Beginners:</b> <c>new NVIDIARivaTTS&lt;float&gt;(new NVIDIARivaTTSOptions { ApiEndpoint = "http://gpu-box:9000" })
 /// .Synthesize("Hello")</c> returns the spoken audio.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // A client of the hosted API: no local model, the service does the synthesis.
+/// var tts = new NVIDIARivaTTS&lt;double&gt;(new NVIDIARivaTTSOptions { ApiEndpoint = "http://gpu-box:9000" });
+/// Tensor&lt;double&gt; audio = tts.Synthesize("Hello from NVIDIA Riva!");
+/// </code>
+/// </example>
 public class NVIDIARivaTTS<T> : CloudTtsClientBase<T>
 {
     /// <summary>Creates the client; a supplied <see cref="HttpClient"/> is used as is and not disposed.</summary>

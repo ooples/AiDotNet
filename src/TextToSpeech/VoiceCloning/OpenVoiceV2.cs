@@ -123,6 +123,7 @@ public partial class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
     public int MaxTextLength => _options.MaxTextLength;
     /// <inheritdoc />
     public new int HiddenDim => _options.HiddenDim;
+    /// <inheritdoc/>
     public int NumFlowSteps => 4;
 
     /// <summary>
@@ -139,6 +140,7 @@ public partial class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
 
     /// <inheritdoc />
     public double MinReferenceDuration => 3.0;
+    /// <inheritdoc/>
     public int SpeakerEmbeddingDim => _options.SpeakerEmbeddingDim;
 
     /// <inheritdoc />
@@ -174,6 +176,7 @@ public partial class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
     }
 
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();

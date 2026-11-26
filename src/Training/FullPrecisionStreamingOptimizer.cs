@@ -51,7 +51,20 @@ internal abstract class FullPrecisionStreamingOptimizer<T> : IStreamingOptimizer
     // First-order optimizers update in place during Apply; nothing to flush.
     public virtual void EndStep() { }
 
-    public void Apply(Tensor<T> param, Tensor<T> grad)
+    public virtual void ApplyBatch(IReadOnlyList<Tensor<T>> parameters, IReadOnlyList<Tensor<T>> gradients)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (gradients is null) throw new ArgumentNullException(nameof(gradients));
+        int count = parameters.Count;
+        if (gradients.Count != count)
+            throw new ArgumentException("Parameters and gradients must have identical counts.", nameof(gradients));
+        for (int i = 0; i < count; i++)
+        {
+            Apply(parameters[i], gradients[i]);
+        }
+    }
+
+    public virtual void Apply(Tensor<T> param, Tensor<T> grad)
     {
         if (param is null) throw new ArgumentNullException(nameof(param));
         if (grad is null) throw new ArgumentNullException(nameof(grad));
@@ -94,4 +107,21 @@ internal abstract class FullPrecisionStreamingOptimizer<T> : IStreamingOptimizer
     /// <summary>Decoupled (AdamW-style) weight decay; no-op when weightDecay == 0.</summary>
     protected double ApplyDecoupledWeightDecay(double parameter, double weightDecay)
         => weightDecay == 0.0 ? parameter : parameter - LearningRate * weightDecay * parameter;
+
+    protected void SetHostMoments(Tensor<T> param, double[][] moments)
+    {
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        if (moments is null) throw new ArgumentNullException(nameof(moments));
+        _moments[param] = moments;
+    }
+
+    protected bool TryTakeHostMoments(Tensor<T> param, out double[][]? moments)
+    {
+        if (_moments.TryGetValue(param, out moments))
+        {
+            _moments.Remove(param);
+            return true;
+        }
+        return false;
+    }
 }

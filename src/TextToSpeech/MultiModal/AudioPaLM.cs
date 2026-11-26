@@ -38,13 +38,22 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// </remarks>
 /// <example>
 /// <code>
+/// var recordings = new List&lt;Tensor&lt;float&gt;&gt; { Tensor&lt;float&gt;.CreateRandom(1, 16000), Tensor&lt;float&gt;.CreateRandom(1, 16000) };
+/// var recording = recordings[0];
+/// var textIds = new Tensor&lt;float&gt;(new[] { 4 }, new Vector&lt;float&gt;(new float[] { 651, 4320, 2185, 1 }));   // Gemma token ids
+/// var voiceRecording = Tensor&lt;float&gt;.CreateRandom(1, 48000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var options = AudioPaLMOptions.Gemma2B();
 /// options.SentencePieceModelPath = "gemma-2b/tokenizer.model";
 /// var model = new AudioPaLM&lt;float&gt;(architecture, options);
 /// model.LoadGemmaWeights("gemma-2b");
 /// model.FitSpeechTokenizer(recordings);        // the audio tokens' k-means codebook
-/// model.Train(new TtsTrainingSample&lt;float&gt; { Tokens = textIds, Audio = recording });
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(model)
+///     .Build(new List&lt;TtsTrainingSample&lt;float&gt;&gt;
+///     {
+///         new TtsTrainingSample&lt;float&gt; { Tokens = textIds, Audio = recording }
+///     });
 /// model.Voice = new TtsVoice&lt;float&gt; { ReferenceAudio = voiceRecording };
 /// var audio = model.Synthesize("Hello world.");
 /// string text = model.Transcribe(recording, "English");

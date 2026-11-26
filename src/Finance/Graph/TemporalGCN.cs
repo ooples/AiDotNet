@@ -78,7 +78,7 @@ namespace AiDotNet.Finance.Graph;
 /// var model = new TemporalGCN&lt;double&gt;(architecture);
 ///
 /// // ONNX inference mode: load pre-trained T-GCN model
-/// var onnxModel = new TemporalGCN&lt;double&gt;(architecture, "tgcn_traffic.onnx");
+/// var onnxModel = new TemporalGCN&lt;double&gt;(architecture, "tgcn_traffic.onnx", options: null, adjacencyMatrix: null);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Finance)]

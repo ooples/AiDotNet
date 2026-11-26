@@ -43,11 +43,14 @@ namespace AiDotNet.Video.Enhancement;
 /// </remarks>
 /// <example>
 /// <code>
+/// var lowResClip = Tensor&lt;float&gt;.CreateRandom(10, 3, 64, 64);     // [frames, 3, H, W], pixel values 0-255
+/// var highResClip = Tensor&lt;float&gt;.CreateRandom(10, 3, 256, 256);  // the same frames at 4x
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputType: InputType.FourDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression, inputFrames: 10, inputHeight: 64, inputWidth: 64, inputDepth: 3);
-/// var model = new RVRT&lt;float&gt;(arch, new RVRTOptions());
-/// model.Train(lowResClip, highResClip);         // [10, 3, 64, 64] -> [10, 3, 256, 256], pixel values 0-255
-/// var upscaled = model.Upscale(lowResClip);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new RVRT&lt;float&gt;(arch, new RVRTOptions()))
+///     .Build(lowResClip, highResClip);
+/// var upscaled = result.Predict(lowResClip);   // [10, 3, 256, 256]
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

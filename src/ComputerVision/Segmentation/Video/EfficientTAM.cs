@@ -34,6 +34,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 /// <b>Reference:</b> Xiong et al., "Efficient Track Anything", arXiv 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an EfficientTAM model for lightweight edge-device video segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.BinaryClassification,
+///     inputHeight: 480, inputWidth: 480, inputDepth: 3, outputSize: 1);
+/// var model = new EfficientTAM&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new EfficientTAM&lt;double&gt;(architecture,
+///     options: new EfficientTAMOptions { NumClasses = 1, DropRate = 0, ModelSize = EfficientTAMModelSize.Tiny });
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -62,6 +75,7 @@ public partial class EfficientTAM<T> : Common.VideoSegmentationBase<T>, ITrainin
     [Scratch]
     private int _frameHeight, _frameWidth;
 
+    /// <inheritdoc/>
     public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => SpatialStrideContract(inputRank, 1);
 
     private Sam2Runtime<T> Runtime => _runtime ?? throw new InvalidOperationException("The network is not initialized.");
@@ -125,6 +139,7 @@ public partial class EfficientTAM<T> : Common.VideoSegmentationBase<T>, ITrainin
         };
     }
 
+    /// <inheritdoc/>
     protected override void InitializeLayers()
     {
         if (_options is null || _runtime is not null) return;
@@ -218,6 +233,7 @@ public partial class EfficientTAM<T> : Common.VideoSegmentationBase<T>, ITrainin
         _corrections[objectId] = correctionMask;
     }
 
+    /// <inheritdoc/>
     protected override void ResetTrackingInternal()
     {
         _trackers.Clear();
@@ -244,6 +260,7 @@ public partial class EfficientTAM<T> : Common.VideoSegmentationBase<T>, ITrainin
         return hasBatch ? logits : RemoveBatchDimension(logits);
     }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
     private IReadOnlyList<(Tensor<T> Input, Tensor<T> Target)> Images(Tensor<T> input, Tensor<T> target)
@@ -304,6 +321,7 @@ public partial class EfficientTAM<T> : Common.VideoSegmentationBase<T>, ITrainin
     /// <inheritdoc />
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>
