@@ -2794,7 +2794,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             // ReserveBytes finds nothing to evict and the full (~25 GB for FLUX) weight set
             // accumulates on the GC heap → OOM. No-op when streaming is inactive
             // (UseStreamingAllocator false) or the weights aren't streaming-backed (idempotent).
-            RegisterStreamingWeightsWithPool();
+            RegisterStreamingWeightsWithPool(releasePoolEntryOnceMapped: true);
         }
     }
 
@@ -3635,7 +3635,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// idempotent via the already-registered handle gate.
     /// </para>
     /// </remarks>
-    private void RegisterStreamingWeightsWithPool()
+    private void RegisterStreamingWeightsWithPool(bool releasePoolEntryOnceMapped = false)
     {
         if (!UseStreamingAllocator) return;
         foreach (var tensor in GetTrainableParameters())
@@ -3644,6 +3644,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             // Only streaming-allocated tensors carry Lifetime.Streaming; skip
             // resident tensors that are not managed by the streaming pool.
             if (tensor.Lifetime != WeightLifetime.Streaming) continue;
+
+            // A weight whose storage is already a writable file mapping is resident by definition and
+            // its mapping is the only copy (see below). Registering it again would serialize it into the
+            // pool and drop the mapping, and the next Materialize would map a SECOND slice of the
+            // parameter file -- every parameter walk would then grow the file by the whole model.
+            if (tensor.IsWritableMmapAliased)
+            {
+                // Mapped earlier by a path that keeps the pool entry (a first forward); the parameter
+                // path still owes the release described below.
+                if (releasePoolEntryOnceMapped && tensor.StreamingPoolHandle >= 0)
+                    WeightRegistry.UnregisterWeight(tensor);
+                continue;
+            }
+
             if (tensor.StreamingPoolHandle < 0)
                 WeightRegistry.RegisterWeight(tensor);
 
@@ -3653,6 +3667,23 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             // correct residency boundary: make all of its managed weights resident immediately
             // before its computation, while the next layer remains free to evict them.
             WeightRegistry.Materialize(tensor);
+
+            // #2447: on the parameter path (GetParameterChunks / SetParameterChunks / GetParameters /
+            // Clone) Materialize maps the weight writably into the registry's parameter file, so the
+            // mapping is the weight's canonical storage and writes land in place. The pool entry it was
+            // copied from is then a stale duplicate -- and the pool's backing file is append-only: a
+            // dirty entry is appended on every eviction and its old slice is never reused. Kept, that
+            // entry put a second copy of the model on disk (and, through the owner write-back that
+            // preceded the mapping, one more per parameter walk): a FLUX round-trip wrote ~5.9x its
+            // 48 GB weight set and filled the CI runner's 76 GB /tmp. Releasing it here leaves exactly one
+            // on-disk copy of a weight that parameter IO is the first to touch: it is mapped while still
+            // resident and its pool entry was never written. A weight that a FORWARD registered and the
+            // pool has already paged out is different: its slice of the append-only pool file is not
+            // reclaimed by unregistering, so forward-then-parameter-IO can hold that weight on disk twice
+            // (once in the pool file, once in the parameter file) until the pool is reset. It no longer
+            // grows with every walk, which was the defect.
+            if (releasePoolEntryOnceMapped && tensor.IsWritableMmapAliased && tensor.StreamingPoolHandle >= 0)
+                WeightRegistry.UnregisterWeight(tensor);
         }
     }
 
@@ -7123,7 +7154,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 sparse.IncrementVersion();
                 return;
             }
-            AiDotNet.Training.TensorCheckpoint<T>.CopyValues(source, _tensor);
+            // A chunk stream fed back into the model it came from hands each slot its own tensor. The values
+            // are already in place, so copying would only page the weight in and dirty it -- for a streamed
+            // foundation model that is a full read + write of every weight on disk for no change.
+            if (!ReferenceEquals(source, _tensor))
+                AiDotNet.Training.TensorCheckpoint<T>.CopyValues(source, _tensor);
             // Writes through the slot must invalidate version-keyed caches, as the sparse and half paths above do.
             _tensor.IncrementVersion();
         }

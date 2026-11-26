@@ -73,6 +73,9 @@ public partial class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
     private FluxDoubleStreamPredictor<T> _predictor;
     private StandardVAE<T> _vae;
     private ControlNetEncoder<T> _controlEncoder;
+
+    /// <summary>The control encoder, for tests that check what a clone shares with its source.</summary>
+    internal ControlNetEncoder<T> ControlEncoder => _controlEncoder;
     private readonly IConditioningModule<T>? _conditioner;
     private readonly ControlType _controlType;
 

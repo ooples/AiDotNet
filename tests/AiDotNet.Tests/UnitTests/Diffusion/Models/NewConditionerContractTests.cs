@@ -1,6 +1,7 @@
 using AiDotNet.Diffusion.Conditioning;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Enums;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization;
 using Xunit;
 using System.Threading.Tasks;
@@ -159,23 +160,60 @@ public class NewConditionerContractTests : DiffusionUnitTestBase
         AssertParameterChunksRoundTrip(predictor.GetParameterChunks, predictor.SetParameterChunks);
     }
 
-    // HeavyTimeout (#1715): SiTPredictor<double> at paper scale. This test exercises the FLAT
-    // GetParameters()/SetParameters() contract (one contiguous Vector<double> over every parameter),
-    // which is all-resident by definition — chunked streaming can't bound a single flat aggregate, and
-    // at foundation scale in fp64 that vector alone exceeds the 16 GB runner. Excluded from the default
-    // gate (foundation-scale footprint that streaming can't reduce) and tracked in the nightly lane.
+    // HeavyTimeout (#1715): SiTPredictor<double> at paper scale (790 M parameters, 6.3 GB fp64). This
+    // test exercises the FLAT GetParameters()/SetParameters() contract (one contiguous Vector<double>
+    // over every parameter), which is all-resident by definition. The weights themselves stream (they
+    // exceed half the heap), but two 6.3 GB flat vectors cannot both live under the nightly's 11.2 GB
+    // heap cap, which is what OOMed here (#2447). So the first vector is reduced to an exact,
+    // position-sensitive fingerprint and released before the read-back -- the same values are compared,
+    // without holding two copies of a foundation model.
     [Trait("Category", "HeavyTimeout")]
     [Fact(Timeout = 120000)]
     public async Task SiTPredictor_GetSetParameters_RoundTrips()
     {
         var predictor = new SiTPredictor<double>();
 
-        var parameters = predictor.GetParameters();
-        Assert.True(parameters.Length > 0);
+        // What this proves at paper scale: a flat read, a flat write and a second flat read fit the lane's
+        // memory, and the second read is bit-for-bit what was written. The first value is changed before the
+        // fingerprint is taken and the vector written back, so a SetParameters that did nothing leaves the
+        // original first value in place and the fingerprints differ. Only the one vector is ever held.
+        var (length, expected) = ReadChangeFingerprintAndWriteBack(predictor);
+        Assert.True(length > 0);
 
-        predictor.SetParameters(parameters);
         var retrieved = predictor.GetParameters();
-        Assert.Equal(parameters.Length, retrieved.Length);
+        Assert.Equal(length, retrieved.Length);
+        Assert.Equal(expected, Fingerprint(retrieved));
+    }
+
+    // The first flat vector lives only inside this frame, so it is unreachable by the time the caller
+    // reads the parameters back. Not inlined: an inlined body would keep the vector in the caller's frame.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static (int Length, (double Sum, double Weighted, long Bits) Fingerprint) ReadChangeFingerprintAndWriteBack(
+        SiTPredictor<double> predictor)
+    {
+        var parameters = predictor.GetParameters();
+        Assert.True(parameters.Length > 0, "A paper-scale SiT predictor has parameters to round-trip.");
+        // Differs from the stored value whatever it is, so the write is observable.
+        parameters[0] = parameters[0] + 0.5;
+        var fingerprint = Fingerprint(parameters);
+        predictor.SetParameters(parameters);
+        return (parameters.Length, fingerprint);
+    }
+
+    // Exact for a bitwise-identical vector (same values, same order, same summation order) and
+    // sensitive to a value moving position, which a plain sum would not be.
+    private static (double Sum, double Weighted, long Bits) Fingerprint(Vector<double> values)
+    {
+        double sum = 0, weighted = 0;
+        long bits = 0;
+        for (int i = 0; i < values.Length; i++)
+        {
+            double v = values[i];
+            sum += v;
+            weighted += v * ((i % 1009) + 1);
+            bits = unchecked(bits * 31 + BitConverter.DoubleToInt64Bits(v));
+        }
+        return (sum, weighted, bits);
     }
 
     #endregion

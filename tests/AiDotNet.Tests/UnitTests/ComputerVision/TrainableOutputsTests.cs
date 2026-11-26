@@ -58,4 +58,97 @@ public class TrainableOutputsTests
         var trainable = CvTensorOps<double>.ConcatenateTrainableOutputs(outputs, Array.Empty<int>(), null);
         Assert.Equal(prediction.ToArray(), trainable.ToArray());
     }
+
+    // Cascade R-CNN's Train_ShouldReduceLoss (#2447): the per-RoI heads are padded to the 1,000-proposal cap, and
+    // three steps toward a zero target let 185, then 264 proposals survive NMS. The mean over the padded layout
+    // rose from 0.313 to 0.368 while the mean error of the predictions fell from 1.53 to 1.31.
+    [Fact]
+    public void PaddingRowsCarryTheTarget_AndAreNotCountedAsPredictions()
+    {
+        var head = CvTensorOps<double>.PadRows(Filled(new[] { 3, 2 }, 1), 5);
+        var rpn = Filled(new[] { 1, 4 }, 100);
+        var outputs = new List<Tensor<double>> { head, rpn };
+        var target = Filled(CvTensorOps<double>.ConcatenateOutputs(outputs).Shape.ToArray(), -50);
+
+        var trainable = CvTensorOps<double>.ConcatenateTrainableOutputs(outputs, Array.Empty<int>(), target, out int count);
+
+        Assert.Equal(3 * 2 + 4, count);
+        var prediction = CvTensorOps<double>.ConcatenateOutputs(outputs);
+        for (int i = 0; i < trainable.Length; i++)
+        {
+            bool padding = i >= 6 && i < 10;
+            Assert.Equal(padding ? target[i] : prediction[i], trainable[i]);
+        }
+    }
+
+    [Fact]
+    public void PaddingAndDataOutputsAreBothTakenOut()
+    {
+        var logits = CvTensorOps<double>.PadRows(Filled(new[] { 2, 3 }, 1), 4);
+        var boxes = CvTensorOps<double>.PadRows(Filled(new[] { 2, 4 }, 10), 4);
+        var outputs = new List<Tensor<double>> { logits, boxes };
+        var target = new Tensor<double>(CvTensorOps<double>.ConcatenateOutputs(outputs).Shape.ToArray());
+
+        CvTensorOps<double>.ConcatenateTrainableOutputs(outputs, new[] { 1 }, target, out int count);
+
+        Assert.Equal(2 * 3, count);
+    }
+
+    [Fact]
+    public void AnUnpaddedHead_IsAllPredictions()
+    {
+        var full = CvTensorOps<double>.PadRows(Filled(new[] { 4, 2 }, 1), 4);
+        Assert.Equal(4, CvTensorOps<double>.PredictionRows(full));
+        CvTensorOps<double>.ConcatenateTrainableOutputs(new List<Tensor<double>> { full, Filled(new[] { 1, 3 }, 5) },
+            Array.Empty<int>(), null, out int count);
+        Assert.Equal(8 + 3, count);
+    }
+
+    [Fact]
+    public void TheLossIsTheMeanOverPredictions_SoMoreSurvivingProposalsWithSmallerErrorsLowerIt()
+    {
+        // Before a step: 2 of 5 RoI rows are proposals, each element off by 2. After it: 4 survive, each off by 1.5.
+        double before = RawStepLoss(survivors: 2, error: 2.0, cap: 5, width: 2);
+        double after = RawStepLoss(survivors: 4, error: 1.5, cap: 5, width: 2);
+
+        Assert.Equal(4.0, before, 12);
+        Assert.Equal(2.25, after, 12);
+
+        // The mean over the padded layout, which the step used to report, rises for the same predictions.
+        double paddedBefore = 2 * 2 * 4.0 / 10, paddedAfter = 4 * 2 * 2.25 / 10;
+        Assert.True(paddedAfter > paddedBefore);
+    }
+
+    [Fact]
+    public void HalfLoss_SumsPastHalfRangeIntoTheTrueMean_AndKeepsTheMeanGradient()
+    {
+        // 40 000 predictions of 2 against a zero target: the squared errors sum to 160 000, past Half's 65504, but
+        // the mean is 4 and each prediction's gradient is 2 * 2 / 40 000.
+        const int n = 40_000;
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        var predicted = new Tensor<Half>(new[] { n });
+        predicted.Fill(ops.FromDouble(2.0));
+        var target = new Tensor<Half>(new[] { n });
+
+        using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<Half>();
+        var loss = CvTensorOps<Half>.MeanSquaredErrorOverPredictions(predicted, target, n);
+        var gradients = tape.ComputeGradients(loss, new[] { predicted });
+
+        Assert.Equal(4.0, ops.ToDouble(loss[0]), 12);
+        Assert.True(gradients.TryGetValue(predicted, out var gradient));
+        for (int i = 0; i < n; i += 997)
+        {
+            Assert.InRange(ops.ToDouble(gradient[i]), 4.0 / n * 0.99, 4.0 / n * 1.01);
+        }
+    }
+
+    private static double RawStepLoss(int survivors, double error, int cap, int width)
+    {
+        var rows = new Tensor<double>(new[] { survivors, width });
+        rows.Fill(error);
+        var outputs = new List<Tensor<double>> { CvTensorOps<double>.PadRows(rows, cap) };
+        var target = new Tensor<double>(CvTensorOps<double>.ConcatenateOutputs(outputs).Shape.ToArray());
+        var trainable = CvTensorOps<double>.ConcatenateTrainableOutputs(outputs, Array.Empty<int>(), target, out int count);
+        return CvTensorOps<double>.MeanSquaredErrorOverPredictions(trainable, target, count)[0];
+    }
 }
