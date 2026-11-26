@@ -126,7 +126,9 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
         var eps = Tensor<T>.CreateDefault(sumSquared._shape, NormalizationEpsilon);
         var safeSum = Engine.TensorAdd(sumSquared, eps);
         var norm = Engine.TensorSqrt(safeSum);
-        var normalized = Engine.TensorDivide(input, norm);
+        // The [..., 1] norm is broadcast to the input's shape explicitly: an element-wise divide of two different
+        // shapes is not something every engine shape policy accepts.
+        var normalized = Engine.TensorDivide(input, Engine.TensorBroadcastTo(norm, input.Shape.ToArray()));
         return Engine.Softmax(normalized, axis: lastAxis);
     }
 
@@ -153,8 +155,10 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// 
     /// The chain rule multiplies the two: with u = x / ||x|| and y = softmax(u),
     /// J = (diag(y) - y y^T) * (I - u u^T) / ||x||.
-    /// The first factor is the ordinary softmax Jacobian; the second is the Jacobian of the normalization, which
-    /// removes the part of any input change that points along x (scaling x does not change the output).
+    /// The first factor is the ordinary softmax Jacobian; the second is the Jacobian of the normalization. With the
+    /// exact norm it removes the part of any input change that points along x, because scaling x does not change
+    /// the output. With the stabilising epsilon in the norm, sqrt(||x||^2 + eps), the output is scale invariant
+    /// only approximately: a change along x is attenuated by eps / (||x||^2 + eps), not removed.
     /// 
     /// Don't worry if the math seems complex - the neural network library handles these calculations automatically.
     /// The important thing to understand is that this function helps the network learn by showing how changes in

@@ -275,7 +275,17 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     private Vector<T> Softmax(Vector<T> logits)
     {
-        Vector<T> expValues = logits.Transform(x => NumOps.Exp(NumOps.Divide(x, _temperature)));
+        if (logits.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        // Shifted by the largest scaled logit, which leaves the distribution unchanged: at a low temperature the
+        // scaled noisy logits reach the thousands, and exp of those overflowed the sum to infinity and the
+        // probabilities to NaN.
+        Vector<T> scaled = logits.Transform(x => NumOps.Divide(x, _temperature));
+        T maximum = Engine.TensorMaxValue(Tensor<T>.FromVector(scaled));
+        Vector<T> expValues = scaled.Transform(x => NumOps.Exp(NumOps.Subtract(x, maximum)));
         T sum = expValues.Sum();
 
         return expValues.Transform(x => NumOps.Divide(x, sum));
