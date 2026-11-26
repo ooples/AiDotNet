@@ -270,15 +270,10 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                 Console.WriteLine($"GlooCommunicationBackend: Using native Gloo via GlooSharp for collectives, TCP for point-to-point ({_worldSize} processes).");
                 return;
             }
-            catch (SocketException)
+            catch (Exception)
             {
-                // Clean up ALL resources on failure: native Gloo context + TCP connections
-                CleanupOnInitFailure();
-                throw;
-            }
-            catch (InvalidOperationException)
-            {
-                // Clean up ALL resources on failure: native Gloo context + TCP connections
+                // Any failure (a socket error, a rendezvous timeout, a refused handshake) releases ALL resources --
+                // the native Gloo context, the listener and every accepted peer -- so a retry can bind the port again.
                 CleanupOnInitFailure();
                 throw;
             }
@@ -288,7 +283,16 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         _useNativeGloo = false;
         _useNativeTCP = true;
         Console.WriteLine($"GlooCommunicationBackend: Using production-ready TCP implementation for {_worldSize} processes.");
-        InitializeTCPConnections();
+        try
+        {
+            InitializeTCPConnections();
+        }
+        catch (Exception)
+        {
+            // Same release as the native branch: a timed-out rendezvous must not leave the listener bound.
+            CleanupOnInitFailure();
+            throw;
+        }
     }
 
     /// <summary>
@@ -1469,8 +1473,17 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                 // The socket send times out on its own; this bound only guards the hand-off to the worker thread.
                 int handOffMs = (int)Math.Min(int.MaxValue, 2L * _owner.TimeoutMilliseconds);
                 if (!_workCompleted.WaitOne(handOffMs))
+                {
+                    // The worker may still be reading the caller's buffer, which the caller returns to a pool (or
+                    // reuses as scratch) as soon as this throws. Abort the peer's transport so the blocked send fails,
+                    // then wait for the worker to finish with the buffer -- which also consumes its completion signal,
+                    // so a later send cannot mistake this one's signal for its own.
+                    _owner.AbortPeerTransport(_destRank);
+                    _workCompleted.WaitOne();
+                    _exception = null;
                     throw new TimeoutException(
-                        $"Rank {_owner._rank}: a background send did not complete within {handOffMs} ms.");
+                        $"Rank {_owner._rank}: a background send to rank {_destRank} did not complete within {handOffMs} ms; its connection was closed.");
+                }
                 sendEx = _exception;
                 _exception = null;
             }
@@ -2324,6 +2337,25 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 
             return client;
         }
+    }
+
+    /// <summary>
+    /// Closes the connection to <paramref name="peerRank"/> so a send blocked on it fails at once. Used when a send
+    /// overran its deadline: the connection is unusable afterwards, and later traffic to that peer fails loudly.
+    /// </summary>
+    private void AbortPeerTransport(int peerRank)
+    {
+        TcpClient? client = null;
+        lock (_connectionLock)
+        {
+            _tcpConnections?.TryGetValue(peerRank, out client);
+        }
+
+        if (client is null) return;
+        try { client.Client?.Close(0); }
+        catch (ObjectDisposedException ex) { Debug.WriteLine($"Rank {_rank}: connection to rank {peerRank} already closed: {ex.Message}"); }
+        try { client.Close(); }
+        catch (ObjectDisposedException ex) { Debug.WriteLine($"Rank {_rank}: connection to rank {peerRank} already closed: {ex.Message}"); }
     }
 
     private void SendArraySlice(int destRank, T[] data, int offset, int count)

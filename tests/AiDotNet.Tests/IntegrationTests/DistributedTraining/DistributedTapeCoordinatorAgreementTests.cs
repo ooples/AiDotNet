@@ -77,6 +77,35 @@ public sealed class DistributedTapeCoordinatorAgreementTests
         var none = OnTwoRanks((c, _) => { c.BroadcastBuffers(Array.Empty<AiDotNet.Tensors.LinearAlgebra.Tensor<float>>()); return true; });
         Assert.All(none, Assert.True);
     }
+
+    // Lengths [1,3] and [2,2] have the same count (2) and total (4); broadcast onto each other, part of rank 0's second
+    // buffer landed in rank 1's first. Every rank refuses the mismatch, and identical layouts still broadcast.
+    [Fact(Timeout = 120000)]
+    public async Task BroadcastBuffers_SameCountAndTotalButDifferentShapes_IsRefusedOnEveryRank()
+    {
+        await Task.Yield();
+        var outcomes = OnTwoRanks((c, rank) =>
+        {
+            var buffers = rank == 0
+                ? new[] { new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 1 }), new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 3 }) }
+                : new[] { new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 2 }), new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 2 }) };
+            try { c.BroadcastBuffers(buffers); return "broadcast"; }
+            catch (InvalidOperationException) { return "refused"; }
+        });
+        Assert.All(outcomes, o => Assert.Equal("refused", o));
+
+        var received = OnTwoRanks((c, rank) =>
+        {
+            var first = new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 1 });
+            var second = new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 3 });
+            float fill = rank == 0 ? 7f : -1f;
+            first[0] = fill;
+            for (int i = 0; i < 3; i++) second[i] = fill + 1 + i;
+            c.BroadcastBuffers(new[] { first, second });
+            return new[] { first[0], second[0], second[1], second[2] };
+        });
+        Assert.All(received, r => Assert.Equal(new[] { 7f, 8f, 9f, 10f }, r));
+    }
 }
 
 /// <summary>The streaming options' copy keeps every setting (ConfigureStreamingTraining stores a copy).</summary>

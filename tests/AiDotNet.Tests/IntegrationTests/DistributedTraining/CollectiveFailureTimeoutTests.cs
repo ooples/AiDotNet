@@ -124,7 +124,13 @@ public sealed class CollectiveFailureTimeoutTests
     [Fact]
     public void SharedMemory_APeerWhoseHandleCannotBeQueried_IsStillSeenToHaveExited()
     {
-        using var peer = Process.Start(new ProcessStartInfo("cmd.exe", "/c exit 0") { UseShellExecute = false, CreateNoWindow = true })!;
+        // A child that exits at once, started with the platform's own shell so the test runs on Linux hosts too.
+        bool windows = Environment.OSVersion.Platform == PlatformID.Win32NT;
+        using var peer = Process.Start(new ProcessStartInfo(windows ? "cmd.exe" : "/bin/sh", windows ? "/c exit 0" : "-c \"exit 0\"")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true
+        })!;
         peer.WaitForExit();
         static bool Restricted(Process p) => throw new System.ComponentModel.Win32Exception(5, "Access is denied");
         // A restricted handle used to read as "alive", leaving only the collective timeout to notice the dead rank.

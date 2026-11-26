@@ -395,6 +395,40 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
     }
 
     /// <summary>
+    /// A 64-bit FNV-1a fingerprint of the ordered layout of <paramref name="tensors"/>: the count, then each tensor's
+    /// rank and dimensions in order. Two lists fingerprint alike when they have the same shapes in the same order.
+    /// </summary>
+    internal static long OrderedLayoutFingerprint(IReadOnlyList<Tensor<T>> tensors)
+    {
+        const ulong Prime = 1099511628211UL;
+        ulong h = 14695981039346656037UL;
+        void Mix(long value)
+        {
+            ulong u = unchecked((ulong)value);
+            for (int b = 0; b < 8; b++)
+            {
+                h ^= (u >> (8 * b)) & 0xFFUL;
+                h = unchecked(h * Prime);
+            }
+        }
+        Mix(tensors.Count);
+        foreach (var tensor in tensors)
+        {
+            int[] shape = tensor._shape;
+            Mix(shape.Length);
+            foreach (int d in shape) Mix(d);
+        }
+        return unchecked((long)h);
+    }
+
+    private static string DescribeShapes(IReadOnlyList<Tensor<T>> tensors)
+    {
+        var parts = new string[tensors.Count];
+        for (int i = 0; i < parts.Length; i++) parts[i] = "[" + string.Join("x", tensors[i]._shape) + "]";
+        return "[" + string.Join(", ", parts) + "]";
+    }
+
+    /// <summary>
     /// Broadcasts Rank 0's registered buffers (non-trainable persistent state such as batch-norm running statistics) to
     /// every other rank, as PyTorch DDP broadcasts module buffers from rank 0 when it wraps the model: without it each
     /// rank kept the buffers it initialized or loaded itself, and evaluation diverged across ranks.
@@ -419,9 +453,13 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
         // The layout must agree before any data moves (a rank with a different buffer set would unpack garbage), and
         // every rank reaches this agreement, including one with no buffers: a rank that returned early would leave the
         // others waiting in it until the collective timeout.
-        if (!RanksAgree(unique.Count, total))
+        // Count and total alone accept [1,3] against [2,2]; the ordered layout (each buffer's rank and dimensions, in
+        // order) must match too, else part of rank 0's second buffer would land in this rank's first. The layout is
+        // agreed as one fixed-width fingerprint so every rank exchanges the same number of values whatever it holds.
+        if (!RanksAgree(unique.Count, total, OrderedLayoutFingerprint(unique)))
             throw new InvalidOperationException(
-                $"Rank {Rank}: the ranks' models register different buffers ({unique.Count} tensors, {total} elements here), "
+                $"Rank {Rank}: the ranks' models register different buffers ({unique.Count} tensors, {total} elements here, "
+                + $"shapes {DescribeShapes(unique)}), "
                 + "so rank 0's buffers cannot be broadcast onto them.");
         if (total == 0) return;
         var flat = new Vector<T>(checked((int)total));
