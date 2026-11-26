@@ -2337,7 +2337,8 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
             optimizer = torch.optim.AdamW(model.parameters(), **optimizer_settings, **adamw_options)
             scale = scale_data.train(model, shape, dataset, device, args.epochs, args.batch_size, args.seed, optimizer,
                                      cuda_graphs, synchronize, begin_step,
-                                     lambda: ResourceMonitor(track_gpu=device.type == "cuda"))
+                                     lambda: ResourceMonitor(track_gpu=device.type == "cuda",
+                                                             gpu_id=cuda_smi_id(device), torch_device=device))
             if args.compile:
                 total = torch._dynamo.utils.counters["stats"]["unique_graphs"]
                 compiled_graphs[name] = total - sum(compiled_graphs.values())
@@ -2443,6 +2444,10 @@ def main() -> None:
                         help="Training steps under torch.autocast(bfloat16) (the C# side's AutocastScope). fp16 needs "
                              "GradScaler loss scaling in both arms and is not wired yet.")
     args = parser.parse_args()
+    if args.data and args.precision != "fp32":
+        # scale_data.train applies no autocast, so a bf16 request would train in fp32 while the
+        # report claimed bf16. Refuse it rather than record a precision that did not run.
+        parser.error("--data supports only --precision fp32: large-data training applies no autocast")
     global PRECISION
     PRECISION = args.precision
 

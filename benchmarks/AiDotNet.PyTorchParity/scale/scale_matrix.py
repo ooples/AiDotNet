@@ -59,6 +59,9 @@ def validate(path: Path, side: str, model: str, device: str, dataset_meta: dict,
     rows = obj["Results" if ai else "results"]
     if len(rows) != 1:
         raise ValueError("Unexpected number of models")
+    if rows[0]["Model" if ai else "model"] != model or rows[0]["Device" if ai else "device"] != device:
+        # Otherwise a report of another model or device would be summarized under this job's name.
+        raise ValueError("Model or device mismatch")
     scale = rows[0]["Scale" if ai else "scale"]
     if not scale:
         raise ValueError("The report has no large-data block")
@@ -134,6 +137,10 @@ def summarize(rows: list[dict]) -> list[dict]:
         best = max(torch_sides, key=lambda name: statistics.median(r["samples"] / r["seconds"] for r in torch_sides[name].values()))
         pt = torch_sides[best]
         launches = sorted(set(ai) & set(pt))
+        if not launches:
+            # Both sides succeeded, but never in the same launch (e.g. AiDotNet launch 1, PyTorch launch 2), so there
+            # is no paired ratio. Skip the row; the failed launches are reported by the caller.
+            continue
         ratios = [ai[l]["samples"] / ai[l]["seconds"] / (pt[l]["samples"] / pt[l]["seconds"]) for l in launches]
         ai_rate = [ai[l]["samples"] / ai[l]["seconds"] for l in launches]
         pt_rate = [pt[l]["samples"] / pt[l]["seconds"] for l in launches]
