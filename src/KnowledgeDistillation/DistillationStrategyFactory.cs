@@ -190,6 +190,20 @@ public static class DistillationStrategyFactory<T>
     }
 
     /// <summary>
+    /// Sparse Top-K distillation with an exact <c>(K + 1)</c>-th remainder tail bucket for large-vocabulary models.
+    /// </summary>
+    public static IDistillationStrategy<T> CreateSparseTopKTailBucketStrategy(
+        int topK = 64,
+        double temperature = 2.0,
+        double alpha = 0.5)
+    {
+        return new SparseTopKTailBucketDistillationStrategy<T>(
+            topK: topK,
+            temperature: temperature,
+            alpha: alpha);
+    }
+
+    /// <summary>
     /// Combined/hybrid distillation. When no strategies are supplied, combines response-based and
     /// relational with equal weight.
     /// </summary>
