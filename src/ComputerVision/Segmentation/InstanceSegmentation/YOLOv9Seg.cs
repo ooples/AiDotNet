@@ -267,7 +267,7 @@ public partial class YOLOv9Seg<T> : Common.InstanceSegmentationBase<T>
     public override InstanceSegmentationResult<T> DetectInstances(Tensor<T> image)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
+        var logits = Common.SegmentationPostProcessing.SingleImageLogits(Predict(image), nameof(image));
         int h = logits.Shape[1], w = logits.Shape[2];
 
         // Instances are the connected components of each non-background class: at most 100, at least

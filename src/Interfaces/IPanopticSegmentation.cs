@@ -89,7 +89,10 @@ public class PanopticSegmentationResult<T>
 public class PanopticSegment<T>
 {
     /// <summary>
-    /// Unique segment ID.
+    /// The segment's id, unique within one result. Ids count up from 1 (<c>1 .. Segments.Count</c>). For a thing
+    /// segment the id is the value its pixels carry in <see cref="PanopticSegmentationResult{T}.InstanceMap"/>, so
+    /// <c>InstanceMap == SegmentId</c> selects its pixels; a stuff segment has no pixels in <c>InstanceMap</c>
+    /// (they are 0 there). The id does not encode the class: read <see cref="ClassId"/> for that.
     /// </summary>
     public int SegmentId { get; set; }
 
