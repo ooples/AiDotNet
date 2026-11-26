@@ -21,7 +21,28 @@ internal static class TtsIdTensors
         if (ids is null) throw new ArgumentNullException(nameof(ids));
         if (ids.Count == 0) return new Tensor<T>(new[] { 0 });
 
+        int count = ids.Count;
+
+        // Typed fast paths: one allocation and one widening pass, no Tensor<int> staging and no Cast copy. Short id
+        // lists (often a single id) are the common call, where the staging cost dominated. int -> double is exact,
+        // and int -> float rounds once to nearest, the same as the int -> double -> float route of FromDouble.
+        if (typeof(T) == typeof(double))
+        {
+            var widened = new double[count];
+            for (int i = 0; i < count; i++)
+                widened[i] = ids[i];
+            return (Tensor<T>)(object)new Tensor<double>(widened, new[] { count });
+        }
+
+        if (typeof(T) == typeof(float))
+        {
+            var narrowed = new float[count];
+            for (int i = 0; i < count; i++)
+                narrowed[i] = ids[i];
+            return (Tensor<T>)(object)new Tensor<float>(narrowed, new[] { count });
+        }
+
         var values = ids as int[] ?? ids.ToArray();
-        return new Tensor<int>(values, new[] { values.Length }).Cast<T>();
+        return new Tensor<int>(values, new[] { count }).Cast<T>();
     }
 }
