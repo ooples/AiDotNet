@@ -302,6 +302,8 @@ public sealed class PredictorParameterIoDiskFootprintTests : DiffusionUnitTestBa
         Assert.Contains(modelBytes.ToString("N0"), refused.Message);
         Assert.Contains((modelBytes / 2).ToString("N0"), refused.Message);
         Assert.Equal(0, ParameterFileUsedBytes());
+        // The session the refused walk engaged is given back: nothing was mapped into it.
+        Assert.Equal(0, WeightStreamingSessions.LiveOwnerCount);
         Assert.Throws<System.IO.IOException>(() => predictor.GetParameters());
         Assert.Throws<System.IO.IOException>(() => predictor.SetParameterChunks(Array.Empty<Tensor<float>>()));
 

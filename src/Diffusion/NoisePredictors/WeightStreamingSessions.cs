@@ -56,8 +56,14 @@ internal static class WeightStreamingSessions
     /// </param>
     /// <param name="claim">Further conditions, evaluated under the gate; <c>false</c> refuses.</param>
     /// <param name="configure">Reconfigures the registry for the new session, under the gate.</param>
+    /// <param name="refusedAtVersion">
+    /// On a refusal, the <see cref="Version"/> of the owner set that refused, read under the same gate as the
+    /// refusal (a version read afterwards can already belong to an owner that took the session since); otherwise
+    /// the version after <paramref name="owner"/> joined.
+    /// </param>
     /// <returns><c>true</c> when <paramref name="owner"/> now holds the session.</returns>
-    internal static bool TryBegin(object owner, bool collectUnreachableOwners, Func<bool> claim, Action configure)
+    internal static bool TryBegin(
+        object owner, bool collectUnreachableOwners, Func<bool> claim, Action configure, out long refusedAtVersion)
     {
         if (owner is null) throw new ArgumentNullException(nameof(owner));
         if (claim is null) throw new ArgumentNullException(nameof(claim));
@@ -67,6 +73,7 @@ internal static class WeightStreamingSessions
         lock (Gate)
         {
             otherOwnerSeen = HasOtherLiveOwner(owner);
+            refusedAtVersion = _version;
         }
 
         if (otherOwnerSeen)
@@ -80,8 +87,9 @@ internal static class WeightStreamingSessions
 
         lock (Gate)
         {
-            if (HasOtherLiveOwner(owner)) return false;
-            if (!claim()) return false;
+            bool refused = HasOtherLiveOwner(owner) || !claim();
+            refusedAtVersion = _version;
+            if (refused) return false;
             configure();
             if (!IsOwner(owner))
             {
@@ -89,6 +97,7 @@ internal static class WeightStreamingSessions
                 _version++;
             }
 
+            refusedAtVersion = _version;
             return true;
         }
     }

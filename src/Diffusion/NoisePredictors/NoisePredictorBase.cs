@@ -1222,6 +1222,18 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     [Scratch]
     private int _streamingEngaged;
 
+    // Serializes engagement on this instance, so a second caller waits for the first one's outcome instead of
+    // reading a half-finished one: _streamingEngaged is published as 1 only after the registry is configured and
+    // every layer is flagged for the streaming allocator. Scratch: a lock does not travel.
+    [Scratch]
+    private readonly object _streamingEngageGate = new();
+
+    // The managed thread running an engagement on this instance, or 0. A call that re-enters from that thread
+    // (an engagement reads the count, and a count with no declaration walks the parameter surface, which engages
+    // for parameter IO) returns at once instead of recursing. Scratch: it describes this process's threads.
+    [Scratch]
+    private int _streamingEngagingThread;
+
     // 0 = no successful weight registration yet, 1 = resolved lazy weights have
     // been registered with the streaming pool at least once.
     // Scratch, for the same reason: restored as 1, RegisterResolvedWeights returns early and the streaming pool
@@ -1229,10 +1241,22 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     [Scratch]
     private int _streamingWeightsRegistered;
 
-    // The session-owner set (WeightStreamingSessions.Version) that last refused this predictor a session, or -1.
-    // Scratch: it describes this process's other predictors.
+    // The session-owner set (WeightStreamingSessions.Version) that last refused this predictor a session, or -1,
+    // read under the same gate as the refusal. Scratch: it describes this process's other predictors.
     [Scratch]
     private long _streamingSessionDeniedAtVersion = -1;
+
+    // Refusals by that same owner set that skipped the collection since the last one that ran. Bounded by
+    // MaxRefusalsWithoutCollection: an unchanged owner set is not proof that its owners are still reachable.
+    [Scratch]
+    private int _streamingRefusalsWithoutCollection;
+
+    /// <summary>
+    /// How many engagements refused by an unchanged owner set skip the blocking collection before one runs again.
+    /// An owner that was alive at the last collection can be dropped later without Dispose; it leaves the owner
+    /// set as it was, so an unbounded skip would keep this predictor resident for the life of the process.
+    /// </summary>
+    internal const int MaxRefusalsWithoutCollection = 4;
 
     // 1 once every weight of this predictor is mapped into the parameter file, so the free-space check before
     // a parameter walk has nothing left to ask for. Scratch: a mapping does not travel.
@@ -1337,12 +1361,59 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     /// empty registry.
     /// </para>
     /// </summary>
-    protected void MaybeEngageWeightStreaming()
-    {
-        if (System.Threading.Volatile.Read(ref _streamingEngaged) != 0) return;
+    protected void MaybeEngageWeightStreaming() => TryEngageWeightStreaming();
 
+    /// <summary>
+    /// <see cref="MaybeEngageWeightStreaming"/>, reporting whether THIS call engaged streaming (as opposed to an
+    /// earlier call, or not at all), so a caller whose follow-up check fails can roll a fresh engagement back.
+    /// </summary>
+    private bool TryEngageWeightStreaming()
+    {
+        if (System.Threading.Volatile.Read(ref _streamingEngaged) != 0) return false;
+
+        int thread = Environment.CurrentManagedThreadId;
+        if (System.Threading.Volatile.Read(ref _streamingEngagingThread) == thread) return false;
+
+        // Concurrent callers wait here for the engagement in progress and then see its outcome: engaged (the
+        // check below returns), or not engaged after a refusal or a failure (they try again themselves).
+        lock (_streamingEngageGate)
+        {
+            if (System.Threading.Volatile.Read(ref _streamingEngaged) != 0) return false;
+            System.Threading.Volatile.Write(ref _streamingEngagingThread, thread);
+            try
+            {
+                return EngageWeightStreamingUnderGate();
+            }
+            finally
+            {
+                System.Threading.Volatile.Write(ref _streamingEngagingThread, 0);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The parameter count the engagement threshold is tested against, without recursing into the engagement.
+    /// </summary>
+    /// <remarks>
+    /// The layers' declared count is used when every layer has one: it allocates nothing. When one is unknown, the
+    /// <see cref="ParameterCount"/> getter (or a derived predictor's override) is used as it was before parameter IO
+    /// engaged streaming (#2447): its fallback walks the parameter surface, which materializes the layers resident,
+    /// and the engagement for parameter IO that walk triggers returns at once on this thread
+    /// (<c>_streamingEngagingThread</c>) instead of reading the count again, which recursed until the stack
+    /// overflowed. Streaming is still decided on the real count, so a predictor whose layers have not yet declared
+    /// their counts streams when it is large, as it did before.
+    /// </remarks>
+    private long ParameterCountForStreamingDecision()
+    {
+        EnsureParameterStructureReady();
+        return TryGetDeclaredParameterCount(out long declared, out _) ? declared : ParameterCount;
+    }
+
+    private bool EngageWeightStreamingUnderGate()
+    {
         long threshold = StreamingThresholdOverride ?? DefaultStreamingThresholdParams;
-        if (ParameterCount <= threshold) return;
+        long parameterCount = ParameterCountForStreamingDecision();
+        if (parameterCount <= threshold) return false;
 
         // Memory-aware engagement (S1): even above the parameter-count floor, only
         // stream when the resident weight set would NOT fit comfortably in available
@@ -1360,10 +1431,10 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
             long available = GetAvailableMemoryBytesOrZero();
             if (available > 0)
             {
-                long weightBytes = checked(ParameterCount * (long)System.Runtime.CompilerServices.Unsafe.SizeOf<T>());
+                long weightBytes = checked(parameterCount * (long)System.Runtime.CompilerServices.Unsafe.SizeOf<T>());
                 // Half of available RAM leaves headroom for activations, the optimizer
                 // state during training, and other live allocations on the host.
-                if (weightBytes <= available / 2) return;
+                if (weightBytes <= available / 2) return false;
             }
         }
 
@@ -1407,7 +1478,12 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
             // Inference keeps the read-only path (the mapping is only taken outside inference mode).
             EnableZeroCopyMmapResidency = true,
         };
-        bool collectUnreachableOwners = _streamingSessionDeniedAtVersion != WeightStreamingSessions.Version;
+        // A refusal by the owner set that refused last time skips the blocking collection, but only a bounded
+        // number of times: an owner alive at the last collection may have been dropped since without leaving the
+        // set, and the set's version cannot tell.
+        bool collectUnreachableOwners = _streamingSessionDeniedAtVersion < 0
+            || _streamingSessionDeniedAtVersion != WeightStreamingSessions.Version
+            || _streamingRefusalsWithoutCollection >= MaxRefusalsWithoutCollection;
         bool began = WeightStreamingSessions.TryBegin(
             this,
             collectUnreachableOwners,
@@ -1415,13 +1491,10 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
             {
                 // Entries of an owner that was collected are pruned first; a LIVE owner's are never touched.
                 // What is left belongs to a model outside this session list (a network that configured the
-                // registry itself), and it keeps the registry.
+                // registry itself), and it keeps the registry. Concurrent callers on this instance are
+                // serialized by _streamingEngageGate, so no claim on _streamingEngaged is needed here.
                 WeightRegistry.PruneDeadEntries();
-                if (WeightRegistry.GetStreamingReport().RegisteredEntryCount > 0) return false;
-
-                // Atomically claim engagement: a concurrent call on this same instance that already won
-                // owns the configuration below, and this one returns.
-                return System.Threading.Interlocked.CompareExchange(ref _streamingEngaged, 1, 0) == 0;
+                return WeightRegistry.GetStreamingReport().RegisteredEntryCount == 0;
             },
             configure: () =>
             {
@@ -1453,27 +1526,90 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
                     System.Diagnostics.Trace.TraceWarning(
                         "NoisePredictorBase.MaybeEngageWeightStreaming: the streaming registry could not be " +
                         "configured (" + ex.GetType().Name + "); this predictor is not engaged.");
-                    System.Threading.Volatile.Write(ref _streamingEngaged, 0);
                     throw;
                 }
-            });
+            },
+            out long refusedAtVersion);
         if (!began)
         {
-            // Another predictor holds the session (or this instance lost its own race): run resident, as the
-            // safety guard above describes. Remember which owner set refused, so the next call does not
-            // force another collection until that set has changed.
-            _streamingSessionDeniedAtVersion = WeightStreamingSessions.Version;
-            return;
+            // Another predictor holds the session: run resident, as the safety guard above describes. Remember
+            // which owner set refused -- read by TryBegin under the gate that refused, not afterwards, when a
+            // hand-off could already have replaced it -- and how often it has refused without a collection.
+            if (!collectUnreachableOwners && refusedAtVersion == _streamingSessionDeniedAtVersion)
+            {
+                _streamingRefusalsWithoutCollection++;
+            }
+            else
+            {
+                _streamingRefusalsWithoutCollection = 0;
+            }
+
+            _streamingSessionDeniedAtVersion = refusedAtVersion;
+            return false;
         }
 
-        // Walk owned layer fields recursively (including those inside the DiT block list)
-        // and flag each for the streaming allocator. Iterated LAZILY: each layer is flagged
-        // as the walk yields it, BEFORE the walk descends into that layer — the layer's own
-        // lazy weight allocation (triggered while descending) reads UseStreamingAllocator, so
-        // the flag must be set first. Do NOT materialize this into a list and flag afterwards.
-        foreach (var layer in ReflectInstanceLayers(this))
+        _streamingSessionDeniedAtVersion = -1;
+        _streamingRefusalsWithoutCollection = 0;
+
+        try
         {
-            if (layer is LayerBase<T> lb) lb.UseStreamingAllocator = true;
+            // Walk owned layer fields recursively (including those inside the DiT block list)
+            // and flag each for the streaming allocator. Iterated LAZILY: each layer is flagged
+            // as the walk yields it, BEFORE the walk descends into that layer — the layer's own
+            // lazy weight allocation (triggered while descending) reads UseStreamingAllocator, so
+            // the flag must be set first. Do NOT materialize this into a list and flag afterwards.
+            foreach (var layer in ReflectInstanceLayers(this))
+            {
+                if (layer is LayerBase<T> lb) lb.UseStreamingAllocator = true;
+            }
+        }
+        catch
+        {
+            // Not engaged: give the session back so a later call (or another predictor) can take it.
+            WeightStreamingSessions.End(this);
+            throw;
+        }
+
+        // Ready only now: the registry is configured and every layer allocates through it.
+        System.Threading.Volatile.Write(ref _streamingEngaged, 1);
+        return true;
+    }
+
+    /// <summary>
+    /// Undoes an engagement this call made when the parameter walk it was for is refused before it started
+    /// (<see cref="EnsureParameterFileCapacity"/>), so the session does not stay with a predictor that holds
+    /// nothing in it: another predictor that fits can stream, and this one engages again once space is freed.
+    /// </summary>
+    /// <remarks>
+    /// An engagement that has been used is kept: a weight with a streaming lifetime, a pool handle or a mapping
+    /// lives in the session's registry, and giving the session up would let the next predictor reset it.
+    /// </remarks>
+    private void RollBackUnusedStreamingEngagement()
+    {
+        lock (_streamingEngageGate)
+        {
+            if (System.Threading.Volatile.Read(ref _streamingEngaged) == 0) return;
+
+            foreach (var layer in ReflectInstanceLayers(this))
+            {
+                if (layer is not LayerBase<T> lb) continue;
+                foreach (var tensor in lb.GetTrainableParametersWithoutMaterialization())
+                {
+                    if (tensor is null) continue;
+                    if (tensor.Lifetime == WeightLifetime.Streaming || tensor.StreamingPoolHandle >= 0
+                        || tensor.IsWritableMmapAliased)
+                        return;
+                }
+            }
+
+            foreach (var layer in ReflectInstanceLayers(this))
+            {
+                if (layer is LayerBase<T> lb) lb.UseStreamingAllocator = false;
+            }
+
+            System.Threading.Volatile.Write(ref _streamingEngaged, 0);
+            System.Threading.Volatile.Write(ref _parameterFileFullyMapped, 0);
+            WeightStreamingSessions.End(this);
         }
     }
 
@@ -1527,8 +1663,18 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     /// </summary>
     private void EngageStreamingForParameterIo()
     {
-        MaybeEngageWeightStreaming();
-        EnsureParameterFileCapacity();
+        bool engagedNow = TryEngageWeightStreaming();
+        try
+        {
+            EnsureParameterFileCapacity();
+        }
+        catch (System.IO.IOException) when (engagedNow)
+        {
+            // Nothing has been mapped yet: the session this call took is given back rather than held by a
+            // predictor whose walk was refused.
+            RollBackUnusedStreamingEngagement();
+            throw;
+        }
     }
 
     /// <summary>
