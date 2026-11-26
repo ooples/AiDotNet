@@ -430,6 +430,11 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     private protected override bool ClipsGradientsInStepCore => true;
 
     /// <inheritdoc/>
+    /// <remarks>The fp32 fast path caches each parameter's moment arrays; replaced moments must not be read through
+    /// the cache.</remarks>
+    private protected override void InvalidateTapeStateFastPathCache() => _fp32StepCache.Clear();
+
+    /// <inheritdoc/>
     protected override bool SupportsModelOwnStep => true;
 
     /// <summary>
@@ -1160,8 +1165,9 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         // A value clip needs no norm; it runs first, so the guard and the update see clamped gradients. This step
         // used to clip only by norm and to ignore ByValue.
         // Gradients clipped ahead of the step (regularization after the clip) are not clipped again.
-        if (GradientOptions.EnableGradientClipping && !GradientsClippedAhead
-            && GradientOptions.GradientClippingMethod == AiDotNet.Models.Options.GradientClippingMethod.ByValue)
+        bool valueClipped = GradientOptions.EnableGradientClipping && !GradientsClippedAhead
+            && GradientOptions.GradientClippingMethod == AiDotNet.Models.Options.GradientClippingMethod.ByValue;
+        if (valueClipped)
             ApplyTapeValueGradientClipping(context, GradientOptions.MaxGradientValue);
 
         // PyTorch GradScaler-style anomaly guard runs BEFORE advancing the
@@ -1205,7 +1211,9 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         {
             globalNormSq = GlobalGradientSquaredNorm(context);
             // Unclipped gradients: this is the step's pre-clip global norm, which training monitors read for free.
-            if (!GradientsClippedAhead)
+            // After a value clip it is the clamped norm, not the pre-clip one: keep the sample the base step took
+            // before the clamp (if any) and never replace it with the post-clamp reduction.
+            if (!GradientsClippedAhead && !valueClipped && TapeClipNormThreadCache.LastPreClipNormSq is null)
                 TapeClipNormThreadCache.LastPreClipNormSq = globalNormSq;
         }
 

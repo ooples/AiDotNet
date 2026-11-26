@@ -305,6 +305,15 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     private protected virtual bool ClipsGradientsInStepCore => false;
 
     /// <summary>
+    /// Called whenever the eager tape moment state is cleared or replaced (a checkpoint restore, a fused-to-eager
+    /// handoff, a reset), so an optimizer that caches the moment arrays for its steady-state fast path drops them
+    /// and the next step reads the new state.
+    /// </summary>
+    private protected virtual void InvalidateTapeStateFastPathCache()
+    {
+    }
+
+    /// <summary>
     /// True when the regularization goes on after the clip (<see cref="RegularizationOrder.ClipThenRegularize"/>,
     /// PyTorch's order), false when the clip covers it.
     /// </summary>
@@ -4501,6 +4510,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             if (field.GetValue(this) is ConcurrentDictionary<Tensor<T>, Tensor<T>> activeState)
             {
                 activeState[parameter] = restoredState;
+                InvalidateTapeStateFastPathCache();
             }
 
             pendingEntries.Remove(parameterIndex);
@@ -4529,6 +4539,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             }
         }
 
+        InvalidateTapeStateFastPathCache();
         DisposeCachedGpuGradBuffers();
     }
 
@@ -4966,8 +4977,43 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// for host-current gradients, and by one device sum of squares (whose scalar is read back) for gradients still
     /// pending on a GPU.
     /// </summary>
-    [AiDotNet.Attributes.ScalarKernel("Opt-in monitoring norm: host fallback for gradients the SIMD sum of squares does not cover")]
     private static double MonitoringGlobalGradientSquaredNorm(TapeStepContext<T> context)
+        => MonitoringDenseGradientSquaredNorm(context) + MonitoringSparseEmbeddingSquaredNorm(context);
+
+    /// <summary>
+    /// The squared norm of the sparse embedding gradients the step has not densified (the second gradient form the
+    /// clip also covers, see <see cref="ClippableGradients"/>), without changing the gradients the optimizer receives.
+    /// Rows that occur once contribute their value rows; a parameter whose rows repeat is coalesced (summed per row)
+    /// on a local dense copy before squaring, since its gradient row is the sum of its contributions.
+    /// </summary>
+    private static double MonitoringSparseEmbeddingSquaredNorm(TapeStepContext<T> context)
+    {
+        double sum = 0.0;
+        foreach (var param in context.Parameters)
+        {
+            // A parameter with a dense gradient already counts it there (the dense entry takes priority).
+            if (!SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param)) continue;
+            var sparse = DifferentiableOps.GetSparseEmbeddingGradsFor(param);
+            if (sparse is null || sparse.Count == 0) continue;
+            if (SparseEmbeddingOptimizerHelpers.HasDuplicateRows(sparse))
+            {
+                var engine = AiDotNetEngine.Current;
+                var coalesced = sparse[0].ToDense(engine);
+                for (int i = 1; i < sparse.Count; i++)
+                    coalesced = engine.TensorAdd(coalesced, sparse[i].ToDense(engine));
+                sum += SparseEmbeddingOptimizerHelpers.SumOfSquares(coalesced);
+                continue;
+            }
+
+            foreach (var contribution in sparse)
+                if (contribution.NumIndices > 0 && contribution.Values is { Length: > 0 } values)
+                    sum += SparseEmbeddingOptimizerHelpers.SumOfSquares(values);
+        }
+        return sum;
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("Opt-in monitoring norm: host fallback for gradients the SIMD sum of squares does not cover")]
+    private static double MonitoringDenseGradientSquaredNorm(TapeStepContext<T> context)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         double sum = 0.0;
