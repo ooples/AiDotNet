@@ -130,6 +130,7 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
         };
     }
 
+    /// <inheritdoc/>
     protected override void InitializeLayers()
     {
         if (_options is null || _network is not null) return;
@@ -181,6 +182,7 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
             ? logits
             : Engine.TensorSlice(logits, new[] { 0, 0, 0, 0 }, new[] { logits.Shape[0], logits.Shape[1], h, w });
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
     /// <summary>
@@ -237,6 +239,7 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
     /// <inheritdoc />
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
@@ -250,6 +253,7 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "VisionMamba" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _options.ModelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },

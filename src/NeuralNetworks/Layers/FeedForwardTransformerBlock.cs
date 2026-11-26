@@ -69,6 +69,7 @@ public partial class FeedForwardTransformerBlock<T> : LayerBase<T>, IShapeContra
     private readonly DropoutLayer<T>? _attentionDropout;
     private readonly DropoutLayer<T>? _convDropout;
 
+    /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
     /// <summary>

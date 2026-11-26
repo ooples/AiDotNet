@@ -235,7 +235,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         ReinforcementLearning,
         StreamingSupervised,
         ImageSpace,
-        Evolution
+        Evolution,
+        SampleObjective
     }
 
     /// <summary>
@@ -267,6 +268,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             RobustnessBuildPath.StreamingSupervised => "a streaming loader never holds the training set the defense iterates",
             RobustnessBuildPath.ImageSpace => "image-space training fits ray batches, not labelled samples",
             RobustnessBuildPath.Evolution => "an evolutionary search trains no model",
+            RobustnessBuildPath.SampleObjective => "a sample-objective model trains on typed samples, not input tensors to perturb",
             _ => $"build path {(int)path} does not support it"
         };
 

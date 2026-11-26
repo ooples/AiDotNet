@@ -74,6 +74,7 @@ public partial class VarianceAdaptorLayer<T> : LayerBase<T>, IShapeContract
     private readonly VariancePredictorLayer<T>? _energyPredictor;
     private readonly EmbeddingLayer<T>? _energyEmbedding;
 
+    /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
     /// <summary>

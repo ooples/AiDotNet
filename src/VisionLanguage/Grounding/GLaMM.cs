@@ -62,6 +62,18 @@ public sealed record GlammAnswer<T>(string Text, IReadOnlyList<Tensor<T>> Masks)
 /// <list type="bullet"><item>Paper: "GLaMM: Pixel Grounding Large Multimodal Model" (Rasheed et al., CVPR 2024)</item></list></para>
 /// <para><b>For Beginners:</b> GLaMM chats about an image and draws a mask on it for each object it mentions.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a GLaMM model for pixel-level grounded understanding
+/// // with text-interleaved segmentation mask generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// var model = new GLaMM&lt;double&gt;(architecture, new GLaMMOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -248,8 +260,10 @@ public partial class GLaMM<T> : VisionLanguageModelBase<T>, IGroundedConversatio
         return single ? Engine.Reshape(features, new[] { features.Shape[1], features.Shape[2] }) : features;
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) => EncodeImage(input);
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => EncodeImage(input);
 
     /// <summary>The prompt of a first turn: the official begin text, then the instruction.</summary>
@@ -429,8 +443,10 @@ public partial class GLaMM<T> : VisionLanguageModelBase<T>, IGroundedConversatio
     /// <inheritdoc />
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
 
+    /// <inheritdoc/>
     protected override bool SupportsParameterMutation => true;
 
+    /// <inheritdoc/>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => GlobalInput(Single(image));
 
     /// <inheritdoc />

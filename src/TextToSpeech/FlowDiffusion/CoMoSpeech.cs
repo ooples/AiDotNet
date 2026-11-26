@@ -48,6 +48,22 @@ public enum CoMoSpeechTrainingPhase
 /// <para><b>For Beginners:</b> A slow diffusion "teacher" learns to clean noisy spectrograms over many steps; the
 /// "student" then learns to jump from any point of that cleaning path straight to the end, so it speaks in one step.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a CoMoSpeech model for one-step speech synthesis
+/// // using consistency model distillation for ultra-fast generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new CoMoSpeech&lt;double&gt;(architecture, "comospeech.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new CoMoSpeech&lt;double&gt;(architecture, new CoMoSpeechOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -147,8 +163,11 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcoustic
     public new int HiddenDim => _options.HiddenDim;
     /// <inheritdoc />
     public int NumFlowSteps => _options.NumFlowSteps;
+    /// <inheritdoc/>
     public new int MelChannels => _options.MelChannels;
+    /// <inheritdoc/>
     public new int HopSize => _options.HopSize;
+    /// <inheritdoc/>
     public int FftSize => _options.FftSize;
 
     /// <summary>The training stage; <see cref="BeginDistillation"/> moves from the teacher to distillation. Synthesis
@@ -592,6 +611,7 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcoustic
         return Engine.TensorAdd(Engine.TensorAdd(durationLoss, priorLoss), denoisingLoss);
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     /// <inheritdoc />
@@ -600,6 +620,7 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcoustic
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

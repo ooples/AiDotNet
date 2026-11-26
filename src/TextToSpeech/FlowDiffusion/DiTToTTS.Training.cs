@@ -9,6 +9,7 @@ public partial class DiTToTTS<T>
         double Time, bool DropText);
     private sealed record LengthExample(Tensor<T> Text, Tensor<T>? Prompt, int[] Labels);
 
+    /// <inheritdoc/>
     protected override T TrainOnSample(TtsTrainingSample<T> sample)
     {
         ThrowIfDisposed(); RequirePaperModel();
@@ -31,6 +32,7 @@ public partial class DiTToTTS<T>
         return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => LengthObjective(example), _optimizer!);
     }
 
+    /// <inheritdoc/>
     public override T EvaluateTrainingObjective(TtsTrainingSample<T> sample)
     {
         ThrowIfDisposed(); RequirePaperModel();

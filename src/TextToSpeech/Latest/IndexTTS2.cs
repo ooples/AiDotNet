@@ -41,6 +41,8 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// </remarks>
 /// <example>
 /// <code>
+/// var promptAudio = Tensor&lt;float&gt;.CreateRandom(1, 16000);
+/// var promptSampleRate = 24000;
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var options = IndexTTS2Options.Release();
 /// options.BpeModelPath = "IndexTTS-2/bpe.model";

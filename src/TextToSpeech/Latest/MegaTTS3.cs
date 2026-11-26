@@ -35,6 +35,7 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// </remarks>
 /// <example>
 /// <code>
+/// var prompt24kHz = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var model = new MegaTTS3&lt;float&gt;(architecture, new MegaTTS3Options());
 /// model.LoadReferenceWeights("checkpoints");   // ByteDance/MegaTTS3: diffusion_transformer, duration_lm, aligner_lm, g2p, wavvae

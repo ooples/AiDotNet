@@ -53,6 +53,7 @@ public sealed class GlmVoiceReply<T>
 /// </remarks>
 /// <example>
 /// <code>
+/// var recording16kHz = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var model = new GLM4Voice&lt;float&gt;(architecture, new GLM4VoiceOptions { TokenizerDirectory = "glm-4-voice-9b" });
 /// model.LoadLanguageModel("glm-4-voice-9b");

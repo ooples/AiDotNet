@@ -47,6 +47,7 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// </remarks>
 /// <example>
 /// <code>
+/// var waveform = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
@@ -90,6 +91,7 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
     internal ParaformerNetwork<T>? Network => _network;
     internal SeACoBiasNetwork<T>? Bias => _bias;
     internal SanmEncoder<T>? Encoder => _encoder;
+    /// <inheritdoc/>
     public IReadOnlyList<string> SupportedLanguages { get; }
     /// <inheritdoc />
     public bool SupportsStreaming => false;
@@ -163,9 +165,13 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
         };
     }
 
+    /// <inheritdoc/>
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+    /// <inheritdoc/>
     public string DetectLanguage(Tensor<T> audio) => _options.Language;
+    /// <inheritdoc/>
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
+    /// <inheritdoc/>
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("SeACo-Paraformer does not support streaming.");
 
     // Greedy decoding with Equation 5's merge at each acoustic token, after attention score filtering.
@@ -279,6 +285,7 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
         return sb.ToString().Trim();
     }
 
+    /// <inheritdoc/>
     protected override void InitializeLayers() => InitializeLayersCore();
 
     private void InitializeLayersCore()
@@ -367,8 +374,10 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
             })
             : ForwardNativeWaveformBatch<ParaformerNetwork<T>>(input, null, static (_, w) => w);
 
+    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input); }
 
+    /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input);
 
     private int[][] RowLabels(Tensor<T> input, Tensor<T> target) =>
@@ -531,6 +540,7 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "SeACo-Native" : "SeACo-ONNX", Description = "SeACo-Paraformer: Paraformer-large with hotword bias modules (Shi et al. 2023)", FeatureCount = 1, Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(SeACo<T>)); }

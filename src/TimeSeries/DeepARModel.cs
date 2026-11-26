@@ -478,6 +478,7 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         };
     }
 
+    /// <inheritdoc/>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance() => new DeepARModel<T>(new DeepAROptions<T>(_options));
 
     internal IReadOnlyList<double> TrainingLossHistory => _epochLosses.AsReadOnly();

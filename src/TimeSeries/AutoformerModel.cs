@@ -318,6 +318,7 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
         return ForecastFrom(input).ToVector();
     }
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var o = _options;

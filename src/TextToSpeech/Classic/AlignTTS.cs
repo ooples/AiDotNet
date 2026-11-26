@@ -219,8 +219,10 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
         yield return new DenseLayer<T>(_options.MelChannels, new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
+    /// <inheritdoc/>
     protected override Tensor<T> PreprocessText(string text)
     {
         var ids = FrontEnd.ClassicTtsText.Characters(text, _options.TextSymbols, _options.VocabSize, _options.MaxTextLength);
@@ -411,6 +413,7 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

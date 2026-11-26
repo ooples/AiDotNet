@@ -21,7 +21,9 @@ public sealed partial class TorchLstmCellLayer<T> : LayerBase<T>, IShapeContract
     private readonly DenseLayer<T> _input;
     [SubLayerInput("1, _hiddenSize")]
     private readonly DenseLayer<T> _recurrent;
+    /// <inheritdoc/>
     public override bool SupportsTraining => true;
+    /// <inheritdoc/>
     public override bool RequiresMultipleInputs => true;
 
     /// <summary>Creates a cell with i, f, g, o gate ordering and two distinct biases.</summary>
@@ -78,7 +80,9 @@ public sealed partial class TorchLstmCellLayer<T> : LayerBase<T>, IShapeContract
         Load(_input, _inputSize, weightIh, biasIh); Load(_recurrent, _hiddenSize, weightHh, biasHh);
     }
 
+    /// <inheritdoc/>
     protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new InvalidOperationException("An LSTM step requires input and state.");
+    /// <inheritdoc/>
     protected override Tensor<T> ForwardTracedMany(params Tensor<T>[] inputs)
     {
         if (inputs.Length != 2) throw new ArgumentException("Expected input and [hidden;cell] state.", nameof(inputs));
@@ -93,10 +97,12 @@ public sealed partial class TorchLstmCellLayer<T> : LayerBase<T>, IShapeContract
         return Engine.TensorConcatenate(new[] { Engine.TensorMultiply(Engine.Sigmoid(Gate(3)), Engine.Tanh(next)), next }, 1);
     }
 
+    /// <inheritdoc/>
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => inputRank == 2 ? new[]
     {
         new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
         new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(2 * _hiddenSize))
     } : null;
+    /// <inheritdoc/>
     public override void ResetState() { }
 }
