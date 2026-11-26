@@ -392,6 +392,7 @@ public class StreamingStepTrainingTests : IDisposable
             foreach (var (index, values) in entries)
             {
                 var other = a.Moments[field][index];
+                Assert.Equal(values.Length, other.Length);
                 double worst = values.Zip(other, (l, r) => (double)Math.Abs(l - r)).Max();
                 double scale = values.Max(v => (double)Math.Abs(v));
                 Assert.True(worst <= PathRounding * Math.Max(1.0, scale), $"{field}[{index}] differs between the paths by {worst}");

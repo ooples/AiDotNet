@@ -97,7 +97,8 @@ public class MixedPrecisionFusedPathTests
         const double relativeTolerance = 2e-2;
         for (int s = 0; s < Steps; s++)
         {
-            Assert.True(double.IsFinite(mp[s]), $"step {s}: mixed-precision loss {mp[s]} is not finite");
+            Assert.False(double.IsNaN(mp[s]) || double.IsInfinity(mp[s]),
+                $"step {s}: mixed-precision loss {mp[s]} is not finite");
             double rel = System.Math.Abs(mp[s] - fp32[s]) / System.Math.Max(1e-6, System.Math.Abs(fp32[s]));
             Assert.True(rel <= relativeTolerance, $"step {s}: FP32 loss {fp32[s]} vs mixed {mp[s]} (relative {rel:E2})");
         }
