@@ -205,7 +205,7 @@ public partial class DecisionTreeClassifier<T>
         float inverseTotalFloat = 1.0f / NumOps.ToFloat(scaledTotal);
         var probabilities = new T[counts.Length];
         for (int c = 0; c < counts.Length; c++)
-            probabilities[c] = Share(ScaledCountInParts(counts[c], shift), inverseTotal, inverseTotalFloat);
+            probabilities[c] = Share(ScaledCountInParts(counts[c], shift), scaledTotal, inverseTotal, inverseTotalFloat);
 
         // The first class with the most rows, as numpy's argmax.
         int predictedClass = Array.IndexOf(counts, counts.Max());
@@ -349,8 +349,8 @@ public partial class DecisionTreeClassifier<T>
                 }
                 else
                 {
-                    T leftShare = Share(ScaledCountInParts(leftSize, shift), inverseTotal, inverseTotalFloat);
-                    T rightShare = Share(ScaledCountInParts(rightSize, shift), inverseTotal, inverseTotalFloat);
+                    T leftShare = Share(ScaledCountInParts(leftSize, shift), scaledTotal, inverseTotal, inverseTotalFloat);
+                    T rightShare = Share(ScaledCountInParts(rightSize, shift), scaledTotal, inverseTotal, inverseTotalFloat);
                     T weighted = NumOps.Add(
                         NumOps.Multiply(leftShare, Impurity(left, leftSize, shift)),
                         NumOps.Multiply(rightShare, Impurity(right, rightSize, shift)));
@@ -421,14 +421,23 @@ public partial class DecisionTreeClassifier<T>
         typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16);
 
     /// <summary>
-    /// <paramref name="part"/> times the reciprocal of the node's size, as the engine's divide-by-scalar forms it: for a
-    /// narrow T the reciprocal and the product are formed in float and rounded once, so the reciprocal is not first
-    /// rounded to T.
+    /// Whether the engine's divide-by-scalar for T multiplies by the reciprocal (the binary floating kernels). Other
+    /// types (integers, decimal) divide directly: a reciprocal of an integer size truncates to zero.
     /// </summary>
-    private T Share(T part, T inverseTotal, float inverseTotalFloat)
+    private static readonly bool DividesByReciprocal =
+        typeof(T) == typeof(float) || typeof(T) == typeof(double) || IsNarrowFloat;
+
+    /// <summary>
+    /// <paramref name="part"/> divided by the node's size, as the engine's divide-by-scalar forms it: for the binary
+    /// floating types a product with the reciprocal (for a narrow T the reciprocal and the product are formed in float
+    /// and rounded once, so the reciprocal is not first rounded to T); for any other T a direct division.
+    /// </summary>
+    private T Share(T part, T scaledTotal, T inverseTotal, float inverseTotalFloat)
         => IsNarrowFloat
             ? NumOps.FromFloat(NumOps.ToFloat(part) * inverseTotalFloat)
-            : NumOps.Multiply(part, inverseTotal);
+            : DividesByReciprocal
+                ? NumOps.Multiply(part, inverseTotal)
+                : NumOps.Divide(part, scaledTotal);
 
     /// <summary>Whether the criterion is entropy (or log loss, the same split criterion) rather than Gini.</summary>
     private bool UsesEntropy =>

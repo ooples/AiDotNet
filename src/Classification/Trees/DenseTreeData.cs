@@ -64,7 +64,8 @@ internal sealed class DenseTreeData<T>
         var distinct = new T[features][];
         var nanRank = new int[features];
         var comparer = ValueComparer();
-        System.Threading.Tasks.Parallel.For(0, features,
+        // Honors the CPU thread limit (AIDOTNET_CPU_THREADS): at degree 1 or a small workload the features rank inline.
+        AiDotNet.Tensors.Helpers.CpuParallelSettings.ParallelForOrSerial(0, features, (long)rows * features,
             () => (Keys: new T[rows], Order: new int[rows]),
             (f, _, buffers) =>
             {

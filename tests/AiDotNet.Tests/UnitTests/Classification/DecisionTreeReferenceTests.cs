@@ -153,4 +153,21 @@ public class DecisionTreeReferenceTests
         Assert.Equal(3, tree.LeafCount);
         Assert.Equal(new[] { 0.0, 0.0, 1.0 }, tree.Predict(x).ToArray());
     }
+
+    [Fact]
+    [Trait("category", "unit")]
+    public void Integer_leaf_of_one_class_has_probability_one()
+    {
+        // Two rows of one label make a single leaf whose only class holds both rows: 2 / 2 = 1. A share formed as
+        // count * (1 / size) truncates the integer reciprocal to 0 and reports probability 0.
+        var x = new Matrix<int>(new[,] { { 1 }, { 2 } });
+        var y = new Vector<int>(new[] { 0, 0 });
+        var tree = new DecisionTreeClassifier<int>();
+        tree.Train(x, y);
+
+        Assert.Equal(1, tree.LeafCount);
+        var probabilities = tree.PredictProbabilities(x);
+        Assert.Equal(1, probabilities[0, 0]);
+        Assert.Equal(1, probabilities[1, 0]);
+    }
 }
