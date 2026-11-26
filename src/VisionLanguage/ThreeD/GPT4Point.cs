@@ -40,11 +40,9 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new GPT4Point&lt;double&gt;(architecture, "gpt4point.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new GPT4Point&lt;double&gt;(architecture, new GPT4PointOptions());
+/// var model = new GPT4Point&lt;double&gt;(architecture, new GPT4PointOptions());
+/// var pointCloud = Tensor&lt;double&gt;.CreateRandom(2048, 6);   // [points, XYZ + RGB]
+/// Tensor&lt;double&gt; answer = model.GenerateFrom3D(pointCloud, "What objects are on the table?");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

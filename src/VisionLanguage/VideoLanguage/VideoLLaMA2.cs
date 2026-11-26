@@ -40,11 +40,10 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 336, inputWidth: 336, inputDepth: 3, inputFrames: 8, outputSize: 512);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new VideoLLaMA2&lt;double&gt;(architecture, "videollama2.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new VideoLLaMA2&lt;double&gt;(architecture, new VideoLLaMA2Options());
+/// var model = new VideoLLaMA2&lt;double&gt;(architecture, new VideoLLaMA2Options());
+/// var frames = new List&lt;Tensor&lt;double&gt;&gt;();
+/// for (int i = 0; i &lt; 8; i++) frames.Add(Tensor&lt;double&gt;.CreateRandom(3, 336, 336));   // 8 frames, [3, H, W] each
+/// Tensor&lt;double&gt; answer = model.GenerateFromVideo(frames, "What happens in this clip?");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

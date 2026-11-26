@@ -40,7 +40,7 @@ public sealed record GroundedSegment<T>(GroundingDetection<T> Detection, Tensor<
 /// </remarks>
 /// <example>
 /// <code>
-/// var image = Tensor&lt;double&gt;.CreateRandom(1, 3, 32, 32);
+/// var image = Tensor&lt;double&gt;.CreateRandom(3, 1024, 1024);   // [3, H, W] RGB at the architecture's input size
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.ImageSegmentation,

@@ -38,11 +38,9 @@ namespace AiDotNet.VisionLanguage.Proprietary;
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new ClaudeVision&lt;double&gt;(architecture, "claudevision.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new ClaudeVision&lt;double&gt;(architecture, new ClaudeVisionOptions());
+/// var model = new ClaudeVision&lt;double&gt;(architecture, new ClaudeVisionOptions());
+/// var image = Tensor&lt;double&gt;.CreateRandom(3, 224, 224);   // [3, H, W] RGB, the architecture's input size
+/// Tensor&lt;double&gt; reply = model.Chat(image, "Describe this image.");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

@@ -38,11 +38,9 @@ namespace AiDotNet.VisionLanguage.Medical;
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new RadFM&lt;double&gt;(architecture, "radfm.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new RadFM&lt;double&gt;(architecture, new RadFMOptions());
+/// var model = new RadFM&lt;double&gt;(architecture, new RadFMOptions());
+/// var scan = Tensor&lt;double&gt;.CreateRandom(3, 224, 224);   // [3, H, W] RGB, the architecture's input size
+/// Tensor&lt;double&gt; answer = model.AnswerMedicalQuestion(scan, "Is there an opacity in the left lung?");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

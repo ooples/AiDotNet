@@ -38,11 +38,9 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new KimiVLThinking&lt;double&gt;(architecture, "kimivlthinking.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new KimiVLThinking&lt;double&gt;(architecture, new KimiVLThinkingOptions());
+/// var model = new KimiVLThinking&lt;double&gt;(architecture, new KimiVLThinkingOptions());
+/// var image = Tensor&lt;double&gt;.CreateRandom(3, 224, 224);   // [3, H, W] RGB, the architecture's input size
+/// Tensor&lt;double&gt; answer = model.ReasonWithChainOfThought(image, "How many apples are left if two are eaten?");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
