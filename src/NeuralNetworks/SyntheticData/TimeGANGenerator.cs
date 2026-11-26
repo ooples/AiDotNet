@@ -742,23 +742,9 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
     private Tensor<T> GenerateNoiseBatchTensor(int batchSize, int sequenceLength, int dim)
     {
-        int totalElements = checked(batchSize * sequenceLength * dim);
-        // Box–Muller via the seeded _random so TimeGANOptions.Seed makes
-        // Fit reproducible — Engine.TensorRandomUniformRange bypasses _random
-        // and breaks the seed contract that the rest of the sampler stack
-        // (and Generate via its own seeded paths) honours.
-        var noiseData = new T[totalElements];
-        for (int i = 0; i < totalElements; i += 2)
-        {
-            double u1 = 1.0 - _random.NextDouble();   // ∈ (0, 1] keeps log finite
-            double u2 = _random.NextDouble();
-            double r = Math.Sqrt(-2.0 * Math.Log(u1));
-            double theta = 2.0 * Math.PI * u2;
-            noiseData[i] = NumOps.FromDouble(r * Math.Cos(theta));
-            if (i + 1 < totalElements)
-                noiseData[i + 1] = NumOps.FromDouble(r * Math.Sin(theta));
-        }
-        return new Tensor<T>(noiseData, [batchSize, sequenceLength, dim]);
+        // Box-Muller from the seeded _random, both outputs of each pair, so the options seed makes the
+        // draw reproducible (an engine random fill would bypass _random).
+        return SyntheticTensorOps<T>.StandardNormalPairTensor([batchSize, sequenceLength, dim], _random);
     }
 
     // ----- Batched, tape-tracked recurrent forward methods -----

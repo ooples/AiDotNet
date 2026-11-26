@@ -1045,14 +1045,7 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     }
 
     private Vector<T> CreateStandardNormalVector(int length)
-    {
-        var v = new Vector<T>(length);
-        for (int i = 0; i < length; i++)
-        {
-            v[i] = SampleStandardNormal();
-        }
-        return v;
-    }
+        => SyntheticTensorOps<T>.StandardNormalVector(length, _random);
 
     #endregion
 
