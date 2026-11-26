@@ -2,7 +2,7 @@
 import { getEntry, render } from 'astro:content';
 import DocsLayout from '../../layouts/DocsLayout.astro';
 
-// Vercel redirects this route, but static previews and GitHub Pages must also
+// The web server redirects this route, but static previews and GitHub Pages must also
 // serve usable documentation without depending on a delayed meta refresh.
 const entry = await getEntry('docs', 'getting-started');
 if (!entry) throw new Error('Getting started documentation is missing');

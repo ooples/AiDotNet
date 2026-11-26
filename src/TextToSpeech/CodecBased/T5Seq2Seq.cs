@@ -103,6 +103,29 @@ internal sealed class T5Attention<T>
         return Output.Forward(merged);
     }
 
+    /// <summary>Batched attention over <paramref name="queries"/> <c>[B, Lq, d]</c> and <paramref name="keyValues"/>
+    /// <c>[B, Lk, d]</c> with <paramref name="bias"/> <c>[B * heads, Lq, Lk]</c> added to the scores.</summary>
+    public Tensor<T> ForwardBatched(Tensor<T> queries, Tensor<T> keyValues, Tensor<T>? bias, bool training, Random random)
+    {
+        int batch = queries.Shape[0], lq = queries.Shape[1], lk = keyValues.Shape[1];
+        Tensor<T> Heads(Tensor<T> x, int length) =>
+            _engine.Reshape(
+                _engine.TensorPermute(_engine.Reshape(x, new[] { batch, length, _heads, _keyValueDim }), new[] { 0, 2, 1, 3 }),
+                new[] { batch * _heads, length, _keyValueDim });
+        var q = Heads(Query.Forward(queries), lq);
+        var k = Heads(Key.Forward(keyValues), lk);
+        var v = Heads(Value.Forward(keyValues), lk);
+        var scores = _engine.BatchMatMul(q, _engine.TensorPermute(k, new[] { 0, 2, 1 }));
+        if (bias is not null) scores = _engine.TensorAdd(scores, bias);
+        var weights = _engine.Softmax(scores, axis: 2);
+        if (training && DropoutRate > 0) weights = Dropout(weights, random);
+        var context = _engine.BatchMatMul(weights, v);
+        var merged = _engine.Reshape(
+            _engine.TensorPermute(_engine.Reshape(context, new[] { batch, _heads, lq, _keyValueDim }), new[] { 0, 2, 1, 3 }),
+            new[] { batch, lq, _heads * _keyValueDim });
+        return Output.Forward(merged);
+    }
+
     private Tensor<T> Dropout(Tensor<T> x, Random random) => T5Seq2Seq<T>.Dropout(_engine, x, DropoutRate, random);
 }
 
@@ -160,6 +183,23 @@ internal sealed class T5Block<T>
         {
             var crossNormed = CrossNorm.Forward(h);
             h = _engine.TensorAdd(h, Drop(CrossAttention.Forward(crossNormed, memory, crossBias, training, random), training, random));
+        }
+        var feedForwardInput = FeedForwardNorm.Forward(h);
+        var hidden = WiLinear is null
+            ? _engine.ReLU(Wi.Forward(feedForwardInput))
+            : _engine.TensorMultiply(_engine.GELU(Wi.Forward(feedForwardInput)), WiLinear.Forward(feedForwardInput));
+        hidden = Drop(hidden, training, random);
+        return _engine.TensorAdd(h, Drop(Wo.Forward(hidden), training, random));
+    }
+
+    public Tensor<T> ForwardBatched(Tensor<T> h, Tensor<T> selfBias, Tensor<T>? memory, Tensor<T>? crossBias, bool training, Random random)
+    {
+        var normed = SelfNorm.Forward(h);
+        h = _engine.TensorAdd(h, Drop(SelfAttention.ForwardBatched(normed, normed, selfBias, training, random), training, random));
+        if (CrossAttention is not null && CrossNorm is not null && memory is not null)
+        {
+            var crossNormed = CrossNorm.Forward(h);
+            h = _engine.TensorAdd(h, Drop(CrossAttention.ForwardBatched(crossNormed, memory, crossBias, training, random), training, random));
         }
         var feedForwardInput = FeedForwardNorm.Forward(h);
         var hidden = WiLinear is null
@@ -233,10 +273,8 @@ internal sealed class T5Seq2Seq<T>
 
     internal static Tensor<T> Dropout(IEngine engine, Tensor<T> x, double rate, Random random)
     {
-        var mask = new Tensor<T>(x._shape);
-        var keep = NumOps.FromDouble(1.0 / (1.0 - rate));
-        for (int i = 0; i < mask.Length; i++) mask[i] = random.NextDouble() < rate ? NumOps.Zero : keep;
-        return engine.TensorMultiply(x, mask);
+        // A per-step draw: a compiled training plan refills the mask before every replay.
+        return engine.TensorMultiply(x, AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(x._shape, random, rate));
     }
 
     private Tensor<T> PositionBias(TiedEmbeddingLayer<T> table, int queries, int keys, bool bidirectional, bool causal) =>
@@ -353,6 +391,123 @@ internal sealed class T5Seq2Seq<T>
             target[i, labels[i]] = NumOps.FromDouble((-(1.0 - labelSmoothing) - labelSmoothing / vocabulary) / counted);
         }
         return _engine.ReduceSum(_engine.TensorMultiply(logProbabilities, target), new[] { 0, 1 }, keepDims: false);
+    }
+
+    private static Tensor<T> TensorFromDoubles(double[] values, int[] shape) =>
+        new Tensor<double>(shape, new Vector<double>(values)).Cast<T>();
+
+    /// <summary>
+    /// Batched teacher-forced cross-entropy over multiple sequences in a single encoder-decoder pass, averaging over
+    /// every non-negative label token across the batch exactly as <c>T5ForConditionalGeneration</c> does.
+    /// </summary>
+    public Tensor<T> BatchLoss(IReadOnlyList<(int[] InputIds, bool[]? InputMask, int[] Labels)> examples, bool training,
+        Random random, bool freezeEncoder = false, double labelSmoothing = 0.0)
+    {
+        if (examples is null || examples.Count == 0)
+            throw new ArgumentException("The batch is empty.", nameof(examples));
+        if (labelSmoothing < 0 || labelSmoothing >= 1)
+            throw new ArgumentOutOfRangeException(nameof(labelSmoothing), "Label smoothing lies in [0, 1).");
+
+        int batch = examples.Count;
+        int heads = Configuration.Heads;
+        int vocabulary = Configuration.VocabularySize;
+        int maxEnc = 0, maxDec = 0, totalCounted = 0;
+        for (int b = 0; b < batch; b++)
+        {
+            var ex = examples[b];
+            if (ex.InputIds.Length > maxEnc) maxEnc = ex.InputIds.Length;
+            if (ex.Labels.Length > maxDec) maxDec = ex.Labels.Length;
+            for (int i = 0; i < ex.Labels.Length; i++)
+                if (ex.Labels[i] >= 0) totalCounted++;
+        }
+        if (maxEnc == 0) throw new ArgumentException("Every input sequence is empty.", nameof(examples));
+        if (totalCounted == 0) throw new ArgumentException("Every label is ignored.", nameof(examples));
+
+        var encIdsData = new double[batch * maxEnc];
+        if (Configuration.PadTokenId != 0)
+            for (int i = 0; i < encIdsData.Length; i++) encIdsData[i] = Configuration.PadTokenId;
+        var encMaskData = new double[batch * heads * maxEnc];
+        var decIdsData = new double[batch * maxDec];
+        var targetData = new double[batch * maxDec * vocabulary];
+        double uniformVal = -labelSmoothing / vocabulary / totalCounted;
+        double labelVal = (-(1.0 - labelSmoothing) - labelSmoothing / vocabulary) / totalCounted;
+
+        for (int b = 0; b < batch; b++)
+        {
+            var (inIds, inMask, labels) = examples[b];
+            for (int j = 0; j < maxEnc; j++)
+            {
+                if (j < inIds.Length) encIdsData[b * maxEnc + j] = inIds[j];
+                bool keep = j < inIds.Length && (inMask is null || inMask[j]);
+                if (!keep)
+                {
+                    for (int hIdx = 0; hIdx < heads; hIdx++)
+                        encMaskData[(b * heads + hIdx) * maxEnc + j] = -1e9;
+                }
+            }
+
+            decIdsData[b * maxDec] = Configuration.DecoderStartTokenId;
+            for (int i = 1; i < maxDec; i++)
+            {
+                int prev = i - 1 < labels.Length ? labels[i - 1] : -100;
+                decIdsData[b * maxDec + i] = prev < 0 ? Configuration.PadTokenId : prev;
+            }
+
+            for (int i = 0; i < labels.Length; i++)
+            {
+                if (labels[i] < 0) continue;
+                int rowOffset = (b * maxDec + i) * vocabulary;
+                if (labelSmoothing > 0)
+                    for (int v = 0; v < vocabulary; v++) targetData[rowOffset + v] = uniformVal;
+                targetData[rowOffset + labels[i]] = labelVal;
+            }
+        }
+
+        var encIds = TensorFromDoubles(encIdsData, new[] { batch, maxEnc });
+        var keyMask4D = TensorFromDoubles(encMaskData, new[] { batch, heads, 1, maxEnc });
+
+        Tensor<T> EncodeBatched(bool encTrain)
+        {
+            var h = Drop((EncoderEmbedding ?? Shared).Forward(encIds), encTrain, random);
+            var posBias = PositionBias(EncoderBias, maxEnc, maxEnc, bidirectional: true, causal: false);
+            var combined = _engine.TensorAdd(
+                _engine.TensorBroadcastTo(_engine.Reshape(posBias, new[] { 1, heads, maxEnc, maxEnc }), new[] { batch, heads, maxEnc, maxEnc }),
+                _engine.TensorBroadcastTo(keyMask4D, new[] { batch, heads, maxEnc, maxEnc }));
+            var flatBias = _engine.Reshape(combined, new[] { batch * heads, maxEnc, maxEnc });
+            foreach (var block in Encoder) h = block.ForwardBatched(h, flatBias, null, null, encTrain, random);
+            return Drop(EncoderFinalNorm.Forward(h), encTrain, random);
+        }
+
+        Tensor<T> memory;
+        if (freezeEncoder)
+        {
+            using (new NoGradScope<T>()) memory = EncodeBatched(encTrain: false);
+        }
+        else
+        {
+            memory = EncodeBatched(encTrain: training);
+        }
+
+        var decoderBias = DecoderBias ?? throw new InvalidOperationException("This T5 has no decoder.");
+        var decoderNorm = DecoderFinalNorm ?? throw new InvalidOperationException("This T5 has no decoder.");
+        var decIds = TensorFromDoubles(decIdsData, new[] { batch, maxDec });
+        var decH = Drop(Shared.Forward(decIds), training, random);
+        var decPosBias = PositionBias(decoderBias, maxDec, maxDec, bidirectional: false, causal: true);
+        var selfBias = _engine.Reshape(
+            _engine.TensorBroadcastTo(_engine.Reshape(decPosBias, new[] { 1, heads, maxDec, maxDec }), new[] { batch, heads, maxDec, maxDec }),
+            new[] { batch * heads, maxDec, maxDec });
+        var crossBias = _engine.Reshape(
+            _engine.TensorBroadcastTo(keyMask4D, new[] { batch, heads, maxDec, maxEnc }),
+            new[] { batch * heads, maxDec, maxEnc });
+        foreach (var block in Decoder) decH = block.ForwardBatched(decH, selfBias, memory, crossBias, training, random);
+        decH = Drop(decoderNorm.Forward(decH), training, random);
+
+        var logits = LanguageModelHead is not null
+            ? LanguageModelHead.Forward(decH)
+            : Shared.Logits(_engine.TensorMultiplyScalar(decH, NumOps.FromDouble(1.0 / Math.Sqrt(Configuration.ModelDim))));
+        var logProbabilities = _engine.TensorLogSoftmax(logits, axis: -1);
+        var target = TensorFromDoubles(targetData, new[] { batch, maxDec, vocabulary });
+        return _engine.ReduceSum(_engine.TensorMultiply(logProbabilities, target), new[] { 0, 1, 2 }, keepDims: false);
     }
 
     /// <summary>

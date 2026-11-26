@@ -1110,12 +1110,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     $"Expected {featureCount} but found {featuresMatrix.Columns}.");
             }
 
-            for (int i = 0; i < sampleCount; i++)
-            {
-                aggregatedMatrix.SetRow(row, featuresMatrix.GetRow(i));
-                aggregatedVector[row] = labelsVector[i];
-                row++;
-            }
+            // Row-major blocks: the client's rows land contiguously at the current offset.
+            featuresMatrix.AsSpan().Slice(0, sampleCount * featureCount)
+                .CopyTo(aggregatedMatrix.AsWritableSpan().Slice(row * featureCount));
+            labelsVector.AsSpan().Slice(0, sampleCount).CopyTo(aggregatedVector.AsWritableSpan().Slice(row));
+            row += sampleCount;
         }
 
         if (row != totalSamples)
@@ -1177,14 +1176,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
 
             var xClientMatrix = new Matrix<T>(sampleCount, xMatrix.Columns);
-            var yClientVector = new Vector<T>(sampleCount);
-
-            for (int i = 0; i < sampleCount; i++)
-            {
-                int sourceRow = startRow + i;
-                xClientMatrix.SetRow(i, xMatrix.GetRow(sourceRow));
-                yClientVector[i] = yVector[sourceRow];
-            }
+            xMatrix.AsSpan().Slice(startRow * xMatrix.Columns, sampleCount * xMatrix.Columns)
+                .CopyTo(xClientMatrix.AsWritableSpan());
+            var yClientVector = yVector.GetSubVector(startRow, sampleCount);
 
             var xClient = ConvertMatrixToInputType(xClientMatrix);
             var yClient = ConvertVectorToOutputType(yClientVector);
@@ -1246,11 +1240,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             rows.Sort();
 
             var xClientMatrix = xMatrix.GetRows(rows);
-            var yClientVector = new Vector<T>(rows.Count);
-            for (int i = 0; i < rows.Count; i++)
-            {
-                yClientVector[i] = yVector[rows[i]];
-            }
+            var yClientVector = AiDotNetEngine.Current.TensorGather(
+                yVector.AsTensor(), Tensor<int>.FromVector(Vector<int>.FromArray(rows.ToArray())), 0).ToVector();
 
             var xClient = ConvertMatrixToInputType(xClientMatrix);
             var yClient = ConvertVectorToOutputType(yClientVector);
@@ -1952,5 +1943,28 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     {
         if (AiDotNetEngine.Current.GetType() == typeof(CpuEngine)) return;
         AiDotNetEngine.ResetToCpu();
+    }
+
+    /// <summary>
+    /// The first index whose value is neither 0 nor 1, or -1 when every value is a 0/1 indicator.
+    /// </summary>
+    private static int FirstNonBinaryIndex(Vector<int> values)
+    {
+        if (values.Length == 0)
+        {
+            return -1;
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var x = values.AsTensor().Cast<T>();
+        var isBinary = engine.TensorAdd(engine.TensorEquals(x, numOps.Zero), engine.TensorEquals(x, numOps.One));
+        var nonBinary = engine.TensorAddScalar(engine.TensorNegate(isBinary), numOps.One);
+        if (!numOps.GreaterThan(engine.TensorMaxValue(nonBinary), numOps.Zero))
+        {
+            return -1;
+        }
+
+        return NasSamplingHelper.ArgMaxRows(nonBinary.Reshape(new[] { 1, values.Length }), out _)[0];
     }
 }

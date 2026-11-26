@@ -88,34 +88,14 @@ public class UnifiedDistillationSampling<T>
         Vector<T> pretrainedScore, Vector<T>? particleScore,
         Vector<T> addedNoise, double timestepWeight)
     {
-        var gradient = new Vector<T>(pretrainedScore.Length);
-        var w = NumOps.FromDouble(timestepWeight);
-
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            var grad = NumOps.Zero;
-
-            // Pretrained score component
-            grad = NumOps.Add(grad, NumOps.Multiply(
-                NumOps.FromDouble(_pretrainedWeight), pretrainedScore[i]));
-
-            // Particle score component (if available)
-            if (particleScore != null && i < particleScore.Length)
-            {
-                grad = NumOps.Subtract(grad, NumOps.Multiply(
-                    NumOps.FromDouble(_particleWeight), particleScore[i]));
-            }
-
-            // Noise baseline component
-            if (i < addedNoise.Length)
-            {
-                grad = NumOps.Subtract(grad, NumOps.Multiply(
-                    NumOps.FromDouble(_noiseWeight), addedNoise[i]));
-            }
-
-            gradient[i] = NumOps.Multiply(w, grad);
-        }
-
-        return gradient;
+        // w(t) * (pretrained_weight * eps_pretrained - particle_weight * eps_particle - noise_weight * eps),
+        // the particle score and noise zero-padded to the pretrained length
+        var engine = AiDotNetEngine.Current;
+        int length = pretrainedScore.Length;
+        var grad = engine.Multiply(pretrainedScore, NumOps.FromDouble(_pretrainedWeight));
+        if (particleScore != null)
+            grad = engine.Subtract(grad, engine.Multiply(DiffusionVectorOps.Fit(particleScore, length), NumOps.FromDouble(_particleWeight)));
+        grad = engine.Subtract(grad, engine.Multiply(DiffusionVectorOps.Fit(addedNoise, length), NumOps.FromDouble(_noiseWeight)));
+        return engine.Multiply(grad, NumOps.FromDouble(timestepWeight));
     }
 }

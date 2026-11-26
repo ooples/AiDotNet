@@ -48,7 +48,10 @@ internal sealed partial class ChannelLayerNormLayer<T> : LayerBase<T>
         var mean = Engine.ReduceMean(input, new[] { 1 }, keepDims: true);
         var centred = Engine.TensorSubtract(input, Engine.TensorTile(mean, new[] { 1, _channels, 1 }));
         var variance = Engine.ReduceMean(Engine.TensorMultiply(centred, centred), new[] { 1 }, keepDims: true);
-        var clamped = Engine.TensorMax(variance, NumOps.FromDouble(_epsilon));
+        // max(variance, ε) as ReLU(variance − ε) + ε: a recorded op whose shape a closure-objective probe derives itself.
+        // The scalar TensorMax runs eagerly while a plan is traced and a later step's probe can only look its shape up
+        // by position, so a step whose objective changed structure before it aborted instead of tracing a new plan.
+        var clamped = Engine.TensorAddScalar(Engine.ReLU(Engine.TensorAddScalar(variance, NumOps.FromDouble(-_epsilon))), NumOps.FromDouble(_epsilon));
         var inverse = Engine.TensorPow(clamped, NumOps.FromDouble(-0.5));
         var gamma = Engine.TensorTile(Engine.Reshape(_gamma, new[] { 1, _channels, 1 }), new[] { batch, 1, time });
         return Engine.TensorMultiply(Engine.TensorMultiply(centred, Engine.TensorTile(inverse, new[] { 1, _channels, 1 })), gamma);
@@ -104,6 +107,75 @@ internal static class TorchParameters
         engine.InvalidatePersistentTensor(b);
     }
 
+    /// <summary>
+    /// Initializes a dense layer from generators: <paramref name="weight"/> is drawn in <c>weight [out, in]</c> order and
+    /// then <paramref name="bias"/> for <c>bias [out]</c>, the order the array overload's caller filled its arrays in.
+    /// The values go straight into the layer's <c>[in, out]</c> tensor.
+    /// </summary>
+    /// <remarks>
+    /// Filling whole arrays first and copying them in allocated 8 bytes of garbage per parameter. WhisperSpeech's T2S and
+    /// S2A models (0.5B parameters together) each allocated about four times their float weights while being built.
+    /// </remarks>
+    public static void Linear<T>(IEngine engine, DenseLayer<T> layer, int inputs, int outputs, Func<double> weight, Func<double> bias)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            layer.Forward(new Tensor<T>(new[] { 1, inputs }));
+        var w = layer.GetWeights();                                                                       // [in, out]
+        if (w.Length != (long)inputs * outputs)
+            throw new ArgumentException($"The layer holds {w.Length} weights, not [{inputs}, {outputs}].", nameof(layer));
+        var span = w.AsWritableSpan();
+        for (int o = 0; o < outputs; o++)
+            for (int i = 0; i < inputs; i++) Store(span, i * outputs + o, weight(), ops);
+        w.IncrementVersion();
+        engine.InvalidatePersistentTensor(w);
+        var b = layer.GetBiases();
+        var biasSpan = b.AsWritableSpan();
+        for (int o = 0; o < outputs; o++) Store(biasSpan, o, bias(), ops);
+        b.IncrementVersion();
+        engine.InvalidatePersistentTensor(b);
+    }
+
+    // A float or double destination is written directly; other numeric types go through their operations.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    private static void Store<T>(Span<T> span, int index, double value, INumericOperations<T> ops)
+    {
+        if (typeof(T) == typeof(float))
+        {
+            float single = (float)value;
+            span[index] = System.Runtime.CompilerServices.Unsafe.As<float, T>(ref single);
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            span[index] = System.Runtime.CompilerServices.Unsafe.As<double, T>(ref value);
+        }
+        else
+        {
+            span[index] = ops.FromDouble(value);
+        }
+    }
+
+    /// <summary>Initializes a bias-free linear layer from a generator, drawn in <c>weight [out, in]</c> order and written
+    /// straight into its <c>[in, out]</c> tensor.</summary>
+    public static void Linear<T>(BiasFreeLinearLayer<T> layer, int inputs, int outputs, Func<double> weight)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var weights = layer.Weights;
+        if (weights.Length != (long)inputs * outputs || weights.Lifetime == WeightLifetime.Streaming)
+        {
+            // No storage to write into: the array form's SetParameters route, in the same draw order.
+            var values = new double[inputs * outputs];
+            for (int k = 0; k < values.Length; k++) values[k] = weight();
+            Linear(layer, inputs, outputs, values);
+            return;
+        }
+        var span = weights.AsWritableSpan();
+        for (int o = 0; o < outputs; o++)
+            for (int i = 0; i < inputs; i++) Store(span, i * outputs + o, weight(), ops);
+        weights.IncrementVersion();
+        AiDotNet.Tensors.Engines.AiDotNetEngine.Current.InvalidatePersistentTensor(weights);
+    }
+
     /// <summary>Loads <c>weight [out, in]</c> into a bias-free linear layer.</summary>
     public static void Linear<T>(BiasFreeLinearLayer<T> layer, int inputs, int outputs, double[] weight)
     {
@@ -117,6 +189,7 @@ internal static class TorchParameters
             var span = weights.AsWritableSpan();
             for (int o = 0; o < outputs; o++)
                 for (int i = 0; i < inputs; i++) span[i * outputs + o] = ops.FromDouble(weight[o * inputs + i]);
+            weights.IncrementVersion();
             AiDotNet.Tensors.Engines.AiDotNetEngine.Current.InvalidatePersistentTensor(weights);
             return;
         }
@@ -157,7 +230,11 @@ internal static class TorchParameters
         source.CopyTransposedTo(weightName, weightShape ?? new[] { outputs, inputs }, outputs, inputs, w);
         engine.InvalidatePersistentTensor(w);
         var b = layer.GetBiases();
-        if (biasName is null) b.AsWritableSpan().Clear();
+        if (biasName is null)
+        {
+            b.AsWritableSpan().Clear();
+            b.IncrementVersion();
+        }
         else source.CopyTo(biasName, new[] { outputs }, b);
         engine.InvalidatePersistentTensor(b);
     }
@@ -224,7 +301,11 @@ internal static class TorchParameters
     /// <summary>Publishes weights written into <see cref="WeightsToWrite{T}"/>'s tensor.</summary>
     public static void Commit<T>(BiasFreeLinearLayer<T> layer, Tensor<T> written)
     {
-        if (ReferenceEquals(written, layer.Weights)) AiDotNet.Tensors.Engines.AiDotNetEngine.Current.InvalidatePersistentTensor(written);
+        if (ReferenceEquals(written, layer.Weights))
+        {
+            written.IncrementVersion();
+            AiDotNet.Tensors.Engines.AiDotNetEngine.Current.InvalidatePersistentTensor(written);
+        }
         else layer.SetParameters(new Vector<T>(written.ToArray()));
     }
 

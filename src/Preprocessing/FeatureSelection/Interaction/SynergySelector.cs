@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Interaction;
 
@@ -25,14 +26,14 @@ public class SynergySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _synergyScores;
+    private Vector<T>? _synergyScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
-    public double[]? SynergyScores => _synergyScores;
+    public Vector<T>? SynergyScores => _synergyScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -67,156 +68,59 @@ public class SynergySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        if (n == 0)
+            throw new InvalidOperationException("Sequence contains no elements");
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
 
         // Discretize all features and target
-        var discretizedX = new int[n, p];
-        for (int j = 0; j < p; j++)
+        var discretizedX = FeatureSelectionInformationOps.EqualWidthBinsExactRange(Tensor<T>.FromMatrix(data), _nBins);
+        var discretizedY = FeatureSelectionInformationOps.EqualWidthBinsExactRange(
+            engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }), _nBins);
+
+        // Compute individual mutual information I(X_j;Y) in bits
+        var individualMI = engine.TensorMax(FeatureSelectionInformationOps.ToBits(FeatureSelectionInformationOps.MutualInformation(
+            FeatureSelectionInformationOps.JointCounts<T>(discretizedX, _nBins, discretizedY, _nBins), n)), NumOps.Zero);
+
+        // For each feature, compute maximum synergy with one of the first (at most 20) features
+        int partners = Math.Min(p, 20); // Limit comparisons for efficiency
+        var scores = individualMI;
+        if (partners > 0)
         {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-            Discretize(col, discretizedX, j, n);
-        }
-
-        var discretizedY = new int[n];
-        DiscretizeTarget(y, discretizedY, n);
-
-        _synergyScores = new double[p];
-
-        // Compute individual mutual information I(X_j;Y)
-        var individualMI = new double[p];
-        for (int j = 0; j < p; j++)
-            individualMI[j] = ComputeMI(discretizedX, j, discretizedY, n);
-
-        // For each feature, compute maximum synergy with another feature
-        for (int j1 = 0; j1 < p; j1++)
-        {
-            double maxSynergy = 0;
-
-            for (int j2 = 0; j2 < Math.Min(p, 20); j2++) // Limit comparisons for efficiency
+            var partnerBins = engine.TensorSlice(discretizedX, new[] { 0, 0 }, new[] { n, partners });
+            var partnerMI = engine.Reshape(engine.TensorSlice(individualMI, new[] { 0 }, new[] { partners }), new[] { 1, partners });
+            var synergyRows = new Tensor<T>[p];
+            for (int j1 = 0; j1 < p; j1++)
             {
-                if (j1 == j2) continue;
-
-                // Compute joint MI: I(X_j1, X_j2; Y)
-                double jointMI = ComputeJointMI(discretizedX, j1, j2, discretizedY, n);
+                // Joint MI I(X_j1, X_j2; Y), joint bin = bin_j1 * nBins + bin_j2
+                var pairs = FeatureSelectionInformationOps.Combine(
+                    engine.TensorSlice(discretizedX, new[] { 0, j1 }, new[] { n, 1 }), partnerBins, _nBins);
+                var jointMI = engine.TensorMax(FeatureSelectionInformationOps.ToBits(FeatureSelectionInformationOps.MutualInformation(
+                    FeatureSelectionInformationOps.JointCounts<T>(pairs, _nBins * _nBins, discretizedY, _nBins), n)), NumOps.Zero);
 
                 // Synergy = I(X_j1, X_j2; Y) - max(I(X_j1;Y), I(X_j2;Y))
-                double synergy = jointMI - Math.Max(individualMI[j1], individualMI[j2]);
-                maxSynergy = Math.Max(maxSynergy, synergy);
+                var own = engine.TensorBroadcastTo(
+                    engine.Reshape(engine.TensorSlice(individualMI, new[] { j1 }, new[] { 1 }), new[] { 1, 1 }), new[] { 1, partners });
+                synergyRows[j1] = engine.TensorSubtract(engine.Reshape(jointMI, new[] { 1, partners }), engine.TensorMax(partnerMI, own));
             }
 
-            _synergyScores[j1] = maxSynergy + individualMI[j1]; // Combine synergy with individual MI
+            // max(0, best synergy) over the partners other than the feature itself
+            var synergy = engine.TensorMax(engine.TensorConcatenate(synergyRows, 0), NumOps.Zero);
+            var notSelf = PreprocessingTensorOps.OneMinus(engine.TensorSlice(engine.TensorEye<T>(p), new[] { 0, 0 }, new[] { p, partners }));
+            var maxSynergy = engine.ReduceMax(engine.TensorMultiply(synergy, notSelf), new[] { 1 }, false);
+            scores = engine.TensorAdd(maxSynergy, individualMI); // Combine synergy with individual MI
         }
 
+        _synergyScores = scores.ToVector();
+
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _synergyScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
 
-    private void Discretize(double[] values, int[,] result, int j, int n)
-    {
-        double min = values.Min();
-        double max = values.Max();
-        double range = max - min;
-
-        for (int i = 0; i < n; i++)
-            result[i, j] = range > 1e-10
-                ? Math.Min(_nBins - 1, (int)((values[i] - min) / range * _nBins))
-                : 0;
-    }
-
-    private void DiscretizeTarget(double[] values, int[] result, int n)
-    {
-        double min = values.Min();
-        double max = values.Max();
-        double range = max - min;
-
-        for (int i = 0; i < n; i++)
-            result[i] = range > 1e-10
-                ? Math.Min(_nBins - 1, (int)((values[i] - min) / range * _nBins))
-                : 0;
-    }
-
-    private double ComputeMI(int[,] X, int j, int[] Y, int n)
-    {
-        var joint = new int[_nBins, _nBins];
-        var xCounts = new int[_nBins];
-        var yCounts = new int[_nBins];
-
-        for (int i = 0; i < n; i++)
-        {
-            joint[X[i, j], Y[i]]++;
-            xCounts[X[i, j]]++;
-            yCounts[Y[i]]++;
-        }
-
-        double mi = 0;
-        for (int xb = 0; xb < _nBins; xb++)
-        {
-            for (int yb = 0; yb < _nBins; yb++)
-            {
-                if (joint[xb, yb] > 0 && xCounts[xb] > 0 && yCounts[yb] > 0)
-                {
-                    double pxy = (double)joint[xb, yb] / n;
-                    double px = (double)xCounts[xb] / n;
-                    double py = (double)yCounts[yb] / n;
-                    mi += pxy * Math.Log(pxy / (px * py)) / Math.Log(2);
-                }
-            }
-        }
-
-        return Math.Max(0, mi);
-    }
-
-    private double ComputeJointMI(int[,] X, int j1, int j2, int[] Y, int n)
-    {
-        // Joint bin = j1 * nBins + j2
-        int jointBins = _nBins * _nBins;
-        var joint = new int[jointBins, _nBins];
-        var xCounts = new int[jointBins];
-        var yCounts = new int[_nBins];
-
-        for (int i = 0; i < n; i++)
-        {
-            int jointBin = X[i, j1] * _nBins + X[i, j2];
-            joint[jointBin, Y[i]]++;
-            xCounts[jointBin]++;
-            yCounts[Y[i]]++;
-        }
-
-        double mi = 0;
-        for (int xb = 0; xb < jointBins; xb++)
-        {
-            for (int yb = 0; yb < _nBins; yb++)
-            {
-                if (joint[xb, yb] > 0 && xCounts[xb] > 0 && yCounts[yb] > 0)
-                {
-                    double pxy = (double)joint[xb, yb] / n;
-                    double px = (double)xCounts[xb] / n;
-                    double py = (double)yCounts[yb] / n;
-                    mi += pxy * Math.Log(pxy / (px * py)) / Math.Log(2);
-                }
-            }
-        }
-
-        return Math.Max(0, mi);
-    }
-
     /// <inheritdoc />
+
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -229,15 +133,7 @@ public class SynergySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         if (_selectedIndices is null)
             throw new InvalidOperationException("SynergySelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

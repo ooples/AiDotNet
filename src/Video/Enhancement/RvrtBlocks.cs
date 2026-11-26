@@ -276,11 +276,18 @@ internal sealed class RvrtSwinLayer<T>
     {
         if (!training || _dropPath <= 0 || _random is null) return branch;
         var ops = MathHelper.GetNumericOperations<T>();
-        var samples = new Tensor<T>[branch.Shape[0]];
-        for (int i = 0; i < samples.Length; i++)
-            samples[i] = engine.TensorMultiplyScalar(engine.TensorNarrow(branch, 0, i, 1),
-                _random.NextDouble() < 1 - _dropPath ? ops.FromDouble(1 / (1 - _dropPath)) : ops.Zero);
-        return samples.Length == 1 ? samples[0] : engine.TensorConcatenate(samples, 0);
+        // The per-sample factors are a per-step draw, so a compiled training plan redraws them on every replay.
+        var random = _random;
+        double drop = _dropPath;
+        var shape = new int[branch.Rank];
+        shape[0] = branch.Shape[0];
+        for (int i = 1; i < shape.Length; i++) shape[i] = 1;
+        var keep = AiDotNet.Training.CompiledStepRandom<T>.Draw(shape, m =>
+        {
+            var span = m.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++) span[i] = random.NextDouble() < 1 - drop ? ops.FromDouble(1 / (1 - drop)) : ops.Zero;
+        });
+        return engine.TensorMultiply(branch, engine.TensorBroadcastTo(keep, branch.Shape.ToArray()));
     }
 
     /// <param name="x">[B, D, H, W, C].</param>

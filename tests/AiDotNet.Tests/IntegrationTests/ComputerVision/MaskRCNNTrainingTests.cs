@@ -188,4 +188,75 @@ public class MaskRCNNTrainingTests
         Assert.True(yolo.Predict(image).Length > 0);
         Assert.True(yolo.ParameterCount > 0);
     }
+
+    [Fact(Timeout = 300000)]
+    public async Task RandomSeed_ProducesBitIdenticalWeightsAcrossInstanceSegmentersAfterAmbientDraws()
+    {
+        await Task.Yield();
+        var firstMask = new MaskRCNN<double>(Options()).GetParameters().ToArray();
+        var firstSolo = new SOLOv2<double>(new InstanceSegmentationOptions<double>
+        {
+            Architecture = InstanceSegmentationArchitecture.SOLOv2,
+            NumClasses = 2,
+            InputSize = new[] { ImageSize, ImageSize },
+            RandomSeed = 19,
+        }).GetParameters().ToArray();
+        var firstYolo = new YOLOSeg<double>(new InstanceSegmentationOptions<double>
+        {
+            Architecture = InstanceSegmentationArchitecture.YOLOSeg,
+            NumClasses = 2,
+            InputSize = new[] { ImageSize, ImageSize },
+            RandomSeed = 23,
+        }).GetParameters().ToArray();
+
+        // Perturb the process-shared ambient RNG heavily before constructing the second cohort.
+        for (int i = 0; i < 10000; i++)
+        {
+            _ = RandomHelper.ThreadSafeRandom.NextDouble();
+        }
+
+        var secondMask = new MaskRCNN<double>(Options()).GetParameters().ToArray();
+        var secondSolo = new SOLOv2<double>(new InstanceSegmentationOptions<double>
+        {
+            Architecture = InstanceSegmentationArchitecture.SOLOv2,
+            NumClasses = 2,
+            InputSize = new[] { ImageSize, ImageSize },
+            RandomSeed = 19,
+        }).GetParameters().ToArray();
+        var secondYolo = new YOLOSeg<double>(new InstanceSegmentationOptions<double>
+        {
+            Architecture = InstanceSegmentationArchitecture.YOLOSeg,
+            NumClasses = 2,
+            InputSize = new[] { ImageSize, ImageSize },
+            RandomSeed = 23,
+        }).GetParameters().ToArray();
+
+        Assert.Equal(firstMask, secondMask);
+        Assert.Equal(firstSolo, secondSolo);
+        Assert.Equal(firstYolo, secondYolo);
+    }
+
+    [Theory(Timeout = 900000)]
+    [InlineData(1)]
+    [InlineData(13)]
+    [InlineData(42)]
+    public async Task TrainInstances_LowersTheLossAcrossSeeds(int seed)
+    {
+        await Task.Yield();
+        var options = Options();
+        options.RandomSeed = seed;
+        var model = new MaskRCNN<double>(options);
+        var image = Image();
+        var targets = Square();
+        var losses = new List<double>();
+        for (int step = 0; step < 8; step++)
+        {
+            model.TrainInstances(image, targets);
+            losses.Add(model.GetLastLoss());
+        }
+
+        Assert.All(losses, l => Assert.True(!double.IsNaN(l) && !double.IsInfinity(l), $"non-finite loss {l} on seed {seed}"));
+        Assert.True(losses.Skip(5).Average() < losses.Take(3).Average(),
+            $"seed {seed} loss did not fall: {string.Join(", ", losses.Select(l => l.ToString("G4")))}");
+    }
 }

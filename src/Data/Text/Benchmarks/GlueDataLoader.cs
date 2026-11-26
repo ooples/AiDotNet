@@ -98,7 +98,7 @@ public class GlueDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
         var vocabulary = TextLoaderHelper.BuildVocabulary(texts, totalSamples, _options.VocabularySize);
 
         int seqLen = _options.MaxSequenceLength;
-        var featuresData = new T[totalSamples * seqLen];
+        var featuresData = new int[totalSamples * seqLen];
         var labelsData = new T[totalSamples * _numClasses];
 
         for (int i = 0; i < totalSamples; i++)
@@ -106,8 +106,7 @@ public class GlueDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
             cancellationToken.ThrowIfCancellationRequested();
             int[] tokenIds = TextLoaderHelper.TokenizeAndEncode(texts[i], vocabulary, seqLen);
             int featureOffset = i * seqLen;
-            for (int j = 0; j < seqLen; j++)
-                featuresData[featureOffset + j] = NumOps.FromDouble(tokenIds[j]);
+            Array.Copy(tokenIds, 0, featuresData, featureOffset, seqLen);
 
             if (isRegression)
             {
@@ -123,7 +122,7 @@ public class GlueDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
             }
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, seqLen });
+        LoadedFeatures = new Tensor<int>(featuresData, new[] { totalSamples, seqLen }).Cast<T>();
         LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, _numClasses });
         InitializeIndices(totalSamples);
     }

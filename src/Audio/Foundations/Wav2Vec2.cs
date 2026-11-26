@@ -8,6 +8,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines.Compilation;
 
 namespace AiDotNet.Audio.Foundations;
 
@@ -70,6 +71,10 @@ public partial class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMo
     private bool _useNativeMode;
     private bool _disposed;
     private Wav2Vec2Network<T>? _network;
+
+    /// <inheritdoc />
+    /// <remarks>True when the encoder's LayerDrop is positive: a skipped layer is not stepped that step.</remarks>
+    private protected override bool TrainingForwardSkipsLayersPerStep => _network is not null && _network.Configuration.LayerDrop > 0;
     private Wav2Vec2Pretraining<T>? _pretraining;
     private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
 
@@ -268,18 +273,35 @@ public partial class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMo
         if (_network is null || _pretraining is null) throw new InvalidOperationException("The native network is not initialized.");
         var network = _network;
         var pretraining = _pretraining;
-        TrainWithCustomLoss(input, _ =>
+        var waveformShape = input.Rank == 1 ? new[] { 1, input.Length }
+            : input.Rank == 2 ? input.Shape.ToArray() : new[] { input.Shape[0], input.Length / input.Shape[0] };
+        int batch = waveformShape[0], frames = network.Frames(waveformShape[1]);
+        var stepMask = pretraining.Configuration.MaskProbability > 0
+            ? network.DrawPretrainingMask(batch, frames, pretraining.Configuration.MaskProbability, _random)
+            : new bool[batch, frames];
+        var stepNegatives = pretraining.SampleNegatives(stepMask, _random);
+        using var outputs = AiDotNet.Tensors.Engines.Autodiff.RetainedOutputCapture<T>.Begin();
+        TrainWithCustomObjective(input, expected, (stepInput, _) =>
         {
-            var output = network.Forward(input, training: true, _random, maskProbability: pretraining.Configuration.MaskProbability,
+            var output = network.Forward(stepInput, training: true, _random, mask: stepMask,
                 featureGradientScale: pretraining.Configuration.FeatureGradientScale);
-            // A zero mask probability disables masking in the encoder. The objective still
-            // needs an explicit empty mask so it has zero masked targets rather than null.
-            output = output.Mask is null ? output with { Mask = new bool[output.Hidden.Shape[0], output.Hidden.Shape[1]] } : output;
-            var negatives = pretraining.SampleNegatives(output.Mask!, _random);
-            var losses = pretraining.Loss(output, negatives, training: true, _random);
-            LastPretrainingLosses = (NumOps.ToDouble(losses.Contrastive[0]), NumOps.ToDouble(losses.Diversity[0]), NumOps.ToDouble(losses.FeaturePenalty[0]));
+            var losses = pretraining.Loss(output, stepNegatives, training: true, _random);
+            if (AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>())
+            {
+                AiDotNet.Tensors.Engines.Autodiff.GradientRecording.RetainOutput(
+                    "wav2vec2-contrastive", Engine.TensorAddScalar(Engine.StopGradient(losses.Contrastive), NumOps.Zero));
+                AiDotNet.Tensors.Engines.Autodiff.GradientRecording.RetainOutput(
+                    "wav2vec2-diversity", Engine.TensorAddScalar(Engine.StopGradient(losses.Diversity), NumOps.Zero));
+                AiDotNet.Tensors.Engines.Autodiff.GradientRecording.RetainOutput(
+                    "wav2vec2-feature-penalty", Engine.TensorAddScalar(Engine.StopGradient(losses.FeaturePenalty), NumOps.Zero));
+            }
             return losses.Total;
         }, _optimizer);
+        outputs.Complete();
+        LastPretrainingLosses = (
+            NumOps.ToDouble(outputs.Get("wav2vec2-contrastive")[0]),
+            NumOps.ToDouble(outputs.Get("wav2vec2-diversity")[0]),
+            NumOps.ToDouble(outputs.Get("wav2vec2-feature-penalty")[0]));
         pretraining.AfterUpdate();
         return true;
     }
@@ -299,7 +321,7 @@ public partial class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMo
         var waveform = input.Rank == 1 ? Engine.Reshape(input, new[] { 1, input.Length })
             : input.Rank == 2 ? input : Engine.Reshape(input, new[] { input.Shape[0], input.Length / input.Shape[0] });
         var mask = _pretraining.Configuration.MaskProbability > 0
-            ? _network.DrawMask(waveform.Shape[0], _network.Frames(waveform.Shape[1]), _pretraining.Configuration.MaskProbability, random)
+            ? _network.DrawPretrainingMask(waveform.Shape[0], _network.Frames(waveform.Shape[1]), _pretraining.Configuration.MaskProbability, random)
             : new bool[waveform.Shape[0], _network.Frames(waveform.Shape[1])];
         var output = _network.Forward(waveform, training: false, random, mask: mask);
         return _pretraining.Loss(output, _pretraining.SampleNegatives(mask, random), training: false, random).Total[0];

@@ -130,7 +130,9 @@ public class Wav2Vec2Options : ModelOptions
         AttentionDropout = DropoutRate,
         ActivationDropout = 0.0,
         LayerDrop = LayerDrop,
-        MaskTimeProbability = MaskProbability,
+        // The network's time mask takes fairseq's mask_prob; MaskProbability is the paper's span-start rate p, and
+        // mask_prob = p·M (Baevski et al. 2020 section 4.2's p = 0.065 is fairseq's mask_prob 0.65).
+        MaskTimeProbability = MaskProbability * MaskLength,
         MaskTimeLength = MaskLength,
     };
 

@@ -62,8 +62,7 @@ internal sealed class TortoiseDiffusionSchedule<T>
         var noisy = Noisy(clean, noise, step);
         var epsilon = _engine.TensorNarrow(prediction, 1, 0, _channels);
         var variance = _engine.TensorNarrow(prediction, 1, _channels, _channels);
-        var frozen = _engine.TensorConcatenate(new[] {
-            new Tensor<T>(epsilon.Shape.ToArray(), new Vector<T>(epsilon.ToArray())), variance }, 1);
+        var frozen = _engine.TensorConcatenate(new[] { _engine.StopGradient(epsilon), variance }, 1);
         int previous = step - 1;
         double clipped = step == 0 ? PosteriorVariance(1, 0) : PosteriorVariance(step, previous);
         var stats = Statistics(noisy, frozen, step, previous, clipped, clipClean: false);

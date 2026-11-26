@@ -14,12 +14,24 @@
       - the event is not a pull request or a push (schedules, dispatches and the coverage run
         feed the nightly and the map, which need everything);
       - a post-merge push is re-running a delta select-shards computed from the pull request run;
+      - a stacked pull request selected with master's map (MAP_LINEAGE_REF): that selection covers
+        everything the stack adds to master, which the diff against the base branch cannot see;
       - TypeImpact cannot map every changed file (a non-C# file, a generator input, a source with
-        no compiled type) or fails in any way.
+        no compiled type) or fails in any way. Paths select-shards classifies as NonRuntime or
+        BuildOnly (documentation, analyzer and pack baselines, benchmark projects, reference-data
+        scripts) are left out of its input first, so they never cause this; a non-C# file
+        select-shards itself escalates on (a project, props or data file) still does, because
+        narrowing would undo that escalation.
     The nightly full matrix on master is the net for what static reachability cannot see
     (reflection over a type name).
 
     Writes matrix, ledger_matrix, skipped and impact_mode to GITHUB_OUTPUT.
+
+    Layer 2 (ShardPacking.ps1, repository variable TEST_IMPACT_REPACK). With `on`, a pull request or merge
+    queue run's slices - narrowed or passed through - are packed into time-balanced jobs and the matrix
+    output holds the packed jobs; ledger_matrix and skipped still list shards. With `report` the packing
+    is computed and written to -PackPlanFile and the matrix is untouched. Unset or `off`, none of it runs.
+    Any failure while packing leaves the matrix one job per shard.
 #>
 [CmdletBinding()]
 param(
@@ -36,10 +48,77 @@ param(
     # until both together fit under this. 400,000 characters is ~800 KB, which leaves room for the job's
     # other outputs. The former 800,000 counted characters as bytes: #2272's plan passed it and still
     # failed the job with "Job outputs exceed 1,048,576 bytes".
-    [int] $MaxMatrixCharacters = 400000
+    [int] $MaxMatrixCharacters = 400000,
+    # Layer 2 (ShardPacking.ps1): what repacking does, or would do, to this run's matrix. Written only when
+    # TEST_IMPACT_REPACK is report or on and the run is in scope; the Build job uploads it as shard-pack-plan.
+    [string] $PackPlanFile = 'shard-pack-plan.json'
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+# select-shards' chosen matrix. CI passes it as a file (SELECTED_MATRIX_PATH): a large selection outgrows Linux's
+# 128 KiB limit on one environment string. SELECTED_MATRIX still works for callers that pass it inline. An unreadable
+# file reads as empty, which falls through to the same passthrough as an empty or unparsable matrix.
+$selectedMatrixJson = if ($env:SELECTED_MATRIX_PATH) {
+    try { Get-Content -LiteralPath $env:SELECTED_MATRIX_PATH -Raw -ErrorAction Stop } catch { '' }
+} else { $env:SELECTED_MATRIX }
+
+function Get-RepackedMatrix {
+    <#
+        Layer 2: the matrix with its slices packed into time-balanced jobs, as JSON, or $null to leave the matrix one
+        job per shard. $null whenever TEST_IMPACT_REPACK is not 'on' (unset and 'off' compute nothing; 'report'
+        computes the packing and records it), the run is out of scope, nothing would share a job, the packed matrix
+        does not fit a job output beside -OtherOutputCharacters, or anything at all goes wrong.
+    #>
+    param([object[]] $Slices, [hashtable] $PlanShards = @{}, [int] $OtherOutputCharacters = 0)
+    # Unset or off: nothing below runs, not even loading the packing code.
+    if ("$($env:TEST_IMPACT_REPACK)".Trim().ToLowerInvariant() -cnotin @('report', 'on')) { return $null }
+    try {
+        . (Join-Path $PSScriptRoot 'ShardPacking.ps1')
+        $mode = Get-ShardRepackMode $env:TEST_IMPACT_REPACK
+        if ($mode -ceq 'off') { return $null }
+        $scope = Get-ShardRepackScope -EventName $env:GITHUB_EVENT_NAME -CoverageEverywhere $env:COLLECT_COVERAGE_EVERYWHERE
+        if (-not $scope.InScope) { Write-Host "shard repacking: $($scope.Why)"; return $null }
+        if (@($Slices).Count -eq 0) { return $null }
+
+        $tablePath = if ($env:SHARD_TIMING_TABLE) { $env:SHARD_TIMING_TABLE } else { Join-Path $Repository 'shard-timing-table.json' }
+        $weights = Get-ShardPackWeights -ShardScriptPath (Join-Path $Repository '.github/scripts/Invoke-Shard.ps1')
+        $result = New-ShardPackPlan -Slices @($Slices) -Table (Read-ShardTimingTable -Path $tablePath) -PlanShards $PlanShards `
+            -HeavyNames $weights.Heavy -AloneNames $weights.Timing -Mode $mode -EventName ([string] $env:GITHUB_EVENT_NAME)
+        $plan = $result.Plan
+        $json = $null
+        $applied = ''
+        if ($mode -cne 'on') { $applied = 'would run as' }
+        elseif ($plan.packedJobs -eq 0) { $applied = 'run unpacked (no two slices fit one job) as' }
+        else {
+            $candidate = ConvertTo-Json -InputObject @($result.Matrix) -Depth 8 -Compress
+            if (($candidate.Length + $OtherOutputCharacters) -gt $MaxMatrixCharacters) {
+                Write-Host "::warning::the packed matrix ($($candidate.Length) characters) does not fit a job output - one job per shard"
+                $applied = 'run unpacked (the packed matrix does not fit a job output), but would run as'
+            }
+            else {
+                # A packed matrix is trusted only after the packing rules pass their own known-answer checks here,
+                # as narrowing is trusted only after TypeImpact passes its own.
+                & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Test-ShardPacking.ps1') -RulesOnly | Out-Host
+                $rules = $LASTEXITCODE
+                $global:LASTEXITCODE = 0
+                if ($rules -ne 0) { throw 'the packing rules failed their self-test' }
+                $json = $candidate
+                $applied = 'run as'
+            }
+        }
+        $plan['applied'] = [bool] $json
+        ConvertTo-Json -InputObject $plan -Depth 8 | Set-Content -LiteralPath (Join-Path $Repository $PackPlanFile) -Encoding utf8
+        $summary = Get-ShardPackSummary -Plan $plan -Applied $applied
+        if ($env:GITHUB_STEP_SUMMARY) { "`n$summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+        Write-Host "shard repacking ($mode): $($plan.slices) slice(s) $applied $(@($plan.jobs).Count) job(s), $($plan.packedJobs) packed"
+        return $json
+    }
+    catch {
+        Write-Host "::warning::shard repacking unavailable ($($_.Exception.Message)) - one job per shard"
+        return $null
+    }
+}
 
 function Write-Output-Value([string] $Name, [string] $Value) {
     "$Name=$Value" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -71,11 +150,16 @@ function Write-Passthrough([string] $Why) {
     # Publish nothing for the selection itself: every consumer reads `needs.build.outputs.X || needs.select-shards
     # .outputs.X`, so an empty value IS the passthrough. Re-publishing select-shards' matrices here added their full
     # size to this job's outputs, which a large selection pushes past GitHub's 1,048,576-byte (UTF-16) job cap.
-    Write-Output-Value 'matrix' ''
+    $passed = @(try { @($selectedMatrixJson | ConvertFrom-Json) } catch { @() })
+    # The one exception, and only with TEST_IMPACT_REPACK=on: the chosen selection repacked into time-balanced jobs
+    # (Layer 2). It carries the same shards once, so it is the size select-shards' own matrix already was, and
+    # ledger_matrix and skipped still fall back to select-shards. Empty in every other case, as before.
+    $repacked = $null
+    if ($env:REQUIRES_SHARDS -eq 'true' -and $passed.Count -gt 0) { $repacked = Get-RepackedMatrix -Slices $passed }
+    Write-Output-Value 'matrix' $(if ($repacked) { $repacked } else { '' })
     Write-Output-Value 'ledger_matrix' ''
     Write-Output-Value 'skipped' ''
     Write-Output-Value 'impact_mode' 'passthrough'
-    $passed = @(try { @($env:SELECTED_MATRIX | ConvertFrom-Json) } catch { @() })
     Write-Effective 'passthrough' $Why $passed
     "### Test-level selection`n`nNot applied: $Why." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 }
@@ -108,6 +192,13 @@ if ($env:COLLECT_COVERAGE_EVERYWHERE -eq 'true') { Write-Passthrough 'coverage-e
 if ($eventName -notin @('pull_request', 'push')) { Write-Passthrough "event '$eventName' runs the full selection"; return }
 if ($eventName -eq 'push' -and $env:DELTA_MODE -ceq 'Partial') { Write-Passthrough 'post-merge delta re-run'; return }
 if ($env:REQUIRES_SHARDS -ne 'true') { Write-Passthrough 'no test shards were required'; return }
+# A stacked pull request selected with another branch's map (MAP_LINEAGE_REF, Download the shard map): select-shards
+# chose for everything the stack adds to that branch, but the diff below is against this pull request's own base, so
+# TypeImpact would drop the shards only the base branch's changes reach while the rest kept the matrix nonempty.
+if (-not [string]::IsNullOrWhiteSpace($env:MAP_LINEAGE_REF)) {
+    Write-Passthrough "the shard selection used the map of '$($env:MAP_LINEAGE_REF)' for a stacked pull request and covers what the stack adds to it, which a diff against this pull request's base cannot see"
+    return
+}
 
 try {
     # The change is the merge commit against its first parent: for a pull request, refs/pull/N/merge
@@ -124,7 +215,8 @@ try {
     $changeLines = @(& git -c core.quotepath=false diff --no-renames --name-status $parents[1] HEAD)
     if ($LASTEXITCODE -ne 0) { throw 'git diff failed' }
     # A path the shard selector proves cannot affect a test (documentation, an unreferenced tool or test project,
-    # a .github file only GitHub reads, .editorconfig) is not a type-impact input: TypeImpact cannot map a non-C#
+    # a .github file only GitHub reads, .editorconfig, a public API or element-wise baseline, a benchmark source) is
+    # not a type-impact input: TypeImpact cannot map a non-C#
     # file, so one such file used to pass the whole decision through. Classification that fails removes nothing.
     $inert = @(Get-InertChangedPaths -Base $parents[1])
     if ($inert.Count -gt 0) {
@@ -187,7 +279,7 @@ if (-not $plan.resolved) {
 # coverage selection) never runs here, however TypeImpact reaches it.
 try {
     $chosen = [Collections.Generic.HashSet[string]]::new(
-        [string[]] @($env:SELECTED_MATRIX | ConvertFrom-Json | ForEach-Object { [string] $_.name } | Where-Object { $_ }),
+        [string[]] @($selectedMatrixJson | ConvertFrom-Json | ForEach-Object { [string] $_.name } | Where-Object { $_ }),
         [StringComparer]::Ordinal)
 }
 catch { $chosen = $null }
@@ -239,8 +331,15 @@ if ((Measure-Outputs) -gt $MaxMatrixCharacters) { Write-Passthrough 'the narrowe
 $running = [Collections.Generic.HashSet[string]]::new([string[]] @($runnable.Shards.name), [StringComparer]::Ordinal)
 $skipped = @($all | Where-Object { -not $running.Contains([string] $_.name) } | ForEach-Object { $_.name -replace '[\\/:*?"<>|\s-]+', '_' })
 
+# Layer 2: with TEST_IMPACT_REPACK=on the narrowed slices are packed into time-balanced jobs. Everything below still
+# describes shards - ledger_matrix, skipped, the effective file and the summary - because a packed job reports each
+# slice under its own shard name. Unset, 'off' and 'report' leave $json exactly as it is.
+$ledgerJson = ConvertTo-Json -InputObject @($runnable.LedgerShards) -Depth 6 -Compress
+$repacked = Get-RepackedMatrix -Slices $tests -PlanShards $byName -OtherOutputCharacters $ledgerJson.Length
+if ($repacked) { $json = $repacked }
+
 Write-Output-Value 'matrix' $json
-Write-Output-Value 'ledger_matrix' (ConvertTo-Json -InputObject @($runnable.LedgerShards) -Depth 6 -Compress)
+Write-Output-Value 'ledger_matrix' $ledgerJson
 Write-Output-Value 'skipped' (ConvertTo-Json -InputObject @($skipped) -Depth 3 -Compress)
 Write-Output-Value 'impact_mode' 'narrowed'
 Write-Effective 'narrowed' '' $tests

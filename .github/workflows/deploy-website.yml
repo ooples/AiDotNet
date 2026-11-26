@@ -4,10 +4,10 @@ on:
   push:
     branches: [master]
     # NOTE: intentionally NOT triggering on src/** — this workflow runs Supabase migrations and
-    # a Vercel prod deploy, so it must not fire on every library change. The wiki is regenerated
-    # here from the current src at deploy time; a pure-src doc-comment change refreshes the live
-    # wiki on the next website deploy (or via workflow_dispatch).
-    paths: ['website/**', '.github/workflows/deploy-website.yml']
+    # a production deploy to the VPS, so it must not fire on every library change. The wiki is
+    # regenerated here from the current src at deploy time; a pure-src doc-comment change refreshes
+    # the live wiki on the next website deploy (or via workflow_dispatch).
+    paths: ['website/**', 'deploy/website/**', '.github/workflows/deploy-website.yml']
   workflow_dispatch:
 
 permissions:
@@ -161,7 +161,7 @@ jobs:
       - name: Build website
         run: npm run build   # astro build + pagefind index (postbuild)
         env:
-          VERCEL: '1'
+          AIDOTNET_SITE_ROOT: '1'
           # The API reference wiki adds ~10.7K content pages; raise the V8 heap so the
           # static build doesn't OOM on the runner.
           NODE_OPTIONS: '--max-old-space-size=6144'
@@ -169,7 +169,6 @@ jobs:
           # the client-side Supabase client throws "Missing Supabase environment
           # variables" at page load, which in turn means every script that imports
           # src/lib/supabase.ts crashes — sign-in buttons silently become no-ops.
-          # Keep these in lockstep with the Vercel project env vars.
           PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
           PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.PUBLIC_SUPABASE_ANON_KEY }}
           # Stripe Payment Link URLs for /pricing/ Subscribe buttons.
@@ -196,32 +195,36 @@ jobs:
             exit 1
           fi
 
-      - name: Install Vercel CLI
-        run: npm i -g vercel@50.37.3
-
-      - name: Prepare and deploy to Vercel Production
-        working-directory: /tmp
-        run: |
-          mkdir -p vercel-deploy/website/dist
-          cp -r $GITHUB_WORKSPACE/website/dist/* vercel-deploy/website/dist/
-          cat > vercel-deploy/website/package.json << 'PKGJSON'
-          {"scripts":{"build":"echo already built"}}
-          PKGJSON
-          cd vercel-deploy
-          # One compressed archive, not a file-by-file upload: the API reference wiki (~10.7K pages) and its
-          # Pagefind index put ~24.7K files in dist, and Vercel rejects an upload of more than 15,000 files
-          # ("`files` should NOT have more than 15000 items"). Every production deploy failed on that since 2026-06.
-          vercel deploy --prod --archive=tgz --token=${{ secrets.VERCEL_TOKEN }} --yes
+      # Upload to the VPS (deploy/website/README.md). The release switches atomically once fully uploaded.
+      - name: Publish to the VPS
+        run: bash ../deploy/website/publish.sh dist www
         env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          WEBSITE_SSH_HOST: ${{ secrets.WEBSITE_SSH_HOST }}
+          WEBSITE_SSH_PORT: ${{ secrets.WEBSITE_SSH_PORT }}
+          WEBSITE_SSH_USER: ${{ secrets.WEBSITE_SSH_USER }}
+          WEBSITE_SSH_KEY: ${{ secrets.WEBSITE_SSH_KEY }}
+          WEBSITE_SSH_KNOWN_HOSTS: ${{ secrets.WEBSITE_SSH_KNOWN_HOSTS }}
+
+      # Cloudflare caches pages at the edge (that is what absorbs floods); drop the old copies.
+      - name: Purge the Cloudflare cache
+        run: |
+          set -euo pipefail
+          : "${CLOUDFLARE_API_TOKEN:?Missing CLOUDFLARE_API_TOKEN secret}"
+          : "${CLOUDFLARE_ZONE_ID:?Missing CLOUDFLARE_ZONE_ID secret}"
+          code=$(curl -sS --connect-timeout 10 --max-time 60 -o "$RUNNER_TEMP/purge.json" -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H 'Content-Type: application/json' \
+            --data '{"purge_everything":true}' "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/purge_cache")
+          [ "$code" = 200 ] || { echo "::error::Cloudflare purge failed: HTTP $code"; jq -c '.errors' "$RUNNER_TEMP/purge.json"; exit 1; }
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
 
       - name: Deployment summary
         if: success()
         run: |
           echo "## Marketing Website Deployment" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Deployed to Vercel Production" >> $GITHUB_STEP_SUMMARY
+          echo "Deployed to the VPS behind Cloudflare" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Links" >> $GITHUB_STEP_SUMMARY
           echo "- [Home](https://aidotnet.dev/)" >> $GITHUB_STEP_SUMMARY

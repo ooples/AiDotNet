@@ -241,11 +241,13 @@ public abstract class PointCloudDatasetLoaderBase<T> : InputOutputDataLoaderBase
 
         if (source.Shape.Length == 1)
         {
-            for (int i = 0; i < indices.Length; i++)
+            if (indices.Length == 0)
             {
-                result[i] = source[indices[i]];
+                return result;
             }
-            return result;
+
+            return AiDotNetEngine.Current.TensorIndexSelect(
+                source, new Tensor<int>(indices, new[] { indices.Length }), 0);
         }
 
         for (int i = 0; i < indices.Length; i++)

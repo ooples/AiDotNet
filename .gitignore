@@ -400,12 +400,9 @@ api/.manifest
 _site/
 _playground/
 
-# Node modules for Vercel API
-api/node_modules/
 _playground_new/
 _playground_test/
 .azure-publish-profile.xml
-.vercel
 .env*.local
 
 # Playwright MCP browser session scratch logs

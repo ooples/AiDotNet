@@ -408,14 +408,20 @@ public class MatrixExtensionsIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task IsCirculantMatrix_CirculantMatrix_ReturnsTrue()
     {
-        // Implementation uses left circular shift convention
-        // Row i, col j should equal Row 0, col (j + i) % cols
+        // A circulant matrix shifts each row one place to the RIGHT of the row above:
+        // C[i, j] = C[0, (j - i) mod n] (the documented layout; scipy.linalg.circulant and Davis,
+        // "Circulant Matrices", 1979). The former fixture used left shifts, which is the reverse
+        // (anti-)circulant layout and only passed because the old check tested left shifts.
         var matrix = new Matrix<double>(3, 3);
         matrix[0, 0] = 1; matrix[0, 1] = 2; matrix[0, 2] = 3;
-        matrix[1, 0] = 2; matrix[1, 1] = 3; matrix[1, 2] = 1; // left shift by 1
-        matrix[2, 0] = 3; matrix[2, 1] = 1; matrix[2, 2] = 2; // left shift by 2
+        matrix[1, 0] = 3; matrix[1, 1] = 1; matrix[1, 2] = 2; // right shift by 1
+        matrix[2, 0] = 2; matrix[2, 1] = 3; matrix[2, 2] = 1; // right shift by 2
 
         Assert.True(matrix.IsCirculantMatrix());
+
+        // The left-shift layout [[1, 2, 3], [2, 3, 1], [3, 1, 2]] is not circulant.
+        var leftShifted = new Matrix<double>(new double[,] { { 1, 2, 3 }, { 2, 3, 1 }, { 3, 1, 2 } });
+        Assert.False(leftShifted.IsCirculantMatrix());
     }
 
     #endregion

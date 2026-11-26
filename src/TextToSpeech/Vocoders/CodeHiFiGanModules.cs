@@ -117,8 +117,12 @@ internal sealed class CodeHiFiGan<T>
         StyleTokenEmbedding = Table(c.StyleTokens);
         SpeakerEmbedding = Table(c.Speakers);
         StyleEmbedding = Table(c.Styles);
+        // No N(0, 0.01) redraw: the reference (fairseq hifigan.py Generator) applies init_weights after weight_norm,
+        // so it writes only the derived `weight` tensor, which the forward pre-hook recomputes from weight_g and
+        // weight_v. Every convolution trains from PyTorch's default draw with g = ||v||. A real N(0, 0.01) shrinks
+        // each stage 3-15x and leaves an untrained generator's output to its biases.
         Generator = new HiFiGanGenerator<T>(engine, c.InputDim, c.InitialChannels, c.UpsampleRates, c.UpsampleKernels, c.ResblockKernels,
-            c.ResblockDilations, resblockType1: true, initialization: initialization);
+            c.ResblockDilations, resblockType1: true, defaultInitialization: initialization);
         layers.AddRange(Generator.Layers);
     }
 
@@ -249,9 +253,20 @@ internal sealed class CodeHiFiGan<T>
             durationLoss = _engine.TensorMultiplyScalar(_engine.ReduceSum(_engine.TensorMultiply(difference, difference), null, false),
                 NumOps.FromDouble(1.0 / kept.Count));
         }
+        return (SynthesizeFrameCodes(codes, speaker, style, pitch, styleTokens), durationLoss);
+    }
+
+    /// <summary>
+    /// Synthesizes the waveform of frame-level codes without running the duration predictor (used for the detached
+    /// discriminator step in GAN training so duration-predictor dropout does not advance the training RNG twice per step).
+    /// </summary>
+    internal Tensor<T> SynthesizeFrameCodes(IReadOnlyList<int> codes, int? speaker, int? style = null,
+        IReadOnlyList<int>? pitch = null, IReadOnlyList<int>? styleTokens = null)
+    {
+        if (codes is null || codes.Count == 0) throw new ArgumentException("There are no codes.", nameof(codes));
         var (pitchRows, styleRows) = ConditionRows(pitch, styleTokens, codes.Count);
         var wave = Generator.Forward(GeneratorInput(Embed(codes), pitchRows, styleRows, speaker, style));
-        return (_engine.Reshape(wave, new[] { wave.Length }), durationLoss);
+        return _engine.Reshape(wave, new[] { wave.Length });
     }
 
     /// <summary>Each unit's frames: <c>max(1, round(exp(d) − 1))</c> of its log duration, rounding half to even.</summary>

@@ -192,55 +192,10 @@ public class EmbeddingCopyrightDetector<T> : TextSafetyModuleBase<T>
 
     private Vector<T> ComputeEmbedding(string text)
     {
-        var embedding = new Vector<T>(_embeddingDim);
-
-        // Character trigrams
-        for (int i = 0; i <= text.Length - 3; i++)
-        {
-            int hash = HashNgram(text, i, 3);
-            int idx = ((hash % _embeddingDim) + _embeddingDim) % _embeddingDim;
-            T delta = (hash & 0x80000) != 0 ? NumOps.One : NumOps.Negate(NumOps.One);
-            embedding[idx] = NumOps.Add(embedding[idx], delta);
-        }
-
-        // Character 4-grams (captures more structure)
-        for (int i = 0; i <= text.Length - 4; i++)
-        {
-            int hash = HashNgram(text, i, 4);
-            int idx = ((hash % _embeddingDim) + _embeddingDim) % _embeddingDim;
-            T delta = (hash & 0x80000) != 0 ? NumOps.One : NumOps.Negate(NumOps.One);
-            embedding[idx] = NumOps.Add(embedding[idx], delta);
-        }
-
-        // L2 normalize
-        T sumSq = NumOps.Zero;
-        sumSq = NumOps.Add(sumSq, Engine.DotProduct(embedding, embedding));
-
-        double norm = Math.Sqrt(NumOps.ToDouble(sumSq));
-        if (norm > 1e-10)
-        {
-            T normT = NumOps.FromDouble(norm);
-            for (int i = 0; i < _embeddingDim; i++)
-            {
-                embedding[i] = NumOps.Divide(embedding[i], normT);
-            }
-        }
-
-        return embedding;
-    }
-
-
-    private static int HashNgram(string text, int start, int length)
-    {
-        unchecked
-        {
-            int hash = (int)2166136261;
-            for (int i = start; i < start + length && i < text.Length; i++)
-            {
-                hash ^= text[i];
-                hash *= 16777619;
-            }
-            return hash;
-        }
+        // Signed character trigrams plus 4-grams (captures more structure), then L2 normalize
+        var hashes = SafetyTensorOps<T>.NgramHashes(text, 3);
+        hashes.AddRange(SafetyTensorOps<T>.NgramHashes(text, 4));
+        var embedding = SafetyTensorOps<T>.HashedCounts(_embeddingDim, hashes, signed: true);
+        return SafetyTensorOps<T>.DivideByNorm(embedding).ToVector();
     }
 }

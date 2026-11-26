@@ -9,6 +9,7 @@ on:
       - '!website/verification-review.json'
       - .github/workflows/website-preview.yml
       - .github/workflows/website-e2e.yml
+      - deploy/website/**
 permissions:
   contents: read
 concurrency:
@@ -54,7 +55,7 @@ jobs:
           npm run build
           node --input-type=module -e "import fs from 'node:fs'; const routes=JSON.parse(fs.readFileSync('dist/verification-routes.json','utf8')); if(routes.filter(r=>r.startsWith('/docs/reference/wiki/')).length<10000) throw Error('Full generated API reference is missing'); console.log(routes.length+' built routes');"
         env:
-          VERCEL: "1"
+          AIDOTNET_SITE_ROOT: "1"
           PUBLIC_ENV_MODE: dev
           PUBLIC_BILLING_FUNCTION: billing-portal-preview
           PUBLIC_COMMUNITY_FUNCTION: register-community-license-preview
@@ -72,28 +73,17 @@ jobs:
           name: website-preview-build
           path: website/dist/
           retention-days: 3
-      - name: Install Vercel CLI
-        run: npm install --global vercel@65.17.0
-      - name: Deploy the existing preview and update its alias
+      - name: Publish the preview to test.aidotnet.dev
         run: |
           set -euo pipefail
-          : "${VERCEL_TOKEN:?Missing VERCEL_TOKEN}"
-          mkdir -p "$RUNNER_TEMP/preview-stage/website"
-          cp -a dist "$RUNNER_TEMP/preview-stage/website/dist"
-          printf '%s\n' '{"name":"aidotnet-preview-stage","version":"1.0.0","private":true}' > "$RUNNER_TEMP/preview-stage/package.json"
-          printf '%s\n' '{"name":"aidotnet-preview","version":"1.0.0","private":true}' > "$RUNNER_TEMP/preview-stage/website/package.json"
-          node --input-type=module -e "import fs from 'node:fs'; const config=JSON.parse(fs.readFileSync('vercel.json','utf8')); Object.assign(config,{framework:null,outputDirectory:'dist',buildCommand:'true'}); fs.writeFileSync(process.env.RUNNER_TEMP+'/preview-stage/website/vercel.json',JSON.stringify(config));"
-          url=$(vercel deploy "$RUNNER_TEMP/preview-stage" --project aidotnet_website --scope franklins-projects-02a0b5a0 --environment preview --archive=tgz --yes --token="$VERCEL_TOKEN")
-          case "$url" in
-            https://*.vercel.app) ;;
-            *) echo '::error::Vercel did not return a preview deployment URL'; exit 1 ;;
-          esac
-          vercel alias set "$url" test.aidotnet.dev --scope franklins-projects-02a0b5a0 --token="$VERCEL_TOKEN"
-          printf 'Verified preview deployment: %s\n' "$url" >> "$GITHUB_STEP_SUMMARY"
+          bash ../deploy/website/publish.sh dist test
+          printf 'Published preview: https://test.aidotnet.dev (commit %s)\n' "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: team_5HDGYIA59nu3JwRl3ZYCMGYV
-          VERCEL_PROJECT_ID: prj_JyDpz7IdLTf5WcEWHyxUKq7TcCSH
+          WEBSITE_SSH_HOST: ${{ secrets.WEBSITE_SSH_HOST }}
+          WEBSITE_SSH_PORT: ${{ secrets.WEBSITE_SSH_PORT }}
+          WEBSITE_SSH_USER: ${{ secrets.WEBSITE_SSH_USER }}
+          WEBSITE_SSH_KEY: ${{ secrets.WEBSITE_SSH_KEY }}
+          WEBSITE_SSH_KNOWN_HOSTS: ${{ secrets.WEBSITE_SSH_KNOWN_HOSTS }}
   verify-user-paths:
     needs: deploy-preview
     uses: ./.github/workflows/website-e2e.yml

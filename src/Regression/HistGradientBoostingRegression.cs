@@ -9,6 +9,8 @@ using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Models.Parameters;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace AiDotNet.Regression;
 
@@ -710,7 +712,7 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
             }
 
             return engine.Divide(
-                engine.Add(uniqueValues.GetSubVector(0, count), uniqueValues.GetSubVector(1, count)),
+                engine.Add(uniqueValues.GetSubVector(0, count), RegressionEngineOps2.Slice(uniqueValues, 1, count)),
                 NumOps.FromDouble(2.0));
         }
 
@@ -934,10 +936,13 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
 
         // Every returned split already beats MinGainToSplit; the first feature with the largest gain wins.
         var splits = new List<SplitInfo>();
+
+        // A histogram is dead once its split is scored, so one buffer serves every feature of this node.
+        var histogram = new Histogram(MaxBinCount);
         foreach (int featureIdx in featuresToConsider)
         {
             // Build histogram for this feature
-            var histogram = BuildHistogram(node.SampleIndices, featureIdx, residuals);
+            BuildHistogram(node.SampleIndices, featureIdx, residuals, histogram);
 
             // Find best split point in histogram
             var split = FindBestSplitInHistogram(histogram, featureIdx, node.SampleIndices.Count);
@@ -991,52 +996,89 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     /// for each bin. This allows us to quickly compute the gain for any split point.
     /// </para>
     /// </remarks>
-    private Histogram BuildHistogram(List<int> sampleIndices, int featureIdx, Vector<T> residuals)
+    // Bins are stored as bytes, so no feature has more than 256.
+    private const int MaxBinCount = 256;
+
+    private void BuildHistogram(List<int> sampleIndices, int featureIdx, Vector<T> residuals, Histogram histogram)
     {
         int numBins = (_binThresholds ?? throw new InvalidOperationException("Bin thresholds not computed."))[featureIdx].Length + 1;
         var binnedData = _binnedData ?? throw new InvalidOperationException("Binned data not computed.");
-        var engine = AiDotNetEngine.Current;
 
-        var bins = new int[sampleIndices.Count];
-        var counts = new int[numBins];
-        for (int k = 0; k < bins.Length; k++)
+        // One pass, accumulating in sample order. This runs once per (node, feature): routing it through engine ops
+        // (scatter-add over gathered residuals, a filled ones vector, tensor wraps of each) allocated several
+        // sample-length arrays per call, and the fit became GC-bound (#2465 regression).
+        histogram.Reset(numBins);
+        var gradientSum = histogram.GradientSum;
+        var hessianSum = histogram.HessianSum;
+        var counts = histogram.Count;
+#if NET5_0_OR_GREATER
+        if (typeof(T) == typeof(double))
         {
-            int bin = binnedData[sampleIndices[k], featureIdx];
-            bins[k] = bin;
-            counts[bin]++;
+            AccumulateHistogram(sampleIndices, featureIdx, binnedData, AsDoubles(residuals.AsSpan()),
+                Unsafe.As<T[], double[]>(ref gradientSum), Unsafe.As<T[], double[]>(ref hessianSum), counts);
         }
-
-        var gradientSum = engine.FillZero<T>(numBins);
-        var hessianSum = engine.FillZero<T>(numBins);
-        if (bins.Length > 0)
+        else if (typeof(T) == typeof(float))
         {
-            var binIndex = new Tensor<int>(bins, new[] { bins.Length });
-            gradientSum = engine.TensorScatterAdd(
-                Tensor<T>.FromVector(gradientSum),
-                binIndex,
-                Tensor<T>.FromVector(RegressionEngineOps.Gather(residuals, sampleIndices.ToArray())),
-                0).ToVector();
-
-            // Squared loss has hessian = 1
-            hessianSum = engine.TensorScatterAdd(
-                Tensor<T>.FromVector(hessianSum),
-                binIndex,
-                Tensor<T>.FromVector(engine.Fill(bins.Length, NumOps.One)),
-                0).ToVector();
+            AccumulateHistogram(sampleIndices, featureIdx, binnedData, AsFloats(residuals.AsSpan()),
+                Unsafe.As<T[], float[]>(ref gradientSum), Unsafe.As<T[], float[]>(ref hessianSum), counts);
         }
-
-        return new Histogram(gradientSum, hessianSum, counts);
+        else
+#endif
+        {
+            AccumulateHistogramGeneric(sampleIndices, featureIdx, binnedData, residuals.AsSpan(), numBins, gradientSum, hessianSum, counts);
+        }
     }
 
-    /// <summary>
-    /// Replaces exact zeros with one, so a split side whose curvature is zero (and whose squared gradient
-    /// is therefore zero) contributes 0 to the gain instead of failing the division.
-    /// </summary>
-    private static Vector<T> NonzeroDenominator(Vector<T> denominator)
+#if NET5_0_OR_GREATER
+    private static ReadOnlySpan<double> AsDoubles(ReadOnlySpan<T> values)
+        => MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<T, double>(ref MemoryMarshal.GetReference(values)), values.Length);
+
+    private static ReadOnlySpan<float> AsFloats(ReadOnlySpan<T> values)
+        => MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<T, float>(ref MemoryMarshal.GetReference(values)), values.Length);
+
+    // Squared loss: each sample adds its residual to the gradient sum and 1 to the hessian sum of its bin.
+    private static void AccumulateHistogram(List<int> sampleIndices, int featureIdx, byte[,] binnedData,
+        ReadOnlySpan<double> residuals, double[] gradientSum, double[] hessianSum, int[] counts)
     {
-        var engine = AiDotNetEngine.Current;
-        var values = Tensor<T>.FromVector(denominator);
-        return engine.TensorAdd(values, engine.TensorEquals(values, MathHelper.GetNumericOperations<T>().Zero)).ToVector();
+        foreach (int idx in sampleIndices)
+        {
+            int bin = binnedData[idx, featureIdx];
+            gradientSum[bin] += residuals[idx];
+            hessianSum[bin] += 1.0;
+            counts[bin]++;
+        }
+    }
+
+    private static void AccumulateHistogram(List<int> sampleIndices, int featureIdx, byte[,] binnedData,
+        ReadOnlySpan<float> residuals, float[] gradientSum, float[] hessianSum, int[] counts)
+    {
+        foreach (int idx in sampleIndices)
+        {
+            int bin = binnedData[idx, featureIdx];
+            gradientSum[bin] += residuals[idx];
+            hessianSum[bin] += 1f;
+            counts[bin]++;
+        }
+    }
+#endif
+
+    [AiDotNet.Attributes.ScalarKernel("Element types other than double and float have no native arithmetic here (nor do frameworks before .NET 5, which lack the span reinterpretation); double and float take the span loops above.")]
+    private void AccumulateHistogramGeneric(List<int> sampleIndices, int featureIdx, byte[,] binnedData,
+        ReadOnlySpan<T> residuals, int numBins, T[] gradientSum, T[] hessianSum, int[] counts)
+    {
+        for (int b = 0; b < numBins; b++)
+        {
+            gradientSum[b] = NumOps.Zero;
+            hessianSum[b] = NumOps.Zero;
+        }
+
+        foreach (int idx in sampleIndices)
+        {
+            int bin = binnedData[idx, featureIdx];
+            gradientSum[bin] = NumOps.Add(gradientSum[bin], residuals[idx]);
+            hessianSum[bin] = NumOps.Add(hessianSum[bin], NumOps.One);
+            counts[bin]++;
+        }
     }
 
     /// <summary>
@@ -1052,66 +1094,82 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     ///        - regularization_penalty
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.ScalarKernel("A running scan over at most 255 split points (bins are bytes) with a first-max pick; engine ops over vectors this small allocated more than they computed.")]
     private SplitInfo? FindBestSplitInHistogram(Histogram histogram, int featureIdx, int totalCount)
     {
         // Split after bin b sends bins 0..b left; b ranges over 0..numBins-2
-        int candidates = histogram.Count.Length - 1;
+        int candidates = histogram.NumBins - 1;
         if (candidates <= 0)
         {
             return null;
         }
 
-        var engine = AiDotNetEngine.Current;
+        var gradientSum = histogram.GradientSum;
+        var hessianSum = histogram.HessianSum;
 
         // Compute totals
-        T totalGrad = engine.Sum(histogram.GradientSum);
-        T totalHess = engine.Sum(histogram.HessianSum);
-
-        // Running (left) sums for every split point at once
-        var leftGrad = engine.TensorCumSum(Tensor<T>.FromVector(histogram.GradientSum), 0).ToVector().GetSubVector(0, candidates);
-        var leftHess = engine.TensorCumSum(Tensor<T>.FromVector(histogram.HessianSum), 0).ToVector().GetSubVector(0, candidates);
-        var leftCounts = new int[candidates];
-        var allowed = new bool[candidates];
-        int leftCount = 0;
-        for (int bin = 0; bin < candidates; bin++)
+        T totalGrad = NumOps.Zero;
+        T totalHess = NumOps.Zero;
+        for (int bin = 0; bin < histogram.NumBins; bin++)
         {
-            leftCount += histogram.Count[bin];
-            leftCounts[bin] = leftCount;
-
-            // Check minimum samples constraint
-            int rightCount = totalCount - leftCount;
-            allowed[bin] = leftCount >= _options.MinSamplesLeaf && rightCount >= _options.MinSamplesLeaf;
+            totalGrad = NumOps.Add(totalGrad, gradientSum[bin]);
+            totalHess = NumOps.Add(totalHess, hessianSum[bin]);
         }
 
-        var rightGrad = engine.Subtract(engine.Fill(candidates, totalGrad), leftGrad);
-        var rightHess = engine.Subtract(engine.Fill(candidates, totalHess), leftHess);
-
-        // Compute gain with L2 regularization
         // gain = 0.5 * (leftGrad^2/(leftHess+lambda) + rightGrad^2/(rightHess+lambda) - totalGrad^2/(totalHess+lambda))
+        // An empty side has zero hessian (and zero gradient): with the default lambda of 0 its term is 0, not 0/0.
         T lambda = NumOps.FromDouble(_options.L2Regularization);
-        var lambdas = engine.Fill(candidates, lambda);
-        // A side with no curvature (no samples on it, with the default lambda of 0) carries no gradient
-        // either, so its term is 0. Dividing there threw DivideByZeroException for every candidate whose
-        // right side was empty (the bins past a feature's largest value), so no tree ever trained.
-        var leftTerm = engine.Divide(engine.Multiply(leftGrad, leftGrad), NonzeroDenominator(engine.Add(leftHess, lambdas)));
-        var rightTerm = engine.Divide(engine.Multiply(rightGrad, rightGrad), NonzeroDenominator(engine.Add(rightHess, lambdas)));
+        T half = NumOps.FromDouble(0.5);
         T totalDenominator = NumOps.Add(totalHess, lambda);
         T totalTerm = NumOps.Equals(totalDenominator, NumOps.Zero)
             ? NumOps.Zero
             : NumOps.Divide(NumOps.Multiply(totalGrad, totalGrad), totalDenominator);
-        var gains = engine.Multiply(
-            engine.Subtract(engine.Add(leftTerm, rightTerm), engine.Fill(candidates, totalTerm)),
-            NumOps.FromDouble(0.5));
 
-        // The first split point with the largest gain wins; disallowed or NaN gains never win.
-        var (bestBin, bestGain) = RegressionEngineOps.MaskedArgMaxFirst(gains, allowed);
+        // One running scan over the split points (bins 0..b go left). The first split point with the largest gain
+        // wins; split points that violate MinSamplesLeaf, and NaN gains, never win.
+        T leftGrad = NumOps.Zero;
+        T leftHess = NumOps.Zero;
+        int leftCount = 0;
+        int bestBin = -1;
+        int bestLeftCount = 0;
+        T bestGain = NumOps.Zero;
+        for (int bin = 0; bin < candidates; bin++)
+        {
+            leftGrad = NumOps.Add(leftGrad, gradientSum[bin]);
+            leftHess = NumOps.Add(leftHess, hessianSum[bin]);
+            leftCount += histogram.Count[bin];
+            int rightCount = totalCount - leftCount;
+            if (leftCount < _options.MinSamplesLeaf || rightCount < _options.MinSamplesLeaf)
+            {
+                continue;
+            }
+
+            T rightGrad = NumOps.Subtract(totalGrad, leftGrad);
+            T rightHess = NumOps.Subtract(totalHess, leftHess);
+            T gain = NumOps.Multiply(
+                NumOps.Subtract(
+                    NumOps.Add(
+                        TermWherePositive(leftGrad, NumOps.Add(leftHess, lambda)),
+                        TermWherePositive(rightGrad, NumOps.Add(rightHess, lambda))),
+                    totalTerm),
+                half);
+            if (NumOps.IsNaN(gain))
+            {
+                continue;
+            }
+
+            if (bestBin < 0 || NumOps.GreaterThan(gain, bestGain))
+            {
+                bestBin = bin;
+                bestGain = gain;
+                bestLeftCount = leftCount;
+            }
+        }
+
         if (bestBin < 0 || !NumOps.GreaterThan(bestGain, NumOps.FromDouble(_options.MinGainToSplit)))
         {
             return null;
         }
-
-        // Left and right counts for the best split
-        int bestLeftCount = leftCounts[bestBin];
 
         return new SplitInfo(NumOps.Zero)
         {
@@ -1122,6 +1180,12 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
             RightCount = totalCount - bestLeftCount
         };
     }
+
+    /// <summary>gradient^2 / denominator where the denominator is positive, else 0 (an empty side of a split).</summary>
+    private T TermWherePositive(T gradient, T denominator)
+        => NumOps.GreaterThan(denominator, NumOps.Zero)
+            ? NumOps.Divide(NumOps.Multiply(gradient, gradient), denominator)
+            : NumOps.Zero;
 
     /// <summary>
     /// Applies a split to a node, creating left and right children.
@@ -1382,15 +1446,27 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     /// </remarks>
     private sealed class Histogram
     {
-        public Vector<T> GradientSum { get; }
-        public Vector<T> HessianSum { get; }
+        public T[] GradientSum { get; }
+        public T[] HessianSum { get; }
         public int[] Count { get; }
 
-        public Histogram(Vector<T> gradientSum, Vector<T> hessianSum, int[] count)
+        /// <summary>Bins in use; entries past it are stale.</summary>
+        public int NumBins { get; private set; }
+
+        public Histogram(int capacity)
         {
-            GradientSum = gradientSum;
-            HessianSum = hessianSum;
-            Count = count;
+            GradientSum = new T[capacity];
+            HessianSum = new T[capacity];
+            Count = new int[capacity];
+        }
+
+        /// <summary>Zeroes the first <paramref name="numBins"/> bins (default(T) is zero for the numeric types).</summary>
+        public void Reset(int numBins)
+        {
+            NumBins = numBins;
+            Array.Clear(GradientSum, 0, numBins);
+            Array.Clear(HessianSum, 0, numBins);
+            Array.Clear(Count, 0, numBins);
         }
     }
 

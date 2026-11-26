@@ -131,9 +131,7 @@ public partial class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
         {
             // Phase 1: Gradient-adapt a fresh LoRA adapter for this task
             ParamModel.SetParameters(baseParams);
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++)
-                adaptedParams[d] = baseParams[d];
+            var adaptedParams = baseParams.Clone();
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
@@ -143,9 +141,7 @@ public partial class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
             }
 
             // Compute adapter delta: Δθ = adaptedParams - baseParams
-            var adapterDelta = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++)
-                adapterDelta[d] = NumOps.Subtract(adaptedParams[d], baseParams[d]);
+            var adapterDelta = Engine.Subtract(adaptedParams, baseParams);
 
             // Compute support set embedding for this task
             ParamModel.SetParameters(baseParams);
@@ -157,10 +153,7 @@ public partial class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
             // Phase 2: Evaluate via recycled adapter fusion (gradient-free)
             if (_adapterBank.Count > 0)
             {
-                var fusedDelta = FuseAdapters(supportEmbed);
-                var fusedParams = new Vector<T>(_paramDim);
-                for (int d = 0; d < _paramDim; d++)
-                    fusedParams[d] = NumOps.Add(baseParams[d], fusedDelta[d]);
+                var fusedParams = Engine.Add(baseParams, FuseAdapters(supportEmbed));
 
                 ParamModel.SetParameters(fusedParams);
             }
@@ -196,8 +189,7 @@ public partial class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
         if (_adapterBank.Count == 0)
         {
             // Fall back to gradient-based adaptation if no adapters are available yet
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = baseParams[d];
+            var adaptedParams = baseParams.Clone();
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
@@ -211,10 +203,7 @@ public partial class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
 
         // Gradient-free adaptation: compute task embedding and fuse adapters
         var taskEmbed = ComputeTaskEmbedding(task.SupportInput);
-        var fusedDelta = FuseAdapters(taskEmbed);
-        var finalParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++)
-            finalParams[d] = NumOps.Add(baseParams[d], fusedDelta[d]);
+        var finalParams = Engine.Add(baseParams, FuseAdapters(taskEmbed));
 
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, finalParams);
     }
@@ -233,21 +222,13 @@ public partial class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
         int inputDim = Math.Min(_paramDim, MaxEncoderInputDim);
         int featureLen = Math.Min(features.Length, inputDim);
 
-        // Linear projection: output = W * input + bias
-        var embedding = new Vector<T>(_prototypeDim);
-        int biasOffset = inputDim * _prototypeDim;
-
-        for (int o = 0; o < _prototypeDim; o++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < featureLen; i++)
-                sum = NumOps.Add(sum, NumOps.Multiply(features[i], _encoderParams[o * inputDim + i]));
-
-            if (biasOffset + o < _encoderParams.Length)
-                sum = NumOps.Add(sum, _encoderParams[biasOffset + o]);
-
-            embedding[o] = sum;
-        }
+        // Linear projection: output = W * input + bias, W stored [prototypeDim, inputDim]
+        var weights = Tensor<T>.FromVector(_encoderParams.GetSubVector(0, inputDim * _prototypeDim), new[] { _prototypeDim, inputDim });
+        if (featureLen < inputDim)
+            weights = Engine.TensorSlice(weights, new[] { 0, 0 }, new[] { _prototypeDim, featureLen });
+        var input = Tensor<T>.FromVector(features.Length == featureLen ? features : features.GetSubVector(0, featureLen), new[] { featureLen, 1 });
+        var embedding = Engine.Add(Engine.TensorMatMul(weights, input).ToVector(),
+            _encoderParams.GetSubVector(inputDim * _prototypeDim, _prototypeDim));
 
         return VectorTanh(embedding);
     }
@@ -259,42 +240,30 @@ public partial class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
     private Vector<T> FuseAdapters(Vector<T> taskEmbedding)
     {
         int numAdapters = _adapterBank.Count;
-        var similarities = new double[numAdapters];
-        double maxSim = double.NegativeInfinity;
+        var prototypeRows = new Tensor<T>[numAdapters];
+        var adapterRows = new Tensor<T>[numAdapters];
+        for (int k = 0; k < numAdapters; k++)
+        {
+            prototypeRows[k] = Tensor<T>.FromVector(_adapterPrototypes[k].GetSubVector(0, _prototypeDim));
+            adapterRows[k] = Tensor<T>.FromVector(_adapterBank[k].GetSubVector(0, _paramDim));
+        }
 
         // Compute negative squared Euclidean distance to each prototype
-        for (int k = 0; k < numAdapters; k++)
-        {
-            double dist = 0;
-            for (int d = 0; d < _prototypeDim; d++)
-            {
-                double diff = NumOps.ToDouble(taskEmbedding[d]) - NumOps.ToDouble(_adapterPrototypes[k][d]);
-                dist += diff * diff;
-            }
-            similarities[k] = -dist / _algoOptions.SelectionTemperature;
-            if (similarities[k] > maxSim) maxSim = similarities[k];
-        }
+        var embedding = Tensor<T>.FromVector(taskEmbedding.GetSubVector(0, _prototypeDim), new[] { 1, _prototypeDim });
+        var diff = Engine.TensorSubtract(Engine.TensorStack(prototypeRows, 0),
+            Engine.TensorBroadcastTo(embedding, new[] { numAdapters, _prototypeDim }));
+        var similarities = Engine.TensorDivideScalar(
+            Engine.TensorNegate(Engine.ReduceSum(Engine.TensorSquare(diff), new[] { 1 }, keepDims: false)),
+            NumOps.FromDouble(_algoOptions.SelectionTemperature));
 
-        // Softmax to get adapter weights
-        var weights = new double[numAdapters];
-        double sumExp = 0;
-        for (int k = 0; k < numAdapters; k++)
-        {
-            weights[k] = Math.Exp(similarities[k] - maxSim);
-            sumExp += weights[k];
-        }
-        for (int k = 0; k < numAdapters; k++)
-            weights[k] /= sumExp;
+        // Softmax to get adapter weights; adapters below 1e-10 are dropped
+        var exp = Engine.TensorExp(Engine.TensorSubtractScalar(similarities, Engine.TensorMaxValue(similarities)));
+        var weights = Engine.TensorDivideScalar(exp, Engine.TensorSum(exp));
+        var kept = Engine.TensorSubtract(Engine.TensorOnesLike(weights), Engine.TensorLessThan(weights, NumOps.FromDouble(1e-10)));
 
         // Weighted combination of adapter deltas
-        var fused = new Vector<T>(_paramDim);
-        for (int k = 0; k < numAdapters; k++)
-        {
-            if (weights[k] < 1e-10) continue;
-            T w = NumOps.FromDouble(weights[k]);
-            for (int d = 0; d < _paramDim; d++)
-                fused[d] = NumOps.Add(fused[d], NumOps.Multiply(_adapterBank[k][d], w));
-        }
+        var fused = Engine.TensorMatMul(
+            Engine.Reshape(Engine.TensorMultiply(weights, kept), new[] { 1, numAdapters }), Engine.TensorStack(adapterRows, 0)).ToVector();
 
         return fused;
     }
@@ -320,7 +289,7 @@ public partial class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
     private double ComputeRecycleLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         var baseParams = ParamModel.GetParameters();
-        double totalLoss = 0;
+        var losses = new List<T>(taskBatch.Tasks.Length);
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -328,16 +297,14 @@ public partial class LoRARecycleAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
             if (_adapterBank.Count == 0) continue;
 
             var taskEmbed = ComputeTaskEmbedding(task.SupportInput);
-            var fusedDelta = FuseAdapters(taskEmbed);
-            var fusedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++)
-                fusedParams[d] = NumOps.Add(baseParams[d], fusedDelta[d]);
-
-            ParamModel.SetParameters(fusedParams);
-            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+            ParamModel.SetParameters(Engine.Add(baseParams, FuseAdapters(taskEmbed)));
+            losses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
         ParamModel.SetParameters(baseParams);
-        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
+
+        // Tasks are skipped only when the bank is empty (all or none), so the mean over evaluated tasks
+        // equals master's total / max(n, 1). The SPSA callback contract is a double, converted once.
+        return NumOps.ToDouble(ComputeMean(losses));
     }
 }

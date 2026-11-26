@@ -16,7 +16,7 @@ namespace AiDotNet.Audio.Foundations;
 /// <param name="NormEpsilon">The layer norms' epsilon: SenseVoice's own LayerNorm (1e-5), or FunASR's (1e-12) for
 /// Paraformer.</param>
 internal sealed record SanmEncoderConfiguration(int Mels = 80, int LfrM = 7, int LfrN = 6, int Width = 512, int Heads = 4,
-    int FeedForward = 2048, int Blocks = 50, int TpBlocks = 20, int Kernel = 11, double NormEpsilon = 1e-5)
+    int FeedForward = 2048, int Blocks = 50, int TpBlocks = 20, int Kernel = 11, double NormEpsilon = 1e-5, int SampleRate = 16000)
 {
     /// <summary>The stacked feature width, <c>Mels · LfrM</c> (560).</summary>
     public int InputSize => Mels * LfrM;
@@ -49,7 +49,7 @@ internal sealed class SanmEncoder<T>
         var c = configuration;
         if (c.Width % c.Heads != 0) throw new ArgumentException("The width must divide by the heads.", nameof(configuration));
         if (c.Blocks < 1) throw new ArgumentException("SAN-M needs at least one block.", nameof(configuration));
-        _fbank = new KaldiFbank<T>(engine, 16000, c.Mels, WindowType.Hamming);
+        _fbank = new KaldiFbank<T>(engine, c.SampleRate, c.Mels, WindowType.Hamming);
         _shift = new double[c.InputSize];
         _scale = Enumerable.Repeat(1.0, c.InputSize).ToArray();
         TLayer Add<TLayer>(TLayer layer) where TLayer : LayerBase<T> { layers.Add(layer); return layer; }
@@ -128,19 +128,25 @@ internal sealed class SanmEncoder<T>
         if (t == 0) throw new ArgumentException("The recording is shorter than one filterbank frame.", nameof(audio));
         // apply_lfr: (m − 1)/2 copies of the first frame before, stacks of m every n, the last frame repeated past the end.
         int left = (c.LfrM - 1) / 2, padded = t + left, frames = (t + c.LfrN - 1) / c.LfrN;
-        var features = new Tensor<T>(new[] { frames, c.InputSize });
+        var indices = new int[frames * c.LfrM];
+        int idx = 0;
         for (int f = 0; f < frames; f++)
             for (int j = 0; j < c.LfrM; j++)
             {
                 int row = Math.Min(f * c.LfrN + j, padded - 1) - left;
-                row = Math.Max(0, row);
-                for (int m = 0; m < c.Mels; m++)
-                {
-                    int k = j * c.Mels + m;
-                    features[f, k] = NumOps.FromDouble((NumOps.ToDouble(fbank[row, m]) + _shift[k]) * _scale[k]);
-                }
+                indices[idx++] = Math.Max(0, row);
             }
-        return features;
+        var gathered = _engine.TensorGather(fbank, new Tensor<int>(indices, new[] { indices.Length }), axis: 0);
+        var stacked = _engine.Reshape(gathered, new[] { frames, c.InputSize });
+        var shiftTensor = new Tensor<T>(new[] { 1, c.InputSize });
+        var scaleTensor = new Tensor<T>(new[] { 1, c.InputSize });
+        for (int k = 0; k < c.InputSize; k++)
+        {
+            shiftTensor[0, k] = NumOps.FromDouble(_shift[k]);
+            scaleTensor[0, k] = NumOps.FromDouble(_scale[k]);
+        }
+        var shifted = _engine.TensorAdd(stacked, _engine.TensorBroadcastTo(shiftTensor, new[] { frames, c.InputSize }));
+        return _engine.TensorMultiply(shifted, _engine.TensorBroadcastTo(scaleTensor, new[] { frames, c.InputSize }));
     }
 
     /// <summary>The encoder's output <c>[frames, width]</c> of features <c>[frames, Mels · LfrM]</c>.</summary>

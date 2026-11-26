@@ -175,9 +175,13 @@ internal sealed class RtdetrAifiLayer<T> : CvParameterModule<T>
         // #2312: the attention weights are discarded here, so the fused tape-aware kernel
         // computes the same attention without materializing the [B, heads, tokens, tokens]
         // score matrix that dominates encoder memory at detection token counts.
-        var context = engine.FlashAttention(
-            Heads(_query.Forward(withPosition)), Heads(_key.Forward(withPosition)), Heads(_value.Forward(source)),
-            1.0 / Math.Sqrt(headDim), isCausal: false, out _, attentionBias: null);
+        var q = Heads(_query.Forward(withPosition));
+        var k = Heads(_key.Forward(withPosition));
+        var v = Heads(_value.Forward(source));
+        double scale = 1.0 / Math.Sqrt(headDim);
+        var context = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+            ? engine.ScaledDotProductAttention(q, k, v, mask: null, scale: scale, out _)
+            : engine.FlashAttention(q, k, v, scale, isCausal: false, out _, attentionBias: null);
         var merged = engine.Reshape(engine.TensorPermute(context, new[] { 0, 2, 1, 3 }), new[] { batch, tokens, _dModel });
         var x = _norm1.Forward(engine.TensorAdd(source, _output.Forward(merged)));
         return _norm2.Forward(engine.TensorAdd(x, _linear2.Forward(engine.GELU(_linear1.Forward(x)))));

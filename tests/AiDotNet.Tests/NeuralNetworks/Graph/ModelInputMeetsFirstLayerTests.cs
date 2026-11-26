@@ -212,7 +212,15 @@ public class ModelInputMeetsFirstLayerTests
                 // here; without this the host's peak is the sum of whatever the collector has not yet reclaimed.
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
-                GC.Collect();
+                // AGGRESSIVE, because a default full collection frees a model but does not return its memory to the
+                // OS. After WhisperSpeech was built and disposed, the GC heap held 0.51 GB live while 6.96 GB stayed
+                // committed, and every later model was measured on top of that high-water mark. Nothing was rooted.
+                // An aggressive collection decommits the freed regions, so the host's size tracks the model being built.
+#if NET8_0_OR_GREATER
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+#else
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+#endif
 
                 // In the FINALLY so every path is measured - including the `continue`s above and a
                 // throwing constructor. Timing only the happy path would have understated exactly the
@@ -333,13 +341,7 @@ public class ModelInputMeetsFirstLayerTests
         instance = null;
         failure = null;
 
-        var ctor = closed.GetConstructors().FirstOrDefault(c =>
-        {
-            var ps = c.GetParameters();
-            return ps.Length > 0
-                && ps[0].ParameterType == typeof(NeuralNetworkArchitecture<double>)
-                && ps.Skip(1).All(p => p.HasDefaultValue);
-        });
+        var ctor = ModelSweepConstruction.FindArchitectureConstructor(closed, typeof(NeuralNetworkArchitecture<double>));
         if (ctor is null) { failure = "no architecture constructor"; return false; }
 
         var architecture = new NeuralNetworkArchitecture<double>(

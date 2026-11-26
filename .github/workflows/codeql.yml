@@ -1,0 +1,164 @@
+name: CodeQL
+
+# CodeQL runs after merge, not on pull requests (owner decision, 2026-11-14). The traced analysis
+# held every non-draft pull request for 80-95 minutes whatever it changed: a dependabot.yml-only
+# pull request ran no test shard and still took 131 minutes (run 43532862304).
+#
+# Both analyses used to be jobs of sonarcloud.yml. They live here because that workflow's master
+# runs do not finish reliably: every master push shares the group build-refs/heads/master with
+# cancel-in-progress, and the nightly full matrix is regularly cancelled or failed. Neither is a
+# place for a scan that has to complete.
+#
+# There is deliberately no pull_request or merge_group trigger. A finding now appears after the
+# merge (when the push scan finishes, or by the next nightly scan at worst) instead of before it.
+on:
+  push:
+    branches:
+      - master
+      - main
+  schedule:
+    # Nightly scan of the default branch, the guaranteed run when no push scan completed that day.
+    # 09:41 UTC is after the 03:00-07:30 nightly lanes have started and before the working day,
+    # and shares a minute with no other scheduled workflow.
+    - cron: '41 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A scan that has started always finishes: a later push waits for it instead of cancelling it.
+# GitHub keeps one pending run per group, so a burst of merges queues only the newest commit.
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+jobs:
+  # Build-less extraction of the whole library, under the standard category. Build-less and traced
+  # extraction do not report the same alerts on the same code (380 error-level alerts existed only
+  # in build-less results, #2136), so each keeps its own category.
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    # Build-less extraction of the whole library holds a runner about 41 minutes; 85 leaves the same
+    # margin for hosted-runner variance the traced job needed.
+    timeout-minutes: 85
+    if: "${{ !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Initialize CodeQL (build-less, whole library)
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
+        with:
+          languages: csharp
+          build-mode: none
+          config-file: ./.github/codeql/codeql-config.yml
+          queries: security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
+        with:
+          category: "/language:csharp"
+          upload: always
+
+
+  # Trace source-generated code as well as running the build-less analysis.
+  codeql-traced:
+    name: CodeQL Analysis (traced)
+    runs-on: ubuntu-latest
+    # PR #2294's full traced build took 43 minutes, then its analysis was cancelled after
+    # another 37 minutes by the 85-minute job limit. Keep the full build and query suite,
+    # with enough time for analysis and upload on the expanded native model source.
+    timeout-minutes: 120
+    if: "${{ !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Free runner disk space
+        # The full solution Release build compiles net10.0 + net471 outputs and can exhaust
+        # ubuntu-latest's runner volume before downstream cleanup steps run. Keep the .NET
+        # host frameworks intact and remove only preinstalled toolchains this job does not use.
+        run: |
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+          sudo rm -rf /opt/hostedtoolcache/PyPy || true
+          sudo rm -rf /opt/hostedtoolcache/Ruby || true
+          sudo rm -rf /opt/hostedtoolcache/go || true
+          sudo rm -rf /usr/share/swift || true
+          sudo rm -rf /usr/share/miniconda || true
+          sudo rm -rf /usr/local/share/boost || true
+          sudo apt-get clean || true
+          df -h /
+
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore dependencies
+        run: |
+          dotnet restore src/AiDotNet.csproj
+          dotnet restore src/AiDotNet.Serving/AiDotNet.Serving.csproj
+          dotnet restore src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj
+          dotnet restore src/AiDotNet.Playground.Execution/AiDotNet.Playground.Execution.csproj
+
+      - name: Initialize CodeQL (traced build)
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
+        with:
+          languages: csharp
+          build-mode: manual
+          config-file: ./.github/codeql/codeql-config.yml
+          queries: security-and-quality
+
+      # CodeQL needs to trace the build - can't reuse artifacts.
+      # CodeQL only analyzes what the traced build compiles, so every shipped entry point that
+      # takes untrusted input has to be built here: the core library, the Serving API and the
+      # playground's Azure Functions. This step used to build the library alone to avoid a file
+      # lock on AiDotNet.Serving's static web assets; naming each project in its own sequential
+      # command (the pattern the build job uses) builds Serving exactly once, never concurrently.
+      # The core library's command is unchanged and runs first, so its extraction is identical;
+      # the next two builds find it up to date and compile only their own sources.
+      - name: Build for CodeQL (net10.0)
+        run: |
+          dotnet build src/AiDotNet.csproj -c Release --no-restore -f net10.0
+          dotnet build src/AiDotNet.Serving/AiDotNet.Serving.csproj -c Release --no-restore
+          dotnet build src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj -c Release --no-restore
+          dotnet build src/AiDotNet.Playground.Execution/AiDotNet.Playground.Execution.csproj -c Release --no-restore
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
+        with:
+          category: "/language:csharp-traced"
+          upload: always

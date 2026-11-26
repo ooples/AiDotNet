@@ -54,7 +54,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
     Note = "Node features: the leading axis is the graph's nodes, sized by the installed adjacency matrix.")]
 [TensorLayout(TensorAxis.Other, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, IShapeContract
+public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, IShapeContract, ICompiledBindingSource
 {
     /// <inheritdoc />
     /// <remarks>
@@ -145,17 +145,6 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// </summary>
     private int[]? _originalInputShape;
 
-    /// <summary>
-    /// Cached attention coefficients from forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastAttentionCoefficients;
-
-    /// <summary>
-    /// Cached pre-softmax attention scores for gradient computation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastPreSoftmaxScores;
 
 
 
@@ -264,10 +253,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shiftedAttn = Engine.TensorSubtract(randomAttn, halfTensor);
         var scaledAttn = Engine.TensorMultiplyScalar(shiftedAttn, attentionScale);
-        for (int i = 0; i < _attentionWeights.Length; i++)
-        {
-            _attentionWeights[i] = scaledAttn.GetFlat(i);
-        }
+        scaledAttn.CopyTo(_attentionWeights.AsWritableSpan());
 
         // Initialize bias to zero
         _bias.Fill(NumOps.Zero);
@@ -392,6 +378,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
 
             output = TensorAllocator.Rent<T>([batchSize, numNodes, _combinedOutputFeatures]);
             output.Fill(NumOps.Zero);
+            double alpha = NumOps.ToDouble(_alpha);
 
             for (int b = 0; b < batchSize; b++)
             {
@@ -406,7 +393,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
                     _weights,
                     attnWeightsSource,
                     attnWeightsTarget,
-                    NumOps.ToDouble(_alpha),
+                    alpha,
                     concatenate: _concatenateHeads,
                     out var batchAttnCoeffs);
 
@@ -415,10 +402,6 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
                 var biasedOutput = Engine.TensorAdd(batchOutput, biasBroadcast);
                 output.SetSlice(b, biasedOutput);
             }
-
-            // Store cached values for backward pass
-            _lastPreSoftmaxScores = null;
-            _lastAttentionCoefficients = null;
 
             activatedOutput = ApplyActivation(output);
 
@@ -466,10 +449,40 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         bool adjacency2D = (adjacency ?? throw new InvalidOperationException("adjacency is null where it is required.")).Shape.Length == 2;
         T maskNegInf = NumOps.FromDouble(-1e9);
 
-        // These per-forward scratch caches are unused on the on-tape path (autodiff owns the
-        // backward). Null them so ResetState / arena recycling see no stale references.
-        _lastPreSoftmaxScores = null;
-        _lastAttentionCoefficients = null;
+        // The masked dense attention below, computed over the graph's edges only. A row's softmax over its stored
+        // neighbours is exactly the dense softmax with the -1e9 additive mask: every masked entry contributes
+        // exp(-1e9 - max) = 0, so the coefficients, the dropout on them and the aggregation agree, at O(edges * heads)
+        // instead of O(nodes^2 * heads) work and memory (the dense path materializes several [N, N] tensors per head
+        // and rebuilds the mask and the dropout mask on the host every forward). It needs every row to have an edge
+        // (a fully masked dense row softmaxes to a uniform 1/N over all nodes), which a GAT's self-loops guarantee.
+        // A training step's own adjacency (GraphStepAdjacency), while a compiled plan traces the step, is a plan input
+        // that every replay refreshes: a CSR pattern or mask built from it on the host here would be frozen into the
+        // plan with the traced step's graph. Such a forward takes the dense path with the mask recorded from the live
+        // adjacency instead. A graph that stays fixed across steps (the layer's own) keeps the sparse kernel.
+        bool graphIsReplayedData = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+            && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsInferenceTrace
+            && GraphStepAdjacency<T>.IsStepData(adjacency);
+        var csr = CsrAttentionOperations<T>.Available;
+        var csrGraph = csr is not null && adjacency2D && adjacency.Shape[0] == numNodes && UseSparseAttention && !graphIsReplayedData
+            ? GetCsrGraph(adjacency, csr) : null;
+        if (csrGraph is not null && csr is not null)
+        {
+            // Wh for every head at once: [B*N, in] @ [in, H*F], laid out [B, N, H, F] as the CSR op reads it.
+            var allHeadWeights = _numHeads == 1
+                ? Engine.Reshape(_weights, [_inputFeatures, _outputFeatures])
+                : Engine.Reshape(Engine.TensorPermute(_weights, [1, 0, 2]), [_inputFeatures, _numHeads * _outputFeatures]);
+            var transformedAll = Engine.TensorMatMul(
+                Engine.Reshape(processInput, [batchSize * numNodes, _inputFeatures]), allHeadWeights);
+            bool dropoutActive = _dropoutRate > 0.0 && IsTrainingMode;
+            var aggregatedAll = csr.Aggregate(Engine, transformedAll, _attentionWeights, csrGraph,
+                NumOps.ToDouble(_alpha), dropoutActive ? _dropoutRate : 0.0, dropoutActive ? _random : null);
+            var combinedSparse = _concatenateHeads || _numHeads == 1
+                ? Engine.Reshape(aggregatedAll, [batchSize, numNodes, _combinedOutputFeatures])
+                : Engine.ReduceMean(Engine.Reshape(aggregatedAll, [batchSize, numNodes, _numHeads, _outputFeatures]), [2], keepDims: false);
+            var sparseBias = Engine.Reshape(_bias, [1, 1, _combinedOutputFeatures]);
+            var activatedSparse = ApplyActivation(Engine.TensorAdd(combinedSparse, sparseBias));
+            return RestoreDenseOutputRank(activatedSparse, rank, numNodes);
+        }
 
         // The additive attention mask depends only on the batch element (adjacency[b]), not the
         // head, so build it once per batch element instead of recomputing the identical O(numNodes^2)
@@ -477,7 +490,9 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         // tape parameter), so the same instance can be reused across heads.
         var perBatchMasks = new Tensor<T>[batchSize];
         for (int b = 0; b < batchSize; b++)
-            perBatchMasks[b] = BuildAttentionMask(adjacency, adjacency2D, b, numNodes, maskNegInf);
+            perBatchMasks[b] = graphIsReplayedData
+                ? RecordedAttentionMask(adjacency, adjacency2D, b, numNodes, maskNegInf)
+                : BuildAttentionMask(adjacency, adjacency2D, b, numNodes, maskNegInf);
 
         // Retain every head output until the paper's head-combination operation. Hidden
         // GAT layers concatenate heads; the final prediction layer averages them.
@@ -545,49 +560,92 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         output = Engine.TensorAdd(combinedHeads, denseBias);
 
         activatedOutput = ApplyActivation(output);
+        return RestoreDenseOutputRank(activatedOutput, rank, numNodes);
+    }
 
-        // Reshape output to match original input rank
-        Tensor<T> denseReshaped;
+    /// <summary>Reshapes a [batch, nodes, combinedFeatures] output back to the input's rank.</summary>
+    private Tensor<T> RestoreDenseOutputRank(Tensor<T> activatedOutput, int rank, int numNodes)
+    {
         if (rank == 1)
         {
             // Original was [inputFeatures], output should be [outputFeatures]
-            denseReshaped = Engine.Reshape(activatedOutput, [_combinedOutputFeatures]);
+            return Engine.Reshape(activatedOutput, [_combinedOutputFeatures]);
         }
-        else if (rank == 2)
+        if (rank == 2)
         {
             // Original was [numNodes, inputFeatures], output should be [numNodes, outputFeatures]
-            denseReshaped = Engine.Reshape(activatedOutput, [numNodes, _combinedOutputFeatures]);
-        }
-        else
-        {
-            // Restore original batch dimensions
-            if (_originalInputShape == null)
-            {
-                throw new InvalidOperationException("Original input shape was not captured.");
-            }
-            var originalShape = _originalInputShape;
-            var outputShape = new int[rank];
-            for (int d = 0; d < rank - 2; d++)
-                outputShape[d] = originalShape[d];
-            outputShape[rank - 2] = numNodes;
-            outputShape[rank - 1] = _combinedOutputFeatures;
-            denseReshaped = Engine.Reshape(activatedOutput, outputShape);
+            return Engine.Reshape(activatedOutput, [numNodes, _combinedOutputFeatures]);
         }
 
-        return denseReshaped;
+        // Restore original batch dimensions
+        var originalShape = _originalInputShape ?? throw new InvalidOperationException("Original input shape was not captured.");
+        var outputShape = new int[rank];
+        for (int d = 0; d < rank - 2; d++)
+            outputShape[d] = originalShape[d];
+        outputShape[rank - 2] = numNodes;
+        outputShape[rank - 1] = _combinedOutputFeatures;
+        return Engine.Reshape(activatedOutput, outputShape);
+    }
+
+    /// <summary>
+    /// Whether a 2-D adjacency runs the sparse (edge-only) attention kernel - the default, and the same result as the
+    /// dense masked path - rather than the dense [N, N] formulation. Tests compare the two.
+    /// </summary>
+    internal bool UseSparseAttention { get; set; } = true;
+
+    // The CSR pattern of the installed 2-D adjacency, rebuilt only when the matrix (or its contents) changes.
+    [Scratch]
+    private object? _csrGraph;
+    [Scratch]
+    private Tensor<T>? _csrGraphSource;
+    private int _csrGraphSourceVersion;
+
+    /// <summary>
+    /// The nonzero pattern of <paramref name="adjacency"/> for the sparse attention kernel, or null when some node has
+    /// no edge (the dense path's uniform fallback for a fully masked row has no sparse equivalent).
+    /// </summary>
+    private object? GetCsrGraph(Tensor<T> adjacency, CsrAttentionOperations<T> csr)
+    {
+        // The storage epoch, not Version: Version does not advance for a write made in inference mode or through
+        // another view of the same storage.
+        if (ReferenceEquals(adjacency, _csrGraphSource) && adjacency.StorageMutationVersion == _csrGraphSourceVersion)
+            return _csrGraph;
+        _csrGraph = csr.CreatePattern(adjacency);
+        _csrGraphSource = adjacency;
+        _csrGraphSourceVersion = adjacency.StorageMutationVersion;
+        return _csrGraph;
+    }
+
+    // What a compiled inference plan reads besides the weights: the adjacency (its CSR pattern or mask), or the edges.
+    [Scratch]
+    private CompiledBindingTracker _bindingTracker;
+
+    /// <inheritdoc/>
+    int ICompiledBindingSource.CompiledBindingVersion
+        => _bindingTracker.Observe(_adjacencyMatrix, _edgeSourceIndices, _edgeTargetIndices, _useSparseAggregation);
+
+    /// <summary>
+    /// The additive attention mask for one graph, as recorded engine ops over the live adjacency: 0 on an edge, -1e9
+    /// elsewhere, the same values as <see cref="BuildAttentionMask"/>. A compiled training plan replays these ops on
+    /// each step's own adjacency.
+    /// </summary>
+    private Tensor<T> RecordedAttentionMask(Tensor<T> adjacency, bool adjacency2D, int b, int numNodes, T negInf)
+    {
+        var graph = adjacency2D
+            ? adjacency
+            : Engine.Reshape(Engine.TensorSlice(adjacency, [b, 0, 0], [1, numNodes, numNodes]), [numNodes, numNodes]);
+        return Engine.TensorMultiplyScalar(Engine.TensorEquals(graph, NumOps.Zero), negInf);
     }
 
     private Tensor<T> ExtractHeadWeight(int h)
     {
-        var headWeight = new Tensor<T>([_inputFeatures, _outputFeatures]);
-        for (int i = 0; i < _inputFeatures; i++)
+        // A plain copy of head h's [inputFeatures, outputFeatures] block.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int j = 0; j < _outputFeatures; j++)
-            {
-                headWeight[i, j] = _weights[h, i, j];
-            }
+            return Engine.Reshape(
+                Engine.TensorSlice(_weights, [h, 0, 0], [1, _inputFeatures, _outputFeatures]),
+                [_inputFeatures, _outputFeatures]).Clone();
         }
-        return headWeight;
     }
 
     /// <summary>
@@ -620,17 +678,18 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// </summary>
     private Tensor<T> BuildAttentionMask(Tensor<T> adjacency, bool adjacency2D, int b, int numNodes, T negInf)
     {
-        var mask = new Tensor<T>([numNodes, numNodes]);
-        T zero = NumOps.Zero;
-        for (int i = 0; i < numNodes; i++)
+        if (numNodes == 0) return new Tensor<T>([0, 0]);
+
+        // negInf where the adjacency entry equals zero (NaN is not zero), else 0. Constant data, off the tape.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int j = 0; j < numNodes; j++)
-            {
-                T a = adjacency2D ? adjacency[i, j] : adjacency[b, i, j];
-                mask[i, j] = NumOps.Equals(a, zero) ? negInf : zero;
-            }
+            var graph = adjacency2D
+                ? Engine.TensorSlice(adjacency, [0, 0], [numNodes, numNodes])
+                : Engine.Reshape(Engine.TensorSlice(adjacency, [b, 0, 0], [1, numNodes, numNodes]), [numNodes, numNodes]);
+            var blocked = new Tensor<T>([numNodes, numNodes]);
+            blocked.Fill(negInf);
+            return Engine.TensorWhere(Engine.TensorEquals(graph, NumOps.Zero), blocked, new Tensor<T>([numNodes, numNodes]));
         }
-        return mask;
     }
 
     /// <summary>
@@ -641,124 +700,8 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// </summary>
     private Tensor<T> BuildAttentionDropoutMask(int numNodes, double dropoutRate)
     {
-        var mask = new Tensor<T>([numNodes, numNodes]);
-        T zero = NumOps.Zero;
-        T keepScale = NumOps.FromDouble(1.0 / (1.0 - dropoutRate));
-        int total = numNodes * numNodes;
-        for (int i = 0; i < total; i++)
-        {
-            mask.SetFlat(i, _random.NextDouble() < dropoutRate ? zero : keepScale);
-        }
-        return mask;
-    }
-
-    private void ComputeAttentionScores(int b, int h, int numNodes, Tensor<T> selfScores, Tensor<T> neighborScores)
-    {
-        // This method is only called from Forward after _adjacencyMatrix, _lastPreSoftmaxScores, and _lastAttentionCoefficients are validated
-        if (_adjacencyMatrix == null || _lastPreSoftmaxScores == null || _lastAttentionCoefficients == null)
-        {
-            throw new InvalidOperationException("Adjacency matrix and score tensors must be set before computing attention scores.");
-        }
-        var adjacencyMatrix = _adjacencyMatrix;
-
-        // Handle 2D or 3D adjacency matrix
-        bool adj2D = adjacencyMatrix.Shape.Length == 2;
-
-        // Raw-array flat indexing. The 4-D tensor indexer [b, h, i, j] resolves to the params-int[]
-        // overload, which HEAP-ALLOCATES an int[4] on every access (plus a virtual call + stride
-        // resolution). Across the three O(numNodes^2) passes per (b, h) that was on the order of
-        // millions of int[4] allocations per forward. Work on the backing arrays with computed flat
-        // offsets instead — identical math, no per-element allocation or dispatch.
-        var pre = _lastPreSoftmaxScores.GetCpuData();        // [batch, numHeads, numNodes, numNodes]
-        var coeff = _lastAttentionCoefficients.GetCpuData(); // same shape
-        var adj = adjacencyMatrix.GetCpuData();
-        var self = selfScores.GetCpuData();
-        var neigh = neighborScores.GetCpuData();
-        T zero = NumOps.Zero;
-        T minVal = NumOps.MinValue;
-
-        // Base offset of the [i, j] block for this (b, h) slice in the [batch, numHeads, N, N] tensor.
-        int bhBase = ((b * _numHeads) + h) * numNodes * numNodes;
-        // Adjacency: 2D is shared across the batch (base 0); 3D is offset by b.
-        int adjBase = adj2D ? 0 : b * numNodes * numNodes;
-
-        // Compute attention scores with LeakyReLU and softmax.
-        var maxScores = new T[numNodes];
-
-        // First pass: compute raw scores and find the per-node max for numerical stability.
-        for (int i = 0; i < numNodes; i++)
-        {
-            int rowBase = bhBase + i * numNodes;
-            int adjRow = adjBase + i * numNodes;
-            T selfI = self[i];
-            T maxI = minVal;
-            for (int j = 0; j < numNodes; j++)
-            {
-                if (NumOps.Equals(adj[adjRow + j], zero))
-                {
-                    pre[rowBase + j] = minVal;
-                    continue;
-                }
-
-                // e_ij = LeakyReLU(a_1^T * Wh_i + a_2^T * Wh_j)
-                T score = LeakyReLU(NumOps.Add(selfI, neigh[j]));
-                pre[rowBase + j] = score;
-                if (NumOps.GreaterThan(score, maxI))
-                {
-                    maxI = score;
-                }
-            }
-            maxScores[i] = maxI;
-        }
-
-        // Second pass: softmax over neighbors per node.
-        for (int i = 0; i < numNodes; i++)
-        {
-            int rowBase = bhBase + i * numNodes;
-            int adjRow = adjBase + i * numNodes;
-            T maxI = maxScores[i];
-            T sumExp = zero;
-
-            // exp(score - max) for numerical stability.
-            for (int j = 0; j < numNodes; j++)
-            {
-                if (!NumOps.Equals(adj[adjRow + j], zero))
-                {
-                    T expVal = NumOps.Exp(NumOps.Subtract(pre[rowBase + j], maxI));
-                    coeff[rowBase + j] = expVal;
-                    sumExp = NumOps.Add(sumExp, expVal);
-                }
-            }
-
-            // Normalize and apply dropout.
-            for (int j = 0; j < numNodes; j++)
-            {
-                if (!NumOps.Equals(adj[adjRow + j], zero))
-                {
-                    T c = NumOps.Divide(coeff[rowBase + j], sumExp);
-
-                    if (_dropoutRate > 0.0 && IsTrainingMode && _random.NextDouble() < _dropoutRate)
-                    {
-                        c = zero;
-                    }
-                    else if (_dropoutRate > 0.0 && IsTrainingMode)
-                    {
-                        c = NumOps.Multiply(c, NumOps.FromDouble(1.0 / (1.0 - _dropoutRate)));
-                    }
-
-                    coeff[rowBase + j] = c;
-                }
-                else
-                {
-                    coeff[rowBase + j] = zero;
-                }
-            }
-        }
-    }
-
-    private T LeakyReLU(T x)
-    {
-        return NumOps.GreaterThan(x, NumOps.Zero) ? x : NumOps.Multiply(_alpha, x);
+        // A per-step draw, so a compiled training plan redraws it on every replay.
+        return AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask([numNodes, numNodes], _random, dropoutRate);
     }
 
     /// <summary>
@@ -869,8 +812,6 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _lastAttentionCoefficients = null;
-        _lastPreSoftmaxScores = null;
         _weightsGradient = null;
         _attentionWeightsGradient = null;
         _biasGradient = null;

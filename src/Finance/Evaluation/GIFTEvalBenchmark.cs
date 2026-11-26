@@ -32,41 +32,32 @@ namespace AiDotNet.Finance.Evaluation;
 /// </remarks>
 public class GIFTEvalBenchmark<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static readonly INumericOperations<double> NumOps = MathHelper.GetNumericOperations<double>();
 
     private static IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>Elements [start, start + count) of <paramref name="tensor"/> in row-major order, as a rank-1 tensor.</summary>
-    private static Tensor<T> FlatRange(Tensor<T> tensor, int start, int count)
+    private static Tensor<double> FlatRange(Tensor<T> tensor, int start, int count)
     {
         var flat = Engine.Reshape(tensor, new[] { tensor.Length });
-        return start == 0 && count == tensor.Length ? flat : Engine.TensorSlice(flat, new[] { start }, new[] { count });
+        return (start == 0 && count == tensor.Length ? flat : Engine.TensorSlice(flat, new[] { start }, new[] { count })).Cast<double>();
     }
 
     /// <summary>Sum of the pinball (quantile) loss at level <paramref name="quantile"/> over error = actual - predicted.</summary>
-    /// <remarks>
-    /// error &gt;= 0 ? q * error : (q - 1) * error, which is q * error + max(-error, 0). The loss is formed element by element in <typeparamref name="T"/> (each term is at most |error|, so it fits
-    /// wherever the error does) and summed in double: a Half sum of 800 errors of 100 is past 65504, and the signed
-    /// q * sum(error) it used to take was -inf against a +inf ReLU sum, so the loss was NaN. Every term is
-    /// non-negative (fl(q * e) + |e| &gt;= 0 for e &lt; 0), so the absolute sum is the sum.
-    /// </remarks>
-    private static double PinballSum(Tensor<T> error, double quantile)
-        => TensorReductionHelper.SumAbsoluteAsDouble(
-            Engine, PinballTerms(error, Engine.TensorMultiplyScalar(error, NumOps.FromDouble(quantile))));
+    /// <remarks>error &gt;= 0 ? q * error : (q - 1) * error, which is q * error + max(-error, 0).</remarks>
+    private static double PinballSum(Tensor<double> error, double quantile)
+        => Engine.TensorSum(PinballLoss(error, Engine.TensorFullLike(error, quantile)));
 
-    /// <summary>
-    /// Throws unless <paramref name="level"/> is a quantile level in [0, 1]. Outside it the pinball terms can be
-    /// negative, and the loss (summed as a sum of non-negative terms) would score an invalid level as a valid one.
-    /// </summary>
     private static void ValidateQuantileLevel(double level, string parameterName)
     {
         if (double.IsNaN(level) || double.IsInfinity(level) || level < 0.0 || level > 1.0)
             throw new ArgumentOutOfRangeException(parameterName, level, "Quantile levels must be within [0, 1].");
     }
 
-    /// <summary>The per-element pinball loss q * e + max(-e, 0), given the error e and q * e.</summary>
-    private static Tensor<T> PinballTerms(Tensor<T> error, Tensor<T> scaledError)
-        => Engine.TensorAdd(scaledError, Engine.TensorReLU(Engine.TensorNegate(error)));
+    private static Tensor<double> PinballLoss(Tensor<double> error, Tensor<double> quantiles)
+        => Engine.TensorWhere(Engine.TensorGreaterEqual(error, Engine.TensorZerosLike(error)),
+            Engine.TensorMultiply(quantiles, error),
+            Engine.TensorMultiply(Engine.TensorSubtractScalar(quantiles, 1.0), error));
 
     /// <summary>
     /// Computes the Mean Absolute Scaled Error (MASE) for point forecasts.
@@ -87,7 +78,7 @@ public class GIFTEvalBenchmark<T>
     /// comparison across datasets with different magnitudes.
     /// </para>
     /// </remarks>
-    public T ComputeMASE(Tensor<T> predictions, Tensor<T> actuals, Tensor<T> historicalData, int seasonalPeriod = 1)
+    public double ComputeMASE(Tensor<T> predictions, Tensor<T> actuals, Tensor<T> historicalData, int seasonalPeriod = 1)
     {
         Guard.NotNull(predictions);
         Guard.NotNull(actuals);
@@ -102,11 +93,13 @@ public class GIFTEvalBenchmark<T>
         // Both MAEs are summed in double and their ratio taken in double: a Half sum of absolute errors passes 65504
         // long before either mean does, and inf / inf made the score NaN.
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        double forecastMae = TensorReductionHelper.SumAbsoluteAsDouble(Engine, Engine.TensorSubtract(
-            FlatRange(predictions, 0, horizon), FlatRange(actuals, 0, horizon))) / horizon;
+        double forecastMae = NumOps.Divide(
+            Engine.TensorSum(Engine.TensorAbs(Engine.TensorSubtract(
+                FlatRange(predictions, 0, horizon), FlatRange(actuals, 0, horizon)))),
+            NumOps.FromDouble(horizon));
 
         // Compute naive baseline MAE (seasonal naive): |h[i] - h[i - period]| for i in [period, length).
-        double naiveMae = 0.0;
+        double naiveMae = NumOps.Zero;
         int naiveCount = Math.Max(0, historicalData.Length - seasonalPeriod);
         if (naiveCount > 0)
         {
@@ -115,9 +108,9 @@ public class GIFTEvalBenchmark<T>
         }
 
         // Avoid division by zero
-        const double tiny = 1e-10;
-        if (naiveMae < tiny)
-            return forecastMae < tiny ? NumOps.One : NumOps.FromDouble(double.PositiveInfinity);
+        double tiny = NumOps.FromDouble(1e-10);
+        if (NumOps.LessThan(naiveMae, tiny))
+            return NumOps.LessThan(forecastMae, tiny) ? NumOps.One : NumOps.FromDouble(double.PositiveInfinity);
 
         return NumOps.FromDouble(forecastMae / naiveMae);
     }
@@ -146,7 +139,7 @@ public class GIFTEvalBenchmark<T>
     /// the summed absolute target, then the quantiles are averaged.
     /// </para>
     /// </remarks>
-    public T ComputeCRPS(IReadOnlyDictionary<double, Tensor<T>> quantileForecasts, Tensor<T> actuals)
+    public double ComputeCRPS(IReadOnlyDictionary<double, Tensor<T>> quantileForecasts, Tensor<T> actuals)
     {
         Guard.NotNull(quantileForecasts);
         Guard.NotNull(actuals);
@@ -177,9 +170,8 @@ public class GIFTEvalBenchmark<T>
 
         // GIFT-Eval CRPS (gluonts MeanWeightedSumQuantileLoss):
         // (1 / Q) * sum_q [2 * sum_t pinball_q / sum_t |y_t|] = 2 * sum_q sum_t pinball_q / (Q * sum_t |y_t|).
-        // Both sums in double: a Half sum of |y| (or of the pinball losses) passes 65504 long before their ratio does.
-        double totalLoss = 0.0;
-        double absoluteTarget = 0.0;
+        double totalLoss = NumOps.Zero;
+        double absoluteTarget = NumOps.Zero;
         if (horizon > 0)
         {
             using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
@@ -202,15 +194,14 @@ public class GIFTEvalBenchmark<T>
     /// <param name="actuals">Actual values of shape [horizon].</param>
     /// <param name="quantileLevel">The quantile level (e.g., 0.5 for median).</param>
     /// <returns>Average quantile loss. Lower is better.</returns>
-    public T ComputeQuantileLoss(Tensor<T> predictions, Tensor<T> actuals, double quantileLevel)
+    public double ComputeQuantileLoss(Tensor<T> predictions, Tensor<T> actuals, double quantileLevel)
     {
         Guard.NotNull(predictions);
         Guard.NotNull(actuals);
         ValidateQuantileLevel(quantileLevel, nameof(quantileLevel));
 
         int horizon = Math.Min(predictions.Length, actuals.Length);
-        // Summed in double, so a Half total past 65504 does not make the mean infinite (or NaN).
-        double totalLoss = 0.0;
+        double totalLoss = NumOps.Zero;
         if (horizon > 0)
         {
             using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
@@ -235,7 +226,7 @@ public class GIFTEvalBenchmark<T>
     /// it feeds the context to the model, gets a forecast, and computes both point metrics
     /// (MASE) and probabilistic metrics (CRPS).
     /// </remarks>
-    public Dictionary<string, T> RunBenchmark(
+    public Dictionary<string, double> RunBenchmark(
         ITimeSeriesFoundationModel<T> model,
         IReadOnlyList<Tensor<T>> testSeries,
         IReadOnlyList<int> contextLengths,
@@ -256,16 +247,14 @@ public class GIFTEvalBenchmark<T>
         if (seasonalPeriods.Count != testSeries.Count)
             throw new ArgumentException($"seasonalPeriods.Count ({seasonalPeriods.Count}) must equal testSeries.Count ({testSeries.Count}).", nameof(seasonalPeriods));
 
-        var maseScores = new List<T>();
+        var maseScores = new List<double>();
 
         // GIFT-Eval aggregates the weighted quantile loss over the whole dataset: each level's pinball
         // losses and the absolute targets are summed across every scored series before dividing.
-        // Summed in double: in Half a level's loss over one series, or a series' sum |y|, passes 65504 long before the
-        // ratio does, and the infinite sum dropped the series from the CRPS as if its forecast were not finite.
-        var levelLosses = new List<double[]>();
+        var levelLosses = new List<Tensor<double>>();
         var absoluteTargets = new List<double>();
         int numQ = quantileLevels.Length;
-        var levelRow = new Tensor<double>(new[] { 1, numQ }, new Vector<double>(quantileLevels.ToArray())).Cast<T>();
+        using var levelRow = new Tensor<double>(new[] { 1, numQ }, new Vector<double>(quantileLevels.ToArray()));
 
         for (int s = 0; s < testSeries.Count; s++)
         {
@@ -294,7 +283,7 @@ public class GIFTEvalBenchmark<T>
             pointPrediction.AsSpan().Slice(0, evalLen).CopyTo(predSlice.Data.Span);
             future.AsSpan().Slice(0, evalLen).CopyTo(actualSlice.Data.Span);
 
-            T mase = ComputeMASE(predSlice, actualSlice, context, seasonalPeriod);
+            double mase = ComputeMASE(predSlice, actualSlice, context, seasonalPeriod);
             maseScores.Add(mase);
 
             // Compute CRPS from quantile forecasts (single call with all quantile levels)
@@ -311,28 +300,23 @@ public class GIFTEvalBenchmark<T>
             {
                 var gridShape = new[] { evalLen, numQ };
                 var grid = Engine.Reshape(FlatRange(allQuantileForecast, 0, needed), gridShape);
-                var actualColumn = Engine.TensorBroadcastTo(Engine.Reshape(actualSlice, new[] { evalLen, 1 }), gridShape);
+                var actualColumn = Engine.TensorBroadcastTo(Engine.Reshape(actualSlice.Cast<double>(), new[] { evalLen, 1 }), gridShape);
                 var error = Engine.TensorSubtract(actualColumn, grid);
 
-                // pinball_q(e) = q * e + max(-e, 0), summed down the steps for each level.
-                var pinball = PinballTerms(error, Engine.TensorMultiply(Engine.TensorBroadcastTo(levelRow, gridShape), error));
+                // Select the sign branch before reducing, avoiding cancellation for quantiles near one.
+                var pinball = PinballLoss(error, Engine.TensorBroadcastTo(levelRow, gridShape));
+                var losses = Engine.ReduceSum(pinball, new[] { 0 }, false);
+                var absoluteTarget = Engine.TensorAbs(actualSlice.Cast<double>());
                 // A forecast or target holding NaN or infinity would turn the whole dataset's CRPS into NaN;
                 // it is left out, as the per-series finite filter did, and not counted in NumCRPSEvaluated.
-                if (!AllFinite(pinball) || !AllFinite(actualSlice))
+                if (!AllFinite(losses) || !AllFinite(absoluteTarget))
                     continue;
-                var losses = new double[numQ];
-                for (int q = 0; q < numQ; q++)
-                {
-                    losses[q] = TensorReductionHelper.SumAbsoluteAsDouble(
-                        Engine, Engine.TensorSlice(pinball, new[] { 0, q }, new[] { evalLen, 1 }));
-                }
-
                 levelLosses.Add(losses);
-                absoluteTargets.Add(TensorReductionHelper.SumAbsoluteAsDouble(Engine, actualSlice));
+                absoluteTargets.Add(Engine.TensorSum(absoluteTarget));
             }
         }
 
-        var results = new Dictionary<string, T>();
+        var results = new Dictionary<string, double>();
         var (maseMean, maseFinite) = FiniteMeanOrNaN(maseScores);
         results["MASE"] = maseMean;
         results["CRPS"] = DatasetWeightedQuantileLoss(levelLosses, absoluteTargets, numQ);
@@ -347,36 +331,39 @@ public class GIFTEvalBenchmark<T>
     /// GIFT-Eval's dataset CRPS: (1 / Q) * sum_q [2 * (sum over series and steps of pinball_q) / (sum of |y|)];
     /// NaN when no series was scored.
     /// </summary>
-    private static T DatasetWeightedQuantileLoss(List<double[]> levelLosses, List<double> absoluteTargets, int numQ)
+    private static double DatasetWeightedQuantileLoss(List<Tensor<double>> levelLosses, List<double> absoluteTargets, int numQ)
     {
         if (levelLosses.Count == 0 || numQ == 0)
             return NumOps.FromDouble(double.NaN);
-        double totalLoss = levelLosses.Sum(losses => losses.Sum());
-        double absoluteTotal = absoluteTargets.Sum();
-        return NumOps.FromDouble(totalLoss / absoluteTotal * (2.0 / numQ));
+        var perLevel = Engine.ReduceSum(Engine.TensorStack(levelLosses.ToArray(), 0), new[] { 0 }, false);
+        using var targets = new Tensor<double>(new[] { absoluteTargets.Count }, new Vector<double>(absoluteTargets.ToArray()));
+        double absoluteTotal = Engine.TensorSum(targets);
+        // Divide by sum|y| before applying 2 / Q, so Q * sum|y| cannot overflow T while the ratio is finite.
+        return NumOps.Multiply(
+            NumOps.Divide(Engine.TensorSum(perLevel), absoluteTotal), NumOps.FromDouble(2.0 / numQ));
     }
 
     /// <summary>True when every value is finite (x - x is 0 exactly for finite x; NaN and +/-infinity give NaN).</summary>
-    private static bool AllFinite(Tensor<T> values)
+    private static bool AllFinite(Tensor<double> values)
         => Engine.TensorCountNonzero(Engine.TensorEquals(Engine.TensorSubtract(values, values), NumOps.Zero)) == values.Length;
 
     /// <summary>
     /// Mean of the finite scores (NaN and infinite ones are skipped) and how many were finite;
     /// NaN when none are.
     /// </summary>
-    private static (T Mean, int Finite) FiniteMeanOrNaN(List<T> scores)
+    private static (double Mean, int Finite) FiniteMeanOrNaN(List<double> scores)
     {
         if (scores.Count == 0)
             return (NumOps.FromDouble(double.NaN), 0);
-        var all = new Tensor<T>(new[] { scores.Count }, new Vector<T>(scores.ToArray()));
+        using var all = new Tensor<double>(new[] { scores.Count }, new Vector<double>(scores.ToArray()));
         // x - x is 0 exactly when x is finite (NaN and +/-infinity give NaN).
         var finite = Engine.TensorEquals(Engine.TensorSubtract(all, all), NumOps.Zero);
         int count = Engine.TensorCountNonzero(finite);
         if (count == 0)
             return (NumOps.FromDouble(double.NaN), 0);
         var kept = Engine.TensorWhere(finite, all, Engine.TensorZerosLike(all));
-        T countT = NumOps.FromDouble(count);
-        T mean = NumOps.Divide(Engine.TensorSum(kept), countT);
+        double countT = NumOps.FromDouble(count);
+        double mean = NumOps.Divide(Engine.TensorSum(kept), countT);
         // The sum of finite scores can overflow T (two float scores near 3e38) while their mean is finite:
         // then divide each score by the count before summing.
         if (NumOps.IsInfinity(mean))

@@ -1,6 +1,8 @@
 using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Engines.Compilation;
+using AiDotNet.Training;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
 
@@ -54,16 +56,17 @@ internal sealed class HiftGenerator<T>
         Configuration = configuration;
         var c = configuration;
         TLayer Add<TLayer>(TLayer layer) where TLayer : LayerBase<T> { layers.Add(layer); return layer; }
-        // init_weights: N(0, 0.01) for the convolutions it reaches; the others keep PyTorch's default (Kaiming uniform).
-        Func<double> Normal(double std) => () =>
-            std * Math.Sqrt(-2.0 * Math.Log(1.0 - initialization.NextDouble())) * Math.Cos(2.0 * Math.PI * initialization.NextDouble());
+        // No N(0, 0.01) redraw: the reference applies init_weights (to ups, conv_post and the ResBlock convolutions) after
+        // weight_norm, so it writes only the derived `weight` tensor, which weight_norm recomputes from weight_g and weight_v
+        // on every forward. Those convolutions train from PyTorch's default draw (null init below: the layer's own
+        // U(±1/√fan_in) weights and bias, g = ||v||), seeded from the initialization stream.
         Func<double> Kaiming(int fanIn) => () => (2 * initialization.NextDouble() - 1) / Math.Sqrt(fanIn);
         NormedConv1DLayer<T> Conv(int input, int output, int kernel, int stride, int dilation, int padding, bool weightNorm,
-            Func<double> init, bool transposed = false)
+            Func<double>? init, bool transposed = false)
         {
             var conv = Add(new NormedConv1DLayer<T>(input, output, kernel, stride, dilation, 1, padding, transposed,
-                weightNorm ? ConvolutionNormalization.Weight : ConvolutionNormalization.None));
-            conv.Reinitialize(init, bias: 0.0);
+                weightNorm ? ConvolutionNormalization.Weight : ConvolutionNormalization.None, 0, true, initialization));
+            if (init is not null) conv.Reinitialize(init, bias: 0.0);
             return conv;
         }
 
@@ -82,8 +85,8 @@ internal sealed class HiftGenerator<T>
         {
             int u = c.UpsampleRates[i], k = c.UpsampleKernels[i];
             Ups.Add(c.Causal
-                ? Conv(c.BaseChannels >> i, c.BaseChannels >> (i + 1), k, 1, 1, 0, true, Normal(0.01))
-                : Conv(c.BaseChannels >> i, c.BaseChannels >> (i + 1), k, u, 1, (k - u) / 2, true, Normal(0.01), transposed: true));
+                ? Conv(c.BaseChannels >> i, c.BaseChannels >> (i + 1), k, 1, 1, 0, true, null)
+                : Conv(c.BaseChannels >> i, c.BaseChannels >> (i + 1), k, u, 1, (k - u) / 2, true, null, transposed: true));
         }
         // Source downsampling: cumulative rates of [1] + reversed rates without its last, reversed again.
         var rates = new List<int> { 1 };
@@ -103,7 +106,7 @@ internal sealed class HiftGenerator<T>
         for (int i = 0; i < c.UpsampleRates.Length; i++)
             for (int j = 0; j < c.ResblockKernels.Length; j++)
                 ResBlocks.Add(NewResBlock(c.BaseChannels >> (i + 1), c.ResblockKernels[j], c.ResblockDilations[j]));
-        ConvPost = Conv(c.BaseChannels >> c.UpsampleRates.Length, c.FftSize + 2, 7, 1, 1, c.Causal ? 0 : 3, true, Normal(0.01));
+        ConvPost = Conv(c.BaseChannels >> c.UpsampleRates.Length, c.FftSize + 2, 7, 1, 1, c.Causal ? 0 : 3, true, null);
 
         ResBlock NewResBlock(int channels, int kernel, int[] dilations)
         {
@@ -111,9 +114,9 @@ internal sealed class HiftGenerator<T>
             foreach (int d in dilations)
             {
                 block.Snakes1.Add(Add(new SnakeLayer<T>(channels)));
-                block.Convs1.Add(Conv(channels, channels, kernel, 1, d, c.Causal ? 0 : (kernel * d - d) / 2, true, Normal(0.01)));
+                block.Convs1.Add(Conv(channels, channels, kernel, 1, d, c.Causal ? 0 : (kernel * d - d) / 2, true, null));
                 block.Snakes2.Add(Add(new SnakeLayer<T>(channels)));
-                block.Convs2.Add(Conv(channels, channels, kernel, 1, 1, c.Causal ? 0 : (kernel - 1) / 2, true, Normal(0.01)));
+                block.Convs2.Add(Conv(channels, channels, kernel, 1, 1, c.Causal ? 0 : (kernel - 1) / 2, true, null));
             }
             return block;
         }
@@ -192,19 +195,62 @@ internal sealed class HiftGenerator<T>
     /// </summary>
     public Tensor<T> Source(Tensor<T> f0, Random random)
     {
-        var c = Configuration;
+        var c = GetHarmonicSettings();
         int samples = f0.Length * c.UpsampleScale, harmonics = c.Harmonics + 1;
+        var draws = DrawHarmonicData(random, harmonics, samples);
+        var excitation = ExcitationData(_engine, "HiftExcitation", f0, new[] { 1, harmonics, samples },
+            () => SourceHarmonics(f0, draws, c));
+        return Merge(excitation);
+    }
+
+    private readonly record struct HarmonicSettings(int UpsampleScale, int Harmonics, int SampleRate,
+        double NsfAlpha, double NsfSigma, double VoicedThreshold, bool OriginalSineGen);
+
+    private HarmonicSettings GetHarmonicSettings()
+    {
+        var c = Configuration;
+        return new(c.UpsampleScale, c.Harmonics, c.SampleRate, c.NsfAlpha, c.NsfSigma, c.VoicedThreshold, c.OriginalSineGen);
+    }
+
+    private static Tensor<double> DrawHarmonicData(Random random, int harmonics, int samples)
+        => CompiledStepRandom<T>.DrawData<double>(new[] { harmonics - 1 + harmonics * samples }, tensor =>
+        {
+            var span = tensor.AsWritableSpan();
+            int index = 0;
+            for (int h = 1; h < harmonics; h++) span[index++] = -Math.PI + 2 * Math.PI * random.NextDouble();
+            for (int h = 0; h < harmonics; h++)
+                for (int s = 0; s < samples; s++)
+                    span[index++] = Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble());
+        });
+
+    private static Tensor<T> SourceHarmonics(Tensor<T> f0, Tensor<double> draws, HarmonicSettings c)
+    {
+        int samples = f0.Length * c.UpsampleScale, harmonics = c.Harmonics + 1;
+        var values = draws.ToArray();
         var phases = new double[harmonics];
-        for (int h = 1; h < harmonics; h++) phases[h] = -Math.PI + 2 * Math.PI * random.NextDouble();
+        int index = 0;
+        for (int h = 1; h < harmonics; h++) phases[h] = values[index++];
         var noise = new double[harmonics, samples];
         for (int h = 0; h < harmonics; h++)
-            for (int s = 0; s < samples; s++)
-                noise[h, s] = Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble());
-        if (c.SampleRate == 22050 || c.OriginalSineGen) return Merge(Harmonics(f0, phases, noise));
-        // SineGen2's initial phases are fractions of a cycle, U[0, 1), drawn after the noise's shape is known.
+            for (int s = 0; s < samples; s++) noise[h, s] = values[index++];
+        if (c.SampleRate == 22050 || c.OriginalSineGen) return HarmonicsCore(f0, phases, noise, c);
+        // SineGen2's initial phases are fractions of a cycle, preserving the original transformation and draw order.
         var fractions = new double[harmonics];
         for (int h = 1; h < harmonics; h++) fractions[h] = phases[h] / (2 * Math.PI) + 0.5;
-        return Merge(HarmonicsByFrames(f0, fractions, noise));
+        return HarmonicsByFramesCore(f0, fractions, noise, c);
+    }
+
+    private static Tensor<T> ExcitationData(IEngine engine, string name, Tensor<T> f0, int[] shape, Func<Tensor<T>> compute)
+    {
+        if (!GraphMode.IsActive) return compute();
+        var scope = GraphMode.Current ?? throw new InvalidOperationException("Active graph mode requires a recording scope.");
+        scope.BindEngineIfUnset(engine);
+        // A forward-data edge declares current F0 ordering without inventing a derivative through the discrete source.
+        return scope.RecordCrossType<T, T>(LazyNodeType.Custom, name, f0, shape, (replayEngine, output) =>
+        {
+            using var value = compute();
+            DirectGpuTensorEngine.CopyResultInto(replayEngine, value, output);
+        });
     }
 
     /// <summary>
@@ -216,9 +262,17 @@ internal sealed class HiftGenerator<T>
     /// </summary>
     public Tensor<T> HarmonicsByFrames(Tensor<T> f0, double[] initialPhases, double[,] noise)
     {
-        var c = Configuration;
+        var c = GetHarmonicSettings();
+        return ExcitationData(_engine, "HiftSineGen2", f0, new[] { 1, c.Harmonics + 1, f0.Length * c.UpsampleScale },
+            () => HarmonicsByFramesCore(f0, initialPhases, noise, c));
+    }
+
+    private static Tensor<T> HarmonicsByFramesCore(Tensor<T> f0, double[] initialPhases, double[,] noise, HarmonicSettings c)
+    {
         int frames = f0.Length, scale = c.UpsampleScale, samples = frames * scale, harmonics = c.Harmonics + 1;
-        var sines = new Tensor<T>(new[] { 1, harmonics, samples });
+        using var frequencies = f0.Cast<double>();
+        var f0Values = frequencies.ToArray();
+        var sines = new double[harmonics * samples];
         // F.interpolate(mode="linear", align_corners=False) with a scale factor: source = (i + 0.5) / factor − 0.5,
         // clamped at 0, the output length ⌊length · factor⌋.
         static double[] Interpolate(double[] values, double factor)
@@ -241,7 +295,7 @@ internal sealed class HiftGenerator<T>
             var increments = new double[samples];
             for (int s = 0; s < samples; s++)
             {
-                double value = NumOps.ToDouble(f0[s / scale]) * (h + 1) / c.SampleRate;
+                double value = f0Values[s / scale] * (h + 1) / c.SampleRate;
                 increments[s] = value - Math.Floor(value);
             }
             increments[0] += h == 0 ? 0.0 : initialPhases[h];
@@ -255,14 +309,15 @@ internal sealed class HiftGenerator<T>
             var phase = Interpolate(perFrame, scale);
             for (int s = 0; s < samples; s++)
             {
-                double f = NumOps.ToDouble(f0[s / scale]);
+                double f = f0Values[s / scale];
                 bool voiced = f > c.VoicedThreshold;
                 double noiseAmplitude = voiced ? c.NsfSigma : c.NsfAlpha / 3;
                 double sine = s < phase.Length ? Math.Sin(phase[s]) : 0.0;
-                sines[0, h, s] = NumOps.FromDouble((voiced ? c.NsfAlpha * sine : 0.0) + noiseAmplitude * noise[h, s]);
+                sines[h * samples + s] = ((voiced ? c.NsfAlpha * sine : 0.0) + noiseAmplitude * noise[h, s]);
             }
         }
-        return sines;
+        using var result = new Tensor<double>(sines, new[] { 1, harmonics, samples });
+        return result.Cast<T>();
     }
 
     /// <summary>
@@ -273,23 +328,32 @@ internal sealed class HiftGenerator<T>
     /// </summary>
     public Tensor<T> Harmonics(Tensor<T> f0, double[] phases, double[,] noise)
     {
-        var c = Configuration;
+        var c = GetHarmonicSettings();
+        return ExcitationData(_engine, "HiftSineGen", f0, new[] { 1, c.Harmonics + 1, f0.Length * c.UpsampleScale },
+            () => HarmonicsCore(f0, phases, noise, c));
+    }
+
+    private static Tensor<T> HarmonicsCore(Tensor<T> f0, double[] phases, double[,] noise, HarmonicSettings c)
+    {
         int frames = f0.Length, scale = c.UpsampleScale, samples = frames * scale, harmonics = c.Harmonics + 1;
-        var sines = new Tensor<T>(new[] { 1, harmonics, samples });
+        using var frequencies = f0.Cast<double>();
+        var f0Values = frequencies.ToArray();
+        var sines = new double[harmonics * samples];
         for (int h = 0; h < harmonics; h++)
         {
             double cumulative = 0, phase = h == 0 ? 0.0 : phases[h];
             for (int s = 0; s < samples; s++)
             {
-                double f = NumOps.ToDouble(f0[s / scale]);
+                double f = f0Values[s / scale];
                 cumulative += f * (h + 1) / c.SampleRate;
                 double theta = 2 * Math.PI * (cumulative - Math.Floor(cumulative));
                 bool voiced = f > c.VoicedThreshold;
                 double noiseAmplitude = voiced ? c.NsfSigma : c.NsfAlpha / 3;
-                sines[0, h, s] = NumOps.FromDouble((voiced ? c.NsfAlpha * Math.Sin(theta + phase) : 0.0) + noiseAmplitude * noise[h, s]);
+                sines[h * samples + s] = ((voiced ? c.NsfAlpha * Math.Sin(theta + phase) : 0.0) + noiseAmplitude * noise[h, s]);
             }
         }
-        return sines;
+        using var result = new Tensor<double>(sines, new[] { 1, harmonics, samples });
+        return result.Cast<T>();
     }
 
     /// <summary>The merged excitation <c>[1, 1, samples]</c> of harmonics <c>[1, H+1, samples]</c>: tanh of the linear merge.</summary>
@@ -373,9 +437,9 @@ internal sealed class HiftGenerator<T>
     /// <summary>Mel to waveform (<c>HiFTGenerator.inference</c>): F0, the excitation, then <see cref="Decode"/>.</summary>
     public Tensor<T> Forward(Tensor<T> mel, Random random)
     {
-        Tensor<T> source;
-        using (new NoGradScope<T>()) source = Source(PredictF0(mel), random);
-        return Decode(mel, source);
+        Tensor<T> f0;
+        using (new NoGradScope<T>()) f0 = PredictF0(mel);
+        return Decode(mel, Source(f0, random));
     }
 
     /// <summary>Loads a CosyVoice <c>hift.pt</c> state dict (weight-norm parametrizations as <c>original0</c> gain and

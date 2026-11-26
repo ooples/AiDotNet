@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 const cwd = fileURLToPath(new URL('../', import.meta.url));
 const env = {
   ...process.env,
-  VERCEL: '1',
+  AIDOTNET_SITE_ROOT: '1',
   PLAYWRIGHT_BASE_URL: 'http://127.0.0.1:4322',
   PUBLIC_SUPABASE_URL: 'https://preview-test.supabase.co',
   PUBLIC_SUPABASE_ANON_KEY: 'preview-test-anon-key',

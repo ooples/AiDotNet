@@ -101,10 +101,6 @@ internal sealed class DirectDifferenceTargetPropagationCreditRule<T> : CreditRul
     /// <summary>Element-wise <c>a − b</c>.</summary>
     private static Matrix<T> Subtract(Matrix<T> a, Matrix<T> b, INumericOperations<T> ops)
     {
-        var r = new Matrix<T>(a.Rows, a.Columns);
-        for (int i = 0; i < a.Rows; i++)
-            for (int j = 0; j < a.Columns; j++)
-                r[i, j] = ops.Subtract(a[i, j], b[i, j]);
-        return r;
+        return AiDotNetEngine.Current.MatrixSubtract(a, b);
     }
 }

@@ -133,6 +133,11 @@ public partial class PrependCLSTokenLayer<T> : LayerBase<T>, IShapeContract
         int batch = input.Shape[0];
         int seq = input.Shape[1];
 
+        // A streamed CLS parameter holds empty storage until paged in. Compute kernels page it
+        // in on access, but Reshape is a view op that inspects the storage first, so page it here.
+        if (_cls.Lifetime == WeightLifetime.Streaming)
+            WeightRegistry.Materialize(_cls);
+
         // Tile the [1, embedDim] CLS to [batch, 1, embedDim], then concat
         // along axis 1 (sequence) with input.
         var clsRow = Engine.Reshape(_cls, new[] { 1, 1, _embedDim });
@@ -148,9 +153,10 @@ public partial class PrependCLSTokenLayer<T> : LayerBase<T>, IShapeContract
             throw new InvalidOperationException(
                 $"PrependCLSTokenLayer.UpdateParameters: gradient buffer length " +
                 $"{ParameterGradients.Length} does not match ParameterCount {ParameterCount}.");
-        for (int i = 0; i < _embedDim; i++)
-            _cls[0, i] = NumOps.Subtract(_cls[0, i],
-                NumOps.Multiply(learningRate, ParameterGradients[i]));
+        // cls -= learningRate * grad over the first embedDim gradient entries, in place.
+        var gradient = Tensor<T>.FromVector(ParameterGradients.SubVector(0, _embedDim), [1, _embedDim]);
+        Engine.TensorCopy(
+            Engine.TensorSubtract(_cls, Engine.TensorMultiplyScalar(gradient, learningRate)), _cls);
     }
 
     /// <inheritdoc/>

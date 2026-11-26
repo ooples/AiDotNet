@@ -42,9 +42,8 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
     private readonly int? _randomState;
 
     // Fitted parameters
-    private double[,]? _components; // Topic-word distribution (k x vocab)
-    private double[,]? _expDigammaComponents;
-    private double[]? _lambdaSums; // Sum of lambda per topic for reconstruction
+    private Matrix<T>? _components; // Topic-word distribution (k x vocab)
+    private Vector<T>? _lambdaSums; // Sum of lambda per topic for reconstruction
     private int _nVocab;
 
     /// <summary>
@@ -71,7 +70,7 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
     /// Gets the topic-word distribution matrix (topics x vocabulary).
     /// Each row is a topic, each column is a word probability.
     /// </summary>
-    public double[,]? Components => _components;
+    public Matrix<T>? Components => _components;
 
     /// <summary>
     /// Gets the vocabulary size.
@@ -127,163 +126,82 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
     /// </summary>
     protected override void FitCore(Matrix<T> data)
     {
-        int n = data.Rows; // Number of documents
+        var engine = Engine;
         _nVocab = data.Columns; // Vocabulary size
+        int n = data.Rows; // Number of documents
         int k = _nComponents;
 
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSeededRandom(42);
 
-        // Convert data to double array (document-term counts)
-        var X = new double[n, _nVocab];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < _nVocab; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
+        // Document-term counts
+        var x = Tensor<T>.FromMatrix(data);
 
-        // Initialize topic-word distribution (lambda)
-        _components = new double[k, _nVocab];
-        for (int t = 0; t < k; t++)
-        {
-            double sum = 0;
-            for (int w = 0; w < _nVocab; w++)
-            {
-                _components[t, w] = random.NextDouble() + _topicWordPrior;
-                sum += _components[t, w];
-            }
-            // Normalize
-            for (int w = 0; w < _nVocab; w++)
-            {
-                _components[t, w] /= sum;
-            }
-        }
+        // Random initial topic-word weights u + beta (row-major draws); normalized they are the initial components
+        var initial = engine.TensorAddScalar(DimensionalityReductionOps.Uniform<T>(random, k, _nVocab), NumOps.FromDouble(_topicWordPrior));
+        _components = DimensionalityReductionOps.ScaleRows(
+            initial, engine.TensorReciprocal(DimensionalityReductionOps.RowSums(initial))).ToMatrix();
 
-        if (_learningMethod == LdaLearningMethod.Batch)
-        {
-            FitBatch(X, n, k);
-        }
-        else
-        {
-            FitOnline(X, n, k, random);
-        }
+        var lambda = _learningMethod == LdaLearningMethod.Batch
+            ? FitBatch(x, initial)
+            : FitOnline(x, n, k, random);
 
-        // Precompute exp(digamma) for components for transform
-        _expDigammaComponents = new double[k, _nVocab];
-        for (int t = 0; t < k; t++)
-        {
-            for (int w = 0; w < _nVocab; w++)
-            {
-                _expDigammaComponents[t, w] = Math.Exp(Digamma(_components[t, w]));
-            }
-        }
+        // Normalize lambda to components; keep the row sums for inference
+        var lambdaSums = DimensionalityReductionOps.RowSums(lambda);
+        _lambdaSums = lambdaSums.ToVector();
+        _components = DimensionalityReductionOps.ScaleRows(lambda, engine.TensorReciprocal(lambdaSums)).ToMatrix();
     }
 
-    private void FitBatch(double[,] X, int n, int k)
+    /// <summary>
+    /// Batch variational inference: every iteration resets lambda to beta plus the sufficient statistics of all
+    /// documents. Starts from the random initial weights so the topics are not identical.
+    /// </summary>
+    private Tensor<T> FitBatch(Tensor<T> x, Tensor<T> initial)
     {
-        // Batch variational inference
-        var lambda = new double[k, _nVocab];
-
-        // Initialize lambda
-        for (int t = 0; t < k; t++)
-        {
-            for (int w = 0; w < _nVocab; w++)
-            {
-                lambda[t, w] = _topicWordPrior + (double)n / k;
-            }
-        }
+        var engine = Engine;
+        var lambda = initial;
+        T tol = DimensionalityReductionOps.Tolerance<T>(_tol);
+        T beta = NumOps.FromDouble(_topicWordPrior);
 
         for (int iter = 0; iter < _maxIter; iter++)
         {
-            var oldLambda = (double[,])lambda.Clone();
+            var oldLambda = lambda;
 
-            // Reset lambda to prior
-            for (int t = 0; t < k; t++)
-            {
-                for (int w = 0; w < _nVocab; w++)
-                {
-                    lambda[t, w] = _topicWordPrior;
-                }
-            }
-
-            // E-step: Update document-topic distributions and accumulate
-            for (int d = 0; d < n; d++)
-            {
-                var (gamma, phi) = UpdateDocumentParameters(X, d, lambda, k);
-
-                // Accumulate sufficient statistics
-                for (int w = 0; w < _nVocab; w++)
-                {
-                    if (X[d, w] > 0)
-                    {
-                        for (int t = 0; t < k; t++)
-                        {
-                            lambda[t, w] += X[d, w] * phi[w, t];
-                        }
-                    }
-                }
-            }
+            // E-step over all documents, then reset lambda to prior + sufficient statistics
+            var (_, sufficientStats) = UpdateDocumentParameters(x, lambda);
+            lambda = engine.TensorAddScalar(sufficientStats, beta);
 
             // Check convergence
-            double maxChange = 0;
-            for (int t = 0; t < k; t++)
-            {
-                for (int w = 0; w < _nVocab; w++)
-                {
-                    double change = Math.Abs(lambda[t, w] - oldLambda[t, w]);
-                    maxChange = Math.Max(maxChange, change);
-                }
-            }
-
-            if (maxChange < _tol)
+            if (DimensionalityReductionOps.Below(DimensionalityReductionOps.MaxAbsDifference(lambda, oldLambda), tol))
             {
                 break;
             }
         }
 
-        // Copy final lambda to components and normalize
-        // Store lambda sums for accurate reconstruction during inference
-        _lambdaSums = new double[k];
-        for (int t = 0; t < k; t++)
-        {
-            double sum = 0;
-            for (int w = 0; w < _nVocab; w++)
-            {
-                sum += lambda[t, w];
-            }
-            _lambdaSums[t] = sum;
-            for (int w = 0; w < _nVocab; w++)
-            {
-                (_components ?? throw new InvalidOperationException("Components not initialized."))[t, w] = lambda[t, w] / sum;
-            }
-        }
+        return lambda;
     }
 
-    private void FitOnline(double[,] X, int n, int k, Random random)
+    /// <summary>
+    /// Online variational inference: mini-batches of shuffled documents, lambda = (1 - rho) lambda +
+    /// rho (beta + n / batch * sstats) with rho = (64 + updates)^-0.7.
+    /// </summary>
+    private Tensor<T> FitOnline(Tensor<T> x, int n, int k, Random random)
     {
-        // Online variational inference (stochastic)
-        var lambda = new double[k, _nVocab];
+        var engine = Engine;
 
         // Initialize lambda
-        for (int t = 0; t < k; t++)
-        {
-            for (int w = 0; w < _nVocab; w++)
-            {
-                lambda[t, w] = random.NextDouble() + _topicWordPrior;
-            }
-        }
+        var lambda = engine.TensorAddScalar(DimensionalityReductionOps.Uniform<T>(random, k, _nVocab), NumOps.FromDouble(_topicWordPrior));
 
         int updateCount = 0;
         double tau0 = 64.0;
         double kappa = 0.7;
+        T beta = NumOps.FromDouble(_topicWordPrior);
 
         for (int iter = 0; iter < _maxIter; iter++)
         {
             // Shuffle document indices
-            var indices = Enumerable.Range(0, n).OrderBy(x => random.Next()).ToArray();
+            var indices = Enumerable.Range(0, n).OrderBy(_ => random.Next()).ToArray();
 
             for (int batchStart = 0; batchStart < n; batchStart += _batchSize)
             {
@@ -291,163 +209,82 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
                 int batchN = batchEnd - batchStart;
 
                 // Compute sufficient statistics from batch
-                var batchSStats = new double[k, _nVocab];
-
-                for (int b = 0; b < batchN; b++)
-                {
-                    int d = indices[batchStart + b];
-                    var (gamma, phi) = UpdateDocumentParameters(X, d, lambda, k);
-
-                    for (int w = 0; w < _nVocab; w++)
-                    {
-                        if (X[d, w] > 0)
-                        {
-                            for (int t = 0; t < k; t++)
-                            {
-                                batchSStats[t, w] += X[d, w] * phi[w, t];
-                            }
-                        }
-                    }
-                }
+                var batchRows = new int[batchN];
+                Array.Copy(indices, batchStart, batchRows, 0, batchN);
+                var (_, batchStats) = UpdateDocumentParameters(
+                    DimensionalityReductionOps.SelectRows(x, DimensionalityReductionOps.IndexTensor(batchRows)), lambda);
 
                 // Update lambda using stochastic gradient
                 updateCount++;
                 double rho = Math.Pow(tau0 + updateCount, -kappa);
-
-                for (int t = 0; t < k; t++)
-                {
-                    for (int w = 0; w < _nVocab; w++)
-                    {
-                        double expectedStat = _topicWordPrior + (double)n / batchN * batchSStats[t, w];
-                        lambda[t, w] = (1 - rho) * lambda[t, w] + rho * expectedStat;
-                    }
-                }
+                var expected = engine.TensorAddScalar(
+                    engine.TensorMultiplyScalar(batchStats, DimensionalityReductionOps.Constant<T>((double)n / batchN)), beta);
+                lambda = engine.TensorAdd(
+                    engine.TensorMultiplyScalar(lambda, DimensionalityReductionOps.Constant<T>(1 - rho)),
+                    engine.TensorMultiplyScalar(expected, DimensionalityReductionOps.Constant<T>(rho)));
             }
         }
 
-        // Copy final lambda to components and normalize
-        // Store lambda sums for accurate reconstruction during inference
-        _lambdaSums = new double[k];
-        for (int t = 0; t < k; t++)
-        {
-            double sum = 0;
-            for (int w = 0; w < _nVocab; w++)
-            {
-                sum += lambda[t, w];
-            }
-            _lambdaSums[t] = sum;
-            for (int w = 0; w < _nVocab; w++)
-            {
-                (_components ?? throw new InvalidOperationException("Components not initialized."))[t, w] = lambda[t, w] / sum;
-            }
-        }
+        return lambda;
     }
 
-    private (double[] Gamma, double[,] Phi) UpdateDocumentParameters(
-        double[,] X, int d, double[,] lambda, int k)
+    /// <summary>
+    /// Variational E-step for a batch of documents (Blei, Ng and Jordan 2003; sklearn _update_doc_distribution):
+    /// with E[log theta_dt] = psi(gamma_dt) - psi(sum_t gamma_dt) and E[log beta_tw] = psi(lambda_tw) - psi(sum_w lambda_tw),
+    /// phi_dwt is proportional to exp(E[log theta_dt] + E[log beta_tw]) and gamma_dt = alpha + sum_w x_dw phi_dwt.
+    /// Up to 20 updates per document, each document stopping once its largest gamma change is below 1e-4.
+    /// Returns gamma [docs, k] and the sufficient statistics sum_d x_dw phi_dwt [k, vocab] of the last phi.
+    /// </summary>
+    private (Tensor<T> Gamma, Tensor<T> SufficientStats) UpdateDocumentParameters(Tensor<T> x, Tensor<T> lambda)
     {
-        // Initialize gamma (document-topic distribution)
-        var gamma = new double[k];
-        for (int t = 0; t < k; t++)
-        {
-            gamma[t] = _docTopicPrior + (double)_nVocab / k;
-        }
+        var engine = Engine;
+        x = engine.TensorClampMin(x, NumOps.Zero);   // only positive counts contribute
+        int docs = x.Shape[0];
+        int k = _nComponents;
 
-        // Initialize phi (word-topic assignments)
-        var phi = new double[_nVocab, k];
+        var expElogBeta = engine.TensorExp(DirichletExpectation(lambda));                 // [k, vocab]
+        var gamma = DimensionalityReductionOps.Full(new[] { docs, k }, NumOps.FromDouble(_docTopicPrior + (double)_nVocab / k));
+        var phiTheta = new Tensor<T>(new[] { docs, k });
+        var active = DimensionalityReductionOps.Full(new[] { docs, 1 }, NumOps.One);
+        var activeOnes = DimensionalityReductionOps.Full(new[] { docs, k }, NumOps.One);
+        var alpha = NumOps.FromDouble(_docTopicPrior);
+        var tolerance = DimensionalityReductionOps.Tolerance<T>(1e-4);
+        var normFloor = DimensionalityReductionOps.Tolerance<T>(2.220446049250313e-16);
 
-        // Compute digamma(lambda) sum for each topic
-        var digammaLambdaSum = new double[k];
-        for (int t = 0; t < k; t++)
-        {
-            double sum = 0;
-            for (int w = 0; w < _nVocab; w++)
-            {
-                sum += lambda[t, w];
-            }
-            digammaLambdaSum[t] = Digamma(sum);
-        }
-
-        // Iterative update
         for (int innerIter = 0; innerIter < 20; innerIter++)
         {
-            var oldGamma = (double[])gamma.Clone();
+            var activeFull = engine.TensorMultiply(activeOnes, active);
 
-            // Compute digamma sum before reset (using previous iteration's gamma values)
-            double digammaGammaSum = Digamma(oldGamma.Sum());
+            // phi from the previous gamma
+            var expElogTheta = engine.TensorExp(DirichletExpectation(gamma));            // [docs, k]
+            phiTheta = engine.TensorWhere(activeFull, expElogTheta, phiTheta);
 
-            // Reset gamma
-            for (int t = 0; t < k; t++)
-            {
-                gamma[t] = _docTopicPrior;
-            }
+            // gamma = alpha + expElogTheta * ((x / norm) expElogBeta^T), norm = expElogTheta expElogBeta
+            // scikit-learn adds machine epsilon to the normaliser: it underflows to 0 for a word no topic supports,
+            // and 0 / 0 would spread NaN through every topic
+            var ratio = engine.TensorDivide(x, engine.TensorAddScalar(engine.TensorMatMul(expElogTheta, expElogBeta), normFloor));
+            var newGamma = engine.TensorAddScalar(
+                engine.TensorMultiply(expElogTheta, DimensionalityReductionOps.MatMulTranspose(ratio, expElogBeta)), alpha);
 
-            // Update phi and gamma
-
-            for (int w = 0; w < _nVocab; w++)
-            {
-                if (X[d, w] <= 0) continue;
-
-                // Update phi[w, :]
-                double maxLogPhi = double.NegativeInfinity;
-                for (int t = 0; t < k; t++)
-                {
-                    double logPhi = Digamma(gamma[t]) - digammaGammaSum
-                                  + Digamma(lambda[t, w]) - digammaLambdaSum[t];
-                    phi[w, t] = logPhi;
-                    maxLogPhi = Math.Max(maxLogPhi, logPhi);
-                }
-
-                // Normalize phi[w, :] (log-sum-exp)
-                double sum = 0;
-                for (int t = 0; t < k; t++)
-                {
-                    phi[w, t] = Math.Exp(phi[w, t] - maxLogPhi);
-                    sum += phi[w, t];
-                }
-                for (int t = 0; t < k; t++)
-                {
-                    phi[w, t] /= sum;
-                    gamma[t] += X[d, w] * phi[w, t];
-                }
-            }
-
-            // Check convergence
-            double maxChange = 0;
-            for (int t = 0; t < k; t++)
-            {
-                maxChange = Math.Max(maxChange, Math.Abs(gamma[t] - oldGamma[t]));
-            }
-            if (maxChange < 1e-4)
+            // Converged documents keep their values
+            var change = engine.ReduceMax(engine.TensorAbs(engine.TensorSubtract(newGamma, gamma)), new[] { 1 }, true);
+            gamma = engine.TensorWhere(activeFull, newGamma, gamma);
+            active = engine.TensorMultiply(active, engine.TensorGreaterEqual(change, DimensionalityReductionOps.Full(new[] { docs, 1 }, tolerance)));
+            if (!DimensionalityReductionOps.Above(engine.TensorSum(active), NumOps.Zero))
             {
                 break;
             }
         }
 
-        return (gamma, phi);
+        // Sufficient statistics: expElogBeta * (phiTheta^T (x / norm))
+        var lastRatio = engine.TensorDivide(x, engine.TensorAddScalar(engine.TensorMatMul(phiTheta, expElogBeta), normFloor));
+        var sufficientStats = engine.TensorMultiply(expElogBeta, DimensionalityReductionOps.TransposeMatMul(phiTheta, lastRatio));
+        return (gamma, sufficientStats);
     }
 
-    private static double Digamma(double x)
-    {
-        // Approximation of the digamma function
-        if (x <= 0)
-        {
-            return double.NegativeInfinity;
-        }
-
-        // For small x, use recurrence relation
-        double result = 0;
-        while (x < 6)
-        {
-            result -= 1.0 / x;
-            x += 1;
-        }
-
-        // Asymptotic expansion for large x
-        double x2 = 1.0 / (x * x);
-        return result + Math.Log(x) - 0.5 / x
-               - x2 * (1.0 / 12.0 - x2 * (1.0 / 120.0 - x2 / 252.0));
-    }
+    /// <summary>psi(a) - psi(row sum of a) for every row of a.</summary>
+    private Tensor<T> DirichletExpectation(Tensor<T> a) =>
+        Engine.TensorSubtract(Engine.TensorDigamma(a), Engine.TensorDigamma(Engine.ReduceSum(a, new[] { 1 }, true)));
 
     /// <summary>
     /// Transforms documents to topic distributions.
@@ -459,46 +296,12 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
             throw new InvalidOperationException("LatentDirichletAllocation has not been fitted.");
         }
 
-        int n = data.Rows;
-        int k = _nComponents;
-
         // Reconstruct lambda from normalized components using stored sums
-        // lambda[t, w] = _components[t, w] * _lambdaSums[t]
-        var lambda = new double[k, _nVocab];
-        for (int t = 0; t < k; t++)
-        {
-            for (int w = 0; w < _nVocab; w++)
-            {
-                // Use stored lambda sum for accurate reconstruction
-                lambda[t, w] = _components[t, w] * _lambdaSums[t];
-            }
-        }
+        var lambda = DimensionalityReductionOps.ScaleRows(Tensor<T>.FromMatrix(_components), Tensor<T>.FromVector(_lambdaSums));
+        var (gamma, _) = UpdateDocumentParameters(Tensor<T>.FromMatrix(data), lambda);
 
-        // Convert input to double
-        var X = new double[n, _nVocab];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < _nVocab; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
-
-        var result = new T[n, k];
-
-        for (int d = 0; d < n; d++)
-        {
-            var (gamma, _) = UpdateDocumentParameters(X, d, lambda, k);
-
-            // Normalize gamma to get topic distribution
-            double gammaSum = gamma.Sum();
-            for (int t = 0; t < k; t++)
-            {
-                result[d, t] = NumOps.FromDouble(gamma[t] / gammaSum);
-            }
-        }
-
-        return new Matrix<T>(result);
+        // Normalize gamma to get topic distribution
+        return DimensionalityReductionOps.ScaleRows(gamma, Engine.TensorReciprocal(DimensionalityReductionOps.RowSums(gamma))).ToMatrix();
     }
 
     /// <summary>
@@ -538,12 +341,14 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
         int k = _nComponents;
         var result = new string[k][];
 
+        // Descending stable ranking of every topic row (ties in index order, like OrderByDescending)
+        int take = Math.Max(0, Math.Min(nTopWords, _nVocab));
+        var ranking = AiDotNet.AnomalyDetection.AnomalyTensorOps.StableSortRows(Tensor<T>.FromMatrix(_components), descending: true).Order.AsSpan().ToArray();
+
         for (int t = 0; t < k; t++)
         {
-            var topIndices = Enumerable.Range(0, _nVocab)
-                .OrderByDescending(w => _components[t, w])
-                .Take(nTopWords)
-                .ToArray();
+            var topIndices = new int[take];
+            Array.Copy(ranking, t * _nVocab, topIndices, 0, take);
 
             if (featureNames is not null)
             {

@@ -236,11 +236,7 @@ internal static class CreditAssignmentGradientComputer<T>
     {
         var w = (layer as LayerBase<T>)?.GetWeights();
         if (w is null || w.Shape.Length != 2) return null;
-        var m = new Matrix<T>(w.Shape[0], w.Shape[1]);
-        for (int i = 0; i < w.Shape[0]; i++)
-            for (int j = 0; j < w.Shape[1]; j++)
-                m[i, j] = w[i, j];
-        return m;
+        return w.ToMatrix();
     }
 
     private static Tensor<T> Keep(GradientTape<T> tape, Tensor<T> t)
@@ -277,10 +273,8 @@ internal static class CreditAssignmentGradientComputer<T>
 
         if (predShape.Length == 2 && isIndexShape && outFeatures == 1)
         {
-            var t = new Tensor<T>(predShape);
-            for (int b = 0; b < batch; b++)
-                t[b, 0] = target.Shape.Length == 1 ? target[b] : target[b, 0];
-            return t;
+            // [batch] or [batch, 1] holds batch values in row order: copy them into a fresh [batch, 1] tensor.
+            return new Tensor<T>(predShape, target.ToVector());
         }
 
         throw new NotSupportedException(
@@ -291,21 +285,25 @@ internal static class CreditAssignmentGradientComputer<T>
     /// <summary>Flattens the reference-keyed gradient map into a vector matching the network's parameter layout.</summary>
     private static Vector<T> Flatten(NeuralNetworkBase<T> network, Dictionary<Tensor<T>, Tensor<T>> grads)
     {
-        var flat = new List<T>();
+        // Flatten runs inside the training tape's scope; the copy is plain data, so keep it off the tape.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var pieces = new List<Tensor<T>>();
         foreach (var paramTensor in network.GetParameterChunks())
         {
             if (paramTensor is null || paramTensor.Length == 0) continue;
             if (grads.TryGetValue(paramTensor, out var grad))
             {
-                for (int i = 0; i < grad.Length; i++)
-                    flat.Add(grad[i]);
+                if (grad.Length > 0)
+                    pieces.Add(engine.Reshape(grad, new[] { grad.Length }));
             }
             else
             {
-                for (int i = 0; i < paramTensor.Length; i++)
-                    flat.Add(Ops.Zero);
+                pieces.Add(new Tensor<T>(new[] { paramTensor.Length }));
             }
         }
-        return new Vector<T>(flat.ToArray());
+
+        if (pieces.Count == 0) return new Vector<T>(0);
+        return engine.TensorConcatenate(pieces.ToArray(), 0).ToVector();
     }
 }

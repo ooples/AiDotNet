@@ -19,6 +19,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.236.1](https://github.com/ooples/AiDotNet/compare/v0.236.0...v0.236.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* move embedded tokenizer and tts data into a single-tfm resources package ([#2624](https://github.com/ooples/AiDotNet/issues/2624)) ([e27708e](https://github.com/ooples/AiDotNet/commit/e27708eecd1928a5a3dd7260a059aff3afd8a708))
+
+## [0.236.0](https://github.com/ooples/AiDotNet/compare/v0.235.0...v0.236.0) (2026-11-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* delete the legacy src/autodiff computation graph ([#2458](https://github.com/ooples/AiDotNet/issues/2458))
+* combine API, RL, documentation, and dependency repairs ([#2400](https://github.com/ooples/AiDotNet/issues/2400))
+* combine model options, inference, and adapted-model correctness fixes ([#2417](https://github.com/ooples/AiDotNet/issues/2417))
+
+### Features
+
+* combine model options, inference, and adapted-model correctness fixes ([#2417](https://github.com/ooples/AiDotNet/issues/2417)) ([3f0088b](https://github.com/ooples/AiDotNet/commit/3f0088bb61c62a71c5eaafb1de430ce75afa9be8))
+* **scaffold:** paper-fidelity checks (option sensitivity, toy tasks, paper tests, paper defaults) ([#2423](https://github.com/ooples/AiDotNet/issues/2423)) ([6035554](https://github.com/ooples/AiDotNet/commit/603555481f4950cd7a67b3205cb3944486f7893c))
+* **training:** compiled plans for closure objectives ([#2573](https://github.com/ooples/AiDotNet/issues/2573)) ([c2c5f57](https://github.com/ooples/AiDotNet/commit/c2c5f571bd6facf967a0ecd177afb5a0f85a2830))
+
+
+### Bug Fixes
+
+* activation-cache sweep 1/3 + keyed safety watermarks and honest classifiers ([#2413](https://github.com/ooples/AiDotNet/issues/2413)) ([8f3498b](https://github.com/ooples/AiDotNet/commit/8f3498b586d5492fc33f457d9af22882099bd809))
+* **ci:** keep the weekly coverage map source alive and retry it when lost ([#2587](https://github.com/ooples/AiDotNet/issues/2587)) ([d639ba6](https://github.com/ooples/AiDotNet/commit/d639ba6ea634e9e97fa0fd908b9be32a362e83fb))
+* **ci:** repair the benchmark build and legacy oblivious tree checkpoint restore on master ([#2578](https://github.com/ooples/AiDotNet/issues/2578)) ([1b02c99](https://github.com/ooples/AiDotNet/commit/1b02c99883f8a1fed8f0b6a68b57652fd7d2581a))
+* **cloning:** support object-valued constructor args in LayerFactoryRegistry.TryRead and harvest matching fields/properties for external layers ([#2438](https://github.com/ooples/AiDotNet/issues/2438)) ([495c7c0](https://github.com/ooples/AiDotNet/commit/495c7c0ddedeb25e03b52803f1bbf1cb70245c09))
+* close the v1 epic gaps ([#2397](https://github.com/ooples/AiDotNet/issues/2397)) ([#2445](https://github.com/ooples/AiDotNet/issues/2445)) ([bab89db](https://github.com/ooples/AiDotNet/commit/bab89db46ade2e1e63f025d5e386165bc6dabca5))
+* combine API, RL, documentation, and dependency repairs ([#2400](https://github.com/ooples/AiDotNet/issues/2400)) ([1ec55a4](https://github.com/ooples/AiDotNet/commit/1ec55a4f485d54d1af9f910c5ffbe4f0096d6270))
+* docs wiki samples, cross-isa agreement, and gpu inference overhead ([#2389](https://github.com/ooples/AiDotNet/issues/2389), [#2388](https://github.com/ooples/AiDotNet/issues/2388), [#2382](https://github.com/ooples/AiDotNet/issues/2382), [#2385](https://github.com/ooples/AiDotNet/issues/2385), [#2384](https://github.com/ooples/AiDotNet/issues/2384)) ([#2442](https://github.com/ooples/AiDotNet/issues/2442)) ([7a6abf7](https://github.com/ooples/AiDotNet/commit/7a6abf78162ce5e7aaf5233d9e1ca1bdc337eaab))
+* **docs:** enforce XML documentation and restore package validation ([#2422](https://github.com/ooples/AiDotNet/issues/2422)) ([abd0e4b](https://github.com/ooples/AiDotNet/commit/abd0e4bd3efb81a9ba694eb029e93ec9cf8afbc9))
+* **layers:** drop the activation on transformer attention outputs ([#2421](https://github.com/ooples/AiDotNet/issues/2421)) ([d290c71](https://github.com/ooples/AiDotNet/commit/d290c71c371be82edfb3c447e3e0b0d6e1494416))
+* lease license activation seats; copy tree training matrices without boxing ([#2465](https://github.com/ooples/AiDotNet/issues/2465)) ([3a6a437](https://github.com/ooples/AiDotNet/commit/3a6a4378bcdb4be877dd368bce23d6f88e449fec))
+* **loss:** support rank-matched compact class-index targets in CrossEntropyWithLogitsLoss.ComputeTapeLoss ([#2440](https://github.com/ooples/AiDotNet/issues/2440)) ([a94ac04](https://github.com/ooples/AiDotNet/commit/a94ac04c8a155c1f38760e7fbbf9e48d9f9afa75))
+* **metalearning:** step the configured meta and inner optimizers ([#2418](https://github.com/ooples/AiDotNet/issues/2418)) ([e13d68f](https://github.com/ooples/AiDotNet/commit/e13d68f5f6575ed64cae7527d83f10b6b6e9cdd0))
+* **rl:** implement the TRPO, CQL, MuZero and Rainbow options and wire every deep agent's learning rates (+4 combined) ([#2414](https://github.com/ooples/AiDotNet/issues/2414)) ([01386cd](https://github.com/ooples/AiDotNet/commit/01386cd1192cd08315d6f19539c9e5953beadace))
+* route activation caches through SaveForBackward (sweep 3/3) (+2 combined) ([#2412](https://github.com/ooples/AiDotNet/issues/2412)) ([ce3f01e](https://github.com/ooples/AiDotNet/commit/ce3f01e7e3a9bd38b4a0329cea4f684fd661b876))
+* tensors 0.152.1, test isolation and gan seed determinism ([#2615](https://github.com/ooples/AiDotNet/issues/2615)) ([e97be25](https://github.com/ooples/AiDotNet/commit/e97be25c453a4373e55ab96dc57a28d6261f247d))
+* **training:** complete streaming checkpoints and GPU optimizer steps ([#2436](https://github.com/ooples/AiDotNet/issues/2436)) ([6d4fe1f](https://github.com/ooples/AiDotNet/commit/6d4fe1f0bc975afab853d01d5bc62aec3da5d9fa))
+* **website:** "Edit this page" links the page's real file, or nothing ([#2600](https://github.com/ooples/AiDotNet/issues/2600)) ([53c7c2c](https://github.com/ooples/AiDotNet/commit/53c7c2c00f1424a9461526cac34813c31d25e6a5))
+* **website:** billing knows the subscription; every link and control is tested ([#2595](https://github.com/ooples/AiDotNet/issues/2595)) ([9bd39b3](https://github.com/ooples/AiDotNet/commit/9bd39b3fa2f812dd6771fbce9b4e43571d5dec4c))
+* **website:** email issued license keys and deploy edge functions from CI ([#2557](https://github.com/ooples/AiDotNet/issues/2557)) ([c15703f](https://github.com/ooples/AiDotNet/commit/c15703f09233630ae01decc2df8f769786e1669f))
+* **website:** fit the admin Issue License dialog to the window ([#2555](https://github.com/ooples/AiDotNet/issues/2555)) ([8e1066a](https://github.com/ooples/AiDotNet/commit/8e1066a7454f95b1f2441229b8e736032fb6111c))
+* **website:** pass the caller's token to getUser in edge functions ([#2568](https://github.com/ooples/AiDotNet/issues/2568)) ([16cfbd5](https://github.com/ooples/AiDotNet/commit/16cfbd51135b54449c1fc2067c6c8ebc340b76d5))
+* **website:** secure billing and automate preview user journeys ([#2602](https://github.com/ooples/AiDotNet/issues/2602)) ([0b14ed8](https://github.com/ooples/AiDotNet/commit/0b14ed81d40723bd145b2ac7d75554fc384e81fe))
+
+
+### Performance
+
+* **#2561:** sparse graph attention, graph-correct compiled plans, Whisper init memory ([#2601](https://github.com/ooples/AiDotNet/issues/2601)) ([f6a9225](https://github.com/ooples/AiDotNet/commit/f6a92251bdb6f427b2752cf3da5e3cb809212e1e))
+* beat torch.compile on GPU for GRU, MobileNetV2, DenseNet-121 ([#2561](https://github.com/ooples/AiDotNet/issues/2561)) ([#2567](https://github.com/ooples/AiDotNet/issues/2567)) ([e90f906](https://github.com/ooples/AiDotNet/commit/e90f90690a2ce211d4e2576000f8cc10d39dcf51))
+* combined element-wise sweeps (metrics/automl, meta-learning, preprocessing, networks) ([#2524](https://github.com/ooples/AiDotNet/issues/2524)) ([2b1bacf](https://github.com/ooples/AiDotNet/commit/2b1bacf53d9a56cb65ed95c604ef43f27d6580cf))
+* element-wise loop sweep - image augmentation ([#2461](https://github.com/ooples/AiDotNet/issues/2461)) ([0c06dc4](https://github.com/ooples/AiDotNet/commit/0c06dc461c83d03a191a313802fc054ad3d117c0))
+* **gpu:** free intermediate gradients at last use (trainable params as backward sources); every LR scheduler on the fused path ([#2563](https://github.com/ooples/AiDotNet/issues/2563)) ([3235348](https://github.com/ooples/AiDotNet/commit/32353481a83dcbe89b1e9aa298b9512311d60fb1))
+* **hifigan:** bound waveform storage and restore compiled GAN updates ([#2606](https://github.com/ooples/AiDotNet/issues/2606)) ([de8edf2](https://github.com/ooples/AiDotNet/commit/de8edf26bef67973cff0abc1ce9155c8e7969477))
+* **histgbm:** accumulate histograms and scan splits in place (39x faster fit, 285x less allocation) ([#2612](https://github.com/ooples/AiDotNet/issues/2612)) ([b392db1](https://github.com/ooples/AiDotNet/commit/b392db1277f7abb1713b0485c6fd126f5bae5d30))
+* **inference:** run speculative decoding on engine ops instead of scalar loops ([#2456](https://github.com/ooples/AiDotNet/issues/2456)) ([642b791](https://github.com/ooples/AiDotNet/commit/642b7910538559b16c9d6db2d169692a53b82aae))
+
+
+### Refactoring
+
+* delete the legacy src/autodiff computation graph ([#2458](https://github.com/ooples/AiDotNet/issues/2458)) ([41ed9dc](https://github.com/ooples/AiDotNet/commit/41ed9dca3ef3b1d6d53b0eafa095b6bbc1ab591f))
+
+
+### Documentation
+
+* **options:** document every public member of src/models/options (a-4 options slice 1) (+1 combined) ([#2405](https://github.com/ooples/AiDotNet/issues/2405)) ([f884e9f](https://github.com/ooples/AiDotNet/commit/f884e9f6b02be8d361bc8bd98da6c5c371b79472))
+
 ## [0.235.0](https://github.com/ooples/AiDotNet/compare/v0.234.0...v0.235.0) (2026-10-29)
 
 

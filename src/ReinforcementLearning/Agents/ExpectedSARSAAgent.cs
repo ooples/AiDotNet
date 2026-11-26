@@ -167,11 +167,7 @@ public partial class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>, 
         int bestAction = GetBestAction(stateKey);
         T bestQ = _qTable[stateKey][bestAction];
 
-        T sumQ = NumOps.Zero;
-        for (int a = 0; a < _options.ActionSize; a++)
-        {
-            sumQ = NumOps.Add(sumQ, _qTable[stateKey][a]);
-        }
+        T sumQ = AiDotNetEngine.Current.Sum(RLTensorOps.Row(_qTable[stateKey], _options.ActionSize));
 
         // (1 - ε) * Q(best) + ε * mean(Q)
         double prob = 1.0 - _epsilon;
@@ -208,18 +204,8 @@ public partial class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>, 
             throw new ArgumentException("Action vector cannot be null or empty", nameof(action));
         }
 
-        for (int i = 0; i < action.Length; i++)
-        {
-            if (NumOps.GreaterThan(action[i], NumOps.Zero))
-            {
-                return i;
-            }
-        }
-
-        // Fallback: If no positive element found (potentially malformed input),
-        // log a warning and return 0 to prevent crashes
-        // In production, consider throwing an exception instead
-        return 0;
+        // The first positive slot; 0 when none is positive (potentially malformed input).
+        return RLTensorOps.FirstPositiveIndex(action, NumOps.Zero);
     }
 
     private void EnsureStateExists(string stateKey)
@@ -237,23 +223,9 @@ public partial class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>, 
     private int GetBestAction(string stateKey)
     {
         EnsureStateExists(stateKey);
-        int bestAction = 0;
-        T bestValue = _qTable[stateKey][0];
-        bool allEqual = true;
-
-        for (int a = 1; a < _options.ActionSize; a++)
-        {
-            if (NumOps.GreaterThan(_qTable[stateKey][a], bestValue))
-            {
-                bestValue = _qTable[stateKey][a];
-                bestAction = a;
-                allEqual = false;
-            }
-            else if (!NumOps.Equals(_qTable[stateKey][a], bestValue))
-            {
-                allEqual = false;
-            }
-        }
+        var qValues = RLTensorOps.Row(_qTable[stateKey], _options.ActionSize);
+        int bestAction = RLTensorOps.ArgMax(qValues);
+        bool allEqual = RLTensorOps.AllEqual(qValues, NumOps);
         // Sutton & Barto §2.3 tie-break.
         if (allEqual)
             bestAction = HashStateToAction(stateKey, _options.ActionSize);

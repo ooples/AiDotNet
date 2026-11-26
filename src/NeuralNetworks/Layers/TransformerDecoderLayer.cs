@@ -1046,4 +1046,13 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         return metadata;
     }
 
+    /// <inheritdoc />
+    internal override long EstimateStructuralParameterCount(int inputChannelsOrFeatures, out int outputChannelsOrFeatures)
+    {
+        int dim = _embeddingSize > 0 ? _embeddingSize : Math.Max(1, inputChannelsOrFeatures);
+        long d = dim;
+        long ff = _feedForwardDim > 0 ? _feedForwardDim : 4L * d;
+        outputChannelsOrFeatures = dim;
+        return 8L * d * d + 2L * d + 2L * d * ff + d + ff + 6L * d;
+    }
 }

@@ -78,26 +78,11 @@ public class ConsistencyDistillationSampling<T>
         Vector<T> consistencyTarget, Vector<T> currentPrediction,
         double timestepWeight)
     {
-        var gradient = new Vector<T>(predictedNoise.Length);
-        var sdsWeight = NumOps.FromDouble(timestepWeight);
-        var consWeight = NumOps.FromDouble(_consistencyWeight);
-
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            // SDS component
-            var sdsDiff = NumOps.Subtract(predictedNoise[i],
-                i < addedNoise.Length ? addedNoise[i] : NumOps.Zero);
-            var sdsGrad = NumOps.Multiply(sdsWeight, sdsDiff);
-
-            // Consistency component
-            var consDiff = NumOps.Subtract(
-                i < currentPrediction.Length ? currentPrediction[i] : NumOps.Zero,
-                i < consistencyTarget.Length ? consistencyTarget[i] : NumOps.Zero);
-            var consGrad = NumOps.Multiply(consWeight, consDiff);
-
-            gradient[i] = NumOps.Add(sdsGrad, consGrad);
-        }
-
-        return gradient;
+        // SDS component w(t) (eps_pred - eps) plus consistency component weight (current - target),
+        // every operand zero-padded to the prediction length
+        int length = predictedNoise.Length;
+        var sdsGrad = DiffusionVectorOps.ScaledDifference(predictedNoise, addedNoise, length, NumOps.FromDouble(timestepWeight));
+        var consGrad = DiffusionVectorOps.ScaledDifference(currentPrediction, consistencyTarget, length, NumOps.FromDouble(_consistencyWeight));
+        return AiDotNetEngine.Current.Add(sdsGrad, consGrad);
     }
 }

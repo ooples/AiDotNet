@@ -173,17 +173,14 @@ internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>
                 previous.Rows == current.Rows && previous.Columns == current.Columns &&
                 (b ?? throw new InvalidOperationException("b is null where it is required.")).Rows == current.Rows && b.Columns == current.Columns)
             {
-                for (int row = 0; row < b.Rows; row++)
-                {
-                    for (int column = 0; column < b.Columns; column++)
-                    {
-                        T forwardIncrement = ops.Subtract(current[row, column], previous[row, column]);
-                        T alignmentError = ops.Subtract(b[row, column], previous[row, column]);
-                        b[row, column] = ops.Subtract(
-                            ops.Add(b[row, column], ops.Multiply(updateScale, forwardIncrement)),
-                            ops.Multiply(decay, alignmentError));
-                    }
-                }
+                // b <- b + updateScale * (current - previous) - decay * (b - previous), in place.
+                var engine = AiDotNetEngine.Current;
+                var forwardIncrement = engine.MatrixSubtract(current, previous);
+                var alignmentError = engine.MatrixSubtract(b, previous);
+                var updated = engine.MatrixSubtract(
+                    engine.MatrixAdd(b, engine.MatrixMultiplyScalar(forwardIncrement, updateScale)),
+                    engine.MatrixMultiplyScalar(alignmentError, decay));
+                updated.AsSpan().CopyTo(b.AsWritableSpan());
             }
 
             _previousForwardWeights[j] = current.Clone();

@@ -231,86 +231,15 @@ public partial class CTCDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
 
     private List<int> CTCGreedyDecode(Tensor<T> logits)
     {
-        var tokens = new List<int>();
-        int prevToken = -1;
         int blankIdx = _options.BlankTokenIndex;
-        int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1;
-        int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0];
-        for (int t = 0; t < numFrames; t++)
-        {
-            int maxIdx = 0; double maxVal = double.NegativeInfinity;
-            for (int v = 0; v < vocabSize; v++)
-            {
-                double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]);
-                if (val > maxVal) { maxVal = val; maxIdx = v; }
-            }
-            if (maxIdx != blankIdx && maxIdx != prevToken) tokens.Add(maxIdx);
-            prevToken = maxIdx;
-        }
-        return tokens;
+        int[] frameTokens = SpeechRecognitionEngineOps.FrameArgMax(logits);
+        return SpeechRecognitionEngineOps.CollapseCtcFrames(frameTokens, blankIdx);
     }
 
+    // CTC prefix beam search (Hannun et al. 2014): paths that collapse to the same prefix are merged,
+    // and a repeated symbol only starts a new token after a blank.
     private List<int> CTCBeamSearchDecode(Tensor<T> logits, int beamWidth)
-    {
-        int blankIdx = _options.BlankTokenIndex;
-        int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1;
-        int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0];
-
-        // Each beam is (prefix tokens, log-probability)
-        var beams = new List<(List<int> Tokens, double LogProb)> { (new List<int>(), 0.0) };
-
-        for (int t = 0; t < numFrames; t++)
-        {
-            var candidates = new List<(List<int> Tokens, double LogProb)>();
-            foreach (var (tokens, logProb) in beams)
-            {
-                // Compute log-softmax for this frame
-                double maxLogit = double.NegativeInfinity;
-                for (int v = 0; v < vocabSize; v++)
-                {
-                    double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]);
-                    if (val > maxLogit) maxLogit = val;
-                }
-                double sumExp = 0;
-                for (int v = 0; v < vocabSize; v++)
-                {
-                    double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]);
-                    sumExp += Math.Exp(val - maxLogit);
-                }
-                double logSumExp = maxLogit + Math.Log(sumExp);
-
-                // Blank extension
-                {
-                    double blankLogProb = (logits.Rank >= 2 ? NumOps.ToDouble(logits[t, blankIdx]) : NumOps.ToDouble(logits[blankIdx])) - logSumExp;
-                    candidates.Add((new List<int>(tokens), logProb + blankLogProb));
-                }
-
-                // Character extensions - take top-K to keep beam manageable
-                var topK = new List<(int Idx, double LogP)>();
-                for (int v = 0; v < vocabSize; v++)
-                {
-                    if (v == blankIdx) continue;
-                    double val = (logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v])) - logSumExp;
-                    topK.Add((v, val));
-                }
-                topK.Sort((a, b) => b.LogP.CompareTo(a.LogP));
-                int limit = Math.Min(beamWidth, topK.Count);
-                for (int k = 0; k < limit; k++)
-                {
-                    int lastToken = tokens.Count > 0 ? tokens[^1] : -1;
-                    if (topK[k].Idx == lastToken) continue; // CTC collapse
-                    var newTokens = new List<int>(tokens) { topK[k].Idx };
-                    candidates.Add((newTokens, logProb + topK[k].LogP));
-                }
-            }
-
-            // Prune to beam width
-            candidates.Sort((a, b) => b.LogProb.CompareTo(a.LogProb));
-            beams = candidates.GetRange(0, Math.Min(beamWidth, candidates.Count));
-        }
-
-        return beams.Count > 0 ? beams[0].Tokens : new List<int>();
-    }
+        => SpeechRecognitionEngineOps.CtcPrefixBeamSearch(logits, beamWidth, _options.BlankTokenIndex);
 
     private string TokensToText(List<int> tokens)
     {

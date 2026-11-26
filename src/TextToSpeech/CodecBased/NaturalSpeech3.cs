@@ -233,20 +233,18 @@ public partial class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
     protected override Tensor<T> PreprocessText(string text)
     {
         if (!HasPaperLayers) return base.PreprocessText(text);
-        return Wave(TextToPhonemes(text).Select(i => (double)i).ToArray());
+        return IdTensor(TextToPhonemes(text));
     }
 
-    private static double[] Doubles(Tensor<T> x) => x.ToArray().Select(v => Ops.ToDouble(v)).ToArray();
 
     private static Tensor<T> Wave(IReadOnlyList<double> samples) =>
         new(new[] { samples.Count }, new Vector<T>(samples.Select(v => Ops.FromDouble(v)).ToArray()));
 
     private int[] PhonemeIds(Tensor<T> input, string name)
     {
-        var ids = new int[input.Length];
+        var ids = RoundedIds(input);
         for (int i = 0; i < ids.Length; i++)
         {
-            ids[i] = (int)Math.Round(Ops.ToDouble(input.GetFlat(i)));
             if (ids[i] < 0 || ids[i] >= _options.VocabSize) throw new ArgumentOutOfRangeException(name, $"Phoneme ids lie in [0, {_options.VocabSize}).");
         }
         if (ids.Length == 0) throw new ArgumentException("There are no phonemes.", name);
@@ -262,7 +260,7 @@ public partial class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         using var _ = new NoGradScope<T>();
         var wave = AsWave(audio);
-        var prosody = _options.MelProsody ? Codec.ProsodyFeature(Doubles(audio)) : null;
+        var prosody = _options.MelProsody ? Codec.ProsodyFeature(audio) : null;
         var latent = Codec.Encoder.Forward(wave);
         foreach (var q in Codec.Quantizers) q.SetTrainingMode(false);
         return Codec.Factorize(latent, prosody, false, null);
@@ -327,7 +325,7 @@ public partial class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
         return new TtsVoice<T>
         {
             ReferenceAudio = Engine.Reshape(recording, new[] { recording.Length }),
-            ReferenceTokens = Wave(phonemes.Select(p => (double)p).ToArray()),
+            ReferenceTokens = IdTensor(phonemes),
             ReferenceDurations = durations.ToArray(),
         };
     }

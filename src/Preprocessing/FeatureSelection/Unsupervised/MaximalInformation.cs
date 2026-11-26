@@ -28,14 +28,14 @@ public class MaximalInformation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _entropies;
+    private Vector<T>? _entropies;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
-    public double[]? Entropies => _entropies;
+    public Vector<T>? Entropies => _entropies;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -63,61 +63,34 @@ public class MaximalInformation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         int n = data.Rows;
         int p = data.Columns;
 
-        _entropies = new double[p];
+        // Discretize every column into nBins equal-width bins over [min, max] (numpy.histogram: the bin is
+        // floor((x - min) / (max - min) * nBins), the maximum falling in the last bin); a constant column
+        // falls entirely in bin 0 and so has zero entropy
+        var x = Tensor<T>.FromMatrix(data);
+        var min = Engine.Reshape(PreprocessingTensorOps.ColumnMin(x), new[] { 1, p });
+        var range = Engine.TensorSubtract(Engine.Reshape(PreprocessingTensorOps.ColumnMax(x), new[] { 1, p }), min);
+        var varying = PreprocessingTensorOps.AtLeast(range, PreprocessingTensorOps.Tolerance<T>(1e-10));
+        var safeRange = Engine.TensorWhere(varying, range, PreprocessingTensorOps.Filled(new[] { 1, p }, NumOps.One));
+        var scaled = Engine.TensorMultiplyScalar(
+            Engine.TensorDivide(Engine.TensorSubtract(x, min), safeRange), NumOps.FromDouble(_nBins));
+        var binIndex = Engine.TensorMin(Engine.TensorFloor(scaled), NumOps.FromDouble(_nBins - 1));
+        binIndex = Engine.TensorMultiply(binIndex, Engine.TensorBroadcastTo(varying, new[] { n, p }));
 
-        for (int j = 0; j < p; j++)
-        {
-            // Get feature values
-            double minVal = double.MaxValue, maxVal = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                if (val < minVal) minVal = val;
-                if (val > maxVal) maxVal = val;
-            }
-
-            // Discretize and count
-            var binCounts = new int[_nBins];
-            double range = maxVal - minVal;
-
-            if (range < 1e-10)
-            {
-                // All values are the same - zero entropy
-                _entropies[j] = 0;
-                continue;
-            }
-
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                int bin = (int)((val - minVal) / range * (_nBins - 1));
-                bin = Math.Min(_nBins - 1, Math.Max(0, bin));
-                binCounts[bin]++;
-            }
-
-            // Compute entropy
-            double entropy = 0;
-            for (int b = 0; b < _nBins; b++)
-            {
-                if (binCounts[b] > 0)
-                {
-                    double p_b = (double)binCounts[b] / n;
-                    entropy -= p_b * Math.Log(p_b);
-                }
-            }
-
-            _entropies[j] = entropy;
-        }
+        // Compute entropy -sum p_b ln p_b over the non-empty bins
+        // (bin counts summed as int: a 0/1 sum in T stops counting at 2048 for Half)
+        var counts = Engine.ReduceSum(
+            PreprocessingTensorOps.OneHotBins(binIndex, _nBins).Cast<int>(), new[] { 0 }, false).Cast<T>();
+        var probabilities = Engine.TensorDivideScalar(counts, NumOps.FromDouble(n));
+        var occupied = Engine.TensorGreaterThan(counts, NumOps.Zero);
+        var safeProbabilities = Engine.TensorWhere(occupied, probabilities,
+            PreprocessingTensorOps.Filled(new[] { p * _nBins }, NumOps.One));
+        var terms = Engine.TensorMultiply(probabilities, Engine.TensorLog(safeProbabilities));
+        var entropies = Engine.TensorNegate(Engine.ReduceSum(
+            Engine.Reshape(terms, new[] { p, _nBins }), new[] { 1 }, false));
+        _entropies = entropies.ToVector();
 
         // Select top features by entropy
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _entropies
-            .Select((e, idx) => (Entropy: e, Index: idx))
-            .OrderByDescending(x => x.Entropy)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(entropies, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -128,15 +101,7 @@ public class MaximalInformation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("MaximalInformation has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

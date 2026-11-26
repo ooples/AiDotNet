@@ -21,8 +21,8 @@ namespace AiDotNet.LoRA.Adapters;
 /// <b>Mathematical Formulation:</b>
 /// Given pre-trained weights W, DVoRA:
 /// 1. Decomposes: W = m * d (magnitude and direction)
-/// 2. Applies VeRA to direction: d' = d + d_scale * (B * A * input) * b_scale
-/// 3. Normalizes direction: d_norm = d' / ||d'||
+/// 2. Adds the VeRA weight delta to the weights: V = W + ΔW, ΔW = d_scale * (B * A) * b_scale
+/// 3. Takes the direction of the sum: d_norm = V / ||V|| (per output neuron)
 /// 4. Recomposes: W' = m * d_norm
 ///
 /// Where:
@@ -105,6 +105,11 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// Lock object for thread-safe shared matrix initialization.
     /// </summary>
     private static readonly object _initLock = new object();
+
+    /// <summary>
+    /// Initial value of the rank-sized VeRA scaling vector (the paper's and PEFT's d_initial).
+    /// </summary>
+    private const double InitialRankScaling = 0.1;
 
     /// <summary>
     /// Magnitude component of the decomposed weights (scalar per output neuron).
@@ -221,19 +226,12 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
         _magnitude = new Tensor<T>([outputSize]);
         DecomposeWeights();
 
-        // Initialize scaling vectors to ones (VeRA component - no initial effect)
+        // VeRA scaling vectors as in Kopiczko et al. (2024) and PEFT: the output-sized vector applied
+        // after B starts at zero, so the VeRA delta (and with it the DVoRA change) is zero at
+        // initialization, and the rank-sized vector applied after A starts at d_initial = 0.1.
         _scalingVectorD = new Tensor<T>([outputSize]);
-        _scalingVectorB = new Tensor<T>([rank]);
+        _scalingVectorB = Tensor<T>.CreateDefault([rank], NumOps.FromDouble(InitialRankScaling));
 
-        for (int i = 0; i < outputSize; i++)
-        {
-            _scalingVectorD[i] = NumOps.One;
-        }
-
-        for (int i = 0; i < rank; i++)
-        {
-            _scalingVectorB[i] = NumOps.One;
-        }
 
         // DVoRA owns the magnitude/scaling tensors above and uses shared frozen matrices instead of
         // the standard LoRA child created by the base constructor.
@@ -343,31 +341,56 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
-        // For each output neuron, compute the magnitude of its weight vector
-        for (int i = 0; i < outputSize; i++)
-        {
-            T sumSquares = NumOps.Zero;
+        // For each output neuron, the magnitude of its weight vector is the L2 norm of its row,
+        // never zero (for numerical stability).
+        Tensor<T> weights = Tensor<T>.FromMatrix(ExtractOutputMajorWeights(baseParams, outputSize, inputSize, weightCount));
+        Tensor<T> rowNorms = Engine.Reshape(SafeRowNorms(weights), [outputSize]);
+        rowNorms.AsSpan().CopyTo(_magnitude.AsWritableSpan());
+    }
 
-            // Sum squares of all weights for this output neuron
-            for (int j = 0; j < inputSize; j++)
-            {
-                int idx = i * inputSize + j;
-                if (idx < weightCount && idx < baseParams.Length)
-                {
-                    T weight = baseParams[idx];
-                    sumSquares = NumOps.Add(sumSquares, NumOps.Multiply(weight, weight));
-                }
-            }
+    /// <summary>
+    /// Reads the leading weight block of a flat parameter vector as an [outputSize, inputSize]
+    /// row-major matrix; positions past the end of the parameters are zero.
+    /// </summary>
+    private Matrix<T> ExtractOutputMajorWeights(Vector<T> baseParams, int outputSize, int inputSize, int weightCount)
+    {
+        int available = Math.Min(weightCount, baseParams.Length);
+        Vector<T> flat = available == weightCount
+            ? baseParams.GetSubVector(0, weightCount)
+            : Vector<T>.Concatenate(baseParams.GetSubVector(0, available), new Vector<T>(weightCount - available));
+        bool inputMajor = _baseLayer is DenseLayer<T>;
+        var weights = Engine.Reshape(Tensor<T>.FromVector(flat), inputMajor ? [inputSize, outputSize] : [outputSize, inputSize]).ToMatrix();
+        return inputMajor ? Engine.MatrixTranspose(weights) : weights;
+    }
 
-            // Magnitude is the L2 norm
-            _magnitude[i] = NumOps.Sqrt(sumSquares);
+    /// <summary>
+    /// Row L2 norms as an [rows, 1] tensor, with exact zeros replaced by 1e-8.
+    /// </summary>
+    private Tensor<T> SafeRowNorms(Tensor<T> matrix)
+    {
+        Tensor<T> norms = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(matrix, matrix), [1], true));
+        return Engine.TensorWhere(
+            Engine.TensorEquals(norms, NumOps.Zero),
+            Tensor<T>.CreateDefault(norms.Shape.ToArray(), NumOps.FromDouble(1e-8)),
+            norms);
+    }
 
-            // Ensure magnitude is never zero (for numerical stability)
-            if (NumOps.Equals(_magnitude[i], NumOps.Zero))
-            {
-                _magnitude[i] = NumOps.FromDouble(1e-8);
-            }
-        }
+    /// <summary>
+    /// VeRA weight delta in [outputSize, inputSize] form: ((A * diag(b)) * B * diag(d))^T * scaling.
+    /// </summary>
+    private Matrix<T> ComputeVeraWeightDelta(int inputSize, int outputSize, int rank, T scaling)
+    {
+        Matrix<T> sharedA = _sharedMatrixA ?? throw new InvalidOperationException("Shared matrix A not initialized.");
+        Matrix<T> sharedB = _sharedMatrixB ?? throw new InvalidOperationException("Shared matrix B not initialized.");
+
+        // A_scaled = A * diag(b); intermediate = A_scaled * B → [inputSize, outputSize]
+        Tensor<T> aScaled = Engine.TensorMultiply(Tensor<T>.FromMatrix(sharedA), Engine.Reshape(_scalingVectorB, [1, rank]));
+        Tensor<T> intermediate = Engine.TensorMatMul(aScaled, Tensor<T>.FromMatrix(sharedB));
+
+        // Apply d scaling, then alpha/rank scaling, and transpose to [outputSize, inputSize]
+        Tensor<T> veraWeights = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(intermediate, Engine.Reshape(_scalingVectorD, [1, outputSize])), scaling);
+        return Engine.TensorTranspose(veraWeights).ToMatrix();
     }
 
     /// <summary>
@@ -379,32 +402,10 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
     {
         int rows = matrix.Rows;
         int cols = matrix.Columns;
-        Matrix<T> normalized = new Matrix<T>(rows, cols);
-
-        for (int i = 0; i < rows; i++)
-        {
-            // Compute L2 norm of row
-            T sumSquares = NumOps.Zero;
-            for (int j = 0; j < cols; j++)
-            {
-                T val = matrix[i, j];
-                sumSquares = NumOps.Add(sumSquares, NumOps.Multiply(val, val));
-            }
-
-            T norm = NumOps.Sqrt(sumSquares);
-
-            // Avoid division by zero
-            if (NumOps.Equals(norm, NumOps.Zero))
-            {
-                norm = NumOps.FromDouble(1e-8);
-            }
-
-            // Normalize row
-            for (int j = 0; j < cols; j++)
-            {
-                normalized[i, j] = NumOps.Divide(matrix[i, j], norm);
-            }
-        }
+        // Divide each row by its L2 norm (exact zero norms become 1e-8 to avoid division by zero)
+        Tensor<T> values = Tensor<T>.FromMatrix(matrix);
+        Matrix<T> normalized = Engine.TensorDivide(
+            values, Engine.TensorBroadcastTo(SafeRowNorms(values), [rows, cols])).ToMatrix();
 
         return normalized;
     }
@@ -418,15 +419,10 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
     {
         int outputSize = direction.Rows;
         int inputSize = direction.Columns;
-        Matrix<T> weights = new Matrix<T>(outputSize, inputSize);
+        // W[i, j] = m[i] * direction[i, j]
+        Matrix<T> weights = Engine.TensorMultiply(
+            Tensor<T>.FromMatrix(direction), Engine.Reshape(_magnitude, [outputSize, 1])).ToMatrix();
 
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                weights[i, j] = NumOps.Multiply(_magnitude[i], direction[i, j]);
-            }
-        }
 
         return weights;
     }
@@ -452,7 +448,7 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// The DVoRA forward pass combines DoRA and VeRA:
     /// 1. Gets base layer weights W
     /// 2. Computes direction: d = W / ||W|| (DoRA)
-    /// 3. Applies VeRA to direction: d' = d + d_scale * (B * A * input) * b_scale (VeRA)
+    /// 3. Adds the VeRA weight delta to the weights: V = W + ΔW (VeRA)
     /// 4. Normalizes adapted direction: d_norm = d' / ||d'|| (DoRA)
     /// 5. Recomposes weights: W' = m * d_norm (DoRA)
     /// 6. Computes output: y = input @ W'^T
@@ -488,107 +484,20 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
         int weightCount = inputSize * outputSize;
 
         // Extract weight matrix from base layer
-        Matrix<T> baseWeights = new Matrix<T>(outputSize, inputSize);
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                int weightIdx = i * inputSize + j;
-                if (weightIdx < weightCount && weightIdx < baseParams.Length)
-                {
-                    baseWeights[i, j] = baseParams[weightIdx];
-                }
-                else
-                {
-                    baseWeights[i, j] = NumOps.Zero;
-                }
-            }
-        }
-
-        // Compute base direction (W / ||W||) - DoRA component
-        Matrix<T> baseDirection = NormalizeRows(baseWeights);
+        Matrix<T> baseWeights = ExtractOutputMajorWeights(baseParams, outputSize, inputSize, weightCount);
 
         // Apply VeRA to get direction delta
         int batchSize = input.Shape[0];
         int rank = _scalingVectorB.Length;
 
-        // Convert input to matrix [batchSize, inputSize]
-        Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                inputMatrix[i, j] = input[i * inputSize + j];
-            }
-        }
-
-        // VeRA forward: (B * A * input) with scaling vectors
-        // Compute: input * A (shared, frozen) → [batchSize, rank]
-        Matrix<T> afterA = inputMatrix.Multiply((_sharedMatrixA ?? throw new InvalidOperationException("Shared matrix A not initialized.")));
-
-        // Apply scaling vector b element-wise: afterA * diag(b) → [batchSize, rank]
-        Matrix<T> afterB = new Matrix<T>(batchSize, rank);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < rank; j++)
-            {
-                afterB[i, j] = NumOps.Multiply(afterA[i, j], _scalingVectorB[j]);
-            }
-        }
-
-        // Compute: afterB * B (shared, frozen) → [batchSize, outputSize]
-        Matrix<T> afterSharedB = afterB.Multiply((_sharedMatrixB ?? throw new InvalidOperationException("Shared matrix B not initialized.")));
-
-        // Apply scaling vector d element-wise: afterSharedB * diag(d) → [batchSize, outputSize]
-        Matrix<T> veraContribution = new Matrix<T>(batchSize, outputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                veraContribution[i, j] = NumOps.Multiply(afterSharedB[i, j], _scalingVectorD[j]);
-            }
-        }
-
-        // Apply alpha/rank scaling
+        // VeRA forward pieces: the weight delta is computed directly from the shared matrices and
+        // scaling vectors (deterministic and independent of the input batch).
         T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
+        Matrix<T> veraWeightDelta = ComputeVeraWeightDelta(inputSize, outputSize, rank, scaling);
 
-        // Compute VeRA weight delta directly from matrices: delta = d .* (B * A_scaled)^T
-        // This is deterministic and independent of the input batch
+        // Add the VeRA delta to the weights themselves (DoRA eq. 5): V = W + ΔW
+        Matrix<T> adaptedDirection = Engine.MatrixAdd(baseWeights, veraWeightDelta);
 
-        // First compute A_scaled = A * diag(b)
-        Matrix<T> aScaled = new Matrix<T>(inputSize, rank);
-        for (int i = 0; i < inputSize; i++)
-        {
-            for (int j = 0; j < rank; j++)
-            {
-                aScaled[i, j] = NumOps.Multiply((_sharedMatrixA ?? throw new InvalidOperationException("Shared matrix A not initialized."))[i, j], _scalingVectorB[j]);
-            }
-        }
-
-        // Compute intermediate = A_scaled * B → [inputSize, outputSize]
-        Matrix<T> intermediate = aScaled.Multiply((_sharedMatrixB ?? throw new InvalidOperationException("Shared matrix B not initialized.")));
-
-        // Apply d scaling and transpose to get weight delta [outputSize, inputSize]
-        Matrix<T> veraWeightDelta = new Matrix<T>(outputSize, inputSize);
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                veraWeightDelta[i, j] = NumOps.Multiply(
-                    NumOps.Multiply(intermediate[j, i], _scalingVectorD[i]),
-                    scaling);
-            }
-        }
-
-        // Add VeRA delta to base direction: d' = d + delta
-        Matrix<T> adaptedDirection = new Matrix<T>(outputSize, inputSize);
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                adaptedDirection[i, j] = NumOps.Add(baseDirection[i, j], veraWeightDelta[i, j]);
-            }
-        }
 
         // Normalize the adapted direction: d_norm = d' / ||d'|| - DoRA component
         Matrix<T> normalizedDirection = NormalizeRows(adaptedDirection);
@@ -596,38 +505,18 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
         // Recompose weights: W' = m * d_norm - DoRA component
         Matrix<T> finalWeights = RecomposeWeights(normalizedDirection);
 
-        // Compute output: y = input @ W'^T + bias
-        Matrix<T> outputMatrix = inputMatrix.Multiply(finalWeights.Transpose());
-
-        // Extract biases from base layer parameters
-        Vector<T> biases = new Vector<T>(outputSize);
-        for (int i = 0; i < outputSize; i++)
-        {
-            int biasIdx = weightCount + i;
-            biases[i] = biasIdx < baseParams.Length ? baseParams[biasIdx] : NumOps.Zero;
-        }
-
-        // Add bias to each row of output
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                outputMatrix[i, j] = NumOps.Add(outputMatrix[i, j], biases[j]);
-            }
-        }
-
-        // Convert back to tensor
-        Vector<T> outputData = new Vector<T>(batchSize * outputSize);
-        int idx = 0;
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                outputData[idx++] = outputMatrix[i, j];
-            }
-        }
-
-        return new Tensor<T>(new[] { batchSize, outputSize }, outputData);
+        // Compute output: y = input @ W'^T + bias (biases past the parameter vector are zero)
+        Tensor<T> outputMatrix = Engine.TensorMatMul(
+            Engine.Reshape(input, [batchSize, inputSize]), Tensor<T>.FromMatrix(Engine.MatrixTranspose(finalWeights)));
+        int availableBiases = Math.Max(0, Math.Min(outputSize, baseParams.Length - weightCount));
+        Vector<T> biases = availableBiases == outputSize
+            ? baseParams.GetSubVector(weightCount, outputSize)
+            : availableBiases > 0
+                ? Vector<T>.Concatenate(baseParams.GetSubVector(weightCount, availableBiases), new Vector<T>(outputSize - availableBiases))
+                : new Vector<T>(outputSize);
+        return Engine.TensorAdd(
+            outputMatrix,
+            Engine.TensorBroadcastTo(Engine.Reshape(Tensor<T>.FromVector(biases), [1, outputSize]), [batchSize, outputSize]));
     }
 
     /// <summary>
@@ -641,32 +530,24 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        // Update magnitude parameters (DoRA component)
-        for (int i = 0; i < _magnitude.Length; i++)
-        {
-            T update = NumOps.Multiply(_magnitudeGradient[i], learningRate);
-            _magnitude[i] = NumOps.Subtract(_magnitude[i], update);
-
-            // Ensure magnitude stays positive
-            if (NumOps.LessThan(_magnitude[i], NumOps.FromDouble(1e-8)))
-            {
-                _magnitude[i] = NumOps.FromDouble(1e-8);
-            }
-        }
+        // Update magnitude parameters (DoRA component): m -= learningRate * dm,
+        // then ensure magnitude stays positive (floor at 1e-8)
+        T floor = NumOps.FromDouble(1e-8);
+        Tensor<T> updatedMagnitude = Engine.TensorSubtract(
+            _magnitude, Tensor<T>.FromVector(Engine.Multiply(_magnitudeGradient, learningRate)));
+        updatedMagnitude = Engine.TensorWhere(
+            Engine.TensorLessThan(updatedMagnitude, floor),
+            Tensor<T>.CreateDefault(updatedMagnitude.Shape.ToArray(), floor),
+            updatedMagnitude);
+        updatedMagnitude.AsSpan().CopyTo(_magnitude.AsWritableSpan());
 
         // Update scaling vector d (VeRA component)
-        for (int i = 0; i < _scalingVectorD.Length; i++)
-        {
-            T update = NumOps.Multiply(_scalingVectorDGradient[i], learningRate);
-            _scalingVectorD[i] = NumOps.Subtract(_scalingVectorD[i], update);
-        }
+        Engine.TensorSubtractInPlace(
+            _scalingVectorD, Tensor<T>.FromVector(Engine.Multiply(_scalingVectorDGradient, learningRate)));
 
         // Update scaling vector b (VeRA component)
-        for (int i = 0; i < _scalingVectorB.Length; i++)
-        {
-            T update = NumOps.Multiply(_scalingVectorBGradient[i], learningRate);
-            _scalingVectorB[i] = NumOps.Subtract(_scalingVectorB[i], update);
-        }
+        Engine.TensorSubtractInPlace(
+            _scalingVectorB, Tensor<T>.FromVector(Engine.Multiply(_scalingVectorBGradient, learningRate)));
 
         // Update base layer if not frozen
         if (!_freezeBaseLayer)
@@ -685,14 +566,14 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// <para>
     /// This method creates a final layer with the DVoRA adaptations baked in.
     /// The merged weights combine DoRA's magnitude-direction decomposition with VeRA's adaptation:
-    /// W' = m * normalize(d + VeRA_contribution)
+    /// W' = m * normalize(W + VeRA_contribution)
     /// </para>
     /// <para><b>For Beginners:</b> This "bakes in" your DVoRA adaptation for deployment.
     ///
     /// After training with DVoRA, you probably want to deploy a simpler model without
     /// all the DVoRA machinery. This method creates that simpler model by:
-    /// 1. Computing the VeRA contribution to direction
-    /// 2. Adding it to the base direction
+    /// 1. Computing the VeRA weight contribution
+    /// 2. Adding it to the base weights
     /// 3. Normalizing the result (DoRA)
     /// 4. Multiplying by magnitude (DoRA)
     /// 5. Creating a new layer with these merged weights
@@ -722,64 +603,15 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Get base layer weights
         Vector<T> baseParams = _baseLayer.GetParameters();
-        Matrix<T> baseWeights = new Matrix<T>(outputSize, inputSize);
         int weightCount = inputSize * outputSize;
+        Matrix<T> baseWeights = ExtractOutputMajorWeights(baseParams, outputSize, inputSize, weightCount);
 
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                int weightIdx = i * inputSize + j;
-                if (weightIdx < weightCount && weightIdx < baseParams.Length)
-                {
-                    baseWeights[i, j] = baseParams[weightIdx];
-                }
-            }
-        }
-
-        // Compute base direction
-        Matrix<T> baseDirection = NormalizeRows(baseWeights);
-
-        // Compute VeRA weight contribution: d * B * A * b * scaling
+        // Compute VeRA weight contribution: d * B * A * b * scaling, transposed to [outputSize, inputSize]
         T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
+        Matrix<T> veraWeightsTransposed = ComputeVeraWeightDelta(inputSize, outputSize, rank, scaling);
 
-        // Apply b scaling to A: A_scaled = A * diag(b)
-        Matrix<T> aScaled = new Matrix<T>(inputSize, rank);
-        for (int i = 0; i < inputSize; i++)
-        {
-            for (int j = 0; j < rank; j++)
-            {
-                aScaled[i, j] = NumOps.Multiply(_sharedMatrixA[i, j], _scalingVectorB[j]);
-            }
-        }
-
-        // Multiply by B: intermediate = A_scaled * B
-        Matrix<T> intermediate = aScaled.Multiply(_sharedMatrixB);
-
-        // Apply d scaling: W_vera = intermediate * diag(d) * scaling
-        Matrix<T> veraWeights = new Matrix<T>(inputSize, outputSize);
-        for (int i = 0; i < inputSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                veraWeights[i, j] = NumOps.Multiply(
-                    NumOps.Multiply(intermediate[i, j], _scalingVectorD[j]),
-                    scaling);
-            }
-        }
-
-        // Transpose to match direction matrix format [outputSize, inputSize]
-        Matrix<T> veraWeightsTransposed = veraWeights.Transpose();
-
-        // Add VeRA contribution to base direction
-        Matrix<T> adaptedDirection = new Matrix<T>(outputSize, inputSize);
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                adaptedDirection[i, j] = NumOps.Add(baseDirection[i, j], veraWeightsTransposed[i, j]);
-            }
-        }
+        // Add the VeRA contribution to the weights themselves (DoRA eq. 5): V = W + ΔW
+        Matrix<T> adaptedDirection = Engine.MatrixAdd(baseWeights, veraWeightsTransposed);
 
         // Normalize the adapted direction
         Matrix<T> normalizedDirection = NormalizeRows(adaptedDirection);
@@ -787,24 +619,12 @@ public partial class DVoRAAdapter<T> : LoRAAdapterBase<T>
         // Recompose with magnitude: W' = m * d_norm
         Matrix<T> finalWeights = RecomposeWeights(normalizedDirection);
 
-        // Create merged parameters (weights + biases)
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Copy merged weights
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                int weightIdx = i * inputSize + j;
-                mergedParams[weightIdx] = finalWeights[i, j];
-            }
-        }
-
-        // Copy biases unchanged
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
+        // Create merged parameters: merged weights (row-major) then biases unchanged
+        var flatWeights = (_baseLayer is DenseLayer<T> ? Engine.MatrixTranspose(finalWeights) : finalWeights).ToRowVector();
+        int biasCount = baseParams.Length - weightCount;
+        Vector<T> mergedParams = biasCount > 0
+            ? Vector<T>.Concatenate(flatWeights, baseParams.GetSubVector(weightCount, biasCount))
+            : flatWeights;
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);

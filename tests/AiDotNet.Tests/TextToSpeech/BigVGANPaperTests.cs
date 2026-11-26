@@ -78,4 +78,32 @@ public class BigVGANPaperTests
         double after = provider.EvaluateTrainingObjective(mel, audio);
         Assert.True(after < before, $"The mel loss did not fall ({before} -> {after}).");
     }
+
+    // Seed and SamplingSeed decide every weight (GanVocoderBase): with no architecture seed the discriminators used to
+    // draw from an unseeded source, so two models with equal seeds trained different discriminators.
+    [Fact(Timeout = 120000)]
+    public async Task EqualVocoderSeeds_GiveEqualDiscriminators_WithoutAnArchitectureSeed()
+    {
+        await Task.Yield();
+        static double[][] Discriminators(int samplingSeed)
+        {
+            var options = Options();
+            options.SamplingSeed = samplingSeed;
+            var model = new BigVGAN<double>(
+                new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 8, outputSize: 16),
+                options,
+                new AiDotNet.Optimizers.AdamOptimizer<double, Tensor<double>, Tensor<double>>(null));
+            return model.DiscriminatorLayers.Select(layer => layer.GetParameters().ToArray()).ToArray();
+        }
+
+        var first = Discriminators(1234);
+        var second = Discriminators(1234);
+        var other = Discriminators(1235);
+        Assert.NotEmpty(first);
+        Assert.Equal(first.Length, second.Length);
+        for (int i = 0; i < first.Length; i++) Assert.Equal(first[i], second[i]);
+        // Both groups follow the seed: a period discriminator (first) and a resolution discriminator (last).
+        Assert.NotEqual(first[0], other[0]);
+        Assert.NotEqual(first[first.Length - 1], other[other.Length - 1]);
+    }
 }

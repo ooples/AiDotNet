@@ -109,45 +109,28 @@ public class UniVSTConsistentSmoothing<T>
         for (int i = 0; i < frames.Count; i++)
         {
             var window = WindowIndices(i, frames.Count);
-            var accumulator = new Tensor<T>(frames[i].Shape.ToArray());
-            int contributed = 0;
-
+            var shape = frames[i].Shape.ToArray();
+            var contributions = new List<Tensor<T>>(window.Count);
             foreach (int j in window)
             {
-                Tensor<T> aligned;
                 if (j == i)
                 {
-                    aligned = frames[i];
-                }
-                else
-                {
-                    var flow = flowTo(i, j);
-                    // No flow for this pair means no correspondence was established; skipping it is
-                    // right, because warping by a zero field would average in an UNALIGNED frame and
-                    // reintroduce exactly the ghosting this step removes.
-                    if (flow == null) continue;
-                    aligned = FlowWarpHelper.Warp(Engine, frames[j], flow);
+                    contributions.Add(frames[i]);
+                    continue;
                 }
 
-                for (int p = 0; p < accumulator.Length; p++)
-                    accumulator[p] = NumOps.Add(accumulator[p], aligned[p]);
-                contributed++;
+                var flow = flowTo(i, j);
+                // No flow for this pair means no correspondence was established; skipping it is
+                // right, because warping by a zero field would average in an UNALIGNED frame and
+                // reintroduce exactly the ghosting this step removes.
+                if (flow == null) continue;
+                contributions.Add(FlowWarpHelper.Warp(Engine, frames[j], flow).Reshape(shape));
             }
 
-            // Divide by the number of frames ACTUALLY averaged, not the nominal 2m+1. At the
-            // sequence ends the window is short, and dividing by 2m+1 there would darken those
-            // frames toward zero.
-            var mean = new Tensor<T>(frames[i].Shape.ToArray());
-            if (contributed == 0)
-            {
-                for (int p = 0; p < mean.Length; p++) mean[p] = frames[i][p];
-            }
-            else
-            {
-                T divisor = NumOps.FromDouble(contributed);
-                for (int p = 0; p < mean.Length; p++) mean[p] = NumOps.Divide(accumulator[p], divisor);
-            }
-
+            // Average over the frames ACTUALLY contributing, not the nominal 2m+1. At the sequence ends the
+            // window is short, and dividing by 2m+1 there would darken those frames toward zero. The frame
+            // itself always contributes, so the count is at least one.
+            var mean = Engine.ReduceMean(Engine.TensorStack(contributions.ToArray(), 0), new[] { 0 }, false);
             smoothed.Add(mean);
         }
 
@@ -176,19 +159,12 @@ public class UniVSTConsistentSmoothing<T>
         double sqrtAlpha = Math.Sqrt(alphaCumulativeT);
         double sqrtOneMinus = Math.Sqrt(1.0 - alphaCumulativeT);
 
-        var result = new Tensor<T>(latentT.Shape.ToArray());
-
         // alpha-bar == 1 is t = 0: there is no noise component left to solve for, so the residual is
         // zero rather than a division by zero.
-        if (sqrtOneMinus <= 0.0) return result;
-
-        for (int i = 0; i < result.Length; i++)
-        {
-            double v = (NumOps.ToDouble(latentT[i]) - (sqrtAlpha * NumOps.ToDouble(smoothedZeroPrediction[i])))
-                       / sqrtOneMinus;
-            result[i] = NumOps.FromDouble(v);
-        }
-        return result;
+        if (sqrtOneMinus <= 0.0) return new Tensor<T>(latentT.Shape.ToArray());
+        var prediction = smoothedZeroPrediction.Reshape(latentT.Shape.ToArray());
+        var residual = Engine.TensorSubtract(latentT, Engine.TensorMultiplyScalar(prediction, NumOps.FromDouble(sqrtAlpha)));
+        return Engine.TensorDivideScalar(residual, NumOps.FromDouble(sqrtOneMinus));
     }
 
     /// <summary>
@@ -211,13 +187,9 @@ public class UniVSTConsistentSmoothing<T>
         double sqrtAlphaPrev = Math.Sqrt(alphaCumulativePrevious);
         double sqrtOneMinusPrev = Math.Sqrt(1.0 - alphaCumulativePrevious);
 
-        var result = new Tensor<T>(smoothedZeroPrediction.Shape.ToArray());
-        for (int i = 0; i < result.Length; i++)
-        {
-            double v = (sqrtAlphaPrev * NumOps.ToDouble(smoothedZeroPrediction[i]))
-                       + (sqrtOneMinusPrev * NumOps.ToDouble(refinedNoise[i]));
-            result[i] = NumOps.FromDouble(v);
-        }
-        return result;
+        var noise = refinedNoise.Reshape(smoothedZeroPrediction.Shape.ToArray());
+        return Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(smoothedZeroPrediction, NumOps.FromDouble(sqrtAlphaPrev)),
+            Engine.TensorMultiplyScalar(noise, NumOps.FromDouble(sqrtOneMinusPrev)));
     }
 }

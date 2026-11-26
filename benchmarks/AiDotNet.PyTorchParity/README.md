@@ -204,6 +204,21 @@ Four more rows wrap shipped model classes (`MoreFamilyRows.cs`), each against a 
 `--compile`, a twin with its own objective (`training_loss`, or the GAN's `train_step` networks) is compiled too, so
 compiled training is what gets timed.
 
+Three audio and speech rows (`AudioRows.cs`, beside the existing `whisper-tiny`) wrap shipped models at their papers'
+shapes, each against a hand-written twin in `benchmark.py` (no torchaudio, librosa or transformers needed):
+
+| row | AiDotNet class | shape, step | trainable parameters |
+|-----|----------------|-------------|---------------------:|
+| `panns-cnn14` | `PANNs` (CNN14) | 10 s AudioSet clips as `[1, 1001, 64]` log-mel, 527 tags, BCE on logits, batch 32 | 80,761,679 |
+| `wav2vec2-base` | `Wav2Vec2Model` (BASE + CTC head) | 2 s of raw 16 kHz audio (32,000 samples, 99 frames), 24-symbol transcripts, CTC, feature encoder frozen | 90,197,410 |
+| `hifigan-v1` | `HiFiGAN` (V1) | 256-frame mel (about 3 s at 22.05 kHz); one D + one G update on an 8192-sample segment | 84,660,721 |
+
+PANNs takes features, so both sides build the log-mel batch outside the timed region; wav2vec 2.0 reads the waveform.
+`wav2vec2-base` runs LayerDrop 0 on both sides (it skips whole layers at random, a graph break per layer under
+`torch.compile`). `hifigan-v1` trains one utterance per step on both sides, as AiDotNet's HiFiGAN does: run it with
+`--batch-size 1` (the paper's batch is 16). Its parameter count covers the generator (13,936,130) and both
+discriminators.
+
 Each training report also records `FirstLoss` / `LastLoss` (`first_loss` / `last_loss`): the loss of the first and
 the last training step, as evidence the timed step trains. The last is read after timing. The first is read during
 epoch 0, once, which the steady-state figures exclude; the PyTorch side holds it on the device until timing ends.
@@ -237,7 +252,7 @@ back to OpenCL or HIP, as `run_matrix.py` does.
 ```bash
 cd benchmarks/AiDotNet.PyTorchParity/pytorch
 pip install -r requirements.txt
-python benchmark.py --models mlp,cnn,lstm,transformer --device cpu \
+python benchmark.py --models mlp,cnn,lstm,transformer --device cpu --compile \
     --threads 8 --output ../results/pytorch.json
 ```
 
@@ -247,7 +262,8 @@ graphs on a CUDA device; `--optimizer-impl fused` selects fused AdamW. The
 report's `protocol` block records which of these ran. `run_matrix.py` runs the
 three compiled configurations listed above and compares AiDotNet with the
 fastest. Pin both sides to the same thread count (`--threads` ↔
-`AIDOTNET_CPU_THREADS`).
+`AIDOTNET_CPU_THREADS`) and device. Record peak CPU RAM and GPU VRAM separately
+from allocation volume.
 
 ## 3. Compare
 
@@ -319,3 +335,17 @@ python timeseries.py ../results/ts --device cuda --compile --epochs 6 --threads 
   PyTorch side maps it to the same `MLP` so a shared `--models` list won't error.
 - This project is excluded from `dotnet test` (`IsTestProject=false`); it's a
   manual harness you run on demand.
+
+### Matched LSTM classification
+
+Run these commands from this benchmark directory. Generate the seed-1234 fixture once. It contains six state-dict fields, 20 training batches of 64 labeled sequences, and inference batches of 1, 8 and 16 sequences.
+
+```powershell
+python pytorch/lstm_fixture.py --output results/lstm-fixture
+dotnet run -c Release -- --models lstm --device cpu --inference-batches 1,8,16 --lstm-fixture results/lstm-fixture --lstm-numerics results/lstm-ai-cpu
+python pytorch/benchmark.py --models lstm --device cpu --inference-batches 1,8,16 --lstm-fixture results/lstm-fixture --compile --lstm-cpu-mkldnn disabled --lstm-numerics results/lstm-torch-cpu --output results/lstm-torch-cpu/report.json
+```
+
+The numerical run writes the logits, scalar loss, gradients and learned parameters from three successive AdamW updates, followed by inference logits for each batch size. The raw FP32 arrays are in `observations.safetensors`. For timing, omit `--lstm-numerics`, set `--output`, and pass `--lstm-workload-receipt` with a fresh path. The normal timing loop makes 60 updates and each receipt binds the tensors actually used. For CUDA, select `--device cuda` on both commands and omit the CPU setting.
+
+On Windows with PyTorch 2.14.1+cu126, the default oneDNN CPU LSTM decomposition sets the recurrent primitive's training flag to false. Its absent workspace fails Inductor's alignment check and AOT autograd's saved-tensor check during training. The explicit `--lstm-cpu-mkldnn disabled` setting selects the installed ATen decomposition and preserves full-graph Inductor compilation and its assertions. Both the compiler and the backend settings are recorded in the workload receipt. Passing `enabled` reproduces the oneDNN control on the affected runtime. Omitting the option preserves the installed PyTorch setting.

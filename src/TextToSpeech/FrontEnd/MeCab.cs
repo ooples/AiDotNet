@@ -106,7 +106,7 @@ internal sealed class MeCab
 
     private MeCab(string resource)
     {
-        using var stream = typeof(MeCab).Assembly.GetManifestResourceStream("AiDotNet.TextToSpeech.FrontEnd." + resource)
+        using var stream = EmbeddedData.Open("AiDotNet.TextToSpeech.FrontEnd." + resource)
             ?? throw new InvalidDataException($"The embedded resource {resource} is missing.");
         using var gzip = new GZipStream(stream, CompressionMode.Decompress);
         using var reader = new BinaryReader(new BufferedStream(gzip, 1 << 20));

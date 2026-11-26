@@ -27,14 +27,14 @@ public class HuberRobustSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     private readonly int _maxIterations;
     private readonly double _learningRate;
 
-    private double[]? _huberCoefficients;
+    private Vector<T>? _huberCoefficients;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Delta => _delta;
-    public double[]? HuberCoefficients => _huberCoefficients;
+    public Vector<T>? HuberCoefficients => _huberCoefficients;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -74,89 +74,32 @@ public class HuberRobustSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
 
-        // Standardize features
-        var means = new double[p];
-        var stds = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                means[j] += X[i, j];
-            means[j] /= n;
-
-            for (int i = 0; i < n; i++)
-                stds[j] += (X[i, j] - means[j]) * (X[i, j] - means[j]);
-            stds[j] = Math.Sqrt(stds[j] / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
-        }
-
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = (X[i, j] - means[j]) / stds[j];
-
-        // Standardize target
-        double yMean = y.Average();
-        double yStd = Math.Sqrt(y.Select(v => (v - yMean) * (v - yMean)).Average());
-        if (yStd < 1e-10) yStd = 1;
-        for (int i = 0; i < n; i++)
-            y[i] = (y[i] - yMean) / yStd;
+        // Standardize features and target (population std; near-constant ones keep scale 1)
+        var x = SelectorTensorOps.StandardizeColumns(Tensor<T>.FromMatrix(data));
+        var y = SelectorTensorOps.StandardizeColumns(engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }));
+        var xt = engine.TensorTranspose(x);
 
         // Fit Huber regression via gradient descent
-        var weights = new double[p];
-        double bias = 0;
-
+        var weights = PreprocessingTensorOps.Filled(new[] { p, 1 }, NumOps.Zero);
+        var bias = PreprocessingTensorOps.Filled(new[] { 1, 1 }, NumOps.Zero);
+        T delta = NumOps.FromDouble(_delta);
+        T negativeDelta = NumOps.Negate(delta);
+        T step = NumOps.FromDouble(_learningRate / n);
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            var gradW = new double[p];
-            double gradB = 0;
+            var residual = engine.TensorSubtract(engine.TensorAdd(engine.TensorMatMul(x, weights), bias), y);
 
-            for (int i = 0; i < n; i++)
-            {
-                double pred = bias;
-                for (int j = 0; j < p; j++)
-                    pred += X[i, j] * weights[j];
-
-                double residual = pred - y[i];
-                double absResidual = Math.Abs(residual);
-
-                // Huber loss gradient
-                double factor;
-                if (absResidual <= _delta)
-                {
-                    factor = residual;
-                }
-                else
-                {
-                    factor = _delta * Math.Sign(residual);
-                }
-
-                for (int j = 0; j < p; j++)
-                    gradW[j] += factor * X[i, j];
-                gradB += factor;
-            }
-
-            // Update weights
-            for (int j = 0; j < p; j++)
-                weights[j] -= _learningRate * gradW[j] / n;
-            bias -= _learningRate * gradB / n;
+            // Huber loss gradient: the residual, clipped to [-delta, delta]
+            var factor = engine.TensorClamp(residual, negativeDelta, delta);
+            weights = engine.TensorSubtract(weights, engine.TensorMultiplyScalar(engine.TensorMatMul(xt, factor), step));
+            bias = engine.TensorSubtract(bias, engine.TensorMultiplyScalar(engine.ReduceSum(factor, new[] { 0 }, true), step));
         }
 
-        _huberCoefficients = weights.Select(Math.Abs).ToArray();
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _huberCoefficients[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        var coefficients = engine.TensorAbs(engine.Reshape(weights, new[] { p }));
+        _huberCoefficients = coefficients.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(coefficients, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -174,15 +117,7 @@ public class HuberRobustSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("HuberRobustSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

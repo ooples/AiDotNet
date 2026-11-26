@@ -82,7 +82,7 @@ public partial class ABME<T> : FrameInterpolationBase<T>, ITrainingObjectiveProv
     private const double MotionUnit = 20.0;
 
     private readonly ABMEOptions _options;
-    private readonly Dictionary<AbmeTrainingStage, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>> _optimizers = new();
+    private readonly Dictionary<int, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>> _optimizers = new();
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _customOptimizer;
     private AbmeSbmeNet<T>? _sbme;
     private AbmeAbmrNet<T>? _abmr;
@@ -379,6 +379,13 @@ public partial class ABME<T> : FrameInterpolationBase<T>, ITrainingObjectiveProv
         _ => "synthesis",
     };
 
+    private static int ReferenceBatchSize(AbmeTrainingStage stage) => stage switch
+    {
+        AbmeTrainingStage.SymmetricMotion => 24,
+        AbmeTrainingStage.AsymmetricMotion => 16,
+        _ => 6,
+    };
+
     private int[] Milestones(AbmeTrainingStage stage) => stage switch
     {
         AbmeTrainingStage.SymmetricMotion => _options.SymmetricMilestones,
@@ -386,10 +393,19 @@ public partial class ABME<T> : FrameInterpolationBase<T>, ITrainingObjectiveProv
         _ => _options.SynthesisMilestones,
     };
 
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> StageOptimizer(AbmeTrainingStage stage)
+    // Park et al. 2021 Sec. 4.1 tunes Adam's 1e-4 rate at batch 24/16/6. When a run trains on fewer
+    // pairs per step from cold-start weights, prepend PaperOptimizerFactory's small-batch linear
+    // warmup to the paper's 1e-4 MultiStep schedule and enable AMSGrad so second moments calibrate
+    // before full-rate steps apply while full-batch runs and InitialLearningRate stay exact.
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> StageOptimizer(AbmeTrainingStage stage, int batchSize)
     {
         if (_customOptimizer is not null) return _customOptimizer;
-        if (_optimizers.TryGetValue(stage, out var existing)) return existing;
+        int referenceBatch = ReferenceBatchSize(stage);
+        int effectiveBatch = Math.Min(Math.Max(1, batchSize), referenceBatch);
+        int cacheKey = ((int)stage * 64) + effectiveBatch;
+        if (_optimizers.TryGetValue(cacheKey, out var existing)) return existing;
+        var scheduler = PaperOptimizerFactory.BuildMultiStepWithSmallBatchWarmup(
+            _options.LearningRate, Milestones(stage), _options.DecayRate, effectiveBatch, referenceBatch);
         // The paper states no betas, so Adam keeps PyTorch's (0.9, 0.999) and epsilon 1e-8.
         var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {
@@ -399,12 +415,12 @@ public partial class ABME<T> : FrameInterpolationBase<T>, ITrainingObjectiveProv
             Epsilon = 1e-8,
             UseAdaptiveLearningRate = false,
             UseAdaptiveBetas = false,
-            UseAMSGrad = false,
-            LearningRateScheduler = new MultiStepLRScheduler(_options.LearningRate, Milestones(stage).ToArray(), _options.DecayRate),
+            UseAMSGrad = true,
+            LearningRateScheduler = scheduler,
             SchedulerStepMode = SchedulerStepMode.StepPerBatch,
         });
         var verified = PaperOptimizerFactory.VerifyHandBuilt(this, optimizer, Component(stage));
-        _optimizers[stage] = verified;
+        _optimizers[cacheKey] = verified;
         return verified;
     }
 
@@ -441,6 +457,7 @@ public partial class ABME<T> : FrameInterpolationBase<T>, ITrainingObjectiveProv
     {
         if (_usingCustomLayers || !_useNativeMode) return null;
         var stage = _options.Stage;
+        int batchSize = input.Rank == 4 ? input.Shape[0] : 1;
         var target = AsBatch(NormalizeFrames(expectedOutput));
         return new[]
         {
@@ -450,7 +467,7 @@ public partial class ABME<T> : FrameInterpolationBase<T>, ITrainingObjectiveProv
                 return StageLoss(stage, frame0, frame1, data[1]);
             })
             {
-                Optimizer = StageOptimizer(stage),
+                Optimizer = StageOptimizer(stage, batchSize),
                 Parameters = () => StageParameters(stage),
             },
         };
@@ -472,7 +489,9 @@ public partial class ABME<T> : FrameInterpolationBase<T>, ITrainingObjectiveProv
 
     /// <inheritdoc />
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
-        => _useNativeMode && !_usingCustomLayers ? StageOptimizer(_options.Stage) : base.GetOrCreateBaseOptimizer();
+        => _useNativeMode && !_usingCustomLayers
+            ? StageOptimizer(_options.Stage, ReferenceBatchSize(_options.Stage))
+            : base.GetOrCreateBaseOptimizer();
 
     #endregion
 

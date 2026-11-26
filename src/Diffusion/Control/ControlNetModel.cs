@@ -880,20 +880,14 @@ public class ControlNetEncoder<T> : IParameterSource<T>
         foreach (var block in _downBlocks)
         {
             int count = checked((int)block.ParameterCount);
-            var p = new T[count];
-            for (int i = 0; i < count; i++)
-                p[i] = parameters[offset + i];
-            block.SetParameters(new Vector<T>(p));
+            block.SetParameters(parameters.GetSubVector(offset, count));
             offset += count;
         }
 
         foreach (var zc in _zeroConvs)
         {
             int count = checked((int)zc.ParameterCount);
-            var p = new T[count];
-            for (int i = 0; i < count; i++)
-                p[i] = parameters[offset + i];
-            zc.SetParameters(new Vector<T>(p));
+            zc.SetParameters(parameters.GetSubVector(offset, count));
             offset += count;
         }
     }

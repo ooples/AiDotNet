@@ -55,12 +55,10 @@ public partial class SpiritLM<T>
         return sb.ToString();
     }
 
-    private double[] Row(Tensor<T> logits)
+    private Tensor<T> Row(Tensor<T> logits)
     {
-        var values = new double[_options.VocabSize];
-        int offset = logits.Length - values.Length;
-        for (int i = 0; i < values.Length; i++) values[i] = Ops.ToDouble(logits.GetFlat(offset + i));
-        return values;
+        int vocabulary = _options.VocabSize;
+        return Engine.TensorSlice(Engine.Reshape(logits, new[] { logits.Length }), new[] { logits.Length - vocabulary }, new[] { vocabulary });
     }
 
     private Tensor<T> Embed(IReadOnlyList<int> ids)
@@ -89,8 +87,8 @@ public partial class SpiritLM<T>
         while (generated.Count < maxNewTokens && cache.Length < _options.MaxTextLength)
         {
             var row = Row(logits!);
-            foreach (int id in forbidden) if (id < row.Length) row[id] = double.NegativeInfinity;
-            int next = _options.Temperature <= 0 ? NucleusSampling.Greedy(row) : NucleusSampling.Sample(row, _options.Temperature, _options.TopK, _options.TopP, null, random);
+            row = TtsSampling<T>.Forbid(row, forbidden);
+            int next = _options.Temperature <= 0 ? NucleusSampling<T>.Greedy(row) : NucleusSampling<T>.Sample(row, _options.Temperature, _options.TopK, _options.TopP, null, random);
             generated.Add(next);
             if (next == end) break;
             (_, logits) = LanguageModel.Forward(Embed(new[] { next }), null, null, cache, lastLogitsOnly: true);

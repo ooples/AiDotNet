@@ -135,16 +135,9 @@ public abstract class OversamplingBase<T> : IResamplingStrategy<T>
             LastStatistics.OriginalClassCounts[kvp.Key] = kvp.Value;
         }
 
-        // Collect all samples (original + synthetic)
-        var allFeatures = new List<Vector<T>>();
-        var allLabels = new List<T>();
-
-        // Add original samples
-        for (int i = 0; i < x.Rows; i++)
-        {
-            allFeatures.Add(x.GetRow(i));
-            allLabels.Add(y[i]);
-        }
+        // Synthetic samples (appended after the original samples)
+        var syntheticFeatures = new List<Vector<T>>();
+        var syntheticLabels = new List<T>();
 
         // Generate synthetic samples for each minority class
         foreach (var kvp in classCounts)
@@ -164,11 +157,8 @@ public abstract class OversamplingBase<T> : IResamplingStrategy<T>
                 // Generate synthetic samples
                 var syntheticSamples = GenerateSyntheticSamples(x, classIndices, samplesToGenerate);
 
-                foreach (var sample in syntheticSamples)
-                {
-                    allFeatures.Add(sample);
-                    allLabels.Add(classLabel);
-                }
+                syntheticFeatures.AddRange(syntheticSamples);
+                syntheticLabels.AddRange(Enumerable.Repeat(classLabel, syntheticSamples.Count));
 
                 LastStatistics.SamplesAddedPerClass[classLabel] = syntheticSamples.Count;
             }
@@ -181,17 +171,7 @@ public abstract class OversamplingBase<T> : IResamplingStrategy<T>
         }
 
         // Build result matrices
-        var resampledX = new Matrix<T>(allFeatures.Count, x.Columns);
-        var resampledY = new Vector<T>(allLabels.Count);
-
-        for (int i = 0; i < allFeatures.Count; i++)
-        {
-            for (int j = 0; j < x.Columns; j++)
-            {
-                resampledX[i, j] = allFeatures[i][j];
-            }
-            resampledY[i] = allLabels[i];
-        }
+        var (resampledX, resampledY) = ResamplingTensorOps.Append(x, y, syntheticFeatures, syntheticLabels);
 
         // Update statistics
         LastStatistics.TotalResampledSamples = resampledX.Rows;
@@ -232,21 +212,7 @@ public abstract class OversamplingBase<T> : IResamplingStrategy<T>
     /// synthetic samples to create.
     /// </para>
     /// </remarks>
-    protected NumericDictionary<T, int> GetClassCounts(Vector<T> y)
-    {
-        var counts = new NumericDictionary<T, int>();
-
-        for (int i = 0; i < y.Length; i++)
-        {
-            if (!counts.TryGetValue(y[i], out int count))
-            {
-                count = 0;
-            }
-            counts[y[i]] = count + 1;
-        }
-
-        return counts;
-    }
+    protected NumericDictionary<T, int> GetClassCounts(Vector<T> y) => ResamplingTensorOps.ClassCounts(y);
 
     /// <summary>
     /// Gets the indices of samples belonging to a specific class.
@@ -261,18 +227,7 @@ public abstract class OversamplingBase<T> : IResamplingStrategy<T>
     /// synthetic examples.
     /// </para>
     /// </remarks>
-    protected List<int> GetClassIndices(Vector<T> y, T targetClass)
-    {
-        var indices = new List<int>();
-        for (int i = 0; i < y.Length; i++)
-        {
-            if (NumOps.Compare(y[i], targetClass) == 0)
-            {
-                indices.Add(i);
-            }
-        }
-        return indices;
-    }
+    protected List<int> GetClassIndices(Vector<T> y, T targetClass) => ResamplingTensorOps.ClassIndices(y, targetClass);
 
     /// <summary>
     /// Computes the Euclidean distance between two vectors.
@@ -308,27 +263,7 @@ public abstract class OversamplingBase<T> : IResamplingStrategy<T>
     /// </remarks>
     protected List<int> FindKNearestNeighbors(Matrix<T> x, int sampleIndex, List<int> candidateIndices, int k)
     {
-        var sample = x.GetRow(sampleIndex);
-        var distances = new List<(int index, T distance)>();
-
-        foreach (int candidateIndex in candidateIndices)
-        {
-            if (candidateIndex != sampleIndex)
-            {
-                var candidate = x.GetRow(candidateIndex);
-                T distance = EuclideanDistance(sample, candidate);
-                distances.Add((candidateIndex, distance));
-            }
-        }
-
-        // Sort by distance and take top k
-        var sorted = distances
-            .OrderBy(d => NumOps.ToDouble(d.distance))
-            .Take(Math.Min(k, distances.Count))
-            .Select(d => d.index)
-            .ToList();
-
-        return sorted;
+        return ResamplingTensorOps.Nearest(Tensor<T>.FromMatrix(x), sampleIndex, candidateIndices, k);
     }
 
     /// <summary>

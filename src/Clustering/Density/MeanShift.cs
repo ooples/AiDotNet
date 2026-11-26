@@ -103,111 +103,50 @@ public partial class MeanShift<T> : ClusteringBase<T>
         NumFeatures = d;
 
         // Estimate bandwidth if not provided
-        _bandwidth = NumOps.FromDouble(_options.Bandwidth ?? EstimateBandwidth(x));
+        _bandwidth = _options.Bandwidth.HasValue ? NumOps.FromDouble(_options.Bandwidth.Value) : EstimateBandwidth(x);
         T tolerance = NumOps.FromDouble(Options.Tolerance);
 
         // Get seeds (either binned or all points)
-        T[,] seeds;
-        if (_options.BinSeeding)
-        {
-            seeds = GetBinnedSeeds(x, n, d);
-        }
-        else
-        {
-            var seedsCopy = new T[n, d];
-            for (int i = 0; i < n; i++)
-                for (int j = 0; j < d; j++)
-                    seedsCopy[i, j] = x[i, j];
-            seeds = seedsCopy;
-        }
+        var seeds = _options.BinSeeding ? GetBinnedSeeds(x, n, d) : x.Clone();
 
-        int numSeeds = seeds.GetLength(0);
-
-        // Mean shift iterations for each seed
-        var convergedCenters = new List<T[]>();
-
-        for (int s = 0; s < numSeeds; s++)
+        // Mean shift iterations for every seed at once; converged seeds stop moving
+        var centers = seeds;
+        var active = Engine.Fill(seeds.Rows, NumOps.One).AsTensor();
+        for (int iter = 0; iter < Options.MaxIterations && seeds.Rows > 0; iter++)
         {
-            var center = new T[d];
-            for (int j = 0; j < d; j++)
+            var shifted = ComputeMeanShift(x, centers);
+            var shift = ClusteringTensorOps.RowEuclidean(Tensor<T>.FromMatrix(shifted), Tensor<T>.FromMatrix(centers));
+
+            var moving = Engine.TensorBroadcastTo(Engine.Reshape(active, new[] { seeds.Rows, 1 }), new[] { seeds.Rows, d });
+            centers = Engine.TensorWhere(moving, Tensor<T>.FromMatrix(shifted), Tensor<T>.FromMatrix(centers)).ToMatrix();
+
+            active = Engine.TensorMultiply(active, Engine.ScalarMinusTensor(NumOps.One, Engine.TensorLessThan(shift, tolerance)));
+            if (!HasActive(active))
             {
-                center[j] = seeds[s, j];
+                break;
             }
-
-            // Iterate until convergence
-            for (int iter = 0; iter < Options.MaxIterations; iter++)
-            {
-                var newCenter = ComputeMeanShift(x, center, n, d);
-
-                // Check convergence
-                T shift = NumOps.Zero;
-                for (int j = 0; j < d; j++)
-                {
-                    T diff = NumOps.Subtract(newCenter[j], center[j]);
-                    shift = NumOps.Add(shift, NumOps.Multiply(diff, diff));
-                }
-                shift = NumOps.Sqrt(shift);
-
-                center = newCenter;
-
-                if (NumOps.LessThan(shift, tolerance))
-                {
-                    break;
-                }
-            }
-
-            convergedCenters.Add(center);
         }
 
         // Merge nearby centers
         T mergeThreshold = _options.ClusterMergeThreshold.HasValue
             ? NumOps.FromDouble(_options.ClusterMergeThreshold.Value)
             : _bandwidth;
-        var finalCenters = MergeCenters(convergedCenters, mergeThreshold, d);
-
-        NumClusters = finalCenters.Count;
-
-        // Set cluster centers
-        ClusterCenters = new Matrix<T>(NumClusters, d);
-        for (int k = 0; k < NumClusters; k++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                ClusterCenters[k, j] = finalCenters[k][j];
-            }
-        }
+        ClusterCenters = MergeCenters(centers, mergeThreshold, d);
+        NumClusters = ClusterCenters.Rows;
 
         // Assign labels
-        Labels = new Vector<T>(n);
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-
-        for (int i = 0; i < n; i++)
-        {
-            var pointArr = new T[d];
-            var centerArr = new T[d];
-            for (int j = 0; j < d; j++) pointArr[j] = x[i, j];
-            T minDist = NumOps.MaxValue;
-            int nearestCluster = 0;
-
-            for (int k = 0; k < NumClusters; k++)
-            {
-                for (int j = 0; j < d; j++) centerArr[j] = ClusterCenters[k, j];
-                T dist = metric.ComputeInline(pointArr, centerArr, d);
-
-                if (NumOps.LessThan(dist, minDist))
-                {
-                    minDist = dist;
-                    nearestCluster = k;
-                }
-            }
-
-            Labels[i] = NumOps.FromDouble(nearestCluster);
-        }
+        Labels = NumClusters > 0
+            ? ClusteringTensorOps.FromIntArray<T>(ClusteringTensorOps.NearestCenters(metric, x, ClusterCenters))
+            : new Vector<T>(n);
 
         IsTrained = true;
     }
 
-    private double EstimateBandwidth(Matrix<T> x)
+    /// <summary>True while some seed is still moving.</summary>
+    private bool HasActive(Tensor<T> active) => NumOps.GreaterThan(Engine.TensorSum(active), NumOps.Zero);
+
+    private T EstimateBandwidth(Matrix<T> x)
     {
         int n = x.Rows;
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
@@ -215,195 +154,142 @@ public partial class MeanShift<T> : ClusteringBase<T>
         // Sample a subset of points for efficiency
         int sampleSize = Math.Min(n, 500);
         var rand = Random ?? RandomHelper.CreateSecureRandom();
-        var indices = Enumerable.Range(0, n).OrderBy(_ => rand.Next()).Take(sampleSize).ToList();
+        var indices = Enumerable.Range(0, n).OrderBy(_ => rand.Next()).Take(sampleSize).ToArray();
 
-        // Compute pairwise distances (convert to double for sorting/quantile selection)
-        var distances = new List<double>();
-        for (int i = 0; i < indices.Count; i++)
-        {
-            for (int j = i + 1; j < indices.Count; j++)
-            {
-                var p1 = GetRow(x, indices[i]);
-                var p2 = GetRow(x, indices[j]);
-                double dist = NumOps.ToDouble(metric.Compute(p1, p2));
-                distances.Add(dist);
-            }
-        }
-
-        distances.Sort();
+        // Distances between every pair of sampled points (upper triangle of the pairwise matrix)
+        var pairwise = Tensor<T>.FromMatrix(metric.ComputePairwise(ClusteringTensorOps.SelectRows(x, indices)));
+        var ones = Engine.TensorOnesLike(pairwise);
+        var upper = Engine.TensorEq(Engine.TensorTriu(ones, 1), ones);
+        var distances = Engine.TensorMsort(Engine.TensorMaskedSelect(pairwise, upper)).ToVector();
 
         // Return the quantile distance
-        int idx = (int)(distances.Count * _options.BandwidthQuantile);
-        return distances[Math.Max(0, Math.Min(idx, distances.Count - 1))];
+        int idx = (int)(distances.Length * _options.BandwidthQuantile);
+        return distances[Math.Max(0, Math.Min(idx, distances.Length - 1))];
     }
 
-    private T[,] GetBinnedSeeds(Matrix<T> data, int n, int d)
+    private Matrix<T> GetBinnedSeeds(Matrix<T> data, int n, int d)
     {
-        // Create bins with width = bandwidth
-        double binWidth = NumOps.ToDouble(_bandwidth);
+        if (n == 0)
+        {
+            return new Matrix<T>(0, d);
+        }
 
-        // Compute bin indices for each point
-        var binCounts = new Dictionary<string, (T[] Sum, int Count)>();
+        // Bin index of every coordinate (bin width = bandwidth), encoded by its rank among the distinct bin indices
+        var bins = Engine.TensorFloor(Engine.TensorDivideScalar(Tensor<T>.FromMatrix(data), _bandwidth));
+        var (_, inverse, _) = Engine.TensorUniqueWithInfo(Engine.Reshape(bins, new[] { n * d }), true, true, false);
+        if (inverse is null)
+        {
+            throw new InvalidOperationException("Unique bin computation did not return the inverse mapping.");
+        }
 
+        var binRanks = inverse.ToArray();
+
+        // Group points by bin in order of first appearance
+        var binOf = new Dictionary<string, int>();
+        var binSizes = new List<int>();
+        var pointBins = new int[n];
         for (int i = 0; i < n; i++)
         {
-            var binKey = new int[d];
-            for (int j = 0; j < d; j++)
+            string key = string.Join(",", new ArraySegment<int>(binRanks, i * d, d));
+            if (!binOf.TryGetValue(key, out int bin))
             {
-                binKey[j] = (int)Math.Floor(NumOps.ToDouble(data[i, j]) / binWidth);
+                bin = binSizes.Count;
+                binOf[key] = bin;
+                binSizes.Add(0);
             }
 
-            string key = string.Join(",", binKey);
-
-            if (!binCounts.ContainsKey(key))
-            {
-                var sumArr = new T[d];
-                for (int j = 0; j < d; j++) sumArr[j] = NumOps.Zero;
-                binCounts[key] = (sumArr, 0);
-            }
-
-            var (sum, count) = binCounts[key];
-            for (int j = 0; j < d; j++)
-            {
-                sum[j] = NumOps.Add(sum[j], data[i, j]);
-            }
-            binCounts[key] = (sum, count + 1);
+            binSizes[bin]++;
+            pointBins[i] = bin;
         }
 
-        // Filter bins with minimum frequency and compute centroids
-        var seeds = new List<T[]>();
-        foreach (var kvp in binCounts)
+        // Keep bins with minimum frequency; their centroids are the seeds
+        var seedIndex = new int[binSizes.Count];
+        int numSeeds = 0;
+        for (int b = 0; b < binSizes.Count; b++)
         {
-            if (kvp.Value.Count >= _options.MinBinFrequency)
-            {
-                T countT = NumOps.FromDouble(kvp.Value.Count);
-                var centroid = new T[d];
-                for (int j = 0; j < d; j++)
-                {
-                    centroid[j] = NumOps.Divide(kvp.Value.Sum[j], countT);
-                }
-                seeds.Add(centroid);
-            }
+            seedIndex[b] = binSizes[b] >= _options.MinBinFrequency ? numSeeds++ : -1;
         }
 
-        // Convert to 2D array
-        var result = new T[seeds.Count, d];
-        for (int i = 0; i < seeds.Count; i++)
+        if (numSeeds == 0)
         {
-            for (int j = 0; j < d; j++)
-            {
-                result[i, j] = seeds[i][j];
-            }
+            return new Matrix<T>(0, d);
         }
 
-        return result;
+        var seedLabels = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            seedLabels[i] = seedIndex[pointBins[i]];
+        }
+
+        return ClusteringTensorOps.ClusterMeans(data, ClusteringTensorOps.FromIntArray<T>(seedLabels), numSeeds, out _);
     }
 
-    private T[] ComputeMeanShift(Matrix<T> data, T[] center, int n, int d)
+    private Matrix<T> ComputeMeanShift(Matrix<T> data, Matrix<T> centers)
     {
+        // Gaussian kernel weight exp(-0.5 |x - c|^2 / h^2), only within the bandwidth;
+        // a center without neighbors stays where it is
+        int m = centers.Rows;
+        int d = data.Columns;
         T bandwidthSq = NumOps.Multiply(_bandwidth, _bandwidth);
-        T halfT = NumOps.FromDouble(0.5);
-        var newCenter = new T[d];
-        T totalWeight = NumOps.Zero;
-        for (int j = 0; j < d; j++) newCenter[j] = NumOps.Zero;
+        var dataT = Tensor<T>.FromMatrix(data);
+        T minusHalf = NumOps.FromDouble(-0.5);
 
-        var centerVec = new Vector<T>(center);
-
-        for (int i = 0; i < n; i++)
+        var shifted = new Matrix<T>(m, d);
+        int block = Math.Max(1, (1 << 22) / Math.Max(1, data.Rows));
+        for (int start = 0; start < m; start += block)
         {
-            // Compute squared distance inline — see ClusteringBase.ComputeDistance
-            // for the rationale (Engine.DotProduct on tiny vectors dispatches
-            // to GPU when AutoDetectAndConfigureGpu has switched backends,
-            // surfaced as the issue #1224 Cluster B regression).
-            T distSq = NumOps.Zero;
-            for (int j = 0; j < d; j++)
-            {
-                T diffJ = NumOps.Subtract(data[i, j], centerVec[j]);
-                distSq = NumOps.Add(distSq, NumOps.Multiply(diffJ, diffJ));
-            }
+            int rows = Math.Min(block, m - start);
+            var chunk = centers.GetSubMatrix(start, 0, rows, d);
+            var distSq = Tensor<T>.FromMatrix(ClusteringTensorOps.SquaredDistances(chunk, data));
+            var kernel = Engine.TensorExp(Engine.TensorMultiplyScalar(
+                Engine.TensorDivideScalar(distSq, bandwidthSq), minusHalf));
+            var inside = Engine.ScalarMinusTensor(NumOps.One, Engine.TensorGreaterThan(distSq, bandwidthSq));
+            var weights = Engine.TensorMultiply(kernel, inside);
 
-            // Gaussian kernel weight (only within bandwidth)
-            if (!NumOps.GreaterThan(distSq, bandwidthSq))
-            {
-                T weight = NumOps.Exp(NumOps.Negate(NumOps.Multiply(halfT, NumOps.Divide(distSq, bandwidthSq))));
-                totalWeight = NumOps.Add(totalWeight, weight);
-
-                for (int j = 0; j < d; j++)
-                {
-                    newCenter[j] = NumOps.Add(newCenter[j], NumOps.Multiply(weight, data[i, j]));
-                }
-            }
+            var totals = Engine.ReduceSum(weights, new[] { 1 }, true);
+            var hasWeight = Engine.TensorGreaterThan(totals, NumOps.Zero);
+            var safeTotals = Engine.TensorWhere(hasWeight, totals, Engine.TensorOnesLike(totals));
+            var mean = Engine.TensorDivide(
+                Engine.TensorMatMul(weights, dataT), Engine.TensorBroadcastTo(safeTotals, new[] { rows, d }));
+            var keep = Engine.TensorBroadcastTo(hasWeight, new[] { rows, d });
+            shifted.SetSubMatrix(start, 0, Engine.TensorWhere(keep, mean, Tensor<T>.FromMatrix(chunk)).ToMatrix());
         }
 
-        if (NumOps.GreaterThan(totalWeight, NumOps.Zero))
-        {
-            for (int j = 0; j < d; j++)
-            {
-                newCenter[j] = NumOps.Divide(newCenter[j], totalWeight);
-            }
-        }
-        else
-        {
-            // No neighbors, keep current center
-            newCenter = (T[])center.Clone();
-        }
-
-        return newCenter;
+        return shifted;
     }
 
-    private List<T[]> MergeCenters(List<T[]> centers, T threshold, int d)
+    private Matrix<T> MergeCenters(Matrix<T> centers, T threshold, int d)
     {
-        var merged = new List<T[]>();
-        var used = new bool[centers.Count];
-
-        for (int i = 0; i < centers.Count; i++)
+        // Greedy: each unused center absorbs every later unused center closer than the threshold
+        int count = centers.Rows;
+        var groupOf = new int[count];
+        for (int i = 0; i < count; i++)
         {
-            if (used[i]) continue;
-
-            // Find all centers close to this one
-            var cluster = new List<T[]> { centers[i] };
-            used[i] = true;
-
-            for (int j = i + 1; j < centers.Count; j++)
-            {
-                if (used[j]) continue;
-
-                // Inline sum-of-squares — same rationale as the loop above.
-                T distSq = NumOps.Zero;
-                for (int k = 0; k < d; k++)
-                {
-                    T diffK = NumOps.Subtract(centers[i][k], centers[j][k]);
-                    distSq = NumOps.Add(distSq, NumOps.Multiply(diffK, diffK));
-                }
-
-                if (NumOps.LessThan(NumOps.Sqrt(distSq), threshold))
-                {
-                    cluster.Add(centers[j]);
-                    used[j] = true;
-                }
-            }
-
-            // Compute mean of cluster
-            var mean = new T[d];
-            for (int k = 0; k < d; k++) mean[k] = NumOps.Zero;
-
-            foreach (var c in cluster)
-            {
-                for (int k = 0; k < d; k++)
-                {
-                    mean[k] = NumOps.Add(mean[k], c[k]);
-                }
-            }
-            T clusterCount = NumOps.FromDouble(cluster.Count);
-            for (int k = 0; k < d; k++)
-            {
-                mean[k] = NumOps.Divide(mean[k], clusterCount);
-            }
-
-            merged.Add(mean);
+            groupOf[i] = -1;
         }
 
-        return merged;
+        int numGroups = 0;
+        for (int i = 0; i < count; i++)
+        {
+            if (groupOf[i] >= 0) continue;
+
+            int group = numGroups++;
+            groupOf[i] = group;
+
+            var close = ClusteringTensorOps.LessThanFlags(ClusteringTensorOps.DistancesToPoint(centers.GetRow(i), centers), threshold);
+            for (int j = i + 1; j < count; j++)
+            {
+                if (groupOf[j] < 0 && close[j])
+                {
+                    groupOf[j] = group;
+                }
+            }
+        }
+
+        // Compute mean of each group
+        return numGroups == 0
+            ? new Matrix<T>(0, d)
+            : ClusteringTensorOps.ClusterMeans(centers, ClusteringTensorOps.FromIntArray<T>(groupOf), numGroups, out _);
     }
 
     /// <inheritdoc />
@@ -411,34 +297,16 @@ public partial class MeanShift<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        var labels = new Vector<T>(x.Rows);
-        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-
-        for (int i = 0; i < x.Rows; i++)
+        if (ClusterCenters is null || NumClusters == 0)
         {
-            var point = GetRow(x, i);
-            T minDist = NumOps.MaxValue;
-            int nearestCluster = 0;
-
-            if (ClusterCenters is not null)
-            {
-                for (int k = 0; k < NumClusters; k++)
-                {
-                    var center = GetRow(ClusterCenters, k);
-                    T dist = metric.Compute(point, center);
-
-                    if (NumOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                        nearestCluster = k;
-                    }
-                }
-            }
-
-            labels[i] = NumOps.FromDouble(nearestCluster);
+            return new Vector<T>(x.Rows);
         }
 
-        return labels;
+        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        var centers = ClusterCenters.Rows == NumClusters
+            ? ClusterCenters
+            : ClusterCenters.GetSubMatrix(0, 0, NumClusters, ClusterCenters.Columns);
+        return ClusteringTensorOps.FromIntArray<T>(ClusteringTensorOps.NearestCenters(metric, x, centers));
     }
 
     /// <inheritdoc />

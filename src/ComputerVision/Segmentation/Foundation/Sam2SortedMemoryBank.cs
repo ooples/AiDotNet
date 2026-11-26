@@ -25,7 +25,8 @@ public enum MemoryBankResampling
 {
     /// <summary>
     /// Medical SAM 2's eq. 4: K draws with replacement, each memory with probability its cosine similarity to the frame over
-    /// the sum of all of them. A negative similarity makes that undefined, and it is reported as an error.
+    /// the sum of all of them. A memory whose similarity is negative, where that ratio is not a probability, is never
+    /// drawn (a similarity of zero); with no positive similarity at all the draw is uniform.
     /// </summary>
     NormalizedSimilarity,
 
@@ -138,12 +139,15 @@ internal sealed class Sam2SortedMemoryBank<T>
         }
         else
         {
-            if (similarities.Any(s => s < 0) || similarities.Sum() <= 0)
-                throw new InvalidOperationException(
-                    "A memory's cosine similarity to the frame is negative, where Medical SAM 2's resampling (eq. 4, the similarity over " +
-                    "their sum) is undefined. Set MemoryResampling to Softmax to draw as the official code does.");
-            double total = similarities.Sum();
-            probabilities = similarities.Select(s => s / total).ToArray();
+            // Eq. 4 is a probability only for non-negative similarities. A memory pointing away from the frame is the
+            // least similar one there is, so it gets the probability eq. 4 gives a similarity of zero: none. Where every
+            // similarity is positive this is eq. 4 unchanged. With no positive similarity nothing ranks the memories, and
+            // the draw is uniform.
+            var weights = similarities.Select(s => double.IsNaN(s) ? 0.0 : Math.Max(s, 0.0)).ToArray();
+            double total = weights.Sum();
+            probabilities = total > 0
+                ? weights.Select(w => w / total).ToArray()
+                : weights.Select(_ => 1.0 / weights.Length).ToArray();
         }
         var drawn = new List<Entry>(_settings.Capacity);
         for (int d = 0; d < _settings.Capacity; d++)

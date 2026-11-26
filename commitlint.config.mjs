@@ -1,5 +1,8 @@
 export default {
   extends: ['@commitlint/config-conventional'],
+  // CI identifies real merge commits from their parents. Message-only defaults would also
+  // exempt an ordinary commit whose subject happens to start with "Merge".
+  defaultIgnores: false,
   rules: {
     // Allow longer body lines (default is 100, increase to 200 for detailed technical explanations)
     'body-max-line-length': [1, 'always', 200],
@@ -15,21 +18,6 @@ export default {
     ]],
   },
   ignores: [
-    // ===== Merge Commits ONLY =====
-    // These are the ONLY legitimate ignores - merge commits cannot follow conventional format
-
-    // Ignore GitHub auto-generated merge commits (PR merges)
-    (message) => /^Merge pull request #\d+/.test(message),
-    // Ignore merge commits when merging branches
-    (message) => /^Merge branch '.+'/.test(message),
-    // Ignore merge commits from remote
-    (message) => /^Merge remote-tracking branch/.test(message),
-    // Ignore general merge commits containing "Merge" followed by common patterns
-    (message) => /^Merge (origin|upstream|master|main)/i.test(message),
-    // Ignore a merge commit given a descriptive subject ("Merge concurrent X while keeping Y"): git writes "Merge " and a
-    // merge has no conventional type. A typed commit uses the lowercase merge: type above and is still linted.
-    (message) => /^Merge \S/.test(message),
-
     // ===== GitHub Actions Bot Commits =====
     // Ignore commits made by GitHub Actions (auto-fixes, dependabot, etc.)
     (message) => /Co-Authored-By: github-actions\[bot\]/.test(message),

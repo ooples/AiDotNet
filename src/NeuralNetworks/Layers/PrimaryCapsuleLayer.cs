@@ -689,53 +689,6 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>, IShapeContract
     }
 
 
-    /// <summary>
-    /// Extracts a patch from the input tensor for convolution.
-    /// </summary>
-    /// <param name="input">The input tensor.</param>
-    /// <param name="batch">The batch index.</param>
-    /// <param name="startY">The starting Y coordinate of the patch.</param>
-    /// <param name="startX">The starting X coordinate of the patch.</param>
-    /// <returns>A vector containing the flattened patch values.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method extracts a square patch from the input tensor at the specified location and flattens
-    /// it into a vector for use in the convolution operation. The patch has dimensions _kernelSize × _kernelSize
-    /// and includes all input channels.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method extracts a small square region from the input for processing.
-    /// 
-    /// For convolution operations, we need to:
-    /// - Look at a small area of the input at a time (the "patch" or "receptive field")
-    /// - Apply the same operation to each patch as we move across the input
-    /// 
-    /// This method:
-    /// - Takes coordinates that specify where to start (startX, startY)
-    /// - Extracts a square patch of size _kernelSize × _kernelSize
-    /// - Includes all channels from the input for that patch
-    /// - Flattens this 3D patch into a 1D vector for easier processing
-    /// 
-    /// For example, with a 3×3 kernel and 3 input channels, this would extract
-    /// a 3×3×3 patch (27 values) and arrange them into a single vector.
-    /// </para>
-    /// </remarks>
-    private Vector<T> ExtractPatch(Tensor<T> input, int batch, int startY, int startX)
-    {
-        var patch = new Vector<T>(_inputChannels * _kernelSize * _kernelSize);
-        int index = 0;
-        for (int c = 0; c < _inputChannels; c++)
-        {
-            for (int i = 0; i < _kernelSize; i++)
-            {
-                for (int j = 0; j < _kernelSize; j++)
-                {
-                    patch[index++] = input[batch, startY + i, startX + j, c];
-                }
-            }
-        }
-
-        return patch;
-    }
 
 
     /// <summary>

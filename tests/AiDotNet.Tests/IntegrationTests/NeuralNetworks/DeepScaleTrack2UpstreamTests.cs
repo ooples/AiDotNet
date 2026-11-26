@@ -69,6 +69,7 @@ public sealed class DeepScaleTrack2UpstreamTests
 
     [Theory]
     [InlineData(1)]
+    [InlineData(2)]
     [InlineData(4)]
     [InlineData(7)]
     public void HouseholderSubspaceLayer_IsExactOrthogonalIsometryAndMatchesNumericalGradients(int numReflectors)
@@ -195,6 +196,159 @@ public sealed class DeepScaleTrack2UpstreamTests
         var unchanged = zero.Forward(input);
         Assert.Equal(1.0, unchanged.GetFlat(0), 12);
         Assert.Equal(0.0, unchanged.GetFlat(1), 12);
+
+        // Also verify Compact WY (k > 1) when zero reflectors are interleaved with tiny (1e-10) and normal reflectors:
+        // H_0 = small x-reflection ([1e-10, 0, 0]), H_1 = zero (identity), H_2 = y-reflection ([0, 2.5, 0]), H_3 = zero (identity).
+        var input3 = new Tensor<double>(new[] { 1, 3 });
+        input3.SetFlat(0, 1.0);
+        input3.SetFlat(1, 2.0);
+        input3.SetFlat(2, 3.0);
+
+        var mixedChain = new HouseholderSubspaceLayer<double>(3, 4, transpose: false);
+        for (int i = 0; i < mixedChain.Reflectors.Length; i++) mixedChain.Reflectors.SetFlat(i, 0.0);
+        mixedChain.Reflectors.SetFlat(0 * 3 + 0, 1e-10);
+        mixedChain.Reflectors.SetFlat(2 * 3 + 1, 2.5);
+        var mixedOut = mixedChain.Forward(input3);
+        Assert.Equal(-1.0, mixedOut.GetFlat(0), 12);
+        Assert.Equal(-2.0, mixedOut.GetFlat(1), 12);
+        Assert.Equal(3.0, mixedOut.GetFlat(2), 12);
+    }
+
+    // The compact WY form must reproduce the reflection ORDER of the sequential chain it replaced, not just some
+    // orthogonal map: x H_0 H_1 ... H_{k-1} forward and x H_{k-1} ... H_0 transposed. Orthogonality and Q^T Q = I hold
+    // for either order, so only a comparison against the one-reflection-at-a-time product catches a swapped T.
+    // Reflectors are deliberately non-unit and, at spread 0.001, nearly parallel (the worst case for the series).
+    [Theory]
+    [InlineData(2, 1.0, false)]
+    [InlineData(2, 1.0, true)]
+    [InlineData(5, 1.0, false)]
+    [InlineData(5, 1.0, true)]
+    [InlineData(32, 1.0, false)]
+    [InlineData(32, 1.0, true)]
+    [InlineData(32, 0.001, false)]
+    [InlineData(32, 0.001, true)]
+    public void HouseholderSubspaceLayer_CompactWy_MatchesSequentialReflectionProduct(int numReflectors, double spread, bool transpose)
+    {
+        const int dim = 24;
+        const int rows = 3;
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(900 + numReflectors);
+        var shared = new double[dim];
+        for (int i = 0; i < dim; i++) shared[i] = rng.NextDouble() * 2.0 - 1.0;
+
+        var reflectors = new double[numReflectors][];
+        for (int j = 0; j < numReflectors; j++)
+        {
+            reflectors[j] = new double[dim];
+            for (int i = 0; i < dim; i++)
+                reflectors[j][i] = (shared[i] + spread * (rng.NextDouble() * 2.0 - 1.0)) * 1.7;
+        }
+
+        var layer = new HouseholderSubspaceLayer<double>(dim, numReflectors, transpose);
+        var layerF = new HouseholderSubspaceLayer<float>(dim, numReflectors, transpose);
+        for (int j = 0; j < numReflectors; j++)
+        {
+            for (int i = 0; i < dim; i++)
+            {
+                layer.Reflectors.SetFlat(j * dim + i, reflectors[j][i]);
+                layerF.Reflectors.SetFlat(j * dim + i, (float)reflectors[j][i]);
+            }
+        }
+
+        var x = new Tensor<double>(new[] { rows, dim });
+        var xF = new Tensor<float>(new[] { rows, dim });
+        var expected = new double[rows * dim];
+        for (int i = 0; i < x.Length; i++)
+        {
+            double v = rng.NextDouble() * 2.0 - 1.0;
+            x.SetFlat(i, v);
+            xF.SetFlat(i, (float)v);
+            expected[i] = v;
+        }
+
+        for (int r = 0; r < rows; r++)
+        {
+            for (int step = 0; step < numReflectors; step++)
+            {
+                var u = reflectors[transpose ? numReflectors - 1 - step : step];
+                double normSq = 0.0, proj = 0.0;
+                for (int i = 0; i < dim; i++)
+                {
+                    normSq += u[i] * u[i];
+                    proj += expected[r * dim + i] * u[i];
+                }
+                for (int i = 0; i < dim; i++)
+                    expected[r * dim + i] -= 2.0 * proj / normSq * u[i];
+            }
+        }
+
+        var y = layer.Forward(x);
+        var yF = layerF.Forward(xF);
+        for (int i = 0; i < expected.Length; i++)
+        {
+            Assert.True(Math.Abs(y.GetFlat(i) - expected[i]) <= 1e-12,
+                $"double mismatch at {i}: sequential={expected[i]}, compact WY={y.GetFlat(i)}");
+            Assert.True(Math.Abs(yF.GetFlat(i) - expected[i]) <= 2e-5,
+                $"float mismatch at {i}: sequential={expected[i]}, compact WY={yF.GetFlat(i)}");
+        }
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(4)]
+    public void HouseholderSubspaceLayer_FloatTinyAndZeroReflectors_KeepExactReflectionAndFiniteBackward(int numReflectors)
+    {
+        const int dim = 8;
+        var layer = new HouseholderSubspaceLayer<float>(dim, numReflectors, transpose: false);
+        var layerT = new HouseholderSubspaceLayer<float>(dim, numReflectors, transpose: true);
+
+        // Reflectors with L2 norm ~1e-12f (well below 1e-9f) must still be exact orthogonal reflections in FP32.
+        for (int j = 0; j < numReflectors; j++)
+        {
+            for (int i = 0; i < dim; i++)
+            {
+                float val = (i == j % dim ? 1.0f : 0.25f * ((i + j) % 3 - 1)) * 1e-12f;
+                layer.Reflectors.SetFlat(j * dim + i, val);
+                layerT.Reflectors.SetFlat(j * dim + i, val);
+            }
+        }
+
+        var eye = new Tensor<float>(new[] { dim, dim });
+        for (int i = 0; i < dim; i++) eye.SetFlat(i * dim + i, 1.0f);
+
+        var q = layer.Forward(eye);
+        var qtq = layerT.Forward(q);
+        float maxDiffFromIdentity = 0f;
+        for (int i = 0; i < eye.Length; i++)
+        {
+            maxDiffFromIdentity = Math.Max(maxDiffFromIdentity, Math.Abs(q.GetFlat(i) - eye.GetFlat(i)));
+            Assert.True(Math.Abs(qtq.GetFlat(i) - eye.GetFlat(i)) <= 1e-5f,
+                $"Q^T Q mismatch at {i} for k={numReflectors} tiny float reflectors: expected={eye.GetFlat(i)}, got={qtq.GetFlat(i)}");
+        }
+        Assert.True(maxDiffFromIdentity > 0.1f, "Tiny float reflector degenerated to identity instead of reflecting.");
+
+        // Zero and sub-floor (1e-20f) float reflectors must remain finite in both forward and backward tape passes.
+        foreach (float scale in new[] { 0.0f, 1e-20f })
+        {
+            for (int j = 0; j < numReflectors; j++)
+            {
+                for (int i = 0; i < dim; i++)
+                    layer.Reflectors.SetFlat(j * dim + i, i == 0 ? scale : 0.0f);
+            }
+
+            using var tape = new GradientTape<float>();
+            var outTensor = layer.Forward(eye);
+            var loss = AiDotNetEngine.Current.ReduceSum(AiDotNetEngine.Current.TensorMultiply(outTensor, outTensor), null);
+            var grads = tape.ComputeGradients(loss, new[] { layer.Reflectors, eye });
+            var reflGrad = grads[layer.Reflectors];
+            var inputGrad = grads[eye];
+            for (int i = 0; i < reflGrad.Length; i++)
+                Assert.False(float.IsNaN(reflGrad.GetFlat(i)) || float.IsInfinity(reflGrad.GetFlat(i)),
+                    $"Non-finite reflector gradient at {i} for scale={scale}, k={numReflectors}: {reflGrad.GetFlat(i)}");
+            for (int i = 0; i < inputGrad.Length; i++)
+                Assert.False(float.IsNaN(inputGrad.GetFlat(i)) || float.IsInfinity(inputGrad.GetFlat(i)),
+                    $"Non-finite input gradient at {i} for scale={scale}, k={numReflectors}: {inputGrad.GetFlat(i)}");
+        }
     }
 
     [Theory]
@@ -393,5 +547,436 @@ public sealed class DeepScaleTrack2UpstreamTests
             Assert.True(Math.Abs(w.GetFlat(i) - 1.96f) <= 1e-5f,
                 $"Expected decoupled Adam8Bit weight decay -> 1.96f, got {w.GetFlat(i)}");
         }
+    }
+
+    [Theory]
+    [InlineData(1, false)]
+    [InlineData(2, false)]
+    [InlineData(2, true)]
+    [InlineData(4, false)]
+    [InlineData(4, true)]
+    public void HouseholderSubspaceLayer_FloatZeroAndTinyReflectors_HaveFiniteGradients_AndTransposeMatchesFiniteDifference(
+        int numReflectors,
+        bool transpose)
+    {
+        const int dim = 6;
+        var layer = new HouseholderSubspaceLayer<float>(dim, numReflectors, transpose: transpose);
+        for (int i = 0; i < layer.Reflectors.Length; i++)
+        {
+            layer.Reflectors.SetFlat(i, 0.0f);
+        }
+
+        if (numReflectors >= 2)
+        {
+            // Row 0: identically zero; Row 1: sub-floor (1e-20f) or normal reflector when k=2; Rows 2..3 when k>=4.
+            layer.Reflectors.SetFlat(1 * dim + 0, numReflectors == 2 ? 1.25f : 1e-20f);
+            if (numReflectors == 2)
+            {
+                layer.Reflectors.SetFlat(1 * dim + 1, -0.5f);
+            }
+        }
+        if (numReflectors >= 3)
+        {
+            layer.Reflectors.SetFlat(2 * dim + 1, 1e-6f);
+        }
+        if (numReflectors >= 4)
+        {
+            layer.Reflectors.SetFlat(3 * dim + 2, 1.75f);
+            layer.Reflectors.SetFlat(3 * dim + 3, -0.5f);
+        }
+
+        var x = new Tensor<float>(new[] { 2, dim });
+        for (int i = 0; i < x.Length; i++)
+        {
+            x.SetFlat(i, (i + 1) * 0.25f);
+        }
+
+        Dictionary<Tensor<float>, Tensor<float>> grads;
+        Tensor<float> y;
+        using (var tape = new GradientTape<float>())
+        {
+            y = layer.Forward(x);
+            var weights = new Tensor<float>(y._shape);
+            for (int i = 0; i < weights.Length; i++)
+            {
+                weights.SetFlat(i, 0.3f * (i + 1));
+            }
+            var loss = AiDotNetEngine.Current.ReduceSum(
+                AiDotNetEngine.Current.TensorMultiply(y, weights), null);
+            grads = tape.ComputeGradients(loss, sources: new[] { x, layer.Reflectors });
+        }
+
+        for (int i = 0; i < y.Length; i++)
+        {
+            float v = y.GetFlat(i);
+            Assert.False(float.IsNaN(v) || float.IsInfinity(v), $"Forward produced non-finite value at {i}: {v}");
+        }
+
+        var gx = grads[x];
+        for (int i = 0; i < gx.Length; i++)
+        {
+            float g = gx.GetFlat(i);
+            Assert.False(float.IsNaN(g) || float.IsInfinity(g), $"dL/dx non-finite at {i}: {g}");
+        }
+
+        var gr = grads[layer.Reflectors];
+        for (int i = 0; i < gr.Length; i++)
+        {
+            float g = gr.GetFlat(i);
+            Assert.False(float.IsNaN(g) || float.IsInfinity(g), $"dL/dReflectors non-finite at {i}: {g}");
+        }
+
+        // Empty batch [0, dim] must preserve shape cleanly.
+        var emptyInput = new Tensor<float>(new[] { 0, dim });
+        var emptyOut = layer.Forward(emptyInput);
+        Assert.Equal(emptyInput._shape, emptyOut._shape);
+
+        // Verify transpose finite-difference accuracy in double precision as well.
+        if (transpose)
+        {
+            var invDbl = new HouseholderSubspaceLayer<double>(dim, numReflectors, transpose: true);
+            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(515);
+            for (int i = 0; i < invDbl.Reflectors.Length; i++)
+            {
+                invDbl.Reflectors.SetFlat(i, (rng.NextDouble() * 2.0 - 1.0) + 0.3);
+            }
+            var xd = new Tensor<double>(new[] { 2, dim });
+            for (int i = 0; i < xd.Length; i++)
+            {
+                xd.SetFlat(i, rng.NextDouble() * 2.0 - 1.0);
+            }
+
+            double EvalTransposeLoss()
+            {
+                var o = invDbl.Forward(xd);
+                double s = 0.0;
+                for (int i = 0; i < o.Length; i++)
+                {
+                    double v = o.GetFlat(i);
+                    s += 0.5 * (i + 1) * v * v;
+                }
+                return s;
+            }
+
+            Dictionary<Tensor<double>, Tensor<double>> dblGrads;
+            using (var tape = new GradientTape<double>())
+            {
+                var o = invDbl.Forward(xd);
+                var scale = new Tensor<double>(o._shape);
+                for (int i = 0; i < scale.Length; i++) scale.SetFlat(i, 0.5 * (i + 1));
+                var loss = AiDotNetEngine.Current.ReduceSum(
+                    AiDotNetEngine.Current.TensorMultiply(scale, AiDotNetEngine.Current.TensorMultiply(o, o)), null);
+                dblGrads = tape.ComputeGradients(loss, sources: new[] { invDbl.Reflectors });
+            }
+
+            const double eps = 1e-6;
+            var grDbl = dblGrads[invDbl.Reflectors];
+            for (int i = 0; i < invDbl.Reflectors.Length; i++)
+            {
+                double orig = invDbl.Reflectors.GetFlat(i);
+                invDbl.Reflectors.SetFlat(i, orig + eps);
+                double lp = EvalTransposeLoss();
+                invDbl.Reflectors.SetFlat(i, orig - eps);
+                double lm = EvalTransposeLoss();
+                invDbl.Reflectors.SetFlat(i, orig);
+                double num = (lp - lm) / (2.0 * eps);
+                Assert.True(Math.Abs(grDbl.GetFlat(i) - num) <= 1e-6 * Math.Max(1.0, Math.Abs(num)),
+                    $"Transpose dL/dReflectors mismatch at {i}: analytic={grDbl.GetFlat(i)}, numeric={num}");
+            }
+        }
+    }
+
+    [Fact]
+    public void HouseholderSubspaceLayer_ConcurrentTapeBackward_HasZeroMaskGradIndexContention()
+    {
+        const int dim = 8;
+        const int numReflectors = 4;
+
+        static (double[] gx, double[] gr) RunSingleBackward(double[] xVals, double[] rVals, bool transpose)
+        {
+            var layer = new HouseholderSubspaceLayer<double>(dim, numReflectors, transpose: transpose);
+            for (int i = 0; i < rVals.Length; i++) layer.Reflectors.SetFlat(i, rVals[i]);
+            var x = new Tensor<double>(new[] { 3, dim });
+            for (int i = 0; i < xVals.Length; i++) x.SetFlat(i, xVals[i]);
+
+            using var tape = new GradientTape<double>();
+            var y = layer.Forward(x);
+            var loss = AiDotNetEngine.Current.ReduceSum(AiDotNetEngine.Current.TensorMultiply(y, y), null);
+            // Also evaluate linear projection so gradients are non-zero (||Qx||^2 == ||x||^2 has zero reflector grad).
+            var linWeights = new Tensor<double>(y._shape);
+            for (int i = 0; i < linWeights.Length; i++) linWeights.SetFlat(i, 0.1 * (i + 1));
+            var total = AiDotNetEngine.Current.TensorAdd(
+                loss,
+                AiDotNetEngine.Current.ReduceSum(AiDotNetEngine.Current.TensorMultiply(y, linWeights), null));
+            var grads = tape.ComputeGradients(total, sources: new[] { x, layer.Reflectors });
+            return (grads[x].ToArray(), grads[layer.Reflectors].ToArray());
+        }
+
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(909);
+        var baseX = Enumerable.Range(0, 3 * dim).Select(_ => rng.NextDouble() * 2.0 - 1.0).ToArray();
+        var baseR = Enumerable.Range(0, numReflectors * dim).Select(_ => rng.NextDouble() * 2.0 - 1.0 + 0.2).ToArray();
+        var (refGxF, refGrF) = RunSingleBackward(baseX, baseR, transpose: false);
+        var (refGxT, refGrT) = RunSingleBackward(baseX, baseR, transpose: true);
+
+        System.Threading.Tasks.Parallel.For(0, 8, worker =>
+        {
+            for (int iter = 0; iter < 24; iter++)
+            {
+                bool tr = ((worker + iter) & 1) == 1;
+                var (gx, gr) = RunSingleBackward(baseX, baseR, tr);
+                var expGx = tr ? refGxT : refGxF;
+                var expGr = tr ? refGrT : refGrF;
+                for (int i = 0; i < expGx.Length; i++)
+                {
+                    Assert.True(Math.Abs(gx[i] - expGx[i]) <= 1e-12,
+                        $"Concurrent worker {worker} iter {iter} gx[{i}] mismatch: got {gx[i]}, expected {expGx[i]}");
+                }
+                for (int i = 0; i < expGr.Length; i++)
+                {
+                    Assert.True(Math.Abs(gr[i] - expGr[i]) <= 1e-12,
+                        $"Concurrent worker {worker} iter {iter} gr[{i}] mismatch: got {gr[i]}, expected {expGr[i]}");
+                }
+            }
+        });
+    }
+
+    [Fact]
+    public void LocalCreditAndStreamingRetention_PreservePublishedGradientsAcrossArenaRecycleAndDisposeCleanly()
+    {
+        // Width 260 -> DenseLayer weight has 260 * 260 = 67,600 >= 65,536 scalars (TensorArena large-array threshold).
+        var (net, tokens, targets) = BuildLm(blocks: 2, width: 260, vocab: 32, tiedHead: true, seed: 313);
+        try
+        {
+            net.SetCreditRule(new BlockwiseAnchorLocalErrorCreditRule<float>(
+                readoutLayerCount: 2,
+                anchorStride: 1,
+                maxCandidates: 16,
+                localWeight: 0.7,
+                detachReadoutOnHiddenBlocks: true,
+                useDepthProgressiveWeight: true,
+                streamBlocksSequentially: true,
+                seed: 42));
+
+            net.Train(tokens, targets);
+
+            // Recycle thread-static TensorArena buffers with poison values to verify published layer gradients
+            // never alias arena-returned backing arrays after Train() exits.
+            using (var arena = AiDotNet.Tensors.Helpers.TensorArena.Create())
+            {
+                var rented = AiDotNet.Tensors.Helpers.TensorAllocator.Rent<float>(new[] { 260, 260 });
+                rented.Fill(98765.0f);
+            }
+
+            var denseGrads = ((LayerBase<float>)net.Layers[1]).GetParameterGradients();
+            Assert.True(denseGrads.Length >= 67600);
+            double normSq = 0.0;
+            for (int i = 0; i < denseGrads.Length; i++)
+            {
+                float g = denseGrads[i];
+                Assert.False(float.IsNaN(g) || float.IsInfinity(g));
+                Assert.NotEqual(98765.0f, g);
+                normSq += (double)g * g;
+            }
+            Assert.True(normSq > 0.0, "Expected non-zero published gradients on large dense layer.");
+        }
+        finally
+        {
+            net.Dispose();
+        }
+
+        // Also verify multi-step StreamingTrainingMode.ForceOn retention reuses snapshots and disposes cleanly.
+        var (streamNet, sTokens, sTargets) = BuildLm(blocks: 2, width: 16, vocab: 32, tiedHead: true, seed: 414);
+        try
+        {
+            streamNet.StreamingTraining = StreamingTrainingMode.ForceOn;
+            streamNet.FastApproxGradClip = true;
+            for (int step = 0; step < 3; step++)
+            {
+                streamNet.Train(sTokens, sTargets);
+                var g = ((LayerBase<float>)streamNet.Layers[1]).GetParameterGradients();
+                Assert.True(g.Length > 0);
+                Assert.All(g.ToArray(), v => Assert.False(float.IsNaN(v) || float.IsInfinity(v)));
+            }
+        }
+        finally
+        {
+            streamNet.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Half has max 65504 = 255.9^2, so a reflector whose norm is above 256 overflowed its sum of squares; the
+    /// infinite denominator zeroed the unit reflector and the layer returned its input (identity). Fifteen correlated
+    /// reflectors also overflowed the old Neumann-series T build, whose partial sums reach ~1e6 before cancelling,
+    /// and produced NaN. Each case must match the double sequential reflection of the same Half-rounded values.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 1.0, 300.0)]
+    [InlineData(3, 1.0, 300.0)]
+    [InlineData(4, 1.0, 2000.0)]
+    [InlineData(15, 0.05, 1.0)]
+    [InlineData(15, 0.05, 300.0)]
+    public void HouseholderSubspaceLayer_HalfLargeNormAndCorrelatedReflectors_MatchDoubleSequentialReflection(
+        int numReflectors, double spread, double magnitude)
+    {
+        const int dim = 8;
+        const int rows = 2;
+        var half = MathHelper.GetNumericOperations<Half>();
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(4100 + numReflectors);
+        var shared = new double[dim];
+        for (int i = 0; i < dim; i++) shared[i] = rng.NextDouble() * 2.0 - 1.0;
+
+        var reflectorData = new Half[numReflectors * dim];
+        var reflectors = new double[numReflectors][];
+        for (int j = 0; j < numReflectors; j++)
+        {
+            reflectors[j] = new double[dim];
+            for (int i = 0; i < dim; i++)
+            {
+                double v = (shared[i] + spread * (rng.NextDouble() * 2.0 - 1.0)) * magnitude;
+                reflectorData[j * dim + i] = half.FromDouble(v);
+                reflectors[j][i] = half.ToDouble(reflectorData[j * dim + i]);
+            }
+        }
+
+        var inputData = new Half[rows * dim];
+        var expected = new double[rows * dim];
+        for (int i = 0; i < inputData.Length; i++)
+        {
+            inputData[i] = half.FromDouble(rng.NextDouble() * 2.0 - 1.0);
+            expected[i] = half.ToDouble(inputData[i]);
+        }
+        var original = (double[])expected.Clone();
+
+        for (int r = 0; r < rows; r++)
+        {
+            foreach (var u in reflectors)
+            {
+                double normSq = 0.0, proj = 0.0;
+                for (int i = 0; i < dim; i++)
+                {
+                    normSq += u[i] * u[i];
+                    proj += expected[r * dim + i] * u[i];
+                }
+                for (int i = 0; i < dim; i++)
+                    expected[r * dim + i] -= 2.0 * proj / normSq * u[i];
+            }
+        }
+
+        // The fixture must discriminate: the reflection moves the input far more than the tolerance, so a result
+        // that degenerated to the identity cannot pass.
+        const double tolerance = 2e-2;
+        double moved = 0.0;
+        for (int i = 0; i < expected.Length; i++) moved = Math.Max(moved, Math.Abs(expected[i] - original[i]));
+        Assert.True(moved > 5 * tolerance, $"Degenerate fixture: the reflection moves the input by only {moved}.");
+
+        var y = HouseholderSubspaceLayer<Half>.ApplyChain(
+            AiDotNetEngine.Current,
+            new Tensor<Half>(new[] { rows, dim }, new Vector<Half>(inputData)),
+            new Tensor<Half>(new[] { numReflectors, dim }, new Vector<Half>(reflectorData)));
+
+        for (int i = 0; i < expected.Length; i++)
+        {
+            double got = half.ToDouble(y.GetFlat(i));
+            Assert.False(double.IsNaN(got) || double.IsInfinity(got), $"Non-finite Half output at {i}: {got}");
+            Assert.True(Math.Abs(got - expected[i]) <= tolerance,
+                $"Half mismatch at {i}: double sequential={expected[i]}, Half compact WY={got}, input={original[i]}");
+        }
+    }
+
+    [Fact]
+    public void LocalCreditTrainStep_ReleasesEveryGradientTheLocalObjectiveResultOwns()
+    {
+        // The train step used the result's own Gradients dictionary as its working set and cleared it at the end of
+        // the step, before the finally disposed the result. LocalObjectiveGradients.Dispose releases what is in that
+        // dictionary, so it found nothing and every local-credit gradient of every step was left undisposed.
+        var (net, tokens, targets) = BuildLm(blocks: 2, width: 8, vocab: 16, tiedHead: false, seed: 616);
+        var owned = new List<Tensor<float>>();
+        int results = 0;
+        try
+        {
+            net.SetCreditRule(new BlockwiseAnchorLocalErrorCreditRule<float>(
+                readoutLayerCount: 2,
+                anchorStride: 1,
+                maxCandidates: 16,
+                localWeight: 0.7,
+                detachReadoutOnHiddenBlocks: true,
+                useDepthProgressiveWeight: true,
+                streamBlocksSequentially: true,
+                seed: 42));
+            LocalObjectiveGradientComputer<float>.ResultObserver = result =>
+            {
+                results++;
+                owned.AddRange(result.Gradients.Values);
+            };
+
+            net.Train(tokens, targets);
+
+            Assert.True(results > 0, "The train step never ran the local-objective computer.");
+            Assert.NotEmpty(owned);
+            Assert.All(owned, g => Assert.True(g.IsDisposed, "A gradient owned by the local-objective result leaked."));
+        }
+        finally
+        {
+            LocalObjectiveGradientComputer<float>.ResultObserver = null;
+            net.Dispose();
+        }
+    }
+
+    [Fact]
+    public void SequentialBlockCredit_LocalObjectiveThrows_ReleasesDetachedNextBlockInput()
+    {
+        // Embedding + two dense layers are three hidden layers; detaching before every hidden layer after the first
+        // makes three blocks, so block 0 detaches the next block's input before its local objective runs. The rule
+        // throws from that objective: the detached tensor exists but has not yet become the next block's input.
+        var (net, tokens, targets) = BuildLm(blocks: 2, width: 8, vocab: 16, tiedHead: false, seed: 515);
+        var detached = new List<Tensor<float>>();
+        try
+        {
+            net.SetCreditRule(new ThrowingSequentialBlockCreditRule());
+            LocalObjectiveGradientComputer<float>.BlockInputDetachedObserver = detached.Add;
+
+            var thrown = Record.Exception(() => net.Train(tokens, targets));
+
+            Assert.NotNull(thrown);
+            Assert.Contains(ThrowingSequentialBlockCreditRule.Marker, thrown?.ToString() ?? string.Empty);
+            Assert.NotEmpty(detached);
+            Assert.All(detached, t => Assert.True(t.IsDisposed, "The detached next-block input leaked on the throw path."));
+        }
+        finally
+        {
+            LocalObjectiveGradientComputer<float>.BlockInputDetachedObserver = null;
+            net.Dispose();
+        }
+    }
+
+    private sealed class ThrowingSequentialBlockCreditRule : ILocalObjectiveCreditRule<float>, ISequentialBlockLocalCreditRule
+    {
+        public const string Marker = "ThrowingSequentialBlockCreditRule local objective failure";
+
+        public string Name => "ThrowingSequentialBlock";
+
+        public bool IsExactBackprop => false;
+
+        public int ReadoutLayerCount => 2;
+
+        public IReadOnlyList<Tensor<float>> AuxiliaryParameters => Array.Empty<Tensor<float>>();
+
+        public bool StreamBlocksSequentially => true;
+
+        public bool ShouldDetachBeforeHiddenLayer(int hiddenIndex, int hiddenLayerCount) => hiddenIndex > 0;
+
+        public void Initialize(ICreditAssignmentContext<float> context) { }
+
+        public void ComputeTeachingSignals(ICreditAssignmentContext<float> context) =>
+            throw new NotSupportedException("Local-objective rule.");
+
+        public Tensor<float>? BuildLocalObjective(LocalObjectiveContext<float> context) =>
+            throw new InvalidOperationException(Marker);
+
+        public Tensor<float>? BuildOutputObjective(LocalObjectiveStep<float> step, Tensor<float> prediction, Tensor<float> defaultLoss) =>
+            null;
+
+        public void ApplyAuxiliaryGradients(IReadOnlyDictionary<Tensor<float>, Tensor<float>> gradients) { }
     }
 }

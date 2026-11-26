@@ -675,6 +675,20 @@ public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
             throw new InvalidOperationException("Layers not initialized.");
 
         var shape = x._shape;
+        bool rank3Tokens = shape.Length == 3;
+        if (rank3Tokens)
+        {
+            // Sequence-shaped latents [B, L, C] (e.g. Shap-E [1, 1, 1024] with patchSize = 1): view as [B, C, 1, L]
+            // across Patchify / Unpatchify and restore [B, L, C] on exit.
+            int tokenBatch = shape[0];
+            int tokenCount = shape[1];
+            int tokenChannels = shape[2];
+            x = tokenCount == 1
+                ? Engine.Reshape(x, new[] { tokenBatch, tokenChannels, 1, 1 })
+                : Engine.Reshape(Engine.TensorPermute(x, new[] { 0, 2, 1 }), new[] { tokenBatch, tokenChannels, 1, tokenCount });
+            shape = x._shape;
+        }
+
         var height = shape[2];
         var width = shape[3];
 
@@ -743,8 +757,17 @@ public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
         // Final norm and projection with AdaLN (also uses the combined embedding)
         hidden = FinalLayerWithAdaLN(hidden, adaLnEmbed);
 
-        // Unpatchify back to image
+        // Unpatchify back to image (or restore sequence shape [B, L, C] for rank-3 token latents)
         var output = Unpatchify(hidden, height, width);
+        if (rank3Tokens)
+        {
+            int tokenBatch = output.Shape[0];
+            int tokenChannels = output.Shape[1];
+            int tokenCount = output.Shape[3];
+            output = tokenCount == 1
+                ? Engine.Reshape(output, new[] { tokenBatch, 1, tokenChannels })
+                : Engine.TensorPermute(Engine.Reshape(output, new[] { tokenBatch, tokenChannels, tokenCount }), new[] { 0, 2, 1 });
+        }
 
         return output;
     }

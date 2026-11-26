@@ -137,9 +137,10 @@ internal sealed class MegaTts2Quantizer<T>
 
     /// <summary>The similarities <c>[N, K]</c> of vectors <c>[N·d]</c> to the codes: cosines, or −‖z − e‖² written as
     /// the reference expands it.</summary>
-    public double[,] Similarities(double[] z, int n)
+    public double[,] Similarities(double[] z, int n) => Similarities(z, Table(), n);
+
+    private double[,] Similarities(double[] z, double[] table, int n)
     {
-        var table = Table();
         int k = Codes, dim = Dimension;
         var d = new double[n, k];
         if (Distance == MegaTts2CodeDistance.Cosine)
@@ -205,15 +206,26 @@ internal sealed class MegaTts2Quantizer<T>
         return _engine.Reshape(Codebook.Forward(ids), new[] { 1, codes.Count, Dimension });
     }
 
+    private int[] _lastQuantizedCodes = Array.Empty<int>();
+    private Random? _activeRandom;
+
     /// <summary>Quantizes <c>[1, N, d]</c>: the straight-through vectors, the codes, the loss <c>[1]</c>; in training also
     /// the dynamic initialization of the codebook (after the lookup, before the step, as the reference orders it).</summary>
     public (Tensor<T> Quantized, int[] Codes, Tensor<T> Loss) Forward(Tensor<T> x, bool training, Random random)
     {
         int n = x.Shape[1];
-        var z = x.ToArray().Select(v => NumOps.ToDouble(v)).ToArray();
-        var similarities = Similarities(z, n);
-        var codes = Nearest(similarities);
-        var zq = Lookup(codes);
+        var allCodeIds = new Tensor<T>(new[] { Codes }, new Vector<T>(Enumerable.Range(0, Codes).Select(i => NumOps.FromDouble(i)).ToArray()));
+        var tableBefore = _engine.Reshape(Codebook.Forward(allCodeIds), new[] { Codes, Dimension });
+        _activeRandom = random;
+        var oneHot = AiDotNet.Training.CompiledStepHostValue<T>.ComputeStateful(
+            "MegaTts2Quantize",
+            this,
+            stateTag: training ? 1 : 0,
+            new[] { x, _engine.StopGradient(tableBefore) },
+            new[] { n, Codes },
+            static (self, tag, inputs, dest) => self.ExecuteQuantize(tag != 0, inputs, dest));
+        int[] codes = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive ? Array.Empty<int>() : _lastQuantizedCodes;
+        var zq = _engine.Reshape(_engine.TensorMatMul(oneHot, tableBefore), new[] { 1, n, Dimension });
         var stopX = _engine.StopGradient(x);
         var stopQ = _engine.StopGradient(zq);
         Tensor<T> Mean(Tensor<T> a, Tensor<T> b)
@@ -224,12 +236,34 @@ internal sealed class MegaTts2Quantizer<T>
         }
         var loss = _engine.TensorAdd(_engine.TensorMultiplyScalar(Mean(stopQ, x), NumOps.FromDouble(Commitment)), Mean(zq, stopX));
         var quantized = _engine.TensorAdd(x, _engine.StopGradient(_engine.TensorSubtract(zq, x)));
-        if (training) Reinitialize(z, n, similarities, codes, random);
         return (quantized, codes, loss);
+    }
+
+    private void ExecuteQuantize(bool training, Tensor<T>[] inputs, Tensor<T> dest)
+    {
+        int n = inputs[0].Shape[1];
+        var zVals = inputs[0].Cast<double>().ToArray();
+        var tableVals = inputs[1].Cast<double>().ToArray();
+        var similarities = Similarities(zVals, tableVals, n);
+        var stepCodes = Nearest(similarities);
+        _lastQuantizedCodes = stepCodes;
+        var span = dest.AsWritableSpan();
+        span.Clear();
+        T one = NumOps.One;
+        for (int i = 0; i < n; i++)
+            span[i * Codes + stepCodes[i]] = one;
+        if (training && !AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward)
+        {
+            var rng = _activeRandom ?? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0);
+            Reinitialize(zVals, tableVals, n, similarities, stepCodes, rng);
+        }
     }
 
     /// <summary>CVQ-VAE's online clustered reinitialization of the codebook from a step's features <c>[N·d]</c>.</summary>
     internal void Reinitialize(double[] z, int n, double[,] similarities, int[] codes, Random random)
+        => Reinitialize(z, Table(), n, similarities, codes, random);
+
+    private void Reinitialize(double[] z, double[] currentTable, int n, double[,] similarities, int[] codes, Random random)
     {
         int k = Codes, dim = Dimension;
         var share = new double[k];
@@ -268,7 +302,7 @@ internal sealed class MegaTts2Quantizer<T>
         {
             anchors = Query(z, n, random);
         }
-        var table = Table();
+        var table = (double[])currentTable.Clone();
         for (int c = 0; c < k; c++)
         {
             double move = Math.Exp(-(Usage[c] * k * 10) / (1 - Decay) - 1e-3);

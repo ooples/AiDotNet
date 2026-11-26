@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "contributor": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+  "base": "codex/2524-ci-coordination @ 3e92dd4efe",
+  "claims": [
+    {
+      "id": "tts-codec",
+      "scope": "Replay contracts for the codec-based TTS failures in run 43902661676",
+      "tests": ["NaturalSpeech*", "CosyVoice*", "UniAudio*", "SparkTTS", "VoiceCraft", "Pheme", "SeedTTS", "TortoiseTTS", "Voicebox"],
+      "files": ["src/TextToSpeech/CodecBased/** (those models only)"]
+    },
+    {
+      "id": "tts-classic-flow",
+      "scope": "Replay contracts for the classic, flow, diffusion and voice-cloning TTS failures",
+      "tests": ["AlignVoiceFlowOptimizer (AlignTTS)", "TransformerTTS", "FastSpeech2 (VarianceAdaptorTtsModelBase)", "Infilling (FlowMatchingTtsModelBase)", "DiTToCodecTraining", "OpenVoiceTrainingIntegration", "GLM4VoiceTask"],
+      "files": ["src/TextToSpeech/Classic/AlignTTS.cs", "src/TextToSpeech/Classic/TransformerTTS.cs", "src/TextToSpeech/VarianceAdaptorTtsModelBase.cs", "src/TextToSpeech/FlowDiffusion/**", "src/TextToSpeech/VoiceCloning/OpenVoice*", "src/TextToSpeech/MultiModal/GLM4Voice.cs"]
+    },
+    {
+      "id": "vocoder-codec",
+      "scope": "FreGrad (VocoderSignalModules, the unowned starting point) and EnCodec (NeuralAudioCodecBase)",
+      "tests": ["FreGradNativeOptions", "FreGradPaper", "EnCodecPaper"],
+      "files": ["src/TextToSpeech/Vocoders/FreGrad.cs", "src/TextToSpeech/Vocoders/VocoderSignalModules.cs", "src/Audio/Codecs/NeuralAudioCodecBase.cs"]
+    }
+  ],
+  "not_claimed": [
+    "WaveRNN and SegmentVocoderBase.cs (owned by the coordinating session)",
+    "NonAttentiveTacotron: its failure is the LstmSequenceTrain replay state, covered by the coordinating session's upstream LSTM fix",
+    "src/Training/** shared training files (owned by the coordinating session)"
+  ],
+  "shared_helpers": "TtsModelBase.cs and other shared helpers: a change there is proposed here first (question entry), not made silently.",
+  "rules_followed": "No push to perf/elementwise-sweep-combined-v1 until its CI cycle completes; no weakened assertions, replay guards or blanket fallbacks; fixes are verified locally before they are offered.",
+  "questions": []
+}

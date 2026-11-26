@@ -498,11 +498,14 @@ public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliary
             var strength = NumOps.FromDouble(Options.Strength);
             var (start, end) = ClampedRange(gradient.Length);
 
-            for (int i = 0; i < gradient.Length; i++)
+            // gradient + strength * coefficients inside [start, end), the gradient unchanged elsewhere
+            gradient.AsSpan().CopyTo(result.AsWritableSpan());
+            if (end > start)
             {
-                result[i] = i >= start && i < end
-                    ? NumOps.Add(gradient[i], NumOps.Multiply(strength, coefficients[i]))
-                    : gradient[i];
+                var regularized = (Vector<T>)AiDotNetEngine.Current.Add(
+                    gradient.GetSubVector(start, end - start),
+                    (Vector<T>)AiDotNetEngine.Current.Multiply(coefficients.GetSubVector(start, end - start), strength));
+                regularized.AsSpan().CopyTo(result.AsWritableSpan().Slice(start));
             }
 
             return result;
@@ -528,8 +531,13 @@ public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliary
             var shrinkage = NumOps.Subtract(NumOps.One, NumOps.FromDouble(Options.Strength));
             var (start, end) = ClampedRange(data.Length);
 
-            for (int i = 0; i < data.Length; i++)
-                result[i] = i >= start && i < end ? NumOps.Multiply(data[i], shrinkage) : data[i];
+            // data * shrinkage inside [start, end), unchanged elsewhere
+            data.AsSpan().CopyTo(result.AsWritableSpan());
+            if (end > start)
+            {
+                var shrunk = (Vector<T>)AiDotNetEngine.Current.Multiply(data.GetSubVector(start, end - start), shrinkage);
+                shrunk.AsSpan().CopyTo(result.AsWritableSpan().Slice(start));
+            }
 
             return result;
         }
@@ -539,16 +547,12 @@ public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliary
             var result = new Matrix<T>(data.Rows, data.Columns);
             var shrinkage = NumOps.Subtract(NumOps.One, NumOps.FromDouble(Options.Strength));
             var (start, end) = ClampedRange(data.Rows * data.Columns);
-            int flatIndex = 0;
-
-            for (int row = 0; row < data.Rows; row++)
+            // Row-major flat range [start, end) is scaled by shrinkage, the rest copied unchanged
+            data.AsSpan().CopyTo(result.AsWritableSpan());
+            if (end > start)
             {
-                for (int column = 0; column < data.Columns; column++, flatIndex++)
-                {
-                    result[row, column] = flatIndex >= start && flatIndex < end
-                        ? NumOps.Multiply(data[row, column], shrinkage)
-                        : data[row, column];
-                }
+                var shrunk = (Vector<T>)AiDotNetEngine.Current.Multiply(new Vector<T>(data.AsSpan().Slice(start, end - start).ToArray()), shrinkage);
+                shrunk.AsSpan().CopyTo(result.AsWritableSpan().Slice(start));
             }
 
             return result;
@@ -631,44 +635,55 @@ public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliary
         // Compute graph smoothness loss: Σ_ij A_ij * ||h_i - h_j||²
         // where A is the adjacency matrix and h are node representations
         T smoothnessLoss = NumOps.Zero;
+        double smoothnessSum = 0.0;
         int numNodes = _lastNodeRepresentations.Shape[0];
-
-        for (int i = 0; i < numNodes; i++)
-        {
-            for (int j = 0; j < numNodes; j++)
-            {
-                // Get edge weight from adjacency matrix
-                T edgeWeight = _lastAdjacencyMatrix[new int[] { i, j }];
-
-                // Skip if no edge
-                if (NumOps.Equals(edgeWeight, NumOps.Zero))
-                    continue;
-
-                // Compute squared difference between node representations
-                var nodeI = _lastNodeRepresentations.GetRow(i);
-                var nodeJ = _lastNodeRepresentations.GetRow(j);
-                var diff = nodeI.Subtract(nodeJ);
-                T squaredDiff = diff.DotProduct(diff);
-
-                // Add weighted difference to smoothness loss
-                smoothnessLoss = NumOps.Add(smoothnessLoss, NumOps.Multiply(edgeWeight, squaredDiff));
-            }
-        }
-
-        // Normalize by number of edges
         int edgeCount = 0;
-        for (int i = 0; i < numNodes; i++)
+
+        if (numNodes > 0)
         {
-            for (int j = 0; j < numNodes; j++)
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                if (!NumOps.Equals(_lastAdjacencyMatrix[new int[] { i, j }], NumOps.Zero))
-                    edgeCount++;
+                // Edges are the nonzero adjacency entries (NaN counts as an edge), in row-major order
+                var adjacency = Engine.TensorSlice(_lastAdjacencyMatrix, [0, 0], [numNodes, numNodes]).Cast<double>();
+                var edgeList = Engine.TensorNonzero(adjacency).ToArray();
+                edgeCount = edgeList.Length / 2;
+
+                if (edgeCount > 0)
+                {
+                    // Limit gathered feature buffers to 2 MiB, or one feature row if it is wider.
+                    const int MaxEdgeFeatureElements = 262144;
+                    int width = _lastNodeRepresentations.Length / numNodes;
+                    int blockSize = Math.Max(1, MaxEdgeFeatureElements / Math.Max(1, width));
+                    var nodes = Engine.Reshape(_lastNodeRepresentations, [numNodes, width]).Contiguous().Cast<double>();
+                    var flatAdjacency = Engine.Reshape(adjacency, [numNodes * numNodes]);
+                    for (int start = 0; start < edgeCount;)
+                    {
+                        int count = Math.Min(blockSize, edgeCount - start);
+                        var sources = new int[count];
+                        var targets = new int[count];
+                        var flatIndex = new int[count];
+                        for (int e = 0; e < count; e++)
+                        {
+                            sources[e] = edgeList[2 * (start + e)];
+                            targets[e] = edgeList[2 * (start + e) + 1];
+                            flatIndex[e] = sources[e] * numNodes + targets[e];
+                        }
+
+                        var diff = Engine.TensorSubtract(
+                            Engine.TensorGather(nodes, new Tensor<int>(sources, [count]), 0),
+                            Engine.TensorGather(nodes, new Tensor<int>(targets, [count]), 0));
+                        var squaredDiff = Engine.ReduceSum(Engine.TensorMultiply(diff, diff), new[] { 1 }, keepDims: false);
+                        var edgeWeights = Engine.TensorGather(flatAdjacency, new Tensor<int>(flatIndex, [count]), 0);
+                        smoothnessSum += Engine.TensorSum(Engine.TensorMultiply(edgeWeights, squaredDiff));
+                        start += count;
+                    }
+                }
             }
         }
 
         if (edgeCount > 0)
         {
-            smoothnessLoss = NumOps.Divide(smoothnessLoss, NumOps.FromDouble(edgeCount));
+            smoothnessLoss = NumOps.FromDouble(smoothnessSum / edgeCount);
         }
 
         _lastGraphSmoothnessLoss = smoothnessLoss;

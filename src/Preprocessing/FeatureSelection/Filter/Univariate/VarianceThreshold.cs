@@ -31,7 +31,7 @@ public class VarianceThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly double _threshold;
 
     // Fitted parameters
-    private double[]? _variances;
+    private Vector<T>? _variances;
     private int[]? _selectedFeatures;
     private int _nInputFeatures;
 
@@ -43,7 +43,7 @@ public class VarianceThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the computed variances for each feature.
     /// </summary>
-    public double[]? Variances => _variances;
+    public Vector<T>? Variances => _variances;
 
     /// <summary>
     /// Gets the indices of selected features.
@@ -81,44 +81,26 @@ public class VarianceThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         _nInputFeatures = data.Columns;
         var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var processed = new bool[_nInputFeatures];
+        foreach (int col in columnsToProcess)
+            processed[col] = true;
 
-        _variances = new double[_nInputFeatures];
+        // Population variance of every feature; pass-through columns report the largest value
+        var computed = FilterStatisticTensorOps.ColumnPopulationVariance(FilterStatisticTensorOps.AsTensor(data));
+        var variances = Engine.TensorWhere(
+            processed, computed, FilterStatisticTensorOps.FilledLike(computed, NumOps.MaxValue));
+        _variances = variances.ToVector();
+
+        // Pass-through columns are always selected; processed ones when their variance is above the threshold
+        var aboveThreshold = new bool[_nInputFeatures];
+        foreach (int col in FilterStatisticTensorOps.MaskPositions(Engine.TensorGreaterThan(computed, NumOps.FromDouble(_threshold))))
+            aboveThreshold[col] = true;
+
         var selectedList = new List<int>();
-
         for (int col = 0; col < _nInputFeatures; col++)
         {
-            if (!processSet.Contains(col))
-            {
-                // Pass-through columns always selected
-                _variances[col] = double.MaxValue;
+            if (!processed[col] || aboveThreshold[col])
                 selectedList.Add(col);
-                continue;
-            }
-
-            // Compute mean
-            double sum = 0;
-            for (int i = 0; i < data.Rows; i++)
-            {
-                sum += NumOps.ToDouble(data[i, col]);
-            }
-            double mean = sum / data.Rows;
-
-            // Compute variance
-            double sumSq = 0;
-            for (int i = 0; i < data.Rows; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, col]) - mean;
-                sumSq += diff * diff;
-            }
-            double variance = sumSq / data.Rows;
-            _variances[col] = variance;
-
-            // Select if above threshold
-            if (variance > _threshold)
-            {
-                selectedList.Add(col);
-            }
         }
 
         _selectedFeatures = selectedList.ToArray();
@@ -143,20 +125,7 @@ public class VarianceThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Selector has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numOutputCols = _selectedFeatures.Length;
-        var result = new T[numRows, numOutputCols];
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numOutputCols; j++)
-            {
-                int sourceCol = _selectedFeatures[j];
-                result[i, j] = data[i, sourceCol];
-            }
-        }
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedFeatures);
     }
 
     /// <summary>

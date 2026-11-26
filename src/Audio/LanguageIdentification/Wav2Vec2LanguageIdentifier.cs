@@ -84,6 +84,10 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
     // The shared wav2vec 2.0 network and the classification head (transformers
     // Wav2Vec2ForSequenceClassification: a projector, mean pooling over frames, a classifier).
     private Audio.Foundations.Wav2Vec2Network<T>? _network;
+
+    /// <inheritdoc />
+    /// <remarks>True when the encoder's LayerDrop is positive: a skipped layer is not stepped that step.</remarks>
+    private protected override bool TrainingForwardSkipsLayersPerStep => _network is not null && _network.Configuration.LayerDrop > 0;
     private DenseLayer<T>? _poolingProjection;
     private DenseLayer<T>? _classifierLayer;
     private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
@@ -404,6 +408,20 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
     /// </remarks>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
         => ForwardNative(PreprocessAudio(input));
+
+    /// <summary>
+    /// TEMPORARY OPT-OUT (#2592): the fused compiled training path is off until the pinned AiDotNet.Tensors contains
+    /// ooples/AiDotNet.Tensors#1750. Remove this override then.
+    /// </summary>
+    /// <remarks>
+    /// The dropout masks, the SpecAugment time mask and LayerDrop are <see cref="AiDotNet.Training.CompiledStepRandom{T}"/>
+    /// draws, and the waveform standardization is graph ops, so a plan redraws and recomputes them on every replay.
+    /// AiDotNet.Tensors 0.150.0 still freezes host reads made inside a training trace into the plan as constants.
+    /// Identically seeded models then trained through the plan to different weights. #1750 makes such reads fail
+    /// closed. Before this override goes, the zero-padding of clips shorter than the receptive field in
+    /// <c>ForwardNative</c>, a host loop over the input, has to become a graph op.
+    /// </remarks>
+    protected override bool SupportsFusedCompiledTraining => false;
 
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>

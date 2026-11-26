@@ -203,16 +203,13 @@ public class GaborWavelet<T> : WaveletFunctionBase<T>
     public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         int size = input.Length;
-        var approximation = new Vector<T>(size);
-        var detail = new Vector<T>(size);
-        for (int x = 0; x < size; x++)
+        if (size == 0)
         {
-            T gaborReal = GaborFunction(x, true);
-            T gaborImag = GaborFunction(x, false);
-            approximation[x] = NumOps.Multiply(gaborReal, input[x]);
-            detail[x] = NumOps.Multiply(gaborImag, input[x]);
+            return (new Vector<T>(0), new Vector<T>(0));
         }
-        return (approximation, detail);
+
+        var x = AiDotNetEngine.Current.TensorArange<T>(0, size, 1);
+        return WaveletEngineOps<T>.PointwiseDecompose(input, GaborFunction(x, true), GaborFunction(x, false));
     }
 
     /// <summary>
@@ -239,12 +236,7 @@ public class GaborWavelet<T> : WaveletFunctionBase<T>
     public override Vector<T> GetScalingCoefficients()
     {
         int size = 100;
-        var coefficients = new Vector<T>(size);
-        for (int x = 0; x < size; x++)
-        {
-            coefficients[x] = GaborFunction(x, true);
-        }
-        return coefficients;
+        return GaborFunction(AiDotNetEngine.Current.TensorArange<T>(0, size, 1), true).ToVector();
     }
 
     /// <summary>
@@ -272,12 +264,7 @@ public class GaborWavelet<T> : WaveletFunctionBase<T>
     public override Vector<T> GetWaveletCoefficients()
     {
         int size = 100;
-        var coefficients = new Vector<T>(size);
-        for (int x = 0; x < size; x++)
-        {
-            coefficients[x] = GaborFunction(x, false);
-        }
-        return coefficients;
+        return GaborFunction(AiDotNetEngine.Current.TensorArange<T>(0, size, 1), false).ToVector();
     }
 
     /// <summary>
@@ -305,14 +292,17 @@ public class GaborWavelet<T> : WaveletFunctionBase<T>
     /// detecting specific patterns in specific locations.
     /// </para>
     /// </remarks>
-    private T GaborFunction(int x, bool real)
+    private Tensor<T> GaborFunction(Tensor<T> x, bool real)
     {
-        T xT = NumOps.FromDouble(x);
-        T xTheta = NumOps.Multiply(xT, MathHelper.Cos(NumOps.Divide(MathHelper.Pi<T>(), NumOps.FromDouble(4))));
-        T expTerm = NumOps.Exp(NumOps.Divide(NumOps.Negate(NumOps.Multiply(xTheta, xTheta)), NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Multiply(_sigma, _sigma))));
-        T angle = NumOps.Add(NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(2.0 * Math.PI), xTheta), _lambda), _psi);
-        T trigTerm = real ? MathHelper.Cos(angle) : MathHelper.Sin(angle);
-        return NumOps.Multiply(expTerm, trigTerm);
+        var engine = AiDotNetEngine.Current;
+        var xTheta = engine.TensorMultiplyScalar(x, MathHelper.Cos(NumOps.Divide(MathHelper.Pi<T>(), NumOps.FromDouble(4))));
+        var expTerm = engine.TensorExp(engine.TensorDivideScalar(
+            engine.TensorNegate(engine.TensorMultiply(xTheta, xTheta)),
+            NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Multiply(_sigma, _sigma))));
+        var angle = engine.TensorAddScalar(
+            engine.TensorDivideScalar(engine.TensorMultiplyScalar(xTheta, NumOps.FromDouble(2.0 * Math.PI)), _lambda), _psi);
+        var trigTerm = real ? engine.TensorCos(angle) : engine.TensorSin(angle);
+        return engine.TensorMultiply(expTerm, trigTerm);
     }
 
     /// <summary>
@@ -337,33 +327,12 @@ public class GaborWavelet<T> : WaveletFunctionBase<T>
     public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
     {
         int size = approximation.Length;
-        var reconstructed = new Vector<T>(size);
-
-        for (int x = 0; x < size; x++)
+        if (size == 0)
         {
-            T gaborReal = GaborFunction(x, true);
-            T gaborImag = GaborFunction(x, false);
-
-            // Use weighted least-squares approach to recover original
-            T realSq = NumOps.Square(gaborReal);
-            T imagSq = NumOps.Square(gaborImag);
-            T denominator = NumOps.Add(realSq, imagSq);
-
-            if (NumOps.GreaterThan(NumOps.Abs(denominator), NumOps.FromDouble(1e-10)))
-            {
-                T numerator = NumOps.Add(
-                    NumOps.Multiply(approximation[x], gaborReal),
-                    NumOps.Multiply(detail[x], gaborImag)
-                );
-                reconstructed[x] = NumOps.Divide(numerator, denominator);
-            }
-            else
-            {
-                // When both Gabor values are near zero, use sum of coefficients
-                reconstructed[x] = NumOps.Add(approximation[x], detail[x]);
-            }
+            return new Vector<T>(0);
         }
 
-        return reconstructed;
+        var x = AiDotNetEngine.Current.TensorArange<T>(0, size, 1);
+        return WaveletEngineOps<T>.PointwiseReconstruct(approximation, detail, GaborFunction(x, true), GaborFunction(x, false));
     }
 }

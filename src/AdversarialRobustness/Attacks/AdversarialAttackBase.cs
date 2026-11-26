@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Engines;
@@ -72,6 +73,12 @@ public abstract partial class AdversarialAttackBase<T, TInput, TOutput> : IAdver
     /// Numeric operations for type T.
     /// </summary>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>
+    /// The machine epsilon of T: the gap between 1 and the next representable value (2^-10 for Half,
+    /// 2^-23 for float, 2^-52 for double).
+    /// </summary>
+    private protected static readonly double RelativeResolution = ResolutionFrom(1);
 
     /// <summary>
     /// Configuration options for the attack.
@@ -159,8 +166,11 @@ public abstract partial class AdversarialAttackBase<T, TInput, TOutput> : IAdver
             throw new ArgumentNullException(nameof(data));
         }
 
+        // Read the payload back as the runtime type of the current options: Serialize writes every property of
+        // a derived options class (AutoAttackOptions, for example), and reading it as the base class dropped them.
         var json = Encoding.UTF8.GetString(data);
-        Options = JsonConvert.DeserializeObject<AdversarialAttackOptions<T>>(json) ?? new AdversarialAttackOptions<T>();
+        Options = JsonConvert.DeserializeObject(json, Options.GetType()) as AdversarialAttackOptions<T>
+            ?? new AdversarialAttackOptions<T>();
 
         // Re-initialize Random with the deserialized seed to ensure consistent behavior
         Random = RandomHelper.CreateSeededRandom(Options.RandomSeed);
@@ -277,25 +287,165 @@ public abstract partial class AdversarialAttackBase<T, TInput, TOutput> : IAdver
     /// </summary>
     protected T ComputeLInfinityNorm(Vector<T> vector)
     {
-        var absVector = Engine.Abs<T>(vector);
-        // Find max of absolute values
-        T maxValue = NumOps.Zero;
-        for (int i = 0; i < absVector.Length; i++)
+        if (vector.Length == 0)
         {
-            if (NumOps.GreaterThan(absVector[i], maxValue))
-            {
-                maxValue = absVector[i];
-            }
+            return NumOps.Zero;
         }
-        return maxValue;
+
+        // max(|v|) with the running maximum seeded at zero, as a single engine reduction.
+        var absVector = Engine.Abs<T>(vector).AsTensor();
+        return Engine.TensorMaxValue(Engine.TensorMax(absVector, NumOps.Zero));
+    }
+
+    /// <summary>
+    /// Estimates d loss(model(x)) / dx with central finite differences for black-box models.
+    /// </summary>
+    /// <remarks>
+    /// Each probe x +/- delta*e_i is clamped to the valid input domain [0, 1], and the difference is
+    /// divided by the actual clamped step width; a coordinate whose width collapses gets a zero gradient.
+    /// The probes need one model call each, so the loop runs over model calls, never over arithmetic.
+    /// </remarks>
+    /// <param name="vectorInput">The point at which to estimate the gradient.</param>
+    /// <param name="referenceInput">An input used to rebuild the model's input type from a vector.</param>
+    /// <param name="targetModel">The black-box model.</param>
+    /// <param name="lossOfOutput">The loss as a function of the model output.</param>
+    /// <param name="delta">The finite-difference step.</param>
+    protected Vector<T> EstimateInputGradient(
+        Vector<T> vectorInput,
+        TInput referenceInput,
+        IFullModel<T, TInput, TOutput> targetModel,
+        Func<Vector<T>, T> lossOfOutput,
+        T delta)
+    {
+        int n = vectorInput.Length;
+
+        // A step below the type's resolution rounds x + delta back to x (1e-4 is below half an ulp of
+        // Half anywhere in [0.0625, 1]), so every probe would collapse and the gradient would be zero.
+        // Eight ulps at 1 keeps the probe representable across the whole [0, 1] domain.
+        var minimumDelta = NumOps.FromDouble(8 * RelativeResolution);
+        if (NumOps.LessThan(delta, minimumDelta))
+        {
+            delta = minimumDelta;
+        }
+
+        var plusAll = Engine.Clamp<T>(Engine.Add<T>(vectorInput, Engine.Fill<T>(n, delta)), NumOps.Zero, NumOps.One);
+        var minusAll = Engine.Clamp<T>(Engine.Subtract<T>(vectorInput, Engine.Fill<T>(n, delta)), NumOps.Zero, NumOps.One);
+
+        var plusLosses = new List<T>(n);
+        var minusLosses = new List<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            plusLosses.Add(LossAtProbe(vectorInput, plusAll, i, referenceInput, targetModel, lossOfOutput));
+            minusLosses.Add(LossAtProbe(vectorInput, minusAll, i, referenceInput, targetModel, lossOfOutput));
+        }
+
+        var width = Engine.Subtract<T>(plusAll, minusAll).AsTensor();
+        var lossDiff = Engine.Subtract<T>(new Vector<T>(plusLosses), new Vector<T>(minusLosses)).AsTensor();
+        var positive = Engine.TensorGreaterThan(width, NumOps.Zero);
+        var zeros = new Tensor<T>(width.Shape.ToArray());
+        var safeWidth = Engine.TensorWhere(positive, width, Engine.TensorAddScalar(zeros, NumOps.One));
+        return Engine.TensorWhere(positive, Engine.TensorDivide(lossDiff, safeWidth), zeros).ToVector();
+    }
+
+    /// <summary>
+    /// Evaluates the loss with coordinate <paramref name="index"/> of the input replaced by the probe value.
+    /// </summary>
+    private static T LossAtProbe(
+        Vector<T> vectorInput,
+        Vector<T> probeValues,
+        int index,
+        TInput referenceInput,
+        IFullModel<T, TInput, TOutput> targetModel,
+        Func<Vector<T>, T> lossOfOutput)
+    {
+        var probe = vectorInput.Clone();
+        probeValues.AsSpan().Slice(index, 1).CopyTo(probe.AsWritableSpan().Slice(index, 1));
+        var modelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(probe, referenceInput);
+        var output = ConversionsHelper.ConvertToVector<T, TOutput>(targetModel.Predict(modelInput));
+        return lossOfOutput(output);
+    }
+
+    /// <summary>
+    /// The small constant added to a norm before dividing by it (torchattacks uses 1e-10).
+    /// </summary>
+    /// <remarks>
+    /// 1e-10 underflows to zero in narrow types such as Half; there the guard falls back to the
+    /// library's default stability epsilon, which still is a positive value of T.
+    /// </remarks>
+    protected static T DivisionGuard()
+    {
+        return PositiveConstant(1e-10);
+    }
+
+    /// <summary>
+    /// <paramref name="value"/> in T, or the library's default stability epsilon when it underflows to zero.
+    /// </summary>
+    /// <remarks>
+    /// Stability constants such as 1e-10 or Adam's 1e-8 are zero in Half, which turns 0 / (0 + eps) into NaN.
+    /// </remarks>
+    private protected static T PositiveConstant(double value)
+    {
+        var constant = NumOps.FromDouble(value);
+        return NumOps.GreaterThan(constant, NumOps.Zero)
+            ? constant
+            : NumOps.FromDouble(NumericalStabilityHelper.DefaultEpsilon);
+    }
+
+    /// <summary>
+    /// The smallest power of two 2^-k (k &gt;= <paramref name="exponent"/>) with 1 + 2^-k still distinct from 1 in T.
+    /// </summary>
+    private static double ResolutionFrom(int exponent)
+    {
+        double next = Math.Pow(2.0, -(exponent + 1));
+        return exponent >= 60 || NumOps.ToDouble(NumOps.FromDouble(1.0 + next)) <= 1.0
+            ? Math.Pow(2.0, -exponent)
+            : ResolutionFrom(exponent + 1);
+    }
+
+    /// <summary>
+    /// Mean squared error between a model output and a target vector, as engine reductions.
+    /// </summary>
+    /// <remarks>
+    /// Computed as (||diff||_2 / sqrt(n))^2 so the sum of squares is never formed in T: in Half it overflows
+    /// once it passes 65504 (for example 1000 logits that are each 10 away from the target).
+    /// </remarks>
+    protected T ComputeMeanSquaredError(Vector<T> output, Vector<T> target)
+    {
+        var diff = Engine.Subtract<T>(output, target);
+        var rootMeanSquare = NumOps.Divide(ComputeL2Norm(diff), NumOps.Sqrt(NumOps.FromDouble(diff.Length)));
+        return NumOps.Multiply(rootMeanSquare, rootMeanSquare);
+    }
+
+    /// <summary>
+    /// Index of the largest entry (first one on ties), or 0 for an empty vector.
+    /// </summary>
+    protected int ArgMaxIndex(Vector<T> values)
+    {
+        if (values.Length == 0)
+        {
+            return 0;
+        }
+
+        // TensorArgMax returns the first maximal index, matching a strict ">" scan from index 0.
+        var index = Engine.TensorArgMax(values.AsTensor(), 0);
+        return index.Data.Span[0];
     }
 
     /// <summary>
     /// Computes the L2 norm of a vector using vectorized operations.
     /// </summary>
+    /// <remarks>
+    /// The engine's tensor norm accumulates the squares in double, so a Half vector whose norm exceeds 256
+    /// (or a Gaussian direction with more than 65504 entries) still gets a finite norm instead of infinity.
+    /// </remarks>
     protected T ComputeL2Norm(Vector<T> vector)
     {
-        return Engine.Norm<T>(vector);
+        if (vector.Length == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        return Engine.TensorNorm(vector.AsTensor()).Data.Span[0];
     }
 
     /// <summary>

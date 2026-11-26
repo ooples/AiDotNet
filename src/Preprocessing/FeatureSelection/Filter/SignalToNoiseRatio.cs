@@ -28,13 +28,13 @@ public class SignalToNoiseRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly int _nFeaturesToSelect;
     private readonly double _minSNR;
 
-    private double[]? _snrValues;
+    private Vector<T>? _snrValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? SNRValues => _snrValues;
+    public Vector<T>? SNRValues => _snrValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -68,85 +68,31 @@ public class SignalToNoiseRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
 
         _nInputFeatures = data.Columns;
         int n = data.Rows;
-        int p = data.Columns;
+        var engine = Engine;
 
         // Separate samples by class (binary)
-        var class0 = new List<int>();
-        var class1 = new List<int>();
+        var class0 = FilterStatisticTensorOps.BelowMask(target, 0.5, out int n0);
+        var class1 = PreprocessingTensorOps.OneMinus(class0);
+        int n1 = n - n0;
 
-        for (int i = 0; i < n; i++)
-        {
-            if (NumOps.LessThan(target[i], NumOps.FromDouble(0.5)))
-                class0.Add(i);
-            else
-                class1.Add(i);
-        }
-
-        if (class0.Count == 0 || class1.Count == 0)
+        if (n0 == 0 || n1 == 0)
             throw new ArgumentException("Both classes must have at least one sample.");
 
-        int n0 = class0.Count;
-        int n1 = class1.Count;
+        // Class means and (population) standard deviations of every feature
+        var x = FilterStatisticTensorOps.AsTensor(data);
+        var (mean0, ss0) = FilterStatisticTensorOps.MaskedColumnMoments(x, class0, n0);
+        var (mean1, ss1) = FilterStatisticTensorOps.MaskedColumnMoments(x, class1, n1);
+        var std0 = engine.TensorSqrt(engine.TensorDivideScalar(ss0, NumOps.FromDouble(n0)));
+        var std1 = engine.TensorSqrt(engine.TensorDivideScalar(ss1, NumOps.FromDouble(n1)));
 
-        _snrValues = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Compute means for each class
-            double mean0 = 0, mean1 = 0;
-            foreach (int i in class0)
-                mean0 += NumOps.ToDouble(data[i, j]);
-            mean0 /= n0;
-
-            foreach (int i in class1)
-                mean1 += NumOps.ToDouble(data[i, j]);
-            mean1 /= n1;
-
-            // Compute standard deviations
-            double var0 = 0, var1 = 0;
-            foreach (int i in class0)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - mean0;
-                var0 += diff * diff;
-            }
-            double std0 = Math.Sqrt(var0 / n0);
-
-            foreach (int i in class1)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - mean1;
-                var1 += diff * diff;
-            }
-            double std1 = Math.Sqrt(var1 / n1);
-
-            // Signal-to-Noise Ratio
-            double noise = std0 + std1;
-            _snrValues[j] = noise > 1e-10 ? Math.Abs(mean0 - mean1) / noise : 0;
-        }
+        // Signal-to-Noise Ratio |mean0 - mean1| / (std0 + std1); classes that do not overlap at all have
+        // infinite SNR, a constant feature 0
+        var snr = FilterStatisticTensorOps.SeparationAwareRatio(
+            engine.TensorAbs(engine.TensorSubtract(mean0, mean1)), engine.TensorAdd(std0, std1), 1e-10);
+        _snrValues = snr.ToVector();
 
         // Select features above threshold or top by SNR
-        var candidates = new List<int>();
-        for (int j = 0; j < p; j++)
-            if (_snrValues[j] >= _minSNR)
-                candidates.Add(j);
-
-        if (candidates.Count >= _nFeaturesToSelect)
-        {
-            _selectedIndices = candidates
-                .OrderByDescending(j => _snrValues[j])
-                .Take(_nFeaturesToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-        else
-        {
-            _selectedIndices = _snrValues
-                .Select((snr, idx) => (SNR: snr, Index: idx))
-                .OrderByDescending(x => x.SNR)
-                .Take(_nFeaturesToSelect)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
-        }
+        _selectedIndices = FilterStatisticTensorOps.CandidatesOrTopK(snr, NumOps.FromDouble(_minSNR), _nFeaturesToSelect);
 
         IsFitted = true;
     }
@@ -164,15 +110,7 @@ public class SignalToNoiseRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("SignalToNoiseRatio has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

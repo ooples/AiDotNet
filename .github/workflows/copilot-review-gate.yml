@@ -14,14 +14,44 @@ permissions:
   contents: read
 
 jobs:
-  gate:
+  select-runner:
     if: ${{ (github.event.pull_request.draft != true) && (!startsWith(github.head_ref, 'release-please--')) }}
-    # Same-repo PRs run on the self-hosted aidotnet-cpu pool to relieve the hosted queue; fork PRs
-    # stay on GitHub-hosted runners so untrusted code never runs on a self-hosted machine.
-    runs-on: ${{ github.event.pull_request.head.repo.full_name == github.repository && fromJSON('["self-hosted", "aidotnet-cpu"]') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      use_self_hosted: ${{ steps.probe.outputs.use_self_hosted }}
+    steps:
+      - name: Probe online idle self-hosted CPU runner
+        id: probe
+        shell: pwsh
+        env:
+          SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          RUNNER_TOKEN: ${{ github.event.pull_request.head.repo.full_name == github.repository && secrets.SELF_HOSTED_RUNNER_TOKEN || '' }}
+          REPO: ${{ github.repository }}
+        run: |
+          $use = 'false'
+          if ($env:SAME_REPO -ceq 'true' -and -not [string]::IsNullOrWhiteSpace($env:RUNNER_TOKEN)) {
+            try {
+              $headers = @{ Authorization = "Bearer $($env:RUNNER_TOKEN)"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
+              $resp = Invoke-RestMethod -Uri "https://api.github.com/repos/$($env:REPO)/actions/runners?per_page=100" -Headers $headers -TimeoutSec 10 -ErrorAction Stop
+              $idle = @($resp.runners | Where-Object { $_.status -eq 'online' -and -not $_.busy -and @($_.labels.name) -contains 'aidotnet-cpu' })
+              if ($idle.Count -gt 0) { $use = 'true' }
+            } catch {
+              Write-Host "Self-hosted runner probe fell back to ubuntu-latest: $($_.Exception.Message)"
+            }
+          }
+          "use_self_hosted=$use" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+
+  gate-self-hosted:
+    needs: [select-runner]
+    if: ${{ needs.select-runner.outputs.use_self_hosted == 'true' }}
+    runs-on: [self-hosted, aidotnet-cpu]
+    continue-on-error: true
+    timeout-minutes: 5
+    outputs:
+      passed: ${{ steps.mark.outputs.passed }}
     steps:
       - name: Ensure gh is installed
-        # Hosted images ship gh; a self-hosted runner image may not.
         run: |
           command -v gh >/dev/null && exit 0
           v=2.104.0
@@ -29,14 +59,13 @@ jobs:
           echo "$RUNNER_TEMP/gh_${v}_linux_amd64/bin" >> "$GITHUB_PATH"
 
       - name: Check unresolved Copilot review threads
+        id: check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
           REPO="${{ github.repository }}"
           PR_NUMBER="${{ github.event.pull_request.number }}"
-          
-          # Use GraphQL to check for unresolved review threads from bots
           QUERY='query($owner: String!, $repo: String!, $pr: Int!) {
             repository(owner: $owner, name: $repo) {
               pullRequest(number: $pr) {
@@ -56,21 +85,71 @@ jobs:
               }
             }
           }'
-          
-          # Extract owner and repo name
           OWNER=$(echo "$REPO" | cut -d'/' -f1)
           REPO_NAME=$(echo "$REPO" | cut -d'/' -f2)
-          
-          # Query unresolved threads from Copilot review bot(s).
-          # Note: GitHub Advanced Security / code-scanning threads are tracked separately (CodeQL/Sonar/etc.)
-          # and cannot always be manually resolved like normal review threads.
           UNRESOLVED=$(gh api graphql \
             -f query="$QUERY" \
             -f owner="$OWNER" \
             -f repo="$REPO_NAME" \
             -F pr="$PR_NUMBER" \
             --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false and .viewerCanResolve == true and (.comments.nodes[0].author.login | test("copilot"; "i")))] | length')
-          
+          echo "Unresolved Copilot review threads: $UNRESOLVED"
+          if [ "$UNRESOLVED" -gt 0 ]; then
+            echo "Found $UNRESOLVED unresolved Copilot review threads"
+            exit 1
+          fi
+
+      - name: Record self-hosted success
+        id: mark
+        if: steps.check.outcome == 'success'
+        run: echo "passed=true" >> "$GITHUB_OUTPUT"
+
+  gate:
+    needs: [select-runner, gate-self-hosted]
+    if: ${{ always() && !cancelled() && (github.event.pull_request.draft != true) && (!startsWith(github.head_ref, 'release-please--')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check unresolved Copilot review threads (or accept verified self-hosted pass)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SELF_HOSTED_PASSED: ${{ needs.gate-self-hosted.outputs.passed }}
+        run: |
+          set -e
+          if [ "$SELF_HOSTED_PASSED" = "true" ]; then
+            echo "Copilot review gate already passed on self-hosted runner."
+            exit 0
+          fi
+          echo "Running Copilot review gate on GitHub-hosted ubuntu-latest fallback."
+          REPO="${{ github.repository }}"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          QUERY='query($owner: String!, $repo: String!, $pr: Int!) {
+            repository(owner: $owner, name: $repo) {
+              pullRequest(number: $pr) {
+                reviewThreads(first: 100) {
+                  nodes {
+                    isResolved
+                    viewerCanResolve
+                    comments(first: 1) {
+                      nodes {
+                        author {
+                          login
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }'
+          OWNER=$(echo "$REPO" | cut -d'/' -f1)
+          REPO_NAME=$(echo "$REPO" | cut -d'/' -f2)
+          UNRESOLVED=$(gh api graphql \
+            -f query="$QUERY" \
+            -f owner="$OWNER" \
+            -f repo="$REPO_NAME" \
+            -F pr="$PR_NUMBER" \
+            --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false and .viewerCanResolve == true and (.comments.nodes[0].author.login | test("copilot"; "i")))] | length')
           echo "Unresolved Copilot review threads: $UNRESOLVED"
           if [ "$UNRESOLVED" -gt 0 ]; then
             echo "Found $UNRESOLVED unresolved Copilot review threads"

@@ -77,14 +77,14 @@ public class CosineWindow<T> : IWindowFunction<T>
     /// </remarks>
     public Vector<T> Create(int windowSize)
     {
-        Vector<T> window = new Vector<T>(windowSize);
-        for (int n = 0; n < windowSize; n++)
+        if (WindowFunctionHelper.TryCreateDegenerate(windowSize, out Vector<T> degenerate))
         {
-            T nT = _numOps.FromDouble(n);
-            window[n] = MathHelper.Sin(_numOps.Multiply(_numOps.FromDouble(Math.PI), _numOps.Divide(nT, _numOps.FromDouble(windowSize - 1))));
+            return degenerate;
         }
 
-        return window;
+        // w(n) = sin(pi n / (N-1))
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorSin(engine.TensorMultiplyScalar(WindowFunctionHelper.UnitPhase<T>(windowSize), _numOps.FromDouble(Math.PI))).ToVector();
     }
 
     /// <summary>

@@ -8,7 +8,7 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the OpenVocabSAM model. Default values follow the original paper settings.</para>
 /// </remarks>
-public class OpenVocabSAMOptions : SegmentationModelOptions
+public class OpenVocabSAMOptions : TextQueriedSegmentationOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
     public OpenVocabSAMOptions()
@@ -24,6 +24,8 @@ public class OpenVocabSAMOptions : SegmentationModelOptions
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
+
+        CopyTextQuerySettings(other);
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
@@ -62,7 +64,7 @@ public class OpenVocabSAMOptions : SegmentationModelOptions
     public double LearningRate { get; set; } = 1e-4;
 
     /// <summary>Gets or sets the AdamW weight decay.</summary>
-    public double WeightDecay { get; set; } = 0.05;
+    public double WeightDecay { get; set; } = 1e-4;
 
     /// <summary>
     /// Throws when a value on this instance cannot produce a working model.
@@ -71,5 +73,9 @@ public class OpenVocabSAMOptions : SegmentationModelOptions
     /// Thrown when <see cref="SegmentationModelOptions.NumClasses"/> is not positive, or when
     /// <see cref="SegmentationModelOptions.DropRate"/> is not a fraction in [0, 1).
     /// </exception>
-    public void Validate() => ValidateSegmentationCore();
+    public void Validate()
+    {
+        ValidateSegmentationCore();
+        ValidateTextQuerySettings();
+    }
 }

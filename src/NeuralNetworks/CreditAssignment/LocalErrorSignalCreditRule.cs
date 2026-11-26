@@ -93,28 +93,19 @@ internal sealed class LocalErrorSignalCreditRule<T> : CreditRuleBase<T>
     private static Matrix<T> SoftmaxRowsMinus(Matrix<T> logits, Matrix<T> target, INumericOperations<T> ops)
     {
         int rows = logits.Rows, cols = logits.Columns;
-        var result = new Matrix<T>(rows, cols);
-        for (int b = 0; b < rows; b++)
-        {
-            double max = double.NegativeInfinity;
-            for (int j = 0; j < cols; j++) max = Math.Max(max, ops.ToDouble(logits[b, j]));
-            double sum = 0;
-            var exp = new double[cols];
-            for (int j = 0; j < cols; j++) { exp[j] = Math.Exp(ops.ToDouble(logits[b, j]) - max); sum += exp[j]; }
-            double inv = sum > 1e-30 ? 1.0 / sum : 0.0;
-            for (int j = 0; j < cols; j++)
-                result[b, j] = ops.FromDouble(exp[j] * inv - ops.ToDouble(target[b, j]));
-        }
-        return result;
+        if (rows == 0 || cols == 0) return new Matrix<T>(rows, cols);
+
+        // Max-shifted softmax per row; after the shift each row's sum is at least 1, so the old
+        // 1e-30 guard never fired on finite input.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var probabilities = engine.Softmax(Tensor<T>.FromMatrix(logits), 1);
+        return engine.TensorSubtract(probabilities, Tensor<T>.FromMatrix(target)).ToMatrix();
     }
 
     /// <summary>Transpose of <paramref name="m"/>.</summary>
     private static Matrix<T> Transpose(Matrix<T> m, INumericOperations<T> ops)
     {
-        var t = new Matrix<T>(m.Columns, m.Rows);
-        for (int i = 0; i < m.Rows; i++)
-            for (int j = 0; j < m.Columns; j++)
-                t[j, i] = m[i, j];
-        return t;
+        return AiDotNetEngine.Current.MatrixTranspose(m);
     }
 }

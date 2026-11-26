@@ -121,7 +121,12 @@ public class GeneratedFloatScaffoldSmokeTests
         Assert.Contains(floatScaffolds, t => t.Name == "MemFlowTests");
         Assert.Contains(floatScaffolds, t => t.Name == "MiniGPT4Tests");
         Assert.Contains(floatScaffolds, t => t.Name == "SpeechGPTTests");
-        Assert.Contains(floatScaffolds, t => t.Name == "PixelLMTests");
+        // PixelLM's required text encoder is supplied by its manual scaffold. It must retain
+        // FP32 coverage without also emitting a duplicate, dependency-free generated scaffold.
+        var pixelLmScaffold = typeof(global::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.PixelLMTests);
+        Assert.Equal(typeof(SegmentationTestBase<float>), pixelLmScaffold.BaseType);
+        Assert.Equal(typeof(float), ScaffoldPrecision(pixelLmScaffold));
+        Assert.DoesNotContain(scaffolds, t => t.Name == pixelLmScaffold.Name);
         Assert.Contains(floatScaffolds, t => t.Name == "OpenCLIPTests");
         Assert.Contains(floatScaffolds, t => t.Name == "StableVideoSRTests");
         Assert.Contains(floatScaffolds, t => t.Name == "PointTransformerV3Tests");

@@ -33,6 +33,14 @@ internal enum FusedStepOutcome
     CommittedFailure,
 }
 
+/// <summary>Whether a caller explicitly permits this closure step to use eager gradients with its configured optimizer.</summary>
+internal enum ClosureGraphBreakPolicy
+{
+    Disallow,
+    UseConfiguredOptimizer
+}
+
+
 /// <summary>One training step as the fused session sees it: what to train, on what, and how.</summary>
 internal sealed class FusedTrainingStepRequest<T>
 {
@@ -53,6 +61,14 @@ internal sealed class FusedTrainingStepRequest<T>
     public double ModelGradientClip { get; init; }
 
     /// <summary>
+    /// The parameters <see cref="ModelGradientClip"/> covers when it does not cover every trained one; null = all.
+    /// </summary>
+    /// <remarks>A compiled plan clips one global norm, so a request with a scope is not fused (its
+    /// <see cref="GraphBreakReason"/> says so). The eager step it falls back to takes the norm over these parameters'
+    /// gradients and scales only them; the others reach the optimizer unclipped by the model.</remarks>
+    public IReadOnlyList<Tensor<T>>? ModelGradientClipScope { get; init; }
+
+    /// <summary>
     /// Whether the model excludes some of its parameters from the optimizer's L2 term (coupled weight decay); asked only
     /// when the optimizer regularizes with L2. Null = none excluded.
     /// </summary>
@@ -60,6 +76,17 @@ internal sealed class FusedTrainingStepRequest<T>
 
     /// <summary>Receives the step's gradients while their buffers are valid (the model's public gradient surface).</summary>
     public Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? OnGradients { get; init; }
+
+    /// <summary>
+    /// Receives the gradients, before clipping, when the step runs on the eager tape instead
+    /// (<see cref="TapeTrainingStepper{T}.EagerStep"/>). Null = <see cref="OnGradients"/>.
+    /// </summary>
+    /// <remarks>
+    /// These are the tape's own tensors, not a plan's persistent buffers: the step clips them in place right after this
+    /// call, and their arena storage is reissued a step later. A receiver must copy what it keeps, so one that keeps a
+    /// plan's buffers by reference (as <see cref="OnGradients"/> may) needs this separate callback.
+    /// </remarks>
+    public Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? OnEagerGradients { get; init; }
 
     /// <summary>
     /// Adds the optimizer's regularization to the gradients when the step runs eager, before clipping, as the fused plan
@@ -79,6 +106,9 @@ internal sealed class FusedTrainingStepRequest<T>
     /// forever. Such a model, or its base class, sets this reason instead of training on a frozen objective.
     /// </remarks>
     public string? GraphBreakReason { get; init; }
+
+    /// <summary>Default strict. An allowed break also requires a nonempty GraphBreakReason on that exact step.</summary>
+    public ClosureGraphBreakPolicy ClosureGraphBreakPolicy { get; init; }
 
     /// <summary>
     /// Check, on the plan's first replay with new data, that the compiled plan computes the same loss as the eager
@@ -329,6 +359,14 @@ internal sealed class FusedTrainingSession<T>
             return FusedStepOutcome.CommittedFailure;
         }
 
+        if (_owner is NeuralNetworks.NeuralNetworkBase<T> { ActiveMixedPrecisionContext: not null })
+            return Decline("mixed precision active (requires eager tape loss scaling)");
+
+        bool isDistributed = _owner is NeuralNetworks.NeuralNetworkBase<T> { DistributedCoordinator: not null };
+        if (isDistributed)
+            AiDotNet.Tensors.Engines.Autodiff.RetainedOutputCapture<T>.RejectUnsupportedRoute("distributed");
+
+
         if (IsDisabled)
         {
             // Keep the cause: the step that disabled the path recorded why, and a bare "disabled" on every later step
@@ -357,19 +395,19 @@ internal sealed class FusedTrainingSession<T>
         // thread-static and stacks on the enclosing arena, so a decline after it would leave it current for the
         // eager fallback and every later step.
         double l2 = 0.0;
-        if (OptimizerRegularizationOf(optimizer) is { } regularization)
+        if (!isDistributed && OptimizerRegularizationOf(optimizer) is { } regularization)
         {
             // The plan adds one L2 strength to every parameter; a model that excludes some (TF EfficientNet decays
             // nothing in batch normalization) trains on the eager tape, which skips them.
             if (regularization is AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>> l2Regularization)
             {
                 if (request.ExcludesParametersFromWeightDecay?.Invoke() == true)
-                    return DeclineAndDropCommitted(
+                    return RejectUnsupportedConfiguration(
                         "L2 with parameters excluded from weight decay has no fused form; the eager tape applies it");
                 l2 = l2Regularization.GetOptions().Strength;
             }
             else
-                return DeclineAndDropCommitted("regularization " + regularization.GetType().Name
+                return RejectUnsupportedConfiguration("regularization " + regularization.GetType().Name
                     + " has no fused form; the eager tape applies it");
         }
 
@@ -381,14 +419,42 @@ internal sealed class FusedTrainingSession<T>
             ? clipping.TapeStepGradientClipNorm
             : 0.0;
         if (double.IsNaN(optimizerClip))
-            return DeclineAndDropCommitted("optimizer clips gradients by value; the fused plan clips only by global norm");
-        if (optimizerClip > 0.0)
+            return RejectUnsupportedConfiguration("optimizer clips gradients by value; the fused plan clips only by global norm");
+        if (!isDistributed && optimizerClip > 0.0)
             clip = clip > 0.0 ? Math.Min(clip, optimizerClip) : optimizerClip;
         // The plan adds its L2 term on the optimizer's side of the clip; after it is PyTorch's order, the default.
         bool l2AfterClip = optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> { RegularizesAfterClip: true };
 
-        bool verifyPersistence = (!_persistenceVerified && !IsCommitted)
-            || ++_stepsSincePersistenceCheck >= PersistenceRecheckInterval;
+        // A deliberate break is selected before probing: the objective and its RNG execute exactly once.
+        if (request.ClosureGraphBreakPolicy != ClosureGraphBreakPolicy.Disallow)
+        {
+            if (request.ClosureGraphBreakPolicy != ClosureGraphBreakPolicy.UseConfiguredOptimizer
+                || request.ClosureObjective is null || string.IsNullOrWhiteSpace(request.GraphBreakReason)
+                || !IsCommitted || isDistributed)
+            {
+                LastFallbackException = new InvalidOperationException(
+                    "A hybrid step requires an explicit closure graph break and an existing local configured optimizer.");
+                return FusedStepOutcome.CommittedFailure;
+            }
+            if (!CompiledTapeTrainingStep<T>.TryDeclaredGraphBreak(_owner, _stateKey, request, config,
+                    l2, l2AfterClip, clip, out var hybridLoss))
+            {
+                LastFallbackException = CompiledTapeTrainingStep<T>.GetLastFallbackException()
+                    ?? new InvalidOperationException("The configured optimizer refused the declared graph break.");
+                return FusedStepOutcome.CommittedFailure;
+            }
+            LastStepRanOutsidePlan = true;
+            LastMissReason = request.GraphBreakReason;
+            lossTensor = hybridLoss!;
+            loss = hybridLoss!.Length > 0 ? hybridLoss[0] : NumOps.Zero;
+            InvalidateDerivedWeightCaches();
+            if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> hybridScheduled)
+                hybridScheduled.OnBatchEnd();
+            return FusedStepOutcome.Stepped;
+        }
+
+        bool verifyPersistence = !isDistributed && ((!_persistenceVerified && !IsCommitted)
+            || ++_stepsSincePersistenceCheck >= PersistenceRecheckInterval);
         // Once a replay has been seen to update the live tensors, every later replay runs the same plan, so a
         // periodic re-check only has to confirm the plan still trains the model's live tensors -- a host-side
         // comparison (ConfiguredPlanTrainsLiveParameters). The numeric probe below costs a slice, a copy and a
@@ -396,7 +462,7 @@ internal sealed class FusedTrainingSession<T>
         // the parity Transformer, a fifth of its CUDA step time); it runs only when that comparison cannot answer.
         bool structuralRecheck = verifyPersistence && _persistenceVerified && _verifiedPlan is not null
             && ReferenceEquals(_verifiedPlan, CompiledTapeTrainingStep<T>.ConfiguredPlanIdentity);
-        var probe = verifyPersistence && !structuralRecheck ? SampleParameters(request) : null;
+        using var probe = verifyPersistence && !structuralRecheck ? SampleParameters(request) : null;
         bool gradientsObserved = false;
         bool gradientNonZero = false;
         void OnGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
@@ -412,12 +478,28 @@ internal sealed class FusedTrainingSession<T>
 
         // The first replay with new data (the step after the trace) is checked against the eager forward when the
         // caller asks: the eager loss on this batch, and a copy of the trained tensors to undo a disagreeing update.
+        // In distributed mode stepLoss is the globally reduced loss across all ranks, so each non-empty rank compares
+        // eagerLoss against its pre-reduction local compiled loss before any weight or moment mutation occurs, and
+        // coordinates the verdict across all ranks via AllReduce(Min).
         bool checkReplay = request.ClosureObjective is null
             && request.VerifyReplayAgreement && IsCommitted && !_replayAgreementVerified;
         double eagerLoss = 0.0;
+        double? distributedEagerReplayLoss = null;
         (Tensor<T> Live, Tensor<T> Saved)[]? snapshot = null;
         if (checkReplay)
         {
+            if (isDistributed)
+            {
+                if (request.Input.Length > 0 && request.Target.Length > 0)
+                {
+                    using var noGrad = new NoGradScope<T>();
+                    using var noDraws = CompiledStepRandom<T>.SuppressDraws();
+                    var eager = request.ComputeLoss(request.Forward(request.Input), request.Target);
+                    distributedEagerReplayLoss = eager.Length > 0 ? NumOps.ToDouble(eager[0]) : 0.0;
+                }
+            }
+            else
+            {
             try
             {
                 using var noGrad = new NoGradScope<T>();
@@ -433,6 +515,7 @@ internal sealed class FusedTrainingSession<T>
                     + ex.GetType().Name + ": " + ex.Message + "), so the compiled plan's replay cannot be checked");
             }
             snapshot = SnapshotTrainedTensors(request);
+            }
         }
 
         // The trace step of a plan whose replay will be checked (against the eager forward, or by a closure
@@ -452,11 +535,15 @@ internal sealed class FusedTrainingSession<T>
 
         // Each step's transient activations are reclaimed when it returns, the way PyTorch's caching allocator
         // returns an iteration's blocks; the plan's moments and persistent input/target are not arena-allocated
-        // (#1624 / #1640). Disposed before result handling so a fallback starts from a clean ring.
+        // (#1624 / #1640). Disposed before result handling so a fallback starts from a clean ring. It pools even nested
+        // (an adversarial step runs inside the caller's arena): the step's transients are dead at its return either way,
+        // and a nested arena that does not pool drops every buffer it rented, including those it took from the
+        // cross-arena pool. A DCGAN CPU step dropped 12 of them that way, so the generator's next detached forward
+        // allocated 69 MB afresh, and this arena another 16 MB of its own, every step.
         bool ran;
         T stepLoss;
         var deferredLoss = new System.Runtime.CompilerServices.StrongBox<Tensor<T>?>();
-        var stepArena = TensorArena.Create();
+        var stepArena = TensorArena.Create(poolWhenNested: true);
         try
         {
             ran = CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
@@ -488,6 +575,9 @@ internal sealed class FusedTrainingSession<T>
                 deferredLoss: deferredLoss,
                 l2AfterClip: l2AfterClip,
                 stateKey: _stateKey,
+                verifyDistributedReplay: isDistributed && checkReplay,
+                distributedEagerReplayLoss: distributedEagerReplayLoss,
+                distributedReplayTolerance: ReplayAgreementTolerance,
                 closureObjective: request.ClosureObjective);
         }
         finally
@@ -497,28 +587,21 @@ internal sealed class FusedTrainingSession<T>
 
         if (!ran)
         {
+            if (isDistributed && CompiledTapeTrainingStep<T>.TryConsumeDistributedReplayDisagreement(out string? disagreeReason))
+            {
+                Warn(disagreeReason);
+                Reset(stickyDisable: true);
+                return Decline(disagreeReason);
+            }
+
             LastFallbackException = CompiledTapeTrainingStep<T>.GetLastFallbackException();
+            if (CompiledTapeTrainingStep<T>.LastFallbackWasUnreplayableClosureStep)
+                return FusedStepOutcome.CommittedFailure;
             // The first replay after the trace could not run (a closure objective whose next step no guarded plan can
             // replay): the traced step is undone and redone eagerly, as for a disagreeing replay.
             if (IsCommitted && _pendingTrace is not null)
                 return UndoTraceAndDecline(optimizer, null, "the compiled plan cannot replay the objective's next step ("
                     + (LastFallbackException?.Message ?? "no reason") + ")");
-            // Later, a step no plan can replay (the objective read its own forward on the host this step) runs on the
-            // eager tape, and the configured plan's own optimizer applies its gradients: the plan's moments and step
-            // count carry on, and the next step replays again.
-            if (IsCommitted && request.ClosureObjective is not null && CompiledTapeTrainingStep<T>.LastFallbackWasUnreplayableClosureStep
-                && TryStepOutsideThePlan(request, OnGradients, out var outsideLoss))
-            {
-                LastStepRanOutsidePlan = true;
-                LastMissReason = null;
-                loss = outsideLoss.Length > 0 ? outsideLoss[0] : NumOps.Zero;
-                lossTensor = outsideLoss;
-                InvalidateDerivedWeightCaches();
-                if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> outsideScheduled)
-                    outsideScheduled.OnBatchEnd();
-                AiDotNet.Configuration.TrainingDiagnosticsConfig.RecordFusedOptimizerPath(hit: true, reason: null);
-                return FusedStepOutcome.Stepped;
-            }
             if (IsCommitted)
                 return FusedStepOutcome.CommittedFailure;
             IsDisabled = true;
@@ -527,7 +610,14 @@ internal sealed class FusedTrainingSession<T>
                 + ")");
         }
 
-        if (checkReplay && snapshot is not null)
+        if (checkReplay && isDistributed)
+        {
+            if (CompiledTapeTrainingStep<T>.WasLastDistributedReplayEvaluated())
+            {
+                _replayAgreementVerified = true;
+            }
+        }
+        else if (checkReplay && snapshot is not null)
         {
             double replayLoss = NumOps.ToDouble(ReadLoss(stepLoss, deferredLoss.Value));
             // Relative to the losses themselves, with no floor: floored at 1, a loss below 1e-3 (a small-magnitude
@@ -611,7 +701,8 @@ internal sealed class FusedTrainingSession<T>
             {
                 string reason = "fused compiled step ran (loss " + NumOps.ToDouble(ReadLoss(stepLoss, deferredLoss.Value)).ToString("G6")
                     + ") but did not persist a parameter update; the plan is decoupled from the model's live "
-                    + "parameter tensors, so training continues on the eager tape (ooples/AiDotNet#1822)";
+                    + "parameter tensors, so training continues on the eager tape (ooples/AiDotNet#1822)"
+                    + $" [persisted={persisted}, attached={attached}, sampled={probe?.Length}, gradientsObserved={gradientsObserved}, gradientNonZero={gradientNonZero}]";
                 Warn(reason);
                 if (IsCommitted)
                     Reset(stickyDisable: true);
@@ -639,7 +730,7 @@ internal sealed class FusedTrainingSession<T>
         // copies and kept predicting with the pre-training weights for every caller but NeuralNetworkBase, which
         // invalidated on its own. One place, so no caller of the session can miss it.
         InvalidateDerivedWeightCaches();
-        if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> scheduled)
+        if (!isDistributed && optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> scheduled)
             scheduled.OnBatchEnd();
 
         // Counted here, where every base class's fused step lands, and regardless of the diagnostics level: the hit
@@ -766,14 +857,15 @@ internal sealed class FusedTrainingSession<T>
         return FusedStepOutcome.Declined;
     }
 
-    // A condition that rules the fused path out for the whole run: a committed plan has to be dropped, since its
-    // moments cannot continue on the eager optimizer.
-    private FusedStepOutcome DeclineAndDropCommitted(string reason)
+    // Unsupported settings cannot transfer a committed plan's moments to the eager optimizer. Refuse this step
+    // without changing the plan, so restoring supported settings can continue the same optimizer trajectory.
+    private FusedStepOutcome RejectUnsupportedConfiguration(string reason)
     {
         if (IsCommitted)
         {
-            Warn("committed fused plan dropped: " + reason);
-            Reset(stickyDisable: true);
+            LastMissReason = reason;
+            LastFallbackException = new InvalidOperationException("Unsupported configuration after fused steps ran: " + reason);
+            return FusedStepOutcome.CommittedFailure;
         }
         return Decline(reason);
     }
@@ -801,27 +893,6 @@ internal sealed class FusedTrainingSession<T>
 
     // Reduced on the engine to ONE scalar, like AnySampleChanged: reading each gradient on the host downloaded the
     // whole gradient set every probed step (on a GPU MLP, most of the per-step device-to-host copies).
-    // One training step of a committed plan's request on the eager tape, applied by the plan's optimizer. Its random
-    // draws are the step's own: the eager tape runs the objective for real. The gradients reach the model's gradient
-    // surface first, as a fused step's do. False, with nothing applied, when the configured plan cannot take them.
-    private static bool TryStepOutsideThePlan(FusedTrainingStepRequest<T> request,
-        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>> onGradients, out Tensor<T> loss)
-    {
-        var parameters = ((IEnumerable<Tensor<T>>?)request.Selection ?? EnumerateLiveParameters(request)).ToArray();
-        Dictionary<Tensor<T>, Tensor<T>> gradients;
-        using (var tape = new GradientTape<T>(TrainingTapeOptions.Step))
-        {
-            loss = request.ComputeLoss(request.Forward(request.Input), request.Target);
-            gradients = tape.ComputeGradients(loss, parameters);
-        }
-        var trained = new Dictionary<Tensor<T>, Tensor<T>>(parameters.Length, TensorReferenceComparer<Tensor<T>>.Instance);
-        foreach (var parameter in parameters)
-            if (gradients.TryGetValue(parameter, out var gradient) && gradient is not null)
-                trained[parameter] = gradient;
-        onGradients(trained);
-        return CompiledTapeTrainingStep<T>.TryApplyGradientsThroughConfiguredPlan(trained);
-    }
-
     // The eager tape's gradient of the request's loss, with the same random draws suppressed as the replay check.
     private static bool EagerGradientNonZero(FusedTrainingStepRequest<T> request)
     {
@@ -909,6 +980,7 @@ internal sealed class FusedTrainingSession<T>
             ExtraParameters = request.ExtraParameters,
             Selection = request.Selection,
             ModelGradientClip = request.ModelGradientClip,
+            ModelGradientClipScope = request.ModelGradientClipScope,
             ExcludesParametersFromWeightDecay = request.ExcludesParametersFromWeightDecay,
             OnGradients = request.OnGradients,
             RegularizeGradients = request.RegularizeGradients,
@@ -919,14 +991,14 @@ internal sealed class FusedTrainingSession<T>
     private static void RestoreTrainedTensors((Tensor<T> Live, Tensor<T> Saved)[] snapshot)
         => TensorCheckpoint<T>.Restore(snapshot.Select(p => p.Live).ToArray(), snapshot.Select(p => p.Saved).ToArray());
 
+    // The tensors the request trains, by the walk the plan's own collection and the eager step use
+    // (CompiledTapeTrainingStep.CollectDeduplicatedParametersWithExtras, TapeTrainingStepper.TrainedParameters): a
+    // layer's parameters include its sub-layers'. Listing only each layer's own tensors left out everything a composite
+    // layer holds in children (a Swin block owns its bias table; its norms, attention and MLP are sub-layers), so the
+    // plan's optimized tensors were not all "live" and a step that had updated the weights was reported as detached.
     private static IEnumerable<Tensor<T>> EnumerateLiveParameters(FusedTrainingStepRequest<T> request)
-    {
-        foreach (var layer in request.Layers)
-            foreach (var parameter in layer.GetTrainableParameters())
-                if (parameter is not null) yield return parameter;
-        if (request.ExtraParameters is null) yield break;
-        foreach (var parameter in request.ExtraParameters) yield return parameter;
-    }
+        // Include composite children, exactly as the eager and compiled training steps do.
+        => TapeTrainingStepper<T>.TrainedParameters(request);
 
     // The #1822 persistence probe. Before the step it copies the first elements of every trained tensor (about
     // ChecksumTargetSamples in total, at least one per tensor) on whatever device holds the tensor; after the step it
@@ -934,7 +1006,49 @@ internal sealed class FusedTrainingSession<T>
     // tensors instead downloaded every GPU-resident parameter before and after each checked step (#1804: four times
     // the step's allocation on N-BEATS). Any real update moves a sampled element: Adam, SGD and the rest update every
     // parameter whose gradient is nonzero, and a plan decoupled from the live tensors moves none.
-    private static (Tensor<T> Source, int Count, Tensor<T> Before)[] SampleParameters(FusedTrainingStepRequest<T> request)
+    private sealed class PersistenceProbe : IDisposable
+    {
+        private readonly IEngine _engine;
+        private (Tensor<T> Source, int Count, Tensor<T> Before)[]? _samples;
+        public PersistenceProbe(IEngine engine, (Tensor<T> Source, int Count, Tensor<T> Before)[] samples)
+        { _engine = engine; _samples = samples; }
+        public int Length => _samples?.Length ?? 0;
+        public (Tensor<T> Source, int Count, Tensor<T> Before)[] Samples
+            => _samples ?? throw new ObjectDisposedException(nameof(PersistenceProbe));
+        public void Dispose()
+        {
+            var samples = _samples;
+            _samples = null;
+            if (samples is null) return;
+            foreach (var sample in samples) ReleaseProbeSnapshot(_engine, sample.Source, sample.Before);
+        }
+    }
+
+    private static void ReleaseProbeSnapshot(IEngine engine, Tensor<T> source, Tensor<T> before)
+    {
+        if (ReferenceEquals(before, source)) return;
+        try
+        {
+            // Deferred results can belong to the engine's activation cache rather than their tensor.
+            // Only the private copied snapshot is dead; its caller-owned parameter remains live.
+            if (!before.SharesStorageWith(source) && engine.TryGet<DirectGpuTensorEngine>(out var gpu))
+            {
+                if (before.DataVector._deviceState is { Buffer: not null })
+                    gpu.ReleaseDeadDeviceStorage(before, afterQueuedWork: true);
+                else
+                {
+                    object vector = before.DataVector;
+                    var array = before.GetBackingArrayForCacheLookupUnsafe();
+                    gpu.EvictActivationsCreatedAfter(0, protect: null, mode: ActivationReleaseMode.Release,
+                        releasableOnly: key => ReferenceEquals(key, vector) || (array is not null && ReferenceEquals(key, array)),
+                        afterQueuedWork: true);
+                }
+            }
+        }
+        finally { before.Dispose(); }
+    }
+
+    private static PersistenceProbe SampleParameters(FusedTrainingStepRequest<T> request)
     {
         var parameters = request.Selection is not null
             ? request.Selection
@@ -943,22 +1057,34 @@ internal sealed class FusedTrainingSession<T>
         var engine = AiDotNetEngine.Current;
         var samples = new List<(Tensor<T>, int, Tensor<T>)>(parameters.Count);
         using var noGrad = new NoGradScope<T>();
-        foreach (var parameter in parameters)
+        using var scratch = TensorScope.Begin();
+        try
         {
-            if (parameter.Length == 0) continue;
-            int count = Math.Min(perTensor, parameter.Length);
-            samples.Add((parameter, count, engine.TensorMultiplyScalar(Head(engine, parameter, count), NumOps.One)));
+            foreach (var parameter in parameters)
+            {
+                if (parameter.Length == 0) continue;
+                int count = Math.Min(perTensor, parameter.Length);
+                var before = engine.TensorMultiplyScalar(Head(engine, parameter, count), NumOps.One);
+                samples.Add((parameter, count, before));
+                scratch.Keep(before);
+            }
+            return new PersistenceProbe(engine, samples.ToArray());
         }
-        return samples.ToArray();
+        catch
+        {
+            foreach (var sample in samples) ReleaseProbeSnapshot(engine, sample.Item1, sample.Item3);
+            throw;
+        }
     }
 
-    private static bool AnySampleChanged((Tensor<T> Source, int Count, Tensor<T> Before)[] samples)
+    private static bool AnySampleChanged(PersistenceProbe samples)
     {
         if (samples.Length == 0) return false;
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
+        using var scratch = TensorScope.Begin();
         Tensor<T>? total = null;
-        foreach (var (source, count, before) in samples)
+        foreach (var (source, count, before) in samples.Samples)
         {
             var delta = engine.TensorSubtract(Head(engine, source, count), before);
             var squares = engine.Reshape(engine.ReduceSum(engine.TensorMultiply(delta, delta), null), new[] { 1 });

@@ -231,10 +231,10 @@ public abstract partial class FishSpeechBase<T>
         {
             InitialLearningRate = o.LearningRate, Beta1 = o.Beta1, Beta2 = o.Beta2, Epsilon = o.Epsilon, WeightDecay = o.WeightDecay,
             EnableGradientClipping = o.MaxGradientNorm > 0, MaxGradientNorm = o.MaxGradientNorm,
-            // fish_speech/scheduler.py: linear warm-up, then constant, or a half cosine to the floor.
+            // fish_speech/scheduler.py: linear warm-up (1-indexed because LambdaLRScheduler evaluates step 0 on batch 1), then constant, or a half cosine to the floor.
             LearningRateScheduler = new LambdaLRScheduler(o.LearningRate, step =>
             {
-                if (step < warmup) return step / (double)Math.Max(1, warmup);
+                if (step < warmup) return (step + 1.0) / (Math.Max(1, warmup) + 1.0);
                 if (!cosine) return 1.0;
                 double progress = (step - warmup) / (double)Math.Max(1, total - warmup);
                 return Math.Max(floor, 0.5 * (1.0 + Math.Cos(Math.PI * progress)));

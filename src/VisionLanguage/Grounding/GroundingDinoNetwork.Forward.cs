@@ -85,18 +85,21 @@ internal sealed partial class GroundingDinoNetwork<T>
     private Tensor<T> Dropout(Tensor<T> x, double rate)
     {
         if (!Training || rate <= 0) return x;
-        var keep = new Tensor<T>(x.Shape.ToArray());
-        var scale = NumOps.FromDouble(1.0 / (1 - rate));
-        for (int i = 0; i < keep.Length; i++) keep[i] = _dropRandom.NextDouble() < rate ? NumOps.Zero : scale;
-        return _engine.TensorMultiply(x, keep);
+        // A per-step draw: a compiled training plan refills the mask before every replay.
+        return _engine.TensorMultiply(x, AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(x.Shape.ToArray(), _dropRandom, rate));
     }
 
     private Tensor<T> DropPath(Tensor<T> x, double rate)
     {
         if (!Training || rate <= 0) return x;
         int b = x.Shape[0];
-        var keep = new Tensor<T>(new[] { b, 1, 1 });
-        for (int i = 0; i < b; i++) keep[i, 0, 0] = NumOps.FromDouble(_dropRandom.NextDouble() < 1 - rate ? 1.0 / (1 - rate) : 0.0);
+        // A per-step draw: a compiled training plan refills the per-sample keep mask before every replay.
+        var keepValue = NumOps.FromDouble(1.0 / (1 - rate));
+        var keep = AiDotNet.Training.CompiledStepRandom<T>.Draw(new[] { b, 1, 1 }, m =>
+        {
+            var span = m.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++) span[i] = _dropRandom.NextDouble() < 1 - rate ? keepValue : NumOps.Zero;
+        });
         return _engine.TensorMultiply(x, _engine.TensorBroadcastTo(keep, x.Shape.ToArray()));
     }
 
@@ -119,6 +122,38 @@ internal sealed partial class GroundingDinoNetwork<T>
             }
         }
         return output;
+    }
+
+    /// <summary>
+    /// <see cref="SineFeatures(double[], int)"/> of every box of <c>[B, Q, n]</c> on the engine, <c>[B, Q, n·features]</c>:
+    /// the same slot order (the first two coordinates swapped) and the same arithmetic, angle = (v·2π) / 10000^(2·pair/features).
+    /// </summary>
+    private Tensor<T> SineFeatures(Tensor<T> boxes, int features)
+    {
+        int b = boxes.Shape[0], q = boxes.Shape[1], n = boxes.Shape[2];
+        var order = Enumerable.Range(0, n).ToArray();
+        if (n >= 2) (order[0], order[1]) = (1, 0);
+        var slots = _engine.TensorIndexSelect(boxes, new Tensor<int>(new[] { n }, new Vector<int>(order)), 2);
+        var shape = new[] { b, q, n, features };
+        var scaled = _engine.TensorBroadcastTo(_engine.Reshape(_engine.TensorMultiplyScalar(slots, NumOps.FromDouble(2 * Math.PI)),
+            new[] { b, q, n, 1 }), shape);
+        var divisors = new double[features];
+        var even = new double[features];
+        var odd = new double[features];
+        for (int i = 0; i < features; i++)
+        {
+            // Features come in sine/cosine pairs that share a frequency: pair index = floor(i / 2).
+            int pair = i >> 1;
+            divisors[i] = Math.Pow(10000, 2.0 * pair / features);
+            even[i] = i % 2 == 0 ? 1 : 0;
+            odd[i] = 1 - even[i];
+        }
+        Tensor<T> Broadcast(double[] values) => _engine.TensorBroadcastTo(
+            new Tensor<double>(new[] { 1, 1, 1, features }, new Vector<double>(values)).Cast<T>(), shape);
+        var angle = _engine.TensorDivide(scaled, Broadcast(divisors));
+        var mixed = _engine.TensorAdd(_engine.TensorMultiply(_engine.TensorSin(angle), Broadcast(even)),
+            _engine.TensorMultiply(_engine.TensorCos(angle), Broadcast(odd)));
+        return _engine.Reshape(mixed, new[] { b, q, n * features });
     }
 
     /// <summary>The sine position embedding of an unpadded <c>h × w</c> level, <c>[D, h, w]</c> (y features, then x).</summary>

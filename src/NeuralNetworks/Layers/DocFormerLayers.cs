@@ -84,49 +84,84 @@ public partial class DocFormerSpatialEmbeddingLayer<T> : LayerBase<T>, IShapeCon
             throw new ArgumentException(
                 $"DocFormerSpatialEmbeddingLayer expects boxes of shape [S, 4]; got shape [{string.Join(", ", input.Shape.ToArray())}].", nameof(input));
         int s = input.Shape[0];
-        var box = new double[s][];
-        for (int i = 0; i < s; i++)
-            box[i] = Enumerable.Range(0, 4).Select(c => Math.Min(Math.Max(Math.Round(NumOps.ToDouble(input[i, c])), 0), _maxPosition2D - 1)).ToArray();
+        T maxPosition = NumOps.FromDouble(_maxPosition2D);
+
+        // Box edges rounded (half to even) and clamped to [0, maxPosition2D - 1]; each box is compared
+        // with the previous one (the first with itself). The ids are constant data, built off the tape.
+        Tensor<T> box, previous;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            box = Engine.TensorClamp(Engine.TensorRound(input), NumOps.Zero, NumOps.FromDouble(_maxPosition2D - 1));
+            previous = s > 1
+                ? Engine.TensorConcatenate(new[]
+                {
+                    Engine.TensorSlice(box, new[] { 0, 0 }, new[] { 1, 4 }),
+                    Engine.TensorSlice(box, new[] { 0, 0 }, new[] { s - 1, 4 })
+                }, 0)
+                : box;
+        }
 
         Tensor<T> Axis(int axis)
         {
             // axis 0: x (edges x0, x1); axis 1: y (edges y0, y1).
             int lo = axis == 0 ? 0 : 1, hi = axis == 0 ? 2 : 3;
             var parts = new Tensor<T>[Features];
-            for (int f = 0; f < Features; f++)
+            var featureIds = new Tensor<T>[Features];
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                var ids = new Tensor<T>(new[] { s });
-                for (int i = 0; i < s; i++)
+                Tensor<T> Column(Tensor<T> t, int c) => Engine.Reshape(Engine.TensorSlice(t, new[] { 0, c }, new[] { s, 1 }), new[] { s });
+                var bLo = Column(box, lo);
+                var bHi = Column(box, hi);
+                var pLo = Column(previous, lo);
+                var pHi = Column(previous, hi);
+                T half = NumOps.FromDouble(0.5);
+                for (int f = 0; f < Features; f++)
                 {
-                    var b = box[i];
-                    var p = i > 0 ? box[i - 1] : b;
-                    double value = f switch
+                    var value = f switch
                     {
-                        0 => b[lo],
-                        1 => b[hi],
-                        2 => b[hi] - b[lo],
-                        3 => b[lo] - p[lo],                                   // top-left corner
-                        4 => axis == 0 ? b[lo] - p[lo] : b[hi] - p[hi],       // bottom-left corner
-                        5 => axis == 0 ? b[hi] - p[hi] : b[lo] - p[lo],       // top-right corner
-                        6 => b[hi] - p[hi],                                   // bottom-right corner
-                        _ => ((b[lo] + b[hi]) / 2) - ((p[lo] + p[hi]) / 2),   // centroid
+                        0 => bLo,
+                        1 => bHi,
+                        2 => Engine.TensorSubtract(bHi, bLo),
+                        3 => Engine.TensorSubtract(bLo, pLo),                                                       // top-left corner
+                        4 => axis == 0 ? Engine.TensorSubtract(bLo, pLo) : Engine.TensorSubtract(bHi, pHi),         // bottom-left corner
+                        5 => axis == 0 ? Engine.TensorSubtract(bHi, pHi) : Engine.TensorSubtract(bLo, pLo),         // top-right corner
+                        6 => Engine.TensorSubtract(bHi, pHi),                                                       // bottom-right corner
+                        _ => Engine.TensorSubtract(                                                                 // centroid
+                            Engine.TensorMultiplyScalar(Engine.TensorAdd(bLo, bHi), half),
+                            Engine.TensorMultiplyScalar(Engine.TensorAdd(pLo, pHi), half)),
                     };
-                    if (f >= 3) value = Math.Min(Math.Max(Math.Round(value), -_maxPosition2D), _maxPosition2D) + _maxPosition2D;
-                    ids[i] = NumOps.FromDouble(Math.Max(0, value));
+                    if (f >= 3)
+                        value = Engine.TensorAddScalar(
+                            Engine.TensorClamp(Engine.TensorRound(value), NumOps.Negate(maxPosition), maxPosition), maxPosition);
+                    featureIds[f] = Engine.TensorMax(value, NumOps.Zero);
                 }
-                parts[f] = _tables[(axis * Features) + f].Forward(ids);
             }
+
+            for (int f = 0; f < Features; f++)
+                parts[f] = _tables[(axis * Features) + f].Forward(featureIds[f]);
             return Engine.TensorConcatenate(parts, 1);
         }
 
-        var pe = new Tensor<T>(new[] { s, _hidden });
-        for (int p = 0; p < s; p++)
-            for (int i = 0; i < _hidden; i += 2)
-            {
-                double angle = p / Math.Pow(10000, (double)i / _hidden);
-                pe[p, i] = NumOps.FromDouble(Math.Sin(angle));
-                pe[p, i + 1] = NumOps.FromDouble(Math.Cos(angle));
-            }
+        // pe[p, 2i] = sin(p / 10000^(2i/hidden)), pe[p, 2i + 1] = cos of the same angle.
+        Tensor<T> pe;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            // A constant built in double (angles reach s radians, beyond what float or Half carries to
+            // sin/cos) and rounded to T once, as the per-element double math was.
+            var pairBase = new Tensor<int>(Enumerable.Range(0, _hidden).Select(c => c - (c % 2)).ToArray(), new[] { _hidden }).Cast<double>();
+            var tenThousands = new Tensor<double>(new[] { _hidden });
+            tenThousands.Fill(10000.0);
+            var frequencyDivisor = Engine.TensorPower(tenThousands, Engine.TensorDivideScalar(pairBase, (double)_hidden));
+            var angles = Engine.TensorDivide(
+                Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<double>(0, s), new[] { s, 1 }), new[] { s, _hidden }),
+                Engine.TensorBroadcastTo(Engine.Reshape(frequencyDivisor, new[] { 1, _hidden }), new[] { s, _hidden }));   // [s, hidden]
+            var oddColumns = new Tensor<int>(Enumerable.Range(0, _hidden).Select(c => c % 2).ToArray(), new[] { 1, _hidden }).Cast<double>();
+            var columnOnes = new Tensor<double>(new[] { 1, _hidden });
+            columnOnes.Fill(1.0);
+            pe = Engine.TensorAdd(
+                Engine.TensorMultiply(Engine.TensorSin(angles), Engine.TensorSubtract(columnOnes, oddColumns)),
+                Engine.TensorMultiply(Engine.TensorCos(angles), oddColumns)).Cast<T>();
+        }
         return Engine.TensorAdd(Engine.TensorAdd(Axis(0), Axis(1)), pe);
     }
 
@@ -300,12 +335,31 @@ public partial class DocFormerEncoderLayer<T> : LayerBase<T>, IShapeContract
             if (stream.Rank != 2 || stream.Shape[0] != l || stream.Shape[1] != _hidden)
                 throw new ArgumentException($"Every DocFormer stream must have shape [{l}, {_hidden}].", nameof(visual));
 
-        var relativeIndex = new int[l * l];
+        int span = l * l;
+        var qRow = new int[span];
+        var kRow = new int[span];
         for (int q = 0; q < l; q++)
+        {
             for (int k = 0; k < l; k++)
-                relativeIndex[(q * l) + k] = Math.Min(Math.Max(k - q, -_maxRelative), _maxRelative) + _maxRelative;
-        var relText = Engine.Reshape(CvTensorOps<T>.Select(_relativeText, relativeIndex, 0), new[] { l, l, _headDim });
-        var relImage = Engine.Reshape(CvTensorOps<T>.Select(_relativeImage, relativeIndex, 0), new[] { l, l, _headDim });
+            {
+                int bucket = Math.Min(Math.Max(k - q, -_maxRelative), _maxRelative) + _maxRelative;
+                qRow[(q * l) + k] = bucket;
+                kRow[(k * l) + q] = bucket;
+            }
+        }
+
+        var qBuckets = new int[_numHeads * span];
+        var kBuckets = new int[_numHeads * span];
+        for (int h = 0; h < _numHeads; h++)
+        {
+            Array.Copy(qRow, 0, qBuckets, h * span, span);
+            Array.Copy(kRow, 0, kBuckets, h * span, span);
+        }
+
+        var qBucketIndices = new Tensor<int>(qBuckets, new[] { _numHeads, l, l });
+        var kBucketIndices = new Tensor<int>(kBuckets, new[] { _numHeads, l, l });
+        var relTextT = Engine.TensorTranspose(_relativeText);
+        var relImageT = Engine.TensorTranspose(_relativeImage);
 
         var t = text;
         for (int i = 0; i < _numLayers; i++)
@@ -317,9 +371,9 @@ public partial class DocFormerEncoderLayer<T> : LayerBase<T>, IShapeContract
             var vsn = _normVs[i].Forward(visualSpatial);
 
             var textContext = StreamContext(_qText[i].Forward(tn), _kText[i].Forward(tn), _vText[i].Forward(tn),
-                _qSpatial[i].Forward(tsn), _kSpatial[i].Forward(tsn), relText, l);
+                _qSpatial[i].Forward(tsn), _kSpatial[i].Forward(tsn), relTextT, qBucketIndices, kBucketIndices, l);
             var imageContext = StreamContext(_qImage[i].Forward(vn), _kImage[i].Forward(vn), _vImage[i].Forward(vn),
-                _qSpatial[i].Forward(vsn), _kSpatial[i].Forward(vsn), relImage, l);
+                _qSpatial[i].Forward(vsn), _kSpatial[i].Forward(vsn), relImageT, qBucketIndices, kBucketIndices, l);
             var context = Engine.Reshape(Engine.TensorPermute(Engine.TensorAdd(textContext, imageContext), new[] { 1, 0, 2 }), new[] { l, _hidden });
 
             var x = Engine.TensorAdd(_output[i].Forward(context), skip);
@@ -329,7 +383,16 @@ public partial class DocFormerEncoderLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>softmax(scores) V for one stream, <c>[heads, L, head_dim]</c>.</summary>
-    private Tensor<T> StreamContext(Tensor<T> q, Tensor<T> k, Tensor<T> v, Tensor<T> qs, Tensor<T> ks, Tensor<T> relative, int l)
+    private Tensor<T> StreamContext(
+        Tensor<T> q,
+        Tensor<T> k,
+        Tensor<T> v,
+        Tensor<T> qs,
+        Tensor<T> ks,
+        Tensor<T> relativeTransposed,
+        Tensor<int> qBucketIndices,
+        Tensor<int> kBucketIndices,
+        int l)
     {
         Tensor<T> Heads(Tensor<T> x) => Engine.TensorPermute(Engine.Reshape(x, new[] { l, _numHeads, _headDim }), new[] { 1, 0, 2 });
         var qh = Heads(q);
@@ -339,14 +402,19 @@ public partial class DocFormerEncoderLayer<T> : LayerBase<T>, IShapeContract
         scores = Engine.TensorAdd(scores, Engine.TensorMultiplyScalar(
             Engine.TensorBatchMatMul<T>(Heads(qs), Engine.TensorPermute(Heads(ks), new[] { 0, 2, 1 })), scale));
 
-        // q_l . a_lr: batch over l, [L, H, dh] x [L, dh, L] -> [L, H, L] -> [H, L, L].
-        var relT = Engine.TensorPermute(relative, new[] { 0, 2, 1 });
-        var queryTerm = Engine.TensorBatchMatMul<T>(Engine.TensorPermute(qh, new[] { 1, 0, 2 }), relT);
-        scores = Engine.TensorAdd(scores, Engine.TensorPermute(queryTerm, new[] { 1, 0, 2 }));
-        // k_r . a_lr: batch over r, [L, H, dh] x [L(r), dh, L(l)] -> [r, H, l] -> [H, l, r].
-        var relByKey = Engine.TensorPermute(relative, new[] { 1, 2, 0 });
-        var keyTerm = Engine.TensorBatchMatMul<T>(Engine.TensorPermute(kh, new[] { 1, 0, 2 }), relByKey);
-        scores = Engine.TensorAdd(scores, Engine.TensorPermute(keyTerm, new[] { 1, 2, 0 }));
+        int buckets = relativeTransposed.Shape[1];
+        // q_l · a_lr via bucket table [H * L, dh] x [dh, B] -> [H, L, B], then gather [H, L, L] (avoids 48x [L, L, dh] allocations).
+        var qByBucket = Engine.Reshape(
+            Engine.TensorMatMul(Engine.Reshape(qh, new[] { _numHeads * l, _headDim }), relativeTransposed),
+            new[] { _numHeads, l, buckets });
+        scores = Engine.TensorAdd(scores, Engine.TensorTakeAlongDim(qByBucket, qBucketIndices, 2));
+
+        // k_r · a_lr via bucket table [H * L(r), dh] x [dh, B] -> [H, L(r), B], gather [H, L(r), L(l)], permute -> [H, L(l), L(r)].
+        var kByBucket = Engine.Reshape(
+            Engine.TensorMatMul(Engine.Reshape(kh, new[] { _numHeads * l, _headDim }), relativeTransposed),
+            new[] { _numHeads, l, buckets });
+        var keyTermByR = Engine.TensorTakeAlongDim(kByBucket, kBucketIndices, 2);
+        scores = Engine.TensorAdd(scores, Engine.TensorPermute(keyTermByR, new[] { 0, 2, 1 }));
 
         return Engine.TensorBatchMatMul<T>(Engine.TensorSoftmax(scores, 2), Heads(v));
     }

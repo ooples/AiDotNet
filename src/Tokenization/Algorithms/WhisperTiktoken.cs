@@ -65,7 +65,7 @@ namespace AiDotNet.Tokenization.Algorithms
 
         private static Dictionary<byte[], int> LoadRanks(string resource)
         {
-            using var stream = typeof(WhisperTiktoken).Assembly.GetManifestResourceStream(resource)
+            using var stream = EmbeddedData.Open(resource)
                 ?? throw new System.IO.InvalidDataException($"The embedded resource {resource} is missing.");
             using var gzip = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
             using var reader = new System.IO.StreamReader(gzip, Encoding.ASCII);

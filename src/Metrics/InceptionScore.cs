@@ -111,7 +111,7 @@ namespace AiDotNet.Metrics
                 throw new ArgumentException($"Not enough images for {NumSplits} splits. Need at least {NumSplits} images.");
             }
 
-            var scores = new T[NumSplits];
+            var scores = new double[NumSplits];
 
             // Compute IS for each split
             for (int split = 0; split < NumSplits; split++)
@@ -129,38 +129,36 @@ namespace AiDotNet.Metrics
 
             // Compute mean and standard deviation
             var engine = AiDotNetEngine.Current;
-            var scoreTensor = new Tensor<T>(scores, new[] { NumSplits });
+            var scoreTensor = new Tensor<double>(scores, new[] { NumSplits });
             var mean = engine.TensorMean(scoreTensor);
-            var deviations = engine.TensorAddScalar(scoreTensor, NumOps.Negate(mean));
-            var std = NumOps.Sqrt(engine.TensorMean(engine.TensorMultiply(deviations, deviations)));
+            var deviations = engine.TensorAddScalar(scoreTensor, -mean);
+            var std = Math.Sqrt(engine.TensorMean(engine.TensorMultiply(deviations, deviations)));
 
-            return (mean, std);
+            return (NumOps.FromDouble(mean), NumOps.FromDouble(std));
         }
 
         /// <summary>
         /// Computes Inception Score for a single split of images.
         /// </summary>
-        private T ComputeISForSplit(Tensor<T> images)
+        private double ComputeISForSplit(Tensor<T> images)
         {
-            // Get predicted class probabilities for all images
-            var predictions = GetPredictions(images);
+            return ScorePredictions(GetPredictions(images));
+        }
 
-            // Compute marginal distribution p(y) = mean of p(y|x) over all x
-            var marginal = ComputeMarginalDistribution(predictions);
-
-            // Compute KL divergence for each image and take mean
-            // KL(p(y|x) || p(y)) = sum_j (p(y_j|x) + eps) * log((p(y_j|x) + eps) / (p(y_j) + eps)), eps = 1e-10
+        /// <summary>Computes exp(mean KL) with wide probabilities and a representable positive floor.</summary>
+        internal static double ScorePredictions(Matrix<T> predictions)
+        {
             var engine = AiDotNetEngine.Current;
-            var epsilon = NumOps.FromDouble(1e-10);
             int numImages = predictions.Rows;
-            var conditional = engine.TensorAddScalar(Tensor<T>.FromMatrix(predictions), epsilon);
-            var marginalRow = engine.TensorAddScalar(engine.Reshape(marginal.AsTensor(), new[] { 1, NumClasses }), epsilon);
-            var logRatio = engine.TensorLog(engine.TensorDivide(conditional, engine.TensorBroadcastTo(marginalRow, new[] { numImages, NumClasses })));
-            var meanKL = NumOps.Divide(engine.TensorSum(engine.TensorMultiply(conditional, logRatio)), NumOps.FromDouble(numImages));
-
-            // IS = exp(E[KL(p(y|x) || p(y))])
-            var inceptionScore = NumOps.Exp(meanKL);
-            return inceptionScore;
+            int numClasses = predictions.Columns;
+            var wide = Tensor<T>.FromMatrix(predictions).Cast<double>();
+            var marginal = engine.ReduceMean(wide, new[] { 0 }, keepDims: true);
+            var conditional = engine.TensorAddScalar(wide, 1e-10);
+            var marginalRow = engine.TensorAddScalar(marginal, 1e-10);
+            var logRatio = engine.TensorLog(engine.TensorDivide(conditional,
+                engine.TensorBroadcastTo(marginalRow, new[] { numImages, numClasses })));
+            double meanKL = engine.TensorSum(engine.TensorMultiply(conditional, logRatio)) / numImages;
+            return Math.Exp(meanKL);
         }
 
         /// <summary>

@@ -141,13 +141,14 @@ public partial class FireRedTTS<T>
         var target = PrepareCodec(sample);
         int frames = target.Mel.Shape[0];
         bool adversarial = _options.CodecAdversarialWeight > 0 && _options.DiscriminatorWindows.All(w => w <= frames);
-        Tensor<T>? generated = null;
-        var loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens,
-            (_, _) => CodecObjective(target, training: true, random, adversarial ? WindowStarts(frames, random) : null, m => generated = m)(),
+        var (loss, fake) = TrainWithCapturedOutput(
+            sample.Tokens,
+            sample.Tokens,
+            "firered-mel-codec-fake",
+            (_, _, capture) => CodecObjective(target, training: true, random, adversarial ? WindowStarts(frames, random) : null, capture)(),
             Optimizer());
-        if (adversarial && generated is not null)
+        if (adversarial && fake is not null)
         {
-            var fake = new Tensor<T>(generated._shape, new Vector<T>(generated.ToArray()));
             var realStarts = WindowStarts(frames, random);
             var fakeStarts = WindowStarts(frames, random);
             int channels = target.Mel.Shape[1];
@@ -156,8 +157,10 @@ public partial class FireRedTTS<T>
             {
                 TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) =>
                 {
-                    var real = MelDiscriminator.Forward(Engine.Reshape(target.Mel, new[] { 1, frames, channels }), realStarts)!;
-                    var forged = MelDiscriminator.Forward(Engine.Reshape(fake, new[] { 1, frames, channels }), fakeStarts)!;
+                    var real = MelDiscriminator.Forward(Engine.Reshape(target.Mel, new[] { 1, frames, channels }), realStarts)
+                        ?? throw new InvalidOperationException("MelDiscriminator returned null on real frames.");
+                    var forged = MelDiscriminator.Forward(Engine.Reshape(fake, new[] { 1, frames, channels }), fakeStarts)
+                        ?? throw new InvalidOperationException("MelDiscriminator returned null on generated frames.");
                     return Engine.TensorAdd(MeanSquareTo(real, 1), MeanSquareTo(forged, 0));
                 }, DiscriminatorOptimizer());
             }
@@ -199,16 +202,56 @@ public partial class FireRedTTS<T>
 
     // ---------------------------------------------------------------- inputs
 
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _speakerCache = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly Dictionary<(int Length, ulong Hash), List<(Tensor<T> Source, Tensor<T> Speaker)>> _speakerCache = new();
+    private readonly Dictionary<(int Length, ulong Hash), List<(Tensor<T> Source, int[] Tokens)>> _semanticTokensCache = new();
 
-    // The speaker embedding of a recording at the model's rate (the frozen acoustic encoder), cached per recording.
+    private static (int Length, ulong Hash) ContentKey(Tensor<T> waveform)
+    {
+        var vals = waveform.Cast<double>().AsSpan();
+        int len = vals.Length;
+        ulong hash = 14695981039346656037UL;
+        int stride = Math.Max(1, len / 256);
+        for (int i = 0; i < len; i += stride)
+        {
+            ulong bits = (ulong)BitConverter.DoubleToInt64Bits(vals[i]);
+            hash = (hash ^ bits) * 1099511628211UL;
+        }
+        if (len > 0)
+        {
+            ulong lastBits = (ulong)BitConverter.DoubleToInt64Bits(vals[len - 1]);
+            hash = (hash ^ lastBits) * 1099511628211UL;
+        }
+        return (len, hash);
+    }
+
+    private static bool SameWaveform(Tensor<T> a, Tensor<T> b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a.Length != b.Length) return false;
+        return a.Cast<double>().AsSpan().SequenceEqual(b.Cast<double>().AsSpan());
+    }
+
+    // The speaker embedding of a recording at the model's rate (the frozen acoustic encoder), cached per recording content.
     private Tensor<T> SpeakerOf(Tensor<T> recording)
     {
-        if (!_speakerCache.TryGetValue(recording, out var speaker))
+        var key = ContentKey(recording);
+        if (_speakerCache.TryGetValue(key, out var bucket))
+        {
+            for (int i = 0; i < bucket.Count; i++)
+            {
+                if (SameWaveform(bucket[i].Source, recording))
+                    return bucket[i].Speaker;
+            }
+        }
+        else
         {
             if (_speakerCache.Count > 64) _speakerCache.Clear();
-            speaker = _speakerCache[recording] = SpeakerEmbedding(To16k(recording, _options.SampleRate));
+            bucket = new List<(Tensor<T> Source, Tensor<T> Speaker)>(1);
+            _speakerCache[key] = bucket;
         }
+
+        var speaker = SpeakerEmbedding(To16k(recording, _options.SampleRate));
+        bucket.Add((recording, speaker));
         return speaker;
     }
 
@@ -222,6 +265,28 @@ public partial class FireRedTTS<T>
             return ids;
         }
         var audio = sample.Audio ?? throw new ArgumentException($"{GetType().Name} trains on semantic tokens or the recording; set CodecTokens or Audio.", nameof(sample));
+        if (_options.Stage != FireRedTtsStage.SpeechTokenizer)
+        {
+            var key = ContentKey(audio);
+            if (_semanticTokensCache.TryGetValue(key, out var bucket))
+            {
+                for (int i = 0; i < bucket.Count; i++)
+                {
+                    if (SameWaveform(bucket[i].Source, audio))
+                        return bucket[i].Tokens;
+                }
+            }
+            else
+            {
+                if (_semanticTokensCache.Count > 64) _semanticTokensCache.Clear();
+                bucket = new List<(Tensor<T> Source, int[] Tokens)>(1);
+                _semanticTokensCache[key] = bucket;
+            }
+
+            var encoded = EncodeSemanticTokens(audio, _options.SampleRate);
+            bucket.Add((audio, encoded));
+            return encoded;
+        }
         return EncodeSemanticTokens(audio, _options.SampleRate);
     }
 
@@ -313,11 +378,13 @@ public partial class FireRedTTS<T>
         var audio = sample.Audio ?? throw new ArgumentException("The tokenizer trains on the recording; set Audio.", nameof(sample));
         var tokenizer = SpeechTokenizer;
         var wave = tokenizer.PadToTokens(To16k(audio, o.SampleRate));
-        Tensor<T> ssl, mel;
+        Tensor<T> ssl, mel, speakerInput;
         using (new NoGradScope<T>())
         {
             ssl = tokenizer.SslFeatures(wave);                        // HuBERT is frozen
             mel = SpeakerMel(wave);
+            // The acoustic encoder reads "Clip&Shuffle" of the mel in training (§3.1), the whole mel otherwise.
+            speakerInput = training ? tokenizer.ClipAndShuffle(mel, 100, random) : mel;
         }
         double gamma = DualDecodingWeight(_tokenizerSteps);
         return () =>
@@ -325,8 +392,7 @@ public partial class FireRedTTS<T>
             foreach (var layer in _speakerLayers) layer.SetTrainingMode(training);
             var encoded = tokenizer.Encode(ssl);
             var (_, quantized, preQuantized, commitment) = tokenizer.Quantizer.Forward(encoded, update: training, random);
-            // The acoustic encoder reads "Clip&Shuffle" of the mel in training (§3.1), the whole mel otherwise.
-            var speaker = SpeakerEncoder.Forward(training ? tokenizer.ClipAndShuffle(mel, 100, random) : mel);
+            var speaker = SpeakerEncoder.Forward(speakerInput);
             var (sslQ, melQ) = tokenizer.Reconstruct(quantized, speaker);
             var (sslP, melP) = tokenizer.Reconstruct(preQuantized, speaker);
             var ssLoss = Engine.TensorAdd(MeanSquare(sslQ, ssl), Engine.TensorMultiplyScalar(MeanSquare(sslP, ssl), Ops.FromDouble(gamma)));

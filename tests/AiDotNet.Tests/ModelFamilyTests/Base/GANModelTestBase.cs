@@ -14,6 +14,13 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class GANModelTestBase<T> : NeuralNetworkModelTestBase<T>
 {
+    /// <summary>
+    /// GAN generators and adversarial multi-network models initialize narrow convolutional/upsampling stacks with
+    /// small weights where an untrained perturbation can fall below floating-point precision; two training steps
+    /// open the generator/discriminator path before input-sensitivity probes run.
+    /// </summary>
+    protected override int InputSensitivityWarmUpSteps => 2;
+
     // =====================================================
     // GAN INVARIANT: Generator Output Shape
     // The generator should produce output matching the declared OutputShape.

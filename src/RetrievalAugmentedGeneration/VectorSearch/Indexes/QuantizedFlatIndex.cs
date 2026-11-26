@@ -202,14 +202,14 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
         {
             var table = pq.BuildDistanceTable(query);
 
-            var scores = _codes
+            var ranked = _codes
                 .Select(kvp => (Id: kvp.Key, Distance: pq.ComputeAsymmetricDistance(table, kvp.Value)))
                 .OrderBy(x => x.Distance)
                 .Take(Math.Min(k, _codes.Count))
-                .Select(x => (x.Id, Score: _numOps.FromDouble(x.Distance)))
                 .ToList();
 
-            return scores;
+            var scores = RagScoreConversion<T>.FromDouble(ranked.Select(x => x.Distance));
+            return ranked.Select((x, i) => (x.Id, Score: scores[i])).ToList();
         }
     }
 }

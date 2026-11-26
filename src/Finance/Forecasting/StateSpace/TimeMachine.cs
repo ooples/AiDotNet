@@ -1158,82 +1158,13 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
     /// </para>
     /// </remarks>
     private Tensor<T> ShiftInputWindow(Tensor<T> input, Tensor<T> prediction)
-    {
-        // .Data demands a contiguous buffer, and neither argument is guaranteed to be
-        // one: AutoregressiveForecast feeds this the output of the previous step, which
-        // by then can be a sliced or transposed VIEW. Reading .Data on such a view throws
-        // "Cannot get contiguous Memory from a non-contiguous tensor view" -- the failure
-        // that ended TimeMachine quantile forecasting for both precisions. Materialise
-        // once, up front, rather than at each of the four .Data reads below.
-        var source = input.IsContiguous ? input : input.Contiguous();
-        var predicted = prediction.IsContiguous ? prediction : prediction.Contiguous();
-
-        int inputLength = source.Data.Length;
-        int predLength = Math.Min(predicted.Data.Length, inputLength);
-
-        var shifted = new Tensor<T>(source._shape);
-
-        // Copy shifted values (skip first predLength values)
-        for (int i = predLength; i < inputLength; i++)
-        {
-            shifted.Data.Span[i - predLength] = source.Data.Span[i];
-        }
-
-        // Append prediction values at the end
-        for (int i = 0; i < predLength; i++)
-        {
-            shifted.Data.Span[inputLength - predLength + i] = predicted.Data.Span[i];
-        }
-
-        return shifted;
-    }
+        => ShiftFlatWindow(input, prediction, prediction.Length, preserveInputShape: true);
 
     /// <summary>
     /// Concatenates multiple prediction tensors into a single tensor.
     /// </summary>
-    /// <param name="predictions">List of prediction tensors.</param>
-    /// <returns>Concatenated tensor containing all predictions.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> After autoregressive forecasting produces multiple
-    /// prediction tensors (one per step), this combines them into a single tensor
-    /// for the complete forecast.
-    /// </para>
-    /// </remarks>
-        protected Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions)
-    {
-        if (predictions.Count == 0)
-            return new Tensor<T>(new[] { 0 });
-
-        // Same contiguity requirement as ShiftInputWindow above: these predictions come
-        // straight from the forecast loop and can be views, and .Data throws on a view.
-        // Materialise each ONCE here rather than at the three reads below, which would
-        // otherwise rebuild the same buffer per element.
-        var materialised = new List<Tensor<T>>(predictions.Count);
-        foreach (var pred in predictions)
-        {
-            materialised.Add(pred.IsContiguous ? pred : pred.Contiguous());
-        }
-
-        int totalLength = 0;
-        foreach (var pred in materialised)
-        {
-            totalLength += pred.Data.Length;
-        }
-
-        var result = new Tensor<T>(new[] { totalLength });
-        int offset = 0;
-
-        foreach (var pred in materialised)
-        {
-            for (int i = 0; i < pred.Data.Length; i++)
-            {
-                result.Data.Span[offset + i] = pred.Data.Span[i];
-            }
-            offset += pred.Data.Length;
-        }
-
-        return result;
-    }
+    protected Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions)
+        => ConcatenateFlatPredictions(predictions);
 
     #endregion
 

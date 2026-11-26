@@ -230,14 +230,10 @@ public partial class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
         PublishFlatParameterGradients(direction);
 
         // Quantization error (distance to the BMU prototype) as the reported loss.
-        double error = 0;
-        var prototype = _weights.AsSpan().Slice(bmu * _inputDimension, _inputDimension);
-        for (int j = 0; j < _inputDimension; j++)
-        {
-            double diff = NumOps.ToDouble(flatInput[j]) - NumOps.ToDouble(prototype[j]);
-            error += diff * diff;
-        }
-        LastLoss = NumOps.FromDouble(Math.Sqrt(error));
+        var prototype = Engine.Reshape(
+            Engine.TensorSlice(_weights, new[] { bmu, 0 }, new[] { 1, _inputDimension }), new[] { _inputDimension });
+        var diff = Engine.TensorSubtract(Engine.Reshape(flatInput, new[] { _inputDimension }).Cast<double>(), prototype.Cast<double>());
+        LastLoss = NumOps.FromDouble(Engine.Norm(diff.ToVector()));
         _currentEpoch++;
 
         return true;

@@ -128,6 +128,7 @@ internal sealed class SamNetwork<T>
         MaskNorm2 = Norm(c.MaskInChannels);
         MaskConv3 = Conv(c.MaskInChannels, p, 1, 1, bias: true);
         _gaussian = new double[2, p / 2];
+        _gaussianTensor = new Tensor<T>(new[] { 2, p / 2 });
 
         IouToken = Values(p);
         MaskTokenTable = Values(c.MaskTokens * p);
@@ -188,6 +189,7 @@ internal sealed class SamNetwork<T>
 
     /// <summary>The random Fourier matrix <c>[2, PromptDim/2]</c> of the position encoding: a fixed buffer.</summary>
     private readonly double[,] _gaussian;
+    private readonly Tensor<T> _gaussianTensor;
 
     /// <summary>The layers this network added to its owner's list, in order.</summary>
     public IReadOnlyList<LayerBase<T>> OwnedLayers => _owned;
@@ -368,7 +370,7 @@ internal sealed class SamNetwork<T>
     /// <summary>
     /// The sparse prompt embeddings <c>[N, tokens, PromptDim]</c> and the dense ones <c>[N, PromptDim, Grid, Grid]</c>
     /// for N prompts: points <c>[N, k, 2]</c> (x, y in the encoder frame) with labels <c>[N, k]</c> (1 positive,
-    /// 0 negative, −1 padding), boxes <c>[N, 4]</c> (x0, y0, x1, y1), and low-resolution mask logits
+    /// 0 negative, −1 learned padding, −2 absent training slot), boxes <c>[N, 4]</c> (x0, y0, x1, y1), and low-resolution mask logits
     /// <c>[N, 1, 4·Grid, 4·Grid]</c>.
     /// </summary>
     public (Tensor<T> Sparse, Tensor<T> Dense) EncodePrompts(Tensor<T>? points, Tensor<T>? labels, Tensor<T>? boxes, Tensor<T>? masks)
@@ -379,38 +381,32 @@ internal sealed class SamNetwork<T>
         var parts = new List<Tensor<T>>();
         if (points is not null && labels is not null)
         {
-            int k = points.Shape[1];
-            bool pad = boxes is null;
-            int count = k + (pad ? 1 : 0);
-            var fourier = new Tensor<T>(new[] { n, count, p });
-            var kinds = new Tensor<T>[3];
-            for (int i = 0; i < 3; i++) kinds[i] = new Tensor<T>(new[] { n, count, 1 });
-            for (int b = 0; b < n; b++)
-                for (int i = 0; i < count; i++)
-                {
-                    int label = i < k ? (int)Math.Round(NumOps.ToDouble(labels[b, i])) : -1;
-                    if (label == -1) { kinds[0][b, i, 0] = NumOps.One; continue; }
-                    double x = (NumOps.ToDouble(points[b, i, 0]) + 0.5) / c.ImageSize, y = (NumOps.ToDouble(points[b, i, 1]) + 0.5) / c.ImageSize;
-                    var f = Fourier(x, y);
-                    for (int j = 0; j < p; j++) fourier[(b * count + i) * p + j] = NumOps.FromDouble(f[j]);
-                    kinds[label == 1 ? 2 : 1][b, i, 0] = NumOps.One;
-                }
+            if (boxes is null)
+            {
+                points = _engine.TensorConcatenate(new[] { points, new Tensor<T>(new[] { n, 1, 2 }) }, 1);
+                labels = _engine.TensorConcatenate(new[] { labels, Tensor<T>.CreateDefault(new[] { n, 1 }, NumOps.FromDouble(-1)) }, 1);
+            }
+            int count = points.Shape[1];
+            var rounded = _engine.TensorRound(labels);
+            var notPoint = _engine.TensorEquals(rounded, NumOps.FromDouble(-1));
+            var positive = _engine.TensorEquals(rounded, NumOps.One);
+            var valid = _engine.ScalarMinusTensor(NumOps.One, _engine.TensorEquals(rounded, NumOps.FromDouble(-2)));
+            var negative = _engine.TensorSubtract(_engine.TensorSubtract(valid, notPoint), positive);
             var shape = new[] { n, count, p };
+            Tensor<T> Expand(Tensor<T> x) => _engine.TensorBroadcastTo(_engine.Reshape(x, new[] { n, count, 1 }), shape);
             Tensor<T> Kind(Tensor<T> mask, BiasFreeLinearLayer<T> embedding) => _engine.TensorMultiply(
-                _engine.TensorBroadcastTo(mask, shape), _engine.TensorBroadcastTo(_engine.Reshape(Value(embedding), new[] { 1, 1, p }), shape));
-            var embedded = _engine.TensorAdd(fourier, Kind(kinds[0], NotAPoint));
-            embedded = _engine.TensorAdd(embedded, Kind(kinds[1], PointEmbeddings[0]));
-            parts.Add(_engine.TensorAdd(embedded, Kind(kinds[2], PointEmbeddings[1])));
+                Expand(mask), _engine.TensorBroadcastTo(_engine.Reshape(Value(embedding), new[] { 1, 1, p }), shape));
+            var hasCoordinates = _engine.TensorSubtract(valid, notPoint);
+            var coordinateValidity = _engine.TensorBroadcastTo(_engine.Reshape(hasCoordinates, new[] { n, count, 1 }), points.Shape.ToArray());
+            var safePoints = _engine.TensorWhere(coordinateValidity, points, new Tensor<T>(points.Shape.ToArray()));
+            var fourier = _engine.TensorMultiply(FourierCoordinates(safePoints), Expand(hasCoordinates));
+            var embedded = _engine.TensorAdd(fourier, Kind(notPoint, NotAPoint));
+            embedded = _engine.TensorAdd(embedded, Kind(negative, PointEmbeddings[0]));
+            parts.Add(_engine.TensorAdd(embedded, Kind(positive, PointEmbeddings[1])));
         }
         if (boxes is not null)
         {
-            var corners = new Tensor<T>(new[] { n, 2, p });
-            for (int b = 0; b < n; b++)
-                for (int corner = 0; corner < 2; corner++)
-                {
-                    var f = Fourier((NumOps.ToDouble(boxes[b, 2 * corner]) + 0.5) / c.ImageSize, (NumOps.ToDouble(boxes[b, 2 * corner + 1]) + 0.5) / c.ImageSize);
-                    for (int j = 0; j < p; j++) corners[(b * 2 + corner) * p + j] = NumOps.FromDouble(f[j]);
-                }
+            var corners = FourierCoordinates(_engine.Reshape(boxes, new[] { n, 2, 2 }));
             var cornerEmbeddings = _engine.TensorConcatenate(new[]
             {
                 _engine.Reshape(Value(PointEmbeddings[2]), new[] { 1, 1, p }), _engine.Reshape(Value(PointEmbeddings[3]), new[] { 1, 1, p }),
@@ -432,9 +428,31 @@ internal sealed class SamNetwork<T>
         return (sparse, dense);
     }
 
+    private Tensor<T> FourierCoordinates(Tensor<T> coordinates)
+    {
+        int n = coordinates.Shape[0], count = coordinates.Shape[1], half = Configuration.PromptDim / 2;
+        var normalized = _engine.TensorSubtractScalar(_engine.TensorMultiplyScalar(
+            _engine.TensorDivideScalar(_engine.TensorAddScalar(coordinates, NumOps.FromDouble(0.5)),
+                NumOps.FromDouble(Configuration.ImageSize)), NumOps.FromDouble(2)), NumOps.One);
+        var angles = _engine.TensorMultiplyScalar(
+            _engine.TensorMatMul(_engine.Reshape(normalized, new[] { n * count, 2 }), _gaussianTensor),
+            NumOps.FromDouble(2 * Math.PI));
+        return _engine.Reshape(_engine.TensorConcatenate(new[] { _engine.TensorSin(angles), _engine.TensorCos(angles) }, 1),
+            new[] { n, count, 2 * half });
+    }
+
+    /// <summary>Training-only -2 slots are absent prompts; -1 remains SAM's learned not-a-point token.</summary>
+    internal Tensor<T>? SparsePromptValidity(Tensor<T>? labels, bool hasBox)
+    {
+        if (labels is null) return null;
+        int n = labels.Shape[0];
+        var valid = _engine.ScalarMinusTensor(NumOps.One, _engine.TensorEquals(_engine.TensorRound(labels), NumOps.FromDouble(-2)));
+        return _engine.TensorConcatenate(new[] { valid,
+            Tensor<T>.CreateDefault(new[] { n, hasBox ? 2 : 1 }, NumOps.One) }, 1);
+    }
     // ------------------------------------------------------------------ mask decoder
 
-    private Tensor<T> Attend(Attention attention, Tensor<T> q, Tensor<T> k, Tensor<T> v)
+    private Tensor<T> Attend(Attention attention, Tensor<T> q, Tensor<T> k, Tensor<T> v, Tensor<T>? keyValidity = null)
     {
         int n = q.Shape[0], tq = q.Shape[1], tk = k.Shape[1];
         var qp = Rows(attention.Query, q);
@@ -443,6 +461,13 @@ internal sealed class SamNetwork<T>
             new[] { n * heads, t, hd });
         var scores = _engine.TensorMultiplyScalar(_engine.BatchMatMul(Heads(qp, tq), _engine.TensorPermute(Heads(Rows(attention.Key, k), tk), new[] { 0, 2, 1 })),
             NumOps.FromDouble(1.0 / Math.Sqrt(hd)));
+        if (keyValidity is not null)
+        {
+            var validity = _engine.TensorBroadcastTo(_engine.Reshape(keyValidity, new[] { n, 1, 1, tk }), new[] { n, heads, tq, tk });
+            validity = _engine.Reshape(validity, new[] { n * heads, tq, tk });
+            scores = _engine.TensorWhere(validity, scores,
+                Tensor<T>.CreateDefault(scores.Shape.ToArray(), NumOps.FromDouble(double.NegativeInfinity)));
+        }
         var context = _engine.BatchMatMul(_engine.Softmax(scores, axis: 2), Heads(Rows(attention.Value, v), tk));
         context = _engine.Reshape(_engine.TensorPermute(_engine.Reshape(context, new[] { n, heads, tq, hd }), new[] { 0, 2, 1, 3 }), new[] { n, tq, inner });
         return Rows(attention.Output, context);
@@ -453,13 +478,20 @@ internal sealed class SamNetwork<T>
     /// embedding <c>[1, OutChannels, Grid, Grid]</c>: the three ambiguity-aware masks with
     /// <paramref name="multimask"/>, else the single one.
     /// </summary>
-    public (Tensor<T> Logits, Tensor<T> Iou) DecodeMasks(Tensor<T> embedding, Tensor<T> positional, Tensor<T> sparse, Tensor<T> dense, bool multimask)
+    public (Tensor<T> Logits, Tensor<T> Iou) DecodeMasks(Tensor<T> embedding, Tensor<T> positional, Tensor<T> sparse, Tensor<T> dense, bool multimask,
+        Tensor<T>? sparseValidity = null)
     {
         var c = Configuration;
         int n = sparse.Shape[0], p = c.PromptDim, g = c.Grid, hw = g * g, m = c.MaskTokens;
+        if (sparseValidity is not null && (sparseValidity.Rank != 2 || sparseValidity.Shape[0] != n || sparseValidity.Shape[1] != sparse.Shape[1]))
+            throw new ArgumentException("Sparse validity must have one entry for each sparse prompt.", nameof(sparseValidity));
         var output = _engine.TensorConcatenate(new[] { _engine.Reshape(Value(IouToken), new[] { 1, 1, p }), _engine.Reshape(Value(MaskTokenTable), new[] { 1, m, p }) }, 1);
         var tokens = _engine.TensorBroadcastTo(output, new[] { n, 1 + m, p });
         if (sparse.Shape[1] > 0) tokens = _engine.TensorConcatenate(new[] { tokens, sparse }, 1);
+        var tokenValidity = sparseValidity is null ? null : _engine.TensorConcatenate(new[]
+        {
+            Tensor<T>.CreateDefault(new[] { n, 1 + m }, NumOps.One), sparseValidity,
+        }, 1);
         var src = _engine.TensorAdd(_engine.TensorBroadcastTo(embedding, new[] { n, p, g, g }), dense);
         Tensor<T> Sequence(Tensor<T> x) => _engine.TensorPermute(_engine.Reshape(x, new[] { x.Shape[0], p, hw }), new[] { 0, 2, 1 });
         var keys = Sequence(src);
@@ -470,19 +502,19 @@ internal sealed class SamNetwork<T>
         {
             if (block.SkipFirstPositional)
             {
-                queries = Attend(block.SelfAttention, queries, queries, queries);
+                queries = Attend(block.SelfAttention, queries, queries, queries, tokenValidity);
             }
             else
             {
                 var qp = _engine.TensorAdd(queries, queryPositional);
-                queries = _engine.TensorAdd(queries, Attend(block.SelfAttention, qp, qp, queries));
+                queries = _engine.TensorAdd(queries, Attend(block.SelfAttention, qp, qp, queries, tokenValidity));
             }
             queries = Rows(block.Norm1, queries);
             queries = Rows(block.Norm2, _engine.TensorAdd(queries,
                 Attend(block.TokenToImage, _engine.TensorAdd(queries, queryPositional), _engine.TensorAdd(keys, keyPositional), keys)));
             queries = Rows(block.Norm3, _engine.TensorAdd(queries, Rows(block.Mlp2, _engine.ReLU(Rows(block.Mlp1, queries)))));
             keys = Rows(block.Norm4, _engine.TensorAdd(keys,
-                Attend(block.ImageToToken, _engine.TensorAdd(keys, keyPositional), _engine.TensorAdd(queries, queryPositional), queries)));
+                Attend(block.ImageToToken, _engine.TensorAdd(keys, keyPositional), _engine.TensorAdd(queries, queryPositional), queries, tokenValidity)));
         }
         queries = Rows(FinalNorm, _engine.TensorAdd(queries,
             Attend(FinalAttention, _engine.TensorAdd(queries, queryPositional), _engine.TensorAdd(keys, keyPositional), keys)));
@@ -570,6 +602,7 @@ internal sealed class SamNetwork<T>
         Norm(NeckNorm2, "image_encoder.neck.3", c.OutChannels);
 
         var gaussian = source.Read("prompt_encoder.pe_layer.positional_encoding_gaussian_matrix", new[] { 2, p / 2 });
+        _engine.TensorCopy(new Tensor<double>(gaussian, new[] { 2, p / 2 }).Cast<T>(), _gaussianTensor);
         for (int r = 0; r < 2; r++)
             for (int j = 0; j < p / 2; j++) _gaussian[r, j] = gaussian[r * (p / 2) + j];
         for (int i = 0; i < 4; i++) Values(PointEmbeddings[i], $"prompt_encoder.point_embeddings.{i}.weight", new[] { 1, p });

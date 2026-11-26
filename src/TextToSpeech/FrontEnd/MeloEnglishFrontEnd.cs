@@ -32,7 +32,7 @@ internal sealed class MeloEnglishFrontEnd
 
     private MeloEnglishFrontEnd()
     {
-        using var stream = typeof(MeloEnglishFrontEnd).Assembly.GetManifestResourceStream("AiDotNet.TextToSpeech.FrontEnd.melo_cmudict.tsv.gz")
+        using var stream = EmbeddedData.Open("AiDotNet.TextToSpeech.FrontEnd.melo_cmudict.tsv.gz")
             ?? throw new InvalidDataException("The embedded resource melo_cmudict.tsv.gz is missing.");
         using var reader = new StreamReader(new GZipStream(stream, CompressionMode.Decompress), Encoding.UTF8);
         string? line;

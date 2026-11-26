@@ -297,8 +297,16 @@ internal sealed class FishFireflyCodec<T>
     {
         int groups = codes.GetLength(0), frames = codes.GetLength(1);
         var transposed = new int[frames, groups];
+        // The transformer's codebook may be larger than the quantizer's levels allow (1,024 entries against
+        // 8 * 5 * 5 * 5 = 1,000), so it can sample a code past them. The release's indices_to_codes reads each digit as
+        // (index // basis) % levels, which is the code modulo the level product; a negative code has no such reading.
+        int entries = Quantizer.CodebookSize;
         for (int g = 0; g < groups; g++)
-            for (int t = 0; t < frames; t++) transposed[t, g] = codes[g, t];
+            for (int t = 0; t < frames; t++)
+            {
+                if (codes[g, t] < 0) throw new ArgumentOutOfRangeException(nameof(codes), "Codes are non-negative.");
+                transposed[t, g] = codes[g, t] % entries;
+            }
         var z = Quantizer.Decode(transposed);                                                                  // [frames, dim]
         var x = _engine.Reshape(_engine.TensorTranspose(z), new[] { 1, z.Shape[1], frames });
         foreach (var (conv, block) in QuantizerUp) x = Apply(block, ApplyTransposed(conv, x));

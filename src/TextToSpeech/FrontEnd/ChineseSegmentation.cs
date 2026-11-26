@@ -11,7 +11,7 @@ internal static class ChineseText
 {
     internal static IEnumerable<string> ReadLines(string resource)
     {
-        var assembly = typeof(ChineseText).Assembly;
+        var assembly = EmbeddedData.Assembly;
         string name = assembly.GetManifestResourceNames().Single(n => n.EndsWith("." + resource, StringComparison.Ordinal));
         using var stream = assembly.GetManifestResourceStream(name)!;
         using var gzip = new GZipStream(stream, CompressionMode.Decompress);

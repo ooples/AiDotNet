@@ -34,7 +34,7 @@ internal sealed class MaskGctMandarinFrontEnd
 
     private static readonly Lazy<Data> Resources = new(() =>
     {
-        using var stream = typeof(MaskGctMandarinFrontEnd).Assembly.GetManifestResourceStream("AiDotNet.TextToSpeech.FrontEnd.maskgct_mandarin.json.gz")
+        using var stream = EmbeddedData.Open("AiDotNet.TextToSpeech.FrontEnd.maskgct_mandarin.json.gz")
             ?? throw new InvalidDataException("The embedded MaskGCT Mandarin data is missing.");
         using var gzip = new GZipStream(stream, CompressionMode.Decompress);
         using var reader = new StreamReader(gzip, Encoding.UTF8);

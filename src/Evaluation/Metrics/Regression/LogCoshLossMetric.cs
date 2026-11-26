@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -54,31 +55,17 @@ public class LogCoshLossMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        double totalLoss = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double y = NumOps.ToDouble(actuals[i]);
-            double yHat = NumOps.ToDouble(predictions[i]);
-            double error = y - yHat;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        var absError = engine.TensorAbs(engine.TensorSubtract(actual, pred));
 
-            // log(cosh(x)) ≈ x²/2 for small x, |x| - log(2) for large x
-            // Use numerically stable computation
-            double absError = Math.Abs(error);
-            double logCosh;
-            if (absError < 20)
-            {
-                logCosh = Math.Log(Math.Cosh(error));
-            }
-            else
-            {
-                // For large values: log(cosh(x)) ≈ |x| - log(2)
-                logCosh = absError - Math.Log(2);
-            }
+        // Numerically stable log(cosh(x)) = |x| + log(1 + exp(-2|x|)) - log(2); for large |x| it tends to |x| - log(2)
+        var correction = engine.TensorLog1p(engine.TensorExp(engine.TensorMultiplyScalar(absError, -2.0)));
+        var logCosh = engine.TensorSubtractScalar(engine.TensorAdd(absError, correction), Math.Log(2));
 
-            totalLoss += logCosh;
-        }
-
-        return NumOps.FromDouble(totalLoss / predictions.Length);
+        return NumOps.FromDouble(engine.TensorMean(logCosh));
     }
 
     /// <inheritdoc />
@@ -101,18 +88,17 @@ public class LogCoshLossMetric<T> : IRegressionMetric<T>
         int n = pred.Length;
         if (n == 0) return (NumOps.Zero, NumOps.Zero);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var predArr = pred.ToArray(); var actArr = actual.ToArray();
         for (int b = 0; b < samples; b++)
         {
             var sp = new T[n]; var sa = new T[n];
             for (int i = 0; i < n; i++) { int idx = random.Next(n); sp[i] = predArr[idx]; sa[i] = actArr[idx]; }
-            values[b] = NumOps.ToDouble(Compute(sp, sa));
+            values.Add(Compute(sp, sa));
         }
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }

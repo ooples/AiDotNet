@@ -10,6 +10,17 @@ namespace AiDotNet.Tests.AdversarialRobustness;
 /// </summary>
 public class ContentClassifierTests
 {
+    [Fact(Timeout = 60000)]
+    public async Task HalfMatchProportion_DividesTheExactCounts()
+    {
+        await Task.Yield();
+
+        // 1 of 2049 patterns: Half rounds 2049 to 2048, so dividing the converted counts gave 1/2048 instead of
+        // the Half nearest to 1/2049.
+        Assert.Equal((Half)(1.0 / 2049), RuleBasedContentClassifier<Half>.MatchProportion(1, 2049));
+        Assert.NotEqual((Half)(1.0 / 2048), RuleBasedContentClassifier<Half>.MatchProportion(1, 2049));
+    }
+
     #region Constructor Tests
 
     [Fact(Timeout = 60000)]

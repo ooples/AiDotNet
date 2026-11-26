@@ -295,6 +295,10 @@ def check_protocol(obj, side, model, device):
     rows = obj["Results" if ai else "results"]
     if len(rows) != 1 or obj["Framework" if ai else "framework"] != ("AiDotNet" if ai else "PyTorch"):
         raise ValueError("Unexpected framework or number of models")
+    # The matrix runs fp32 in both arms; a report at another precision (benchmark --precision) is not comparable.
+    precision = obj["Protocol"].get("Precision", "fp32") if ai else obj["protocol"].get("precision", "fp32")
+    if precision != "fp32":
+        raise ValueError(f"{side} ran at precision {precision!r}; the matrix compares fp32")
     if ai:
         env = obj["Environment"]
         if (env["CpuThreads"], env["EngineDevice"]) != (THREADS, {"cpu": "CpuEngine", "cuda": "DirectGpuTensorEngine"}[device]):

@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -186,43 +187,52 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
         /// </remarks>
         protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
         {
-            var vectorResults = _vectorStore.GetSimilarWithFilters(queryVector, topK * 2, metadataFilters);
-            var keywordResults = _keywordStore.GetSimilarWithFilters(queryVector, topK * 2, metadataFilters);
-
-            var combinedScores = new Dictionary<string, T>();
-
-            foreach (var doc in vectorResults.Where(d => d.HasRelevanceScore))
-            {
-                var score = NumOps.Multiply(_vectorWeight, doc.RelevanceScore);
-                combinedScores[doc.Id] = score;
-            }
-
-            foreach (var doc in keywordResults.Where(doc => doc.HasRelevanceScore))
-            {
-                var keywordScore = NumOps.Multiply(_keywordWeight, doc.RelevanceScore);
-                combinedScores[doc.Id] = combinedScores.TryGetValue(doc.Id, out var existingScore)
-                    ? NumOps.Add(existingScore, keywordScore)
-                    : keywordScore;
-            }
+            var vectorResults = _vectorStore.GetSimilarWithFilters(queryVector, topK * 2, metadataFilters).ToList();
+            var keywordResults = _keywordStore.GetSimilarWithFilters(queryVector, topK * 2, metadataFilters).ToList();
 
             var allDocuments = vectorResults.Concat(keywordResults)
                 .GroupBy(d => d.Id)
                 .Select(g => g.First())
                 .ToList();
+            var position = allDocuments.Select((doc, i) => (doc.Id, i)).ToDictionary(x => x.Id, x => x.i);
 
-            var results = allDocuments
-                .Where(doc => combinedScores.ContainsKey(doc.Id))
-                .OrderByDescending(doc => combinedScores[doc.Id])
+            // score = w_v * vector score + w_k * keyword score; a document needs at least one score.
+            int n = allDocuments.Count;
+            var vectorScores = new T[n];
+            var keywordScores = new T[n];
+            var scored = new bool[n];
+            foreach (var doc in vectorResults.Where(d => d.HasRelevanceScore))
+            {
+                vectorScores[position[doc.Id]] = doc.RelevanceScore;
+                scored[position[doc.Id]] = true;
+            }
+
+            foreach (var doc in keywordResults.Where(d => d.HasRelevanceScore))
+            {
+                keywordScores[position[doc.Id]] = doc.RelevanceScore;
+                scored[position[doc.Id]] = true;
+            }
+
+            if (n == 0)
+                return new List<Document<T>>();
+
+            var engine = AiDotNetEngine.Current;
+            var combined = engine.TensorAdd(
+                engine.TensorMultiplyScalar(new Tensor<T>(vectorScores, [n]), _vectorWeight),
+                engine.TensorMultiplyScalar(new Tensor<T>(keywordScores, [n]), _keywordWeight)).ToArray();
+
+            return allDocuments
+                .Select((doc, i) => (doc, i))
+                .Where(x => scored[x.i])
+                .OrderByDescending(x => combined[x.i])
                 .Take(topK)
-                .Select(doc =>
+                .Select(x =>
                 {
-                    doc.RelevanceScore = combinedScores[doc.Id];
-                    doc.HasRelevanceScore = true;
-                    return doc;
+                    x.doc.RelevanceScore = combined[x.i];
+                    x.doc.HasRelevanceScore = true;
+                    return x.doc;
                 })
                 .ToList();
-
-            return results;
         }
 
         /// <summary>

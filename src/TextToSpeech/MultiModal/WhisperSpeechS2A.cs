@@ -126,9 +126,9 @@ internal sealed class WhisperSpeechS2A<T>
             for (int i = 0; i < values.Length; i++) values[i] = NumOps.FromDouble(WhisperSpeechOps.TruncatedNormal(random, std));
             _engine.InvalidatePersistentTensor(values);
         }
+        // Drawn straight into the layer, weights then biases, as the release draws them.
         void Linear(DenseLayer<T> layer, int inputs, int outputs) => TorchParameters.Linear(_engine, layer, inputs, outputs,
-            Enumerable.Range(0, inputs * outputs).Select(_ => WhisperSpeechOps.TruncatedNormal(random, c.InitStd / inputs)).ToArray(),
-            Enumerable.Range(0, outputs).Select(_ => WhisperSpeechOps.TruncatedNormal(random, c.InitStd / inputs)).ToArray());
+            () => WhisperSpeechOps.TruncatedNormal(random, c.InitStd / inputs), () => WhisperSpeechOps.TruncatedNormal(random, c.InitStd / inputs));
         Fill(SemanticEmbedding, c.EmbeddingsStd);
         foreach (var t in new[] { LanguageEmbedding, SnrEmbedding, C50Embedding }) if (t is not null) Fill(t, c.EmbeddingsStd);
         foreach (var e in AcousticEmbeddings)
@@ -141,10 +141,11 @@ internal sealed class WhisperSpeechS2A<T>
         if (SpeakerToHidden is not null) Linear(SpeakerToHidden, c.SpeakerWidth, w);
         foreach (var block in EncoderBlocks.Concat(DecoderBlocks))
         {
-            foreach (var attention in new[] { block.Attention, block.CrossAttention }.Where(a => a is not null))
+            foreach (var candidate in new[] { block.Attention, block.CrossAttention })
             {
-                TorchParameters.Linear(_engine, attention!.Query, w, w, new double[w * w], new double[w]);
-                TorchParameters.Linear(attention.Key, w, w, Enumerable.Range(0, w * w).Select(_ => WhisperSpeechOps.TruncatedNormal(random, c.InitStd / w)).ToArray());
+                if (candidate is not { } attention) continue;
+                TorchParameters.Linear(_engine, attention.Query, w, w, static () => 0.0, static () => 0.0);
+                TorchParameters.Linear(attention.Key, w, w, () => WhisperSpeechOps.TruncatedNormal(random, c.InitStd / w));
                 Linear(attention.Value, w, w);
                 Linear(attention.Output, w, w);
             }

@@ -80,7 +80,7 @@ public abstract partial class AmplitudePhaseVocoderBase<T> : GanVocoderBase<T>
     {
         var o = Settings;
         var layers = new List<LayerBase<T>>();
-        CreatePredictors(layers, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7));
+        CreatePredictors(layers, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 7));
         _features = new CenteredLogMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.MelMaxFrequency, 1e-5,
             naturalLog: true);
         _stft = new CenteredComplexStft<T>(Engine, o.FftSize, o.HopSize, o.WindowSize);

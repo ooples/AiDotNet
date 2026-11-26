@@ -107,10 +107,16 @@ public class iBOT<T> : TeacherStudentSSL<T>
         NumLocalCrops = 0;
     }
 
+    private sealed record StepMaskState(
+        Tensor<T> View1,
+        Tensor<T> View2,
+        Tensor<T>? Keep1,
+        Tensor<T>? Keep2,
+        Tensor<T>? Rows1,
+        Tensor<T>? Rows2);
+
     [Scratch]
-    private Tensor<T>? _pendingTeacherCls;
-    [Scratch]
-    private Tensor<T>? _pendingTeacherPatches;
+    private StepMaskState? _stepState;
     [Scratch]
     private Random? _maskRandom;
 
@@ -130,10 +136,23 @@ public class iBOT<T> : TeacherStudentSSL<T>
     /// </remarks>
     protected override Tensor<T> ComputeObjective(Tensor<T> view1, Tensor<T> view2)
     {
-        var mask1 = PatchMask(view1);
-        var mask2 = PatchMask(view2);
-        var s1 = ForwardStudent(ApplyMask(view1, mask1));
-        var s2 = ForwardStudent(ApplyMask(view2, mask2));
+        StepMaskState state;
+        if (_stepState is { } existing
+            && ReferenceEquals(existing.View1, view1)
+            && ReferenceEquals(existing.View2, view2))
+        {
+            state = existing;
+        }
+        else
+        {
+            var (k1, r1) = BuildPatchMaskLeaves(view1);
+            var (k2, r2) = BuildPatchMaskLeaves(view2);
+            state = new StepMaskState(view1, view2, k1, k2, r1, r2);
+            _stepState = state;
+        }
+
+        var s1 = ForwardStudent(state.Keep1 is null ? view1 : Engine.TensorMultiply(view1, Engine.TensorBroadcastTo(state.Keep1, view1._shape)));
+        var s2 = ForwardStudent(state.Keep2 is null ? view2 : Engine.TensorMultiply(view2, Engine.TensorBroadcastTo(state.Keep2, view2._shape)));
         var t1 = ForwardTeacher(view1);
         var t2 = ForwardTeacher(view2);
 
@@ -141,19 +160,17 @@ public class iBOT<T> : TeacherStudentSSL<T>
         var s2Cls = ClassToken(s2);
         var t1Cls = ClassToken(t1);
         var t2Cls = ClassToken(t2);
-        _pendingTeacherCls = Engine.Concat(new[] { t1Cls, t2Cls }, 0);
         var loss = Engine.TensorMultiplyScalar(Engine.TensorAdd(
             _clsLoss.ComputeDifferentiableLoss(s1Cls, t2Cls, updateCenter: false),
             _clsLoss.ComputeDifferentiableLoss(s2Cls, t1Cls, updateCenter: false)), NumOps.FromDouble(0.5));
 
-        if (mask1 is null || mask2 is null || s1.Rank != 3 || t1.Rank != 3)
+        if (state.Rows1 is null || state.Rows2 is null || s1.Rank != 3 || t1.Rank != 3)
             return loss;
 
-        var (studentRows1, teacherRows1) = MaskedRows(s1, t1, mask1);
-        var (studentRows2, teacherRows2) = MaskedRows(s2, t2, mask2);
-        if (studentRows1 is null || studentRows2 is null || teacherRows1 is null || teacherRows2 is null)
-            return loss;
-        _pendingTeacherPatches = Engine.Concat(new[] { teacherRows1, teacherRows2 }, 0);
+        var studentRows1 = GatherMaskedRows(s1, state.Rows1);
+        var studentRows2 = GatherMaskedRows(s2, state.Rows2);
+        var teacherRows1 = GatherMaskedRows(t1, state.Rows1);
+        var teacherRows2 = GatherMaskedRows(t2, state.Rows2);
         var mim = Engine.TensorMultiplyScalar(Engine.TensorAdd(
             _patchLoss.ComputeDifferentiableLoss(studentRows1, teacherRows1, updateCenter: false),
             _patchLoss.ComputeDifferentiableLoss(studentRows2, teacherRows2, updateCenter: false)), NumOps.FromDouble(0.5));
@@ -163,11 +180,24 @@ public class iBOT<T> : TeacherStudentSSL<T>
     /// <inheritdoc />
     protected override void AfterOptimizerStep()
     {
+        var state = _stepState;
+        _stepState = null;
+        if (state is not null)
+        {
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var t1 = ForwardTeacher(state.View1);
+            var t2 = ForwardTeacher(state.View2);
+            _clsLoss.UpdateCenter(Engine.Concat(new[] { ClassToken(t1), ClassToken(t2) }, 0));
+            if (state.Rows1 is not null && state.Rows2 is not null && t1.Rank == 3 && t2.Rank == 3)
+            {
+                _patchLoss.UpdateCenter(Engine.Concat(new[]
+                {
+                    GatherMaskedRows(t1, state.Rows1),
+                    GatherMaskedRows(t2, state.Rows2),
+                }, 0));
+            }
+        }
         base.AfterOptimizerStep();
-        if (_pendingTeacherCls is { } cls) _clsLoss.UpdateCenter(cls);
-        if (_pendingTeacherPatches is { } patches) _patchLoss.UpdateCenter(patches);
-        _pendingTeacherCls = null;
-        _pendingTeacherPatches = null;
     }
 
     // [batch, tokens, dim] -> its class token [batch, dim]; a [batch, dim] output is already one vector per sample.
@@ -177,52 +207,40 @@ public class iBOT<T> : TeacherStudentSSL<T>
                 new[] { output.Shape[0], output.Shape[2] })
             : output;
 
-    // For a [batch, tokens, dim] input, marks maskRatio of each sample's patch tokens (never the class token at 0).
-    private bool[,]? PatchMask(Tensor<T> view)
+    // Builds external-leaf keep masks [batch, tokens, 1] and flattened masked row indices [batch * toMask]
+    // so compiled closure plans have a fixed graph topology across random per-step patch masks.
+    private (Tensor<T>? Keep, Tensor<T>? Rows) BuildPatchMaskLeaves(Tensor<T> view)
     {
-        if (view.Rank != 3 || view.Shape[1] < 2) return null;
+        if (view.Rank != 3 || view.Shape[1] < 2) return (null, null);
         var rng = _maskRandom ??= _config.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_config.Seed.Value)
             : RandomHelper.CreateSecureRandom();
         int batch = view.Shape[0], tokens = view.Shape[1];
-        var mask = new bool[batch, tokens];
         int toMask = Math.Max(1, (int)Math.Round((tokens - 1) * _maskRatio));
+        var keepValues = new double[batch * tokens];
+        for (int i = 0; i < keepValues.Length; i++) keepValues[i] = 1.0;
+        var rowIndices = new double[batch * toMask];
         for (int b = 0; b < batch; b++)
         {
-            var order = Enumerable.Range(1, tokens - 1).OrderBy(_ => rng.Next()).Take(toMask);
-            foreach (int t in order) mask[b, t] = true;
-        }
-        return mask;
-    }
-
-    private Tensor<T> ApplyMask(Tensor<T> view, bool[,]? mask)
-    {
-        if (mask is null) return view;
-        var keep = new Tensor<T>(view.Shape.ToArray());
-        int batch = view.Shape[0], tokens = view.Shape[1], dim = view.Shape[2];
-        for (int b = 0; b < batch; b++)
-            for (int t = 0; t < tokens; t++)
-                for (int d = 0; d < dim; d++)
-                    keep[b, t, d] = mask[b, t] ? NumOps.Zero : NumOps.One;
-        return Engine.TensorMultiply(view, keep);
-    }
-
-    // The masked tokens' student and teacher outputs as [count, dim] rows.
-    private (Tensor<T>? Student, Tensor<T>? Teacher) MaskedRows(Tensor<T> student, Tensor<T> teacher, bool[,] mask)
-    {
-        var studentRows = new List<Tensor<T>>();
-        var teacherRows = new List<Tensor<T>>();
-        int batch = student.Shape[0], tokens = Math.Min(student.Shape[1], mask.GetLength(1)), dim = student.Shape[2];
-        for (int b = 0; b < batch; b++)
-            for (int t = 0; t < tokens; t++)
+            var order = Enumerable.Range(1, tokens - 1).OrderBy(_ => rng.Next()).Take(toMask).OrderBy(t => t).ToArray();
+            for (int m = 0; m < toMask; m++)
             {
-                if (!mask[b, t]) continue;
-                studentRows.Add(Engine.Reshape(Engine.TensorSlice(student, new[] { b, t, 0 }, new[] { 1, 1, dim }), new[] { 1, dim }));
-                teacherRows.Add(Engine.Reshape(Engine.TensorSlice(teacher, new[] { b, t, 0 }, new[] { 1, 1, dim }), new[] { 1, dim }));
+                int flatIdx = b * tokens + order[m];
+                keepValues[flatIdx] = 0.0;
+                rowIndices[b * toMask + m] = flatIdx;
             }
-        return studentRows.Count == 0
-            ? (null, null)
-            : (Engine.Concat(studentRows.ToArray(), 0), Engine.Concat(teacherRows.ToArray(), 0));
+        }
+
+        var keep = new Tensor<double>(new[] { batch, tokens, 1 }, new Vector<double>(keepValues)).Cast<T>();
+        var rows = new Tensor<double>(new[] { batch * toMask }, new Vector<double>(rowIndices)).Cast<T>();
+        return (keep, rows);
+    }
+
+    private Tensor<T> GatherMaskedRows(Tensor<T> sequence, Tensor<T> flatRowIndices)
+    {
+        int batch = sequence.Shape[0], tokens = sequence.Shape[1], dim = sequence.Shape[2];
+        return Engine.TensorEmbeddingLookupFromFloatIndices(
+            Engine.Reshape(sequence, new[] { batch * tokens, dim }), flatRowIndices);
     }
 
     /// <summary>

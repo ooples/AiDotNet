@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 export function redactText(text: string, values: string[]): string {
   for (const value of values) if (value.length > 3) text = text.split(value).join('[redacted]');
-  return text.replace(/(authorization|apikey|cookie|x-vercel-protection-bypass)\s*:[^\r\n]*/gi, '$1: [redacted]')
+  return text.replace(/(authorization|apikey|cookie|x-aidotnet-preview-bypass)\s*:[^\r\n]*/gi, '$1: [redacted]')
     .replace(/([?&#](?:access_token|refresh_token|token_hash|token|code|secret|client_secret)=)[^&\s"'<>]+/gi,'$1[redacted]')
     .replace(/(https?:\/\/billing\.stripe\.com\/p\/session\/)[^/?#\s"'<>]+/gi,'$1[redacted]')
     .replace(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,'[redacted token]')
@@ -15,7 +15,7 @@ export function redactText(text: string, values: string[]): string {
 
 export default class RedactReporter implements Reporter {
   private values() {
-    const keys=['SUPABASE_SERVICE_ROLE_KEY','STRIPE_SECRET_KEY','STRIPE_WEBHOOK_SECRET','VERCEL_AUTOMATION_BYPASS_SECRET','PLAYWRIGHT_USER_PASSWORD','PLAYWRIGHT_ADMIN_PASSWORD'];
+    const keys=['SUPABASE_SERVICE_ROLE_KEY','STRIPE_SECRET_KEY','STRIPE_WEBHOOK_SECRET','PREVIEW_BYPASS_SECRET','PLAYWRIGHT_USER_PASSWORD','PLAYWRIGHT_ADMIN_PASSWORD'];
     const values=keys.map(key=>process.env[key]??'').filter(Boolean);
     if (process.env.AIDOTNET_AUTH_RUN_DIR) for (const name of ['deployment.json','user.json','admin.json']) {
       try {

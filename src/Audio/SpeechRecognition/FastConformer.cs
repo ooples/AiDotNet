@@ -228,23 +228,9 @@ public partial class FastConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
 
     private List<int> CTCGreedyDecode(Tensor<T> logits)
     {
-        var tokens = new List<int>();
-        int prevToken = -1;
         int blankIdx = 0;
-        int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1;
-        int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0];
-        for (int t = 0; t < numFrames; t++)
-        {
-            int maxIdx = 0; double maxVal = double.NegativeInfinity;
-            for (int v = 0; v < vocabSize; v++)
-            {
-                double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]);
-                if (val > maxVal) { maxVal = val; maxIdx = v; }
-            }
-            if (maxIdx != blankIdx && maxIdx != prevToken) tokens.Add(maxIdx);
-            prevToken = maxIdx;
-        }
-        return tokens;
+        int[] frameTokens = SpeechRecognitionEngineOps.FrameArgMax(logits);
+        return SpeechRecognitionEngineOps.CollapseCtcFrames(frameTokens, blankIdx);
     }
 
     private string TokensToText(List<int> tokens)
@@ -290,10 +276,7 @@ public partial class FastConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         {
             if (_disposed) throw new ObjectDisposedException(nameof(FastConformerStreamingSession));
             if (_chunks.Count == 0) return new TranscriptionResult<T> { Language = _language };
-            int totalLen = 0; foreach (var ch in _chunks) totalLen += ch.Length;
-            var combined = new Tensor<T>(new[] { totalLen });
-            int offset = 0;
-            foreach (var ch in _chunks) { for (int i = 0; i < ch.Length; i++) combined[offset + i] = ch[i]; offset += ch.Length; }
+            var combined = SpeechRecognitionEngineOps.ConcatFlat(_chunks);
             return _model.Transcribe(combined, _language);
         }
 

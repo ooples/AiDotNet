@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet.Audio.Foundations;
 using AiDotNet.Tensors.Engines;
@@ -156,5 +157,54 @@ public class TransducerLossTests
                 - TransducerLoss.ComputeTokenAndDuration(engine, minus, 4, durations, labels, 0)[0]) / (2 * h);
             Assert.Equal(numeric, grad.Data.Span[i], 6);
         }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task TokenAndDuration_AllowsConfiguredDurationsLongerThanShortUtteranceFrames()
+    {
+        await Task.Yield();
+        var engine = new CpuEngine();
+        var labels = new[] { 2 };
+        var durations = new[] { 0, 1, 2, 3, 4 };
+        var lattice = TdtLattice(frames: 3, labels.Length + 1, vocabulary: 4, durations.Length, seed: 23);
+        Tensor<double> grad;
+        double loss;
+        using (var tape = new GradientTape<double>())
+        {
+            var value = TransducerLoss.ComputeTokenAndDuration(engine, lattice, 4, durations, labels, 0);
+            loss = value[0];
+            grad = tape.ComputeGradients(value, new[] { lattice })[lattice];
+        }
+        Assert.Equal(-Math.Log(TdtBruteForce(lattice, 4, durations, labels, 0, 0)), loss, 10);
+        // Durations 4 (> frames = 3) can never be taken on a 3-frame utterance, so their gradient slots are zero.
+        for (int t = 0; t < 3; t++)
+            for (int u = 0; u < 2; u++)
+                Assert.Equal(0.0, grad[t, u, 4 + 4], 12);
+        Assert.Throws<ArgumentException>(() => TransducerLoss.ComputeTokenAndDuration(engine, lattice, 4, new[] { -1, 1, 2, 3, 4 }, labels, 0));
+        Assert.Throws<ArgumentException>(() => TransducerLoss.ComputeTokenAndDuration(engine, lattice, 4, new[] { 0, 4, 5, 6, 7 }, labels, 0));
+    }
+
+    // A duration near int.MaxValue passes validation beside one that fits: adding it to the frame index must not
+    // overflow into a negative "next frame" that indexes the lattice.
+    [Fact(Timeout = 60000)]
+    public async Task TokenAndDuration_SkipsADurationWhoseFrameSumWouldOverflow()
+    {
+        await Task.Yield();
+        var engine = new CpuEngine();
+        var labels = new[] { 2 };
+        var lattice = TdtLattice(frames: 3, labels.Length + 1, vocabulary: 4, 3, seed: 29);
+        Tensor<double> grad;
+        double loss;
+        using (var tape = new GradientTape<double>())
+        {
+            var value = TransducerLoss.ComputeTokenAndDuration(engine, lattice, 4, new[] { 0, 1, int.MaxValue }, labels, 0);
+            loss = value[0];
+            grad = tape.ComputeGradients(value, new[] { lattice })[lattice];
+        }
+        // The oversized duration can never be taken: the loss is that of durations {0, 1} with its slot unused.
+        Assert.Equal(-Math.Log(TdtBruteForce(lattice, 4, new[] { 0, 1, 4 }, labels, 0, 0)), loss, 10);
+        for (int t = 0; t < 3; t++)
+            for (int u = 0; u < 2; u++)
+                Assert.Equal(0.0, grad[t, u, 4 + 2], 12);
     }
 }

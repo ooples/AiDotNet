@@ -94,31 +94,19 @@ public class ArithmeticSecretSharing<T> : FederatedLearningComponentBase<T>, ISe
             throw new ArgumentOutOfRangeException(nameof(numberOfParties));
         }
 
-        int totalElements = ComputeTotalElements(value);
+        int[] shape = value.Shape.ToArray();
         var shares = new Tensor<T>[numberOfParties];
 
-        // Generate n-1 random shares
+        // Generate n-1 random shares (draws in party-major order)
         for (int p = 0; p < numberOfParties - 1; p++)
         {
-            shares[p] = new Tensor<T>(value._shape);
-            for (int i = 0; i < totalElements; i++)
-            {
-                shares[p][i] = NumOps.FromDouble(_random.NextDouble() * 2.0 - 1.0);
-            }
+            shares[p] = UniformTensor(shape);
         }
 
         // Last share = secret - sum of other shares
-        shares[numberOfParties - 1] = new Tensor<T>(value._shape);
-        for (int i = 0; i < totalElements; i++)
-        {
-            double sum = 0.0;
-            for (int p = 0; p < numberOfParties - 1; p++)
-            {
-                sum += NumOps.ToDouble(shares[p][i]);
-            }
-
-            shares[numberOfParties - 1][i] = NumOps.FromDouble(NumOps.ToDouble(value[i]) - sum);
-        }
+        var others = new Tensor<T>[numberOfParties - 1];
+        Array.Copy(shares, others, numberOfParties - 1);
+        shares[numberOfParties - 1] = Engine.TensorSubtract(value, SumShares(others));
 
         return shares;
     }
@@ -131,21 +119,7 @@ public class ArithmeticSecretSharing<T> : FederatedLearningComponentBase<T>, ISe
             throw new ArgumentException("Shares array must not be null or empty.", nameof(shares));
         }
 
-        int totalElements = ComputeTotalElements(shares[0]);
-        var result = new Tensor<T>(shares[0].Shape.ToArray());
-
-        for (int i = 0; i < totalElements; i++)
-        {
-            double sum = 0.0;
-            for (int p = 0; p < shares.Length; p++)
-            {
-                sum += NumOps.ToDouble(shares[p][i]);
-            }
-
-            result[i] = NumOps.FromDouble(sum);
-        }
-
-        return result;
+        return SumShares(shares);
     }
 
     /// <inheritdoc/>
@@ -165,14 +139,7 @@ public class ArithmeticSecretSharing<T> : FederatedLearningComponentBase<T>, ISe
         var result = new Tensor<T>[sharesA.Length];
         for (int p = 0; p < sharesA.Length; p++)
         {
-            int totalElements = ComputeTotalElements(sharesA[p]);
-            result[p] = new Tensor<T>(sharesA[p]._shape);
-            for (int i = 0; i < totalElements; i++)
-            {
-                double a = NumOps.ToDouble(sharesA[p][i]);
-                double b = NumOps.ToDouble(sharesB[p][i]);
-                result[p][i] = NumOps.FromDouble(a + b);
-            }
+            result[p] = Engine.TensorAdd(sharesA[p], sharesB[p]);
         }
 
         return result;
@@ -192,11 +159,10 @@ public class ArithmeticSecretSharing<T> : FederatedLearningComponentBase<T>, ISe
         }
 
         int n = sharesA.Length;
-        int totalElements = ComputeTotalElements(sharesA[0]);
 
         // Use Beaver triple: (a, b, c) where c = a*b
         // To compute x*y: open e = x-a, open d = y-b, then z = c + e*[b] + d*[a] + e*d
-        var triple = GetNextBeaverTriple(sharesA[0]._shape, n);
+        var triple = GetNextBeaverTriple(sharesA[0].Shape.ToArray(), n);
 
         // Compute e = x - a and d = y - b (secret-shared differences)
         var sharesE = SecureAdd(sharesA, Negate(triple.SharesA));
@@ -207,28 +173,14 @@ public class ArithmeticSecretSharing<T> : FederatedLearningComponentBase<T>, ISe
         var d = Reconstruct(sharesD);
 
         // Compute z = c + e*b + d*a + e*d
-        // Each party locally computes: c_p + e * b_p + d * a_p + (e*d)/n
+        // Each party locally computes: c_p + e * b_p + d * a_p, and only party 0 adds e*d to avoid double-counting
         var result = new Tensor<T>[n];
         for (int p = 0; p < n; p++)
         {
-            result[p] = new Tensor<T>(sharesA[0]._shape);
-            for (int i = 0; i < totalElements; i++)
-            {
-                double cVal = NumOps.ToDouble(triple.SharesC[p][i]);
-                double eVal = NumOps.ToDouble(e[i]);
-                double dVal = NumOps.ToDouble(d[i]);
-                double bVal = NumOps.ToDouble(triple.SharesB[p][i]);
-                double aVal = NumOps.ToDouble(triple.SharesA[p][i]);
-
-                double val = cVal + eVal * bVal + dVal * aVal;
-                // Only one party adds e*d to avoid double-counting
-                if (p == 0)
-                {
-                    val += eVal * dVal;
-                }
-
-                result[p][i] = NumOps.FromDouble(val);
-            }
+            var local = Engine.TensorAdd(triple.SharesC[p], Engine.TensorAdd(
+                Engine.TensorMultiply(e, triple.SharesB[p]),
+                Engine.TensorMultiply(d, triple.SharesA[p])));
+            result[p] = p == 0 ? Engine.TensorAdd(local, Engine.TensorMultiply(e, d)) : local;
         }
 
         return result;
@@ -248,15 +200,7 @@ public class ArithmeticSecretSharing<T> : FederatedLearningComponentBase<T>, ISe
         var diff = SecureAdd(sharesA, Negate(sharesB));
         var plainDiff = Reconstruct(diff);
 
-        int totalElements = ComputeTotalElements(plainDiff);
-        var compResult = new Tensor<T>(plainDiff._shape);
-        for (int i = 0; i < totalElements; i++)
-        {
-            double d = NumOps.ToDouble(plainDiff[i]);
-            compResult[i] = NumOps.FromDouble(d > 0.0 ? 1.0 : 0.0);
-        }
-
-        return Share(compResult, sharesA.Length);
+        return Share(Engine.TensorGreaterThan(plainDiff, NumOps.Zero), sharesA.Length);
     }
 
     /// <inheritdoc/>
@@ -267,16 +211,10 @@ public class ArithmeticSecretSharing<T> : FederatedLearningComponentBase<T>, ISe
             throw new ArgumentNullException(nameof(shares));
         }
 
-        double s = NumOps.ToDouble(scalar);
         var result = new Tensor<T>[shares.Length];
         for (int p = 0; p < shares.Length; p++)
         {
-            int totalElements = ComputeTotalElements(shares[p]);
-            result[p] = new Tensor<T>(shares[p]._shape);
-            for (int i = 0; i < totalElements; i++)
-            {
-                result[p][i] = NumOps.FromDouble(NumOps.ToDouble(shares[p][i]) * s);
-            }
+            result[p] = Engine.TensorMultiplyScalar(shares[p], scalar);
         }
 
         return result;
@@ -303,11 +241,12 @@ public class ArithmeticSecretSharing<T> : FederatedLearningComponentBase<T>, ISe
 
         var triple = _beaverTriples[_tripleIndex];
 
-        // If the pre-generated triple has a different party count, regenerate
-        if (triple.SharesA.Length != numberOfParties)
+        // A pre-generated triple for a different party count or shape cannot mask this product; put a matching
+        // one in its place (the unmatched triple stays queued for a later call that fits it).
+        if (triple.SharesA.Length != numberOfParties || !triple.SharesA[0].Shape.ToArray().SequenceEqual(shape))
         {
-            GenerateBeaverTriples(shape, 10, numberOfParties);
-            triple = _beaverTriples[_tripleIndex];
+            triple = CreateBeaverTriple(shape, numberOfParties);
+            _beaverTriples.Insert(_tripleIndex, triple);
         }
 
         _tripleIndex++;
@@ -318,31 +257,34 @@ public class ArithmeticSecretSharing<T> : FederatedLearningComponentBase<T>, ISe
     {
         for (int t = 0; t < count; t++)
         {
-            int totalElements = 1;
-            for (int d = 0; d < shape.Length; d++)
-            {
-                totalElements *= shape[d];
-            }
-
-            var a = new Tensor<T>(shape);
-            var b = new Tensor<T>(shape);
-            var c = new Tensor<T>(shape);
-
-            for (int i = 0; i < totalElements; i++)
-            {
-                double aVal = _random.NextDouble() * 2.0 - 1.0;
-                double bVal = _random.NextDouble() * 2.0 - 1.0;
-                a[i] = NumOps.FromDouble(aVal);
-                b[i] = NumOps.FromDouble(bVal);
-                c[i] = NumOps.FromDouble(aVal * bVal);
-            }
-
-            var sharesA = Share(a, numberOfParties);
-            var sharesB = Share(b, numberOfParties);
-            var sharesC = Share(c, numberOfParties);
-
-            _beaverTriples.Add((sharesA, sharesB, sharesC));
+            _beaverTriples.Add(CreateBeaverTriple(shape, numberOfParties));
         }
+    }
+
+    private (Tensor<T>[] SharesA, Tensor<T>[] SharesB, Tensor<T>[] SharesC) CreateBeaverTriple(int[] shape, int numberOfParties)
+    {
+        int totalElements = 1;
+        for (int d = 0; d < shape.Length; d++)
+        {
+            totalElements *= shape[d];
+        }
+
+        // a and b are drawn element by element (a then b), and c = a * b is formed in double precision.
+        var aValues = new double[totalElements];
+        var bValues = new double[totalElements];
+        var cValues = new double[totalElements];
+        for (int i = 0; i < totalElements; i++)
+        {
+            aValues[i] = _random.NextDouble() * 2.0 - 1.0;
+            bValues[i] = _random.NextDouble() * 2.0 - 1.0;
+            cValues[i] = aValues[i] * bValues[i];
+        }
+
+        var sharesA = Share(new Tensor<double>(aValues, shape).Cast<T>(), numberOfParties);
+        var sharesB = Share(new Tensor<double>(bValues, shape).Cast<T>(), numberOfParties);
+        var sharesC = Share(new Tensor<double>(cValues, shape).Cast<T>(), numberOfParties);
+
+        return (sharesA, sharesB, sharesC);
     }
 
     private Tensor<T>[] Negate(Tensor<T>[] shares)
@@ -350,25 +292,40 @@ public class ArithmeticSecretSharing<T> : FederatedLearningComponentBase<T>, ISe
         var result = new Tensor<T>[shares.Length];
         for (int p = 0; p < shares.Length; p++)
         {
-            int totalElements = ComputeTotalElements(shares[p]);
-            result[p] = new Tensor<T>(shares[p]._shape);
-            for (int i = 0; i < totalElements; i++)
-            {
-                result[p][i] = NumOps.FromDouble(-NumOps.ToDouble(shares[p][i]));
-            }
+            result[p] = Engine.TensorNegate(shares[p]);
         }
 
         return result;
     }
 
-    private static int ComputeTotalElements(Tensor<T> tensor)
+    private Tensor<T> SumShares(Tensor<T>[] shares)
     {
-        int total = 1;
-        for (int d = 0; d < tensor.Rank; d++)
+        var sum = Engine.TensorAdd(shares[0], Engine.TensorFullLike(shares[0], NumOps.Zero));
+        for (int p = 1; p < shares.Length; p++)
         {
-            total *= tensor.Shape[d];
+            sum = Engine.TensorAdd(sum, shares[p]);
         }
 
-        return total;
+        return sum;
+    }
+
+    /// <summary>
+    /// A share drawn uniformly from [-1, 1) element by element from the protocol generator.
+    /// </summary>
+    private Tensor<T> UniformTensor(int[] shape)
+    {
+        int totalElements = 1;
+        for (int d = 0; d < shape.Length; d++)
+        {
+            totalElements *= shape[d];
+        }
+
+        var values = new double[totalElements];
+        for (int i = 0; i < totalElements; i++)
+        {
+            values[i] = _random.NextDouble() * 2.0 - 1.0;
+        }
+
+        return new Tensor<double>(values, shape).Cast<T>();
     }
 }

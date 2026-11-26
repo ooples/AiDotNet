@@ -95,6 +95,10 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
 
     // The shared wav2vec 2.0 network and the CTC head (transformers Wav2Vec2ForCTC: dropout, then lm_head).
     private Audio.Foundations.Wav2Vec2Network<T>? _network;
+
+    /// <inheritdoc />
+    /// <remarks>True when the encoder's LayerDrop is positive: a skipped layer is not stepped that step.</remarks>
+    private protected override bool TrainingForwardSkipsLayersPerStep => _network is not null && _network.Configuration.LayerDrop > 0;
     private DenseLayer<T>? _ctcHead;
     private readonly Random _random;
 
@@ -439,7 +443,8 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         ThrowIfDisposed();
 
         // Preprocess audio
-        var features = PreprocessAudio(audio);
+        var features = PreprocessAudio(_useNativeMode && audio.Rank > 1
+            ? Engine.Reshape(audio, new[] { audio.Length }) : audio);
 
         // Get model output
         Tensor<T> logits;
@@ -530,11 +535,16 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         // DifferentInputs / ScaledInput). The sibling ASR models that pass these invariants
         // (UniSpeech, RobustConformer) likewise treat the given tensor as the prepared feature stream.
         int targetLength = SampleRate * _maxAudioLengthSeconds;
-        int length = Math.Min(rawAudio.Length, targetLength);
+        // A batch of clips [batch, samples] stays a batch: flattening it concatenated the clips into one long
+        // waveform (and truncated it to one clip's window), so a batched Predict transcribed the wrong signal.
+        if (rawAudio.Rank == 2 && rawAudio.Shape[0] > 1)
+        {
+            return rawAudio.Shape[1] <= targetLength
+                ? rawAudio
+                : Engine.TensorSlice(rawAudio, new[] { 0, 0 }, new[] { rawAudio.Shape[0], targetLength });
+        }
 
-        var waveform = new Tensor<T>([length]);
-        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
+        return TruncateAudioWaveform(rawAudio, _maxAudioLengthSeconds);
     }
 
     /// <summary>
@@ -587,20 +597,17 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         int field = ReceptiveField();
         if (waveform.Shape[^1] < field)
         {
-            var padded = new Tensor<T>(waveform.Rank == 1 ? new[] { field } : new[] { waveform.Shape[0], field });
-            int length = waveform.Shape[^1], rows = waveform.Rank == 1 ? 1 : waveform.Shape[0];
-            for (int r = 0; r < rows; r++)
-                for (int i = 0; i < length; i++) padded[r * field + i] = waveform[r * length + i];
-            waveform = padded;
+            // Right-pad every row with zeros up to the receptive field.
+            int length = waveform.Shape[^1];
+            var zeros = new Tensor<T>(waveform.Rank == 1 ? new[] { field - length } : new[] { waveform.Shape[0], field - length });
+            waveform = Engine.TensorConcatenate(new[] { waveform, zeros }, waveform.Rank - 1);
         }
         var output = _network.Forward(waveform, training, _random, freezeFeatureEncoder: training && _options.FreezeFeatureEncoder);
         var hidden = output.Hidden;
         if (training && _options.FinalDropout > 0)
         {
-            var mask = new Tensor<T>(hidden._shape);
-            var keep = NumOps.FromDouble(1.0 / (1.0 - _options.FinalDropout));
-            for (int i = 0; i < mask.Length; i++) mask[i] = _random.NextDouble() < _options.FinalDropout ? NumOps.Zero : keep;
-            hidden = Engine.TensorMultiply(hidden, mask);
+            // A per-step draw, so a compiled training plan redraws it on every replay.
+            hidden = Engine.TensorMultiply(hidden, AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(hidden._shape, _random, _options.FinalDropout));
         }
         int batch = hidden.Shape[0], frames = hidden.Shape[1];
         var logits = Engine.Reshape(_ctcHead.Forward(Engine.Reshape(hidden, new[] { batch * frames, hidden.Shape[2] })), new[] { batch, frames, _vocabSize });
@@ -618,6 +625,40 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
 
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
         => RunModel(input, training: true);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The CTC objective (Graves et al. 2006) of transformers' Wav2Vec2ForCTC: log-softmax over the vocabulary, then the
+    /// CTC loss of each utterance's label ids (blank 0) over all of its frames, averaged over the batch. It applies when
+    /// the target holds label ids, one row per utterance (<c>[batch, labels]</c> for <c>[batch, samples]</c>, or
+    /// <c>[labels]</c> for one waveform); a per-frame target (<c>[..., frames, vocabulary]</c>) keeps the standard step
+    /// with the model's loss function. The CTC loss was declared but never reached: the base Train scored the logits
+    /// against the labels with mean squared error.
+    /// </remarks>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
+    {
+        if (!_useNativeMode || _network is null || target.Rank != input.Rank || target.Rank > 2) return false;
+        int rows = target.Rank == 1 ? 1 : target.Shape[0];
+        if (input.Rank == 2 && input.Shape[0] != rows)
+            throw new ArgumentException($"The CTC targets have {rows} rows for {input.Shape[0]} waveforms.", nameof(target));
+        int perRow = target.Length / rows;
+        // Label ids are rounded in bulk, so a float code such as 1.9999999 reads as label 2.
+        int[] labels = Engine.TensorRound(target).Cast<int>().ToArray();
+        foreach (int label in labels)
+            if (label <= 0 || label >= _vocabSize)
+                throw new ArgumentException($"CTC label {label} is the blank or outside the {_vocabSize}-symbol vocabulary.", nameof(target));
+        var targetLengths = Enumerable.Repeat(perRow, rows).ToArray();
+        TrainWithCustomLoss(input, logits =>
+        {
+            if (logits.Rank == 2) logits = Engine.Reshape(logits, new[] { 1, logits.Shape[0], logits.Shape[1] });
+            int frames = logits.Shape[1];
+            var timeMajor = Engine.TensorPermute(Engine.TensorLogSoftmax(logits, axis: -1), new[] { 1, 0, 2 });
+            var perUtterance = Engine.TensorCTCLoss(timeMajor, new Tensor<int>(labels, new[] { labels.Length }),
+                Enumerable.Repeat(frames, rows).ToArray(), targetLengths, 0);
+            return Engine.ReduceMean(perUtterance, new[] { 0 }, keepDims: false);
+        }, _optimizer);
+        return true;
+    }
 
     /// <inheritdoc />
     /// <remarks>With <see cref="Wav2Vec2ModelOptions.FreezeFeatureEncoder"/> the convolutional feature encoder's
@@ -685,8 +726,6 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
 
     private List<int> CTCGreedyDecode(Tensor<T> logits)
     {
-        var tokens = new List<int>();
-        int prevToken = -1;
         int blankIdx = 0; // Blank token is first in vocabulary
 
         if (logits.Rank == 3)
@@ -694,36 +733,8 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
             if (logits.Shape[0] != 1) throw new ArgumentException("Greedy CTC decoding takes one utterance's logits.", nameof(logits));
             logits = Engine.Reshape(logits, new[] { logits.Shape[1], logits.Shape[2] });
         }
-        int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1;
-        int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0];
-
-        for (int t = 0; t < numFrames; t++)
-        {
-            // Find argmax
-            int maxIdx = 0;
-            double maxVal = double.NegativeInfinity;
-
-            for (int v = 0; v < vocabSize; v++)
-            {
-                double val = logits.Rank >= 2
-                    ? NumOps.ToDouble(logits[t, v])
-                    : NumOps.ToDouble(logits[v]);
-                if (val > maxVal)
-                {
-                    maxVal = val;
-                    maxIdx = v;
-                }
-            }
-
-            // CTC decoding: collapse repeated tokens and remove blanks
-            if (maxIdx != blankIdx && maxIdx != prevToken)
-            {
-                tokens.Add(maxIdx);
-            }
-            prevToken = maxIdx;
-        }
-
-        return tokens;
+        int[] frameTokens = SpeechRecognitionEngineOps.FrameArgMax(logits);
+        return SpeechRecognitionEngineOps.CollapseCtcFrames(frameTokens, blankIdx);
     }
 
     private string TokensToText(List<int> tokens)

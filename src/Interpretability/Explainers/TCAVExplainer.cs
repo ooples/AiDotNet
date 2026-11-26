@@ -226,51 +226,55 @@ public class TCAVExplainer<T> : IGPUAcceleratedExplainer<T>
         Func<Vector<T>, Vector<T>> layerActivationFunction,
         int layerSize)
     {
-        double epsilon = 1e-5;
-        var gradients = new T[layerSize];
+        var engine = AiDotNetEngine.Current;
+        T epsilon = ExplainerTensorOps<T>.Tolerance(1e-5);
 
         // Get baseline
         var inputTensor = Tensor<T>.FromRowMatrix(new Matrix<T>(new[] { input }));
         var baseOutput = network.Predict(inputTensor);
-        double baseScore = NumOps.ToDouble(baseOutput.ToVector()[outputClass]);
-        var baseActivations = layerActivationFunction(input);
+        T baseScore = baseOutput.ToVector()[outputClass];
+        var baseActivations = ExplainerTensorOps<T>.PadOrTruncate(layerActivationFunction(input), layerSize);
 
         // For each input dimension, perturb and measure effect on layer activations and output
         // Then estimate d(output)/d(activation) using chain rule
         int numInputDims = Math.Min(input.Length, 50); // Limit for efficiency
-        var activationGradients = new double[layerSize];
+        if (numInputDims == 0 || layerSize == 0)
+        {
+            return new Vector<T>(layerSize);
+        }
 
+        var perturbedOutputs = new List<Vector<T>>(numInputDims);
+        var perturbedActivations = new List<Vector<T>>(numInputDims);
+        var activationCounts = new List<Vector<T>>(numInputDims);
         for (int i = 0; i < numInputDims; i++)
         {
-            var perturbedInput = input.Clone();
-            perturbedInput[i] = NumOps.Add(perturbedInput[i], NumOps.FromDouble(epsilon));
+            var step = engine.Multiply(ExplainerTensorOps<T>.RangeIndicator(input.Length, i, i + 1).ToVector(), epsilon);
+            var perturbedInput = engine.Add(input, step);
 
             var perturbedTensor = Tensor<T>.FromRowMatrix(new Matrix<T>(new[] { perturbedInput }));
-            var perturbedOutput = network.Predict(perturbedTensor);
-            double perturbedScore = NumOps.ToDouble(perturbedOutput.ToVector()[outputClass]);
-            var perturbedActivations = layerActivationFunction(perturbedInput);
-
-            double dOutput = (perturbedScore - baseScore) / epsilon;
-
-            // Accumulate: if activation j changed and output changed, j is relevant
-            for (int j = 0; j < layerSize && j < perturbedActivations.Length; j++)
-            {
-                double dActivation = (NumOps.ToDouble(perturbedActivations[j]) -
-                                     NumOps.ToDouble(baseActivations[j])) / epsilon;
-                if (Math.Abs(dActivation) > 1e-10)
-                {
-                    // Estimate d(output)/d(activation[j]) using chain rule
-                    activationGradients[j] += dOutput / dActivation / numInputDims;
-                }
-            }
+            perturbedOutputs.Add(network.Predict(perturbedTensor).ToVector());
+            var activations = layerActivationFunction(perturbedInput);
+            perturbedActivations.Add(ExplainerTensorOps<T>.PadOrTruncate(activations, layerSize));
+            activationCounts.Add(ExplainerTensorOps<T>.RangeIndicator(layerSize, 0, Math.Min(layerSize, activations.Length)).ToVector());
         }
 
-        for (int j = 0; j < layerSize; j++)
-        {
-            gradients[j] = NumOps.FromDouble(activationGradients[j]);
-        }
+        // dOutput per perturbation and dActivation per perturbation and layer unit
+        var shape = new[] { numInputDims, layerSize };
+        var perturbedScores = engine.TensorSliceAxis(ExplainerTensorOps<T>.Stack(perturbedOutputs), 1, outputClass);
+        var dOutput = engine.TensorDivideScalar(engine.TensorSubtractScalar(perturbedScores, baseScore), epsilon);
+        var baseRows = engine.TensorBroadcastTo(ExplainerTensorOps<T>.RowTensor(baseActivations), shape);
+        var dActivation = engine.TensorDivideScalar(
+            engine.TensorSubtract(ExplainerTensorOps<T>.Stack(perturbedActivations), baseRows), epsilon);
 
-        return new Vector<T>(gradients);
+        // Accumulate d(output)/d(activation[j]) / numInputDims where activation j (present) changed
+        var relevant = engine.TensorMultiply(
+            ExplainerTensorOps<T>.Stack(activationCounts),
+            engine.TensorGreaterThan(engine.TensorAbs(dActivation), ExplainerTensorOps<T>.Tolerance(1e-10)));
+        var dOutputRows = engine.TensorBroadcastTo(dOutput.Reshape(new[] { numInputDims, 1 }), shape);
+        var safeDActivation = engine.TensorWhere(relevant, dActivation, engine.TensorFullLike(dActivation, NumOps.One));
+        var ratios = engine.TensorDivideScalar(engine.TensorDivide(dOutputRows, safeDActivation), NumOps.FromDouble(numInputDims));
+        var contributions = engine.TensorWhere(relevant, ratios, engine.TensorFullLike(ratios, NumOps.Zero));
+        return engine.ReduceSum(contributions, new[] { 0 }, false).ToVector();
     }
 
     /// <summary>
@@ -316,63 +320,33 @@ public class TCAVExplainer<T> : IGPUAcceleratedExplainer<T>
         int numTotal = numConcept + numRandom;
         int numFeatures = _layerSize;
 
-        var X = new Matrix<T>(numTotal, numFeatures);
-        var y = new Vector<T>(numTotal);
-
-        // Add concept examples (label = 1)
-        for (int i = 0; i < numConcept; i++)
-        {
-            var act = conceptActivations[i];
-            for (int j = 0; j < Math.Min(numFeatures, act.Length); j++)
-            {
-                X[i, j] = act[j];
-            }
-            y[i] = NumOps.One;
-        }
-
-        // Add random examples (label = 0)
-        for (int i = 0; i < numRandom; i++)
-        {
-            var act = randomActivations[i];
-            for (int j = 0; j < Math.Min(numFeatures, act.Length); j++)
-            {
-                X[numConcept + i, j] = act[j];
-            }
-            y[numConcept + i] = NumOps.Zero;
-        }
+        // Concept examples (label = 1) then random examples (label = 0); missing activations stay zero
+        var engine = AiDotNetEngine.Current;
+        var rows = conceptActivations.Concat(randomActivations)
+            .Select(act => ExplainerTensorOps<T>.PadOrTruncate(act, numFeatures))
+            .ToList();
+        var X = numTotal > 0 ? ExplainerTensorOps<T>.Stack(rows).ToMatrix() : new Matrix<T>(0, numFeatures);
+        var y = new Vector<T>(Enumerable.Repeat(NumOps.One, numConcept).Concat(Enumerable.Repeat(NumOps.Zero, numRandom)));
 
         // Train linear classifier using regularized least squares (simple but effective)
         var weights = TrainLinearClassifier(X, y);
 
         // Normalize to unit vector
-        double norm = 0;
-        for (int i = 0; i < weights.Length; i++)
+        T norm = NumOps.Sqrt(engine.DotProduct(weights, weights));
+        if (NumOps.GreaterThan(norm, ExplainerTensorOps<T>.Tolerance(1e-10)))
         {
-            double w = NumOps.ToDouble(weights[i]);
-            norm += w * w;
-        }
-        norm = Math.Sqrt(norm);
-
-        if (norm > 1e-10)
-        {
-            for (int i = 0; i < weights.Length; i++)
-            {
-                weights[i] = NumOps.FromDouble(NumOps.ToDouble(weights[i]) / norm);
-            }
+            weights = engine.Divide(weights, norm);
         }
 
-        // Compute classifier accuracy for quality check
+        // Compute classifier accuracy for quality check: (X w > 0.5) == (y > 0.5)
+        T half = NumOps.FromDouble(0.5);
         int correct = 0;
-        for (int i = 0; i < numTotal; i++)
+        if (numTotal > 0)
         {
-            double score = 0;
-            for (int j = 0; j < numFeatures; j++)
-            {
-                score += NumOps.ToDouble(X[i, j]) * NumOps.ToDouble(weights[j]);
-            }
-            int predicted = score > 0.5 ? 1 : 0;
-            int actual = NumOps.GreaterThan(y[i], NumOps.FromDouble(0.5)) ? 1 : 0;
-            if (predicted == actual) correct++;
+            var predicted = engine.TensorGreaterThan(engine.MatrixVectorMultiply(X, weights).AsTensor(), half);
+            var actual = engine.TensorGreaterThan(y.AsTensor(), half);
+            // Counted in int: a 0/1 sum in Half stops at 2048
+            correct = engine.TensorCountNonzero(engine.TensorEquals(predicted, actual));
         }
         double accuracy = (double)correct / numTotal;
 
@@ -384,37 +358,14 @@ public class TCAVExplainer<T> : IGPUAcceleratedExplainer<T>
     /// </summary>
     private Vector<T> TrainLinearClassifier(Matrix<T> X, Vector<T> y)
     {
-        int n = X.Rows;
         int d = X.Columns;
+        var engine = AiDotNetEngine.Current;
 
         // Solve (X^T X + lambda*I)^-1 X^T y
-        var XtX = new Matrix<T>(d, d);
-        var Xty = new Vector<T>(d);
-
-        // Compute X^T X
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                double sum = 0;
-                for (int k = 0; k < n; k++)
-                {
-                    sum += NumOps.ToDouble(X[k, i]) * NumOps.ToDouble(X[k, j]);
-                }
-                XtX[i, j] = NumOps.FromDouble(sum);
-            }
-
-            // Add regularization
-            XtX[i, i] = NumOps.Add(XtX[i, i], NumOps.FromDouble(_regularization));
-
-            // Compute X^T y
-            double dotProduct = 0;
-            for (int k = 0; k < n; k++)
-            {
-                dotProduct += NumOps.ToDouble(X[k, i]) * NumOps.ToDouble(y[k]);
-            }
-            Xty[i] = NumOps.FromDouble(dotProduct);
-        }
+        var Xt = engine.MatrixTranspose(X);
+        var regularization = engine.TensorMultiplyScalar(engine.TensorEye<T>(d), NumOps.FromDouble(_regularization));
+        var XtX = engine.TensorAdd(engine.TensorMatMul(Tensor<T>.FromMatrix(Xt), Tensor<T>.FromMatrix(X)), regularization).ToMatrix();
+        var Xty = engine.MatrixVectorMultiply(Xt, y);
 
         // Solve using Cholesky decomposition
         return SolvePositiveDefinite(XtX, Xty);
@@ -507,14 +458,8 @@ public class TCAVExplainer<T> : IGPUAcceleratedExplainer<T>
         var layerGradients = _gradientToLayerFunction(input, targetClass);
 
         // Compute dot product with CAV
-        double dotProduct = 0;
         int len = Math.Min(layerGradients.Length, cav.Weights.Length);
-        for (int i = 0; i < len; i++)
-        {
-            dotProduct += NumOps.ToDouble(layerGradients[i]) * NumOps.ToDouble(cav.Weights[i]);
-        }
-
-        return NumOps.FromDouble(dotProduct);
+        return AiDotNetEngine.Current.DotProduct(layerGradients.GetSubVector(0, len), cav.Weights.GetSubVector(0, len));
     }
 
     /// <summary>
@@ -542,18 +487,17 @@ public class TCAVExplainer<T> : IGPUAcceleratedExplainer<T>
     /// </remarks>
     public double ComputeTCAVScore(Matrix<T> testInputs, ConceptActivationVector<T> cav, int targetClass)
     {
-        int positiveCount = 0;
-
+        var derivatives = new List<T>(testInputs.Rows);
         for (int i = 0; i < testInputs.Rows; i++)
         {
-            var input = testInputs.GetRow(i);
-            var derivative = ComputeDirectionalDerivative(input, cav, targetClass);
-            if (NumOps.GreaterThan(derivative, NumOps.Zero))
-            {
-                positiveCount++;
-            }
+            derivatives.Add(ComputeDirectionalDerivative(testInputs.GetRow(i), cav, targetClass));
         }
 
+        // Fraction of inputs with a positive directional derivative
+        int positiveCount = derivatives.Count > 0
+            ? AiDotNetEngine.Current.TensorCountNonzero(
+                AiDotNetEngine.Current.TensorGreaterThan(new Vector<T>(derivatives).AsTensor(), NumOps.Zero))
+            : 0;
         return (double)positiveCount / testInputs.Rows;
     }
 
@@ -606,14 +550,9 @@ public class TCAVExplainer<T> : IGPUAcceleratedExplainer<T>
                 .Take(numRandomNeeded)
                 .ToList();
 
-            var randomExamples = new Matrix<T>(numRandomNeeded, randomExamplesPool.Columns);
-            for (int i = 0; i < numRandomNeeded; i++)
-            {
-                for (int j = 0; j < randomExamplesPool.Columns; j++)
-                {
-                    randomExamples[i, j] = randomExamplesPool[randomIndices[i], j];
-                }
-            }
+            var randomExamples = AiDotNetEngine.Current.TensorIndexSelect(
+                Tensor<T>.FromMatrix(randomExamplesPool),
+                new Tensor<int>(randomIndices.ToArray(), new[] { randomIndices.Count }), 0).ToMatrix();
 
             // Train CAV
             var cav = TrainCAV(conceptExamples, randomExamples);
@@ -729,19 +668,15 @@ public class TCAVExplainer<T> : IGPUAcceleratedExplainer<T>
         var layerActivation = _layerActivationFunction(input);
 
         // Compute activation magnitude in concept direction
-        double projectionMagnitude = 0;
         int len = Math.Min(layerActivation.Length, cav.Weights.Length);
-        for (int i = 0; i < len; i++)
-        {
-            projectionMagnitude += NumOps.ToDouble(layerActivation[i]) * NumOps.ToDouble(cav.Weights[i]);
-        }
+        T projectionMagnitude = AiDotNetEngine.Current.DotProduct(layerActivation.GetSubVector(0, len), cav.Weights.GetSubVector(0, len));
 
         return new LocalTCAVExplanation<T>(
             input: input,
             conceptName: conceptName,
             targetClass: targetClass,
             directionalDerivative: derivative,
-            conceptProjection: NumOps.FromDouble(projectionMagnitude),
+            conceptProjection: projectionMagnitude,
             prediction: prediction[targetClass],
             influenceDirection: NumOps.GreaterThan(derivative, NumOps.Zero) ? "positive" : "negative");
     }

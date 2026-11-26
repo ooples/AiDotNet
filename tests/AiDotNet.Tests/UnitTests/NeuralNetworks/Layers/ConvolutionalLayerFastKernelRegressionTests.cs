@@ -26,11 +26,38 @@ public class ConvolutionalLayerFastKernelRegressionTests
         var first = layer.Forward(input);
         var firstSnapshot = first.AsSpan().ToArray();
 
-        AssertOptimizedRouteMatch(layer, expected: true,
+        AssertOptimizedRouteMatch(layer, input, expected: true,
             "AiDotNet.Tensors 0.129.7 must make the exact and optimized convolution routes " +
             "bitwise-equal; a slow reference fallback only hides the PatchGAN regression.");
         for (int replay = 0; replay < 32; replay++)
             Assert.Equal(firstSnapshot, layer.Forward(input).AsSpan().ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ExactInference_AlternatingBatchShapes_KeepBothVerdictsAndReplayBitwise()
+    {
+        // The route verdict is kept per input shape. A cache of one shape would pass the single-shape tests while
+        // verifying again (or serving the other shape's verdict) every time the batch size alternates.
+        await Task.Yield();
+
+        var one = CreateInput([1, 3, 8, 8]);
+        var two = CreateInput([2, 3, 8, 8]);
+        var layer = CreateInitializedLayer(one, inputDepth: 3, outputDepth: 4);
+        layer.SetTrainingMode(false);
+
+        var oneSnapshot = layer.Forward(one).AsSpan().ToArray();
+        var twoSnapshot = layer.Forward(two).AsSpan().ToArray();
+        AssertOptimizedRouteMatch(layer, one, expected: true, "The batch-1 verdict must survive a batch-2 forward.");
+        AssertOptimizedRouteMatch(layer, two, expected: true, "The batch-2 verdict must be recorded as well.");
+
+        for (int replay = 0; replay < 8; replay++)
+        {
+            Assert.Equal(oneSnapshot, layer.Forward(one).AsSpan().ToArray());
+            Assert.Equal(twoSnapshot, layer.Forward(two).AsSpan().ToArray());
+        }
+
+        AssertOptimizedRouteMatch(layer, one, expected: true, "Alternating shapes must not drop the batch-1 verdict.");
+        AssertOptimizedRouteMatch(layer, two, expected: true, "Alternating shapes must not drop the batch-2 verdict.");
     }
 
     [Fact(Timeout = 120000)]
@@ -49,7 +76,7 @@ public class ConvolutionalLayerFastKernelRegressionTests
         var first = layer.Forward(input);
         var firstSnapshot = first.AsSpan().ToArray();
 
-        AssertOptimizedRouteMatch(layer, expected: true,
+        AssertOptimizedRouteMatch(layer, input, expected: true,
             "The fused ReLU route must be bitwise-equal on every platform after the Tensors " +
             "upgrade; retaining the old Windows fallback would preserve a performance regression.");
         for (int replay = 0; replay < 32; replay++)
@@ -152,14 +179,11 @@ public class ConvolutionalLayerFastKernelRegressionTests
 
     private static void AssertOptimizedRouteMatch(
         ConvolutionalLayer<float> layer,
+        Tensor<float> input,
         bool expected,
         string message)
     {
-        var matchField = typeof(ConvolutionalLayer<float>).GetField(
-            "_optimizedMatchesReference",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        Assert.NotNull(matchField);
-        bool actual = (bool)(matchField.GetValue(layer) ?? throw new InvalidOperationException("matchField.GetValue(layer) is null where it is required."));
+        bool actual = layer.OptimizedRouteMatchesReference(input);
         Assert.True(actual == expected, $"{message} Expected match={expected}, actual={actual}.");
     }
 
