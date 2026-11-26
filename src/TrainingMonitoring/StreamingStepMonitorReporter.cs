@@ -32,9 +32,10 @@ internal sealed class StreamingStepMonitorReporter<T>
 
     private long _windowStartTimestamp;
     private long _windowStartSamples;
-    private long _windowStartStep;
     private double _windowLossSum;
-    private int _windowLossCount;
+    private long _windowLossCount;
+    // Optimizer updates since the last report: step_ms is per update, and a step trained one sample at a time is several.
+    private long _windowUpdates;
 
     private long _lastResourceTimestamp;
     private TimeSpan _lastProcessorTime;
@@ -69,7 +70,6 @@ internal sealed class StreamingStepMonitorReporter<T>
             ? (long)(resourceIntervalSeconds * Stopwatch.Frequency)
             : 0L;
         _gradNormSource = gradNormSource;
-        _windowStartStep = startStep;
         _windowStartTimestamp = Stopwatch.GetTimestamp();
         _lastResourceTimestamp = _windowStartTimestamp;
     }
@@ -88,6 +88,10 @@ internal sealed class StreamingStepMonitorReporter<T>
     /// <param name="totalSteps">The planned step count, or 0 when unknown.</param>
     /// <param name="currentEpoch">The current epoch (1-based).</param>
     /// <param name="totalEpochs">The planned epoch count.</param>
+    /// <param name="optimizerUpdates">The optimizer updates this step applied: 1 for a stacked batch or an accumulated
+    /// update; more when a batch that could not be stacked was trained one sample at a time. <c>step_ms</c> and
+    /// <c>train_loss_avg</c> are in update units, so <paramref name="stepLoss"/> is then the mean of those updates' losses
+    /// and counts once per update.</param>
     public void OnStep(
         long globalStep,
         bool hasLoss,
@@ -96,19 +100,22 @@ internal sealed class StreamingStepMonitorReporter<T>
         double learningRate,
         long totalSteps,
         int currentEpoch,
-        int totalEpochs)
+        int totalEpochs,
+        int optimizerUpdates = 1)
     {
+        if (optimizerUpdates <= 0) throw new ArgumentOutOfRangeException(nameof(optimizerUpdates));
+        _windowUpdates += optimizerUpdates;
         if (hasLoss)
         {
-            _windowLossSum += _numOps.ToDouble(stepLoss);
-            _windowLossCount++;
+            _windowLossSum += _numOps.ToDouble(stepLoss) * optimizerUpdates;
+            _windowLossCount += optimizerUpdates;
         }
 
         if (globalStep % _everyNSteps != 0)
             return;
 
         long now = Stopwatch.GetTimestamp();
-        long steps = globalStep - _windowStartStep;
+        long updates = _windowUpdates;
         double seconds = (now - _windowStartTimestamp) / (double)Stopwatch.Frequency;
         long samples = totalSamplesSeen - _windowStartSamples;
         int step = ClampToInt(globalStep);
@@ -121,9 +128,9 @@ internal sealed class StreamingStepMonitorReporter<T>
                 _monitor.LogMetric(_sessionId, "train_loss_avg", _numOps.FromDouble(_windowLossSum / _windowLossCount), step);
             if (!double.IsNaN(learningRate))
                 _monitor.LogMetric(_sessionId, "learning_rate", _numOps.FromDouble(learningRate), step);
-            if (steps > 0 && seconds > 0)
+            if (updates > 0 && seconds > 0)
             {
-                _monitor.LogMetric(_sessionId, "step_ms", _numOps.FromDouble(seconds * 1000.0 / steps), step);
+                _monitor.LogMetric(_sessionId, "step_ms", _numOps.FromDouble(seconds * 1000.0 / updates), step);
                 _monitor.LogMetric(_sessionId, "samples_per_second", _numOps.FromDouble(samples / seconds), step);
                 if (_tokensPerSample is int tokens)
                     _monitor.LogMetric(_sessionId, "tokens_per_second", _numOps.FromDouble(samples * (double)tokens / seconds), step);
@@ -158,9 +165,9 @@ internal sealed class StreamingStepMonitorReporter<T>
 
         _windowStartTimestamp = Stopwatch.GetTimestamp();
         _windowStartSamples = totalSamplesSeen;
-        _windowStartStep = globalStep;
         _windowLossSum = 0.0;
         _windowLossCount = 0;
+        _windowUpdates = 0;
     }
 
     /// <summary>

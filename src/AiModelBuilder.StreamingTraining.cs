@@ -166,10 +166,18 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// (rank r takes the counters rank r saved; a rank the saving run did not have takes rank 0's -- its masks cannot
     /// match a run that never had it, but they continue a real sequence rather than restart one).
     /// </summary>
+    /// <remarks>
+    /// Must run after the model state is loaded: loading a serialized model rebuilds its layers, and a rebuilt layer
+    /// starts at draw counter 0 on stream 0 with no fallback seed. The rank's stream and the run's base seed are
+    /// therefore re-applied here before the checkpoint's own values replace them.
+    /// </remarks>
     private void RestoreStochasticCheckpointState(string state, int rank, string checkpointId)
     {
-        if (_model is not NeuralNetworks.NeuralNetworkBase<T> neuralNet || string.IsNullOrEmpty(state)) return;
+        if (_model is not NeuralNetworks.NeuralNetworkBase<T> neuralNet) return;
         var layers = neuralNet.CollectStochasticLayers();
+        foreach (var layer in layers) layer.StochasticStream = rank;
+        if (_stochasticBaseSeed is int configuredBaseSeed) ApplyStochasticBaseSeed(layers, configuredBaseSeed);
+        if (string.IsNullOrEmpty(state)) return;
         int bar = state.IndexOf('|');
         string seedText = bar < 0 ? state : state.Substring(0, bar);
         string countersText = bar < 0 ? string.Empty : state.Substring(bar + 1);
@@ -194,11 +202,23 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
         var ranks = countersText.Split(';');
         var mine = ranks[rank < ranks.Length ? rank : 0].Split(',');
+        int restored = layers.Count;
         if (mine.Length != layers.Count)
-            throw new InvalidOperationException(
-                $"Cannot resume from checkpoint '{checkpointId}': it records {mine.Length} stochastic layer counter(s) but "
-                + $"the model has {layers.Count}.");
-        for (int i = 0; i < layers.Count; i++)
+        {
+            // Checkpoints written before off-chain (GetExtraTrainableLayers) stochastic layers were collected record only
+            // the on-chain ones, which are the leading entries of the list in the same order: restore those and let the
+            // off-chain layers start their sequence, rather than refuse a checkpoint that is otherwise complete.
+            int onChain = neuralNet.CollectStochasticLayers(includeExtraRoots: false).Count;
+            if (mine.Length != onChain || onChain >= layers.Count)
+                throw new InvalidOperationException(
+                    $"Cannot resume from checkpoint '{checkpointId}': it records {mine.Length} stochastic layer counter(s) but "
+                    + $"the model has {layers.Count}.");
+            System.Diagnostics.Trace.TraceWarning(
+                $"Checkpoint '{checkpointId}' records draw counters for the model's {onChain} on-chain stochastic layer(s) "
+                + $"only (it predates off-chain ones); the other {layers.Count - onChain} restart their mask sequence on resume.");
+            restored = onChain;
+        }
+        for (int i = 0; i < restored; i++)
             layers[i].StochasticDrawCounter = long.Parse(mine[i], CultureInfo.InvariantCulture);
     }
     internal const string StreamingMpGrowthTrackerKey = "mp.growth_tracker";
@@ -769,7 +789,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         int savedBatchSize = checked((int)ReadStreamingCursor(metadata, StreamingBatchSizeKey, latest.CheckpointId));
 
         ValidateCheckpointSeed(metadata, options.Seed, latest.CheckpointId);
-        RestoreStochasticCheckpointState(ReadStochasticCheckpointState(metadata), rank: 0, latest.CheckpointId);
         int? savedFitSeed = TryReadOptionalIntMetadata(metadata, StreamingFitSeedKey);
         RequireCheckpointedDataOrder(options.Seed, savedFitSeed, latest.CheckpointId);
         int? savedFitBatchSize = TryReadOptionalIntMetadata(metadata, StreamingFitBatchSizeKey) ?? savedBatchSize;
@@ -803,6 +822,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             throw new InvalidOperationException(
                 $"Checkpoint '{latest.CheckpointId}' has no saved model state to resume from.");
         }
+
+        // After the model state: restoring it can rebuild the layers, which would drop draw counters restored earlier.
+        RestoreStochasticCheckpointState(ReadStochasticCheckpointState(metadata), rank: 0, latest.CheckpointId);
 
         if (model is NeuralNetworks.NeuralNetworkBase<T> restoredNn)
         {
@@ -1000,7 +1022,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         byte[] sharedRngState = BroadcastByteArray(distBackend, distBackend.Rank == 0 ? rank0RngState : null, root: 0);
-        RestoreStochasticCheckpointState(System.Text.Encoding.UTF8.GetString(sharedRngState), distBackend.Rank, rngCheckpointId);
 
         byte[] sharedStateBytes = BroadcastByteArray(distBackend, distBackend.Rank == 0 ? rank0StateBytes : null, root: 0);
         if (sharedStateBytes.Length > 0 && model is ICheckpointableModel checkpointableModel)
@@ -1024,6 +1045,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 parameterizable.SetParameters(fullParams);
             }
         }
+
+        // After the model state on every rank: LoadState rebuilds the layers, which would drop counters restored earlier.
+        RestoreStochasticCheckpointState(System.Text.Encoding.UTF8.GetString(sharedRngState), distBackend.Rank, rngCheckpointId);
 
         if (model is NeuralNetworks.NeuralNetworkBase<T> restoredNn)
         {
@@ -1811,6 +1835,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 if (clipCount != lastClipCount)
                 {
                     lastClipCount = clipCount;
+                    // The eager step this clip belonged to is now reported: advance the optimizer baseline too, else a
+                    // later compiled step with no readable plan norm would report this step's optimizer norm as its own.
+                    if (gradientOptimizer is not null) lastOptimizerStepCount = gradientOptimizer.TapeStepCount;
                     // The optimizer saw the network-clipped gradients, so its norm would not be the step's norm.
                     return network.TryGetLastGradientNorm(allowDeviceRead: monitorGradNorm);
                 }
