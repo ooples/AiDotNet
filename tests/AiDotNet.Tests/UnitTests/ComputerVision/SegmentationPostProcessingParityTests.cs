@@ -46,6 +46,40 @@ public class SegmentationPostProcessingParityTests
         return new Tensor<T>(data, new[] { c, h, w });
     }
 
+    /// <summary>
+    /// Class logits <c>[c, h, w]</c> whose winning class is drawn per pixel, so the classes break into many small
+    /// components. A fraction of pixels tie two classes exactly, and a fraction carry NaN or an infinite logit.
+    /// </summary>
+    private static Tensor<T> NoiseLogits<T>(int c, int h, int w, int seed, double tieRate = 0, double nonFiniteRate = 0)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var random = RandomHelper.CreateSeededRandom(seed);
+        var data = new T[c * h * w];
+        var values = new double[c];
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                int winner = random.Next(c);
+                for (int ch = 0; ch < c; ch++) values[ch] = (ch == winner ? 2.5 : 0.0) + random.NextDouble();
+                double draw = random.NextDouble();
+                if (draw < tieRate)
+                {
+                    values[(winner + 1) % c] = values[winner];
+                }
+                else if (draw < tieRate + nonFiniteRate)
+                {
+                    int kind = random.Next(3);
+                    values[random.Next(c)] = kind == 0 ? double.NaN : kind == 1 ? double.PositiveInfinity : double.NegativeInfinity;
+                }
+
+                for (int ch = 0; ch < c; ch++) data[(ch * h + y) * w + x] = ops.FromDouble(values[ch]);
+            }
+        }
+
+        return new Tensor<T>(data, new[] { c, h, w });
+    }
+
     private static Tensor<T> RandomTensor<T>(int[] shape, int seed, double low, double high)
     {
         var ops = MathHelper.GetNumericOperations<T>();
@@ -62,7 +96,9 @@ public class SegmentationPostProcessingParityTests
         var e = Flat(expected);
         var a = Flat(actual);
         for (int i = 0; i < e.Length; i++)
-            Assert.True(D(e[i]).Equals(D(a[i])), $"{what}: element {i} expected {D(e[i]):R} but was {D(a[i]):R}");
+            Assert.True(
+                BitConverter.DoubleToInt64Bits(D(e[i])) == BitConverter.DoubleToInt64Bits(D(a[i])),
+                $"{what}: element {i} expected {D(e[i]):R} but was {D(a[i]):R}");
     }
 
     // ------------------------------------------------------------------ panoptic
@@ -70,6 +106,7 @@ public class SegmentationPostProcessingParityTests
     private sealed class ReferenceSegment
     {
         public int PanopticValue;
+        public int SegmentId;
         public int ClassId;
         public bool IsThing;
         public double Confidence;
@@ -135,16 +172,22 @@ public class SegmentationPostProcessingParityTests
                 }
 
                 if (area > 0)
-                    segments.Add(new ReferenceSegment { PanopticValue = cls * 1000 + instId, ClassId = cls, IsThing = true, Confidence = sumConf / area, Area = area, Mask = compMask });
+                    segments.Add(new ReferenceSegment { PanopticValue = cls * 1000 + instId, SegmentId = instId, ClassId = cls, IsThing = true, Confidence = sumConf / area, Area = area, Mask = compMask });
             }
         }
 
+        // Segment ids are sequential: a thing keeps its instance id, and the stuff segments follow the last instance
+        int nextStuffId = nextInstId;
+        foreach (var segment in segments.Where(s => !s.IsThing)) segment.SegmentId = nextStuffId++;
         return (instanceMap, panopticMap, segments);
     }
 
     private static void PanopticMatchesScan<T>(int classes, int numStuff, int numClasses, int seed)
+        => PanopticMatchesScan(BlockLogits<T>(classes, 12, 16, seed), numStuff, numClasses);
+
+    private static void PanopticMatchesScan<T>(Tensor<T> logits, int numStuff, int numClasses)
     {
-        var logits = BlockLogits<T>(classes, 12, 16, seed);
+        int h = logits.Shape[1], w = logits.Shape[2];
         var (instance, panoptic, segments) = ReferencePanoptic(logits, numStuff, numClasses);
 
         var result = SegmentationPostProcessing.PanopticFromSemanticLogits(logits, numStuff, numClasses);
@@ -152,7 +195,7 @@ public class SegmentationPostProcessingParityTests
         AssertSame(SegmentationTensorOps.ArgmaxAlongClassDim(logits), result.SemanticMap, "semantic map");
         Assert.Equal(instance, Flat(result.InstanceMap).Select(D).ToArray());
         Assert.Equal(panoptic, Flat(result.PanopticMap).Select(D).ToArray());
-        Assert.Equal(new[] { 12, 16 }, result.PanopticMap.Shape.ToArray());
+        Assert.Equal(new[] { h, w }, result.PanopticMap.Shape.ToArray());
 
         Assert.NotEmpty(segments);
         Assert.Equal(segments.Count, result.Segments.Count);
@@ -165,7 +208,7 @@ public class SegmentationPostProcessingParityTests
             Assert.Equal(expected.Area, actual.Area);
             // Same pixels added in the same (row-major) order, so the sum is the same double
             Assert.Equal(expected.Confidence, actual.Confidence);
-            Assert.Equal(expected.PanopticValue, actual.SegmentId);
+            Assert.Equal(expected.SegmentId, actual.SegmentId);
             if (expected.Mask is { } mask)
                 Assert.Equal(mask, Flat(actual.Mask).Select(D).ToArray());
         }
@@ -187,28 +230,61 @@ public class SegmentationPostProcessingParityTests
         => PanopticMatchesScan<float>(classes, numStuff, numClasses, seed);
 
     [Fact]
-    public void PanopticFromSemanticLogits_SegmentIdsAreUniqueAndAreThePanopticMapValues()
+    public void PanopticFromSemanticLogits_TiesAndNonFiniteLogits_MatchThePixelScan()
+        => PanopticMatchesScan(NoiseLogits<double>(5, 12, 16, 23, tieRate: 0.15, nonFiniteRate: 0.1), 2, 5);
+
+    [Fact]
+    public void PanopticFromSemanticLogits_MoreThanAThousandInstances_MatchesThePixelScan()
+    {
+        // Per-pixel winners on 64 x 64 break the thing classes into well over 1000 components, the count at which
+        // the classId * 1000 + instanceId encoding of PanopticMap stops identifying the class.
+        var logits = NoiseLogits<double>(3, 64, 64, 24);
+        Assert.True(ReferencePanoptic(logits, 1, 3).Segments.Count(s => s.IsThing) > 1000);
+        PanopticMatchesScan(logits, 1, 3);
+    }
+
+    [Fact]
+    public void PanopticFromSemanticLogits_LargeImage_MatchesThePixelScan_Float()
+        => PanopticMatchesScan(BlockLogits<float>(6, 64, 64, 25), 2, 6);
+
+    [Theory]
+    [InlineData(12, 16, 31)]
+    [InlineData(64, 64, 32)]
+    public void PanopticFromSemanticLogits_SegmentIdsAreSequential_AndSelectThingPixelsInTheInstanceMap(int h, int w, int seed)
     {
         // Nine of the ten models used the class id for stuff and the instance id for things as SegmentId, so
-        // stuff class 1 and instance 1 shared an id; the id is now the segment's value in PanopticMap.
-        var logits = BlockLogits<double>(6, 12, 16, 31);
+        // stuff class 1 and instance 1 shared an id. Ids are now 1 .. S, as MaskClassificationOps assigns them,
+        // and InstanceMap == SegmentId selects exactly a thing's pixels (64 x 64 has over 1000 instances).
+        var logits = h == 12 ? BlockLogits<double>(6, h, w, seed) : NoiseLogits<double>(6, h, w, seed);
         var result = SegmentationPostProcessing.PanopticFromSemanticLogits(logits, 2, 6);
 
-        var ids = result.Segments.Select(s => s.SegmentId).ToArray();
-        Assert.Equal(ids.Length, ids.Distinct().Count());
+        var ids = result.Segments.Select(s => s.SegmentId).OrderBy(id => id).ToArray();
+        Assert.Equal(Enumerable.Range(1, result.Segments.Count).ToArray(), ids);
         Assert.Contains(result.Segments, s => !s.IsThing);
         Assert.Contains(result.Segments, s => s.IsThing);
+        if (h == 64) Assert.True(result.Segments.Count(s => s.IsThing) > 1000);
 
-        var panoptic = Flat(result.PanopticMap);
-        var counts = panoptic.GroupBy(v => (int)v).ToDictionary(g => g.Key, g => g.Count());
+        var instanceMap = Flat(result.InstanceMap);
+        var semanticMap = Flat(result.SemanticMap);
+        var instancePixels = instanceMap.GroupBy(v => (int)v).ToDictionary(g => g.Key, g => g.Count());
         foreach (var segment in result.Segments)
         {
-            Assert.True(counts.TryGetValue(segment.SegmentId, out int pixels), $"no pixel carries id {segment.SegmentId}");
-            Assert.Equal(segment.Area, pixels);
-            Assert.Equal(segment.ClassId, segment.SegmentId / SegmentationPostProcessing.PanopticLabelDivisor);
+            if (segment.IsThing)
+            {
+                Assert.True(instancePixels.TryGetValue(segment.SegmentId, out int pixels), $"no pixel carries id {segment.SegmentId}");
+                Assert.Equal(segment.Area, pixels);
+                var mask = Flat(segment.Mask);
+                for (int i = 0; i < instanceMap.Length; i++)
+                    Assert.Equal((int)instanceMap[i] == segment.SegmentId ? 1.0 : 0.0, mask[i]);
+            }
+            else
+            {
+                Assert.False(instancePixels.ContainsKey(segment.SegmentId));
+                Assert.Equal(segment.Area, semanticMap.Count(v => (int)v == segment.ClassId));
+            }
         }
 
-        Assert.Equal(panoptic.Length, result.Segments.Sum(s => s.Area));
+        Assert.Equal(instanceMap.Length, result.Segments.Sum(s => s.Area));
     }
 
     // ------------------------------------------------------------------ instances
@@ -225,7 +301,7 @@ public class SegmentationPostProcessingParityTests
     /// The scan every YOLO-seg DetectInstances override ran, and the stable descending-confidence ordering it
     /// applied before its mask NMS.
     /// </summary>
-    private static List<ReferenceInstance> ReferenceInstances<T>(Tensor<T> logits, int numClasses, int maxInstances, double threshold)
+    private static List<ReferenceInstance> ReferenceInstances<T>(Tensor<T> logits, int numClasses, int maxInstances, double threshold, int minArea = 4)
     {
         var ops = MathHelper.GetNumericOperations<T>();
         var probMap = SegmentationTensorOps.SoftmaxAlongClassDim(logits);
@@ -258,7 +334,7 @@ public class SegmentationPostProcessingParityTests
                     }
                 }
 
-                if (area < 4) continue;
+                if (area < minArea) continue;
                 double confidence = sumConf / area;
                 if (confidence < threshold) continue;
                 instances.Add(new ReferenceInstance
@@ -275,21 +351,24 @@ public class SegmentationPostProcessingParityTests
     }
 
     private static void InstancesMatchScan<T>(int numClasses, int maxInstances, double threshold, int seed)
+        => InstancesMatchScan(BlockLogits<T>(5, 12, 16, seed), numClasses, maxInstances, threshold, minArea: 4);
+
+    private static void InstancesMatchScan<T>(Tensor<T> logits, int numClasses, int maxInstances, double threshold, int minArea)
     {
-        var logits = BlockLogits<T>(5, 12, 16, seed);
-        var expected = ReferenceInstances(logits, numClasses, maxInstances, threshold);
+        int h = logits.Shape[1], w = logits.Shape[2];
+        var expected = ReferenceInstances(logits, numClasses, maxInstances, threshold, minArea);
 
         var actual = SegmentationPostProcessing.ConnectedComponentInstances(
-            logits, numClasses, maxInstances, minArea: 4, confidenceThreshold: threshold);
+            logits, numClasses, maxInstances, minArea, confidenceThreshold: threshold);
 
         Assert.Equal(expected.Count, actual.Count);
         for (int i = 0; i < expected.Count; i++)
         {
             Assert.Equal(expected[i].ClassId, actual[i].ClassId);
             Assert.Equal(expected[i].ClassId, actual[i].Box.ClassIndex);
-            Assert.Equal(expected[i].Confidence, D(actual[i].Confidence));
+            Assert.Equal(BitConverter.DoubleToInt64Bits(expected[i].Confidence), BitConverter.DoubleToInt64Bits(D(actual[i].Confidence)));
             Assert.Equal(expected[i].Box, new[] { D(actual[i].Box.X1), D(actual[i].Box.Y1), D(actual[i].Box.X2), D(actual[i].Box.Y2) });
-            Assert.Equal(new[] { 12, 16 }, actual[i].Mask.Shape.ToArray());
+            Assert.Equal(new[] { h, w }, actual[i].Mask.Shape.ToArray());
             Assert.Equal(expected[i].Mask, Flat(actual[i].Mask).Select(D).ToArray());
         }
     }
@@ -309,6 +388,57 @@ public class SegmentationPostProcessingParityTests
     [InlineData(5, 2, 0.0, 52)]
     public void ConnectedComponentInstances_MatchesThePixelScan_Float(int numClasses, int maxInstances, double threshold, int seed)
         => InstancesMatchScan<float>(numClasses, maxInstances, threshold, seed);
+
+    [Theory]
+    [InlineData(0.5, 47)]
+    [InlineData(0.0, 48)]
+    public void ConnectedComponentInstances_TiesAndNonFiniteLogits_MatchThePixelScan(double threshold, int seed)
+        => InstancesMatchScan(NoiseLogits<double>(5, 12, 16, seed, tieRate: 0.15, nonFiniteRate: 0.1), 5, 100, threshold, minArea: 1);
+
+    [Fact]
+    public void ConnectedComponentInstances_EqualConfidencesPastTheCap_KeepExtractionOrder()
+    {
+        // Class 1 wins a checkerboard of single pixels by a margin too small to move its probability off 1/3, so
+        // 128 components with equal confidences compete for a cap of 100 and must keep their extraction order.
+        const int h = 16, w = 16;
+        var data = new double[3 * h * w];
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                if ((x + y) % 2 == 1) data[(1 * h + y) * w + x] = 1e-300;
+        var logits = new Tensor<double>(data, new[] { 3, h, w });
+
+        var expected = ReferenceInstances(logits, 3, 100, 0.0, minArea: 1);
+        Assert.Equal(100, expected.Count);
+        Assert.Single(expected.Select(i => i.Confidence).Distinct());
+        InstancesMatchScan(logits, 3, 100, 0.0, minArea: 1);
+    }
+
+    [Fact]
+    public void ConnectedComponentInstances_MoreThanAThousandComponents_MatchesThePixelScan()
+    {
+        var logits = NoiseLogits<double>(3, 64, 64, 49);
+        Assert.True(ReferenceInstances(logits, 3, int.MaxValue, 0.0, minArea: 1).Count > 1000);
+        InstancesMatchScan(logits, 3, int.MaxValue, 0.0, minArea: 1);
+    }
+
+    [Theory]
+    [InlineData(100, 0.5, 53)]
+    [InlineData(int.MaxValue, 0.0, 54)]
+    public void ConnectedComponentInstances_LargeImage_MatchesThePixelScan_Float(int maxInstances, double threshold, int seed)
+        => InstancesMatchScan(BlockLogits<float>(5, 64, 64, seed), 5, maxInstances, threshold, minArea: 4);
+
+    [Fact]
+    public void SingleImageLogits_AcceptsOneImageAndRejectsABatch()
+    {
+        var single = RandomTensor<double>(new[] { 5, 4, 6 }, 55, -1.0, 1.0);
+        var batchOfOne = new Tensor<double>(single.ToArray(), new[] { 1, 5, 4, 6 });
+
+        Assert.Same(single, SegmentationPostProcessing.SingleImageLogits(single, "image"));
+        AssertSame(single, SegmentationPostProcessing.SingleImageLogits(batchOfOne, "image"), "batch of one");
+        var error = Assert.Throws<ArgumentException>(() => SegmentationPostProcessing.SingleImageLogits(
+            new Tensor<double>(new[] { 2, 5, 4, 6 }), "image"));
+        Assert.Equal("image", error.ParamName);
+    }
 
     [Fact]
     public void ConnectedComponentInstances_KeepsSomethingAndDropsSomething()
@@ -387,11 +517,13 @@ public class SegmentationPostProcessingParityTests
     // ------------------------------------------------------------------ score maps
 
     private static void GatedChannelMeanMatchesScan<T>(int seed)
+        => GatedChannelMeanMatchesScan(
+            RandomTensor<T>(new[] { 7, 5, 6 }, seed, -3.0, 3.0), RandomTensor<T>(new[] { 5, 6 }, seed + 1, 0.0, 1.0));
+
+    private static void GatedChannelMeanMatchesScan<T>(Tensor<T> features, Tensor<T> gate)
     {
         var ops = MathHelper.GetNumericOperations<T>();
-        const int c = 7, h = 5, w = 6;
-        var features = RandomTensor<T>(new[] { c, h, w }, seed, -3.0, 3.0);
-        var gate = RandomTensor<T>(new[] { h, w }, seed + 1, 0.0, 1.0);
+        int c = features.Shape[0], h = features.Shape[1], w = features.Shape[2];
 
         var expected = new Tensor<T>(new[] { h, w });
         for (int y = 0; y < h; y++)
@@ -417,6 +549,40 @@ public class SegmentationPostProcessingParityTests
     [InlineData(64)]
     [InlineData(65)]
     public void GatedChannelMean_MatchesTheDoubleAccumulation_Float(int seed) => GatedChannelMeanMatchesScan<float>(seed);
+
+    [Fact]
+    public void GatedChannelMean_LargeMap_MatchesTheDoubleAccumulation_Float()
+        // 64 channels over 64 x 64 with a wide range, so the float values summed in double depend on the order
+        => GatedChannelMeanMatchesScan(
+            RandomTensor<float>(new[] { 64, 64, 64 }, 66, -1e4, 1e4), RandomTensor<float>(new[] { 64, 64 }, 67, 0.0, 1.0));
+
+    [Fact]
+    public void GatedChannelMean_NonFiniteAndSignedZeroValues_MatchTheDoubleAccumulation()
+    {
+        var features = RandomTensor<double>(new[] { 3, 4, 5 }, 68, -2.0, 2.0);
+        features[0, 0, 0] = double.NaN;
+        features[1, 1, 1] = double.PositiveInfinity;
+        features[2, 2, 2] = double.NegativeInfinity;
+        features[0, 3, 4] = -0.0;
+        features[1, 3, 4] = -0.0;
+        features[2, 3, 4] = -0.0;
+        var gate = RandomTensor<double>(new[] { 4, 5 }, 69, 0.0, 1.0);
+        gate[0, 1] = 0.0;
+        gate[1, 1] = 0.0;
+        gate[3, 4] = -1.0;
+
+        GatedChannelMeanMatchesScan(features, gate);
+    }
+
+    [Fact]
+    public void GatedChannelMean_NonContiguousFeatures_MatchTheDoubleAccumulation()
+    {
+        // A transposed view, so the features are not laid out row-major in their storage
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var stored = RandomTensor<float>(new[] { 6, 5, 4 }, 70, -3.0, 3.0);
+        var features = engine.TensorPermute(stored, new[] { 0, 2, 1 });
+        GatedChannelMeanMatchesScan(features, RandomTensor<float>(new[] { 4, 5 }, 71, 0.0, 1.0));
+    }
 
     [Theory]
     [InlineData(5, 6)]
@@ -451,9 +617,12 @@ public class SegmentationPostProcessingParityTests
     // ------------------------------------------------------------------ multi-threshold masks
 
     private static void PromptMasksMatchScan<T>(int h, int w, int seed)
+        => PromptMasksMatchScan(RandomTensor<T>(new[] { h, w }, seed, -3.0, 3.0));
+
+    private static void PromptMasksMatchScan<T>(Tensor<T> scoreMap)
     {
         var ops = MathHelper.GetNumericOperations<T>();
-        var scoreMap = RandomTensor<T>(new[] { h, w }, seed, -3.0, 3.0);
+        int h = scoreMap.Shape[0], w = scoreMap.Shape[1];
 
         var probs = SegmentationTensorOps.Sigmoid(scoreMap);
         double[] thresholds = { 0.3, 0.5, 0.7 };
@@ -505,6 +674,37 @@ public class SegmentationPostProcessingParityTests
     [InlineData(9, 13, 85)]
     [InlineData(8, 5, 86)]
     public void PromptMasksFromScores_MatchesThePixelScan_Float(int h, int w, int seed) => PromptMasksMatchScan<float>(h, w, seed);
+
+    [Fact]
+    public void PromptMasksFromScores_LargeMap_MatchesThePixelScan_Float()
+        => PromptMasksMatchScan(RandomTensor<float>(new[] { 64, 64 }, 87, -3.0, 3.0));
+
+    [Fact]
+    public void PromptMasksFromScores_NaNAndExactThresholds_MatchThePixelScan()
+    {
+        // Scores whose sigmoid lands on or one step beside a threshold or a stability bound, plus NaN, infinite
+        // and signed-zero scores
+        double[] edges = { 0.3, 0.5, 0.7, 0.3 - 0.05, 0.3 + 0.05, 0.5 - 0.05, 0.5 + 0.05, 0.7 - 0.05, 0.7 + 0.05 };
+        var values = new List<double> { double.NaN, double.PositiveInfinity, double.NegativeInfinity, 0.0, -0.0 };
+        foreach (double p in edges)
+        {
+            double logit = Math.Log(p / (1 - p));
+            values.Add(logit);
+            values.Add(BitStep(logit, 1));
+            values.Add(BitStep(logit, -1));
+        }
+
+        while (values.Count % 8 != 0) values.Add(1.0);
+        PromptMasksMatchScan(new Tensor<double>(values.ToArray(), new[] { values.Count / 8, 8 }));
+    }
+
+    /// <summary>The double one step above (<paramref name="direction"/> 1) or below (-1) a finite value.</summary>
+    private static double BitStep(double value, int direction)
+    {
+        if (value == 0) return direction > 0 ? double.Epsilon : -double.Epsilon;
+        long bits = BitConverter.DoubleToInt64Bits(value);
+        return BitConverter.Int64BitsToDouble(bits + ((value > 0) == (direction > 0) ? 1 : -1));
+    }
 
     [Fact]
     public void PromptMasksFromScores_AllLowScores_GiveEmptyMasksAndZeroScores()
