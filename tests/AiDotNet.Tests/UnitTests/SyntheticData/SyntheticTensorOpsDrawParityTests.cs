@@ -347,4 +347,47 @@ public class SyntheticTensorOpsDrawParityTests
         row[0] = 99.0;
         Assert.Equal(3.0, data[2, 0]);
     }
+
+    /// <summary>A generator that returns one fixed uniform, to drive the Box-Muller guards to their edges.</summary>
+    private sealed class FixedRandom : Random
+    {
+        private readonly double _value;
+        public FixedRandom(double value) => _value = value;
+        public override double NextDouble() => _value;
+        protected override double Sample() => _value;
+    }
+
+    // The largest double below 1, the top of NextDouble's range.
+    private static readonly double JustBelowOne = BitConverter.Int64BitsToDouble(BitConverter.DoubleToInt64Bits(1.0) - 1);
+
+    [Fact]
+    public void FlooredGuard_FloorsAZeroUniform_ToAFiniteDraw()
+    {
+        // u1 = max(1e-10, 0) = 1e-10 and u2 = 0; without the floor ln(0) makes every draw +Infinity.
+        double expected = Math.Sqrt(-2.0 * Math.Log(1e-10)) * Math.Cos(2.0 * Math.PI * 0.0);
+        var vector = SyntheticTensorOps<double>.StandardNormalVector(4, new FixedRandom(0.0), BoxMullerGuard.Floored).ToArray();
+        var tensor = SyntheticTensorOps<double>.StandardNormalTensor(new[] { 2, 2 }, new FixedRandom(0.0), BoxMullerGuard.Floored).ToArray();
+        foreach (var draws in new[] { vector, tensor })
+        {
+            Assert.All(draws, v => Assert.False(double.IsInfinity(v) || double.IsNaN(v)));
+            Assert.All(draws, v => Assert.Equal(BitConverter.DoubleToInt64Bits(expected), BitConverter.DoubleToInt64Bits(v)));
+        }
+    }
+
+    [Fact]
+    public void FlooredComplementGuard_FloorsTheComplementOfTheLargestUniform()
+    {
+        // 1 - JustBelowOne is 2^-53, below the 1e-10 floor: the floored draw uses ln(1e-10), the unfloored one
+        // ln(2^-53), so the values differ and the floor is observable.
+        double u2 = JustBelowOne;
+        double expected = Math.Sqrt(-2.0 * Math.Log(1e-10)) * Math.Cos(2.0 * Math.PI * u2);
+        double unfloored = Math.Sqrt(-2.0 * Math.Log(1.0 - JustBelowOne)) * Math.Cos(2.0 * Math.PI * u2);
+        Assert.NotEqual(expected, unfloored);
+
+        var target = new Tensor<double>(new[] { 3 });
+        SyntheticTensorOps<double>.FillStandardNormal(target, new FixedRandom(JustBelowOne), BoxMullerGuard.FlooredComplement);
+        var vector = SyntheticTensorOps<double>.StandardNormalVector(3, new FixedRandom(JustBelowOne), BoxMullerGuard.FlooredComplement).ToArray();
+        foreach (var draws in new[] { target.ToArray(), vector })
+            Assert.All(draws, v => Assert.Equal(BitConverter.DoubleToInt64Bits(expected), BitConverter.DoubleToInt64Bits(v)));
+    }
 }

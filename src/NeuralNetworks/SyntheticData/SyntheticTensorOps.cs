@@ -541,15 +541,18 @@ internal static class SyntheticTensorOps<T>
     }
 
     /// <summary>
-    /// <paramref name="count"/> standard normal draws by the Box-Muller cosine branch, two uniforms per draw taken
-    /// from <paramref name="random"/> in order: <c>sqrt(-2 ln u1) * cos(2 pi u2)</c>. <paramref name="guard"/> says
-    /// how the first uniform is kept away from zero.
+    /// Writes standard normal draws into <paramref name="destination"/> by the Box-Muller cosine branch, two uniforms
+    /// per draw taken from <paramref name="random"/> in order: <c>sqrt(-2 ln u1) * cos(2 pi u2)</c>.
+    /// <paramref name="guard"/> says how the first uniform is kept away from zero.
     /// </summary>
-    internal static double[] StandardNormalDraws(int count, Random random, BoxMullerGuard guard = BoxMullerGuard.Complement)
+    /// <remarks>Each draw is converted once, straight into the destination: no <c>double[]</c> staging, no
+    /// <c>Tensor&lt;double&gt;</c> wrapper and no <c>Cast</c> copy, so a short per-row draw costs what the element loop
+    /// it replaced did.</remarks>
+    [AiDotNet.Attributes.ScalarKernel("Draws each element from a sequential seeded Random stream; Box-Muller (Log, Sqrt, Cos) dominates the cost.")]
+    internal static void WriteStandardNormal(Span<T> destination, Random random, BoxMullerGuard guard = BoxMullerGuard.Complement)
     {
         if (random is null) throw new ArgumentNullException(nameof(random));
-        var draws = new double[count];
-        for (int i = 0; i < count; i++)
+        for (int i = 0; i < destination.Length; i++)
         {
             double first = random.NextDouble();
             double u2 = random.NextDouble();
@@ -559,41 +562,42 @@ internal static class SyntheticTensorOps<T>
                 BoxMullerGuard.FlooredComplement => Math.Max(1.0 - first, 1e-10),
                 _ => Math.Max(1e-10, first),
             };
-            draws[i] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+            destination[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
         }
-
-        return draws;
     }
 
     /// <summary>
-    /// A vector of <paramref name="length"/> standard normal values; see <see cref="StandardNormalDraws"/>.
+    /// A vector of <paramref name="length"/> standard normal values; see <see cref="WriteStandardNormal"/>.
     /// </summary>
     internal static Vector<T> StandardNormalVector(int length, Random random, BoxMullerGuard guard = BoxMullerGuard.Complement)
-        => length == 0
-            ? new Vector<T>(0)
-            : new Vector<T>(new Tensor<double>(StandardNormalDraws(length, random, guard), new[] { length }).Cast<T>().ToArray());
+    {
+        if (length == 0) return new Vector<T>(0);
+        var values = new Vector<T>(length);
+        WriteStandardNormal(values.AsWritableSpan(), random, guard);
+        return values;
+    }
 
     /// <summary>
-    /// A tensor of standard normal values, filled in row-major order; see <see cref="StandardNormalDraws"/>.
+    /// A tensor of standard normal values, filled in row-major order; see <see cref="WriteStandardNormal"/>.
     /// </summary>
     internal static Tensor<T> StandardNormalTensor(int[] shape, Random random, BoxMullerGuard guard = BoxMullerGuard.Complement)
     {
         int count = ElementCount(shape);
-        return count == 0
-            ? new Tensor<T>(shape)
-            : new Tensor<double>(StandardNormalDraws(count, random, guard), shape).Cast<T>();
+        var result = new Tensor<T>(shape);
+        if (count != 0)
+            WriteStandardNormal(result.AsWritableSpan(), random, guard);
+        return result;
     }
 
     /// <summary>
     /// Overwrites every element of <paramref name="target"/> with a standard normal value, in row-major order; see
-    /// <see cref="StandardNormalDraws"/>.
+    /// <see cref="WriteStandardNormal"/>.
     /// </summary>
     internal static void FillStandardNormal(Tensor<T> target, Random random, BoxMullerGuard guard = BoxMullerGuard.Complement)
     {
         if (target is null) throw new ArgumentNullException(nameof(target));
         if (target.Length == 0) return;
-        new Tensor<double>(StandardNormalDraws(target.Length, random, guard), new[] { target.Length }).Cast<T>()
-            .AsSpan().CopyTo(target.AsWritableSpan());
+        WriteStandardNormal(target.AsWritableSpan(), random, guard);
     }
 
     /// <summary>
@@ -602,25 +606,17 @@ internal static class SyntheticTensorOps<T>
     /// <c>r cos(theta)</c> and <c>r sin(theta)</c>, <c>r = sqrt(-2 ln(1 - u1))</c>, <c>theta = 2 pi u2</c>.
     /// An odd element count drops the last sine.
     /// </summary>
+    /// <remarks>The fill is <see cref="AiDotNet.Training.CompiledStepRandom{T}"/>'s own pair Box-Muller, called
+    /// directly rather than through <c>CompiledStepRandom&lt;T&gt;.StandardNormal</c>, whose draws are recorded for
+    /// compiled replay and skipped inside suppression scopes; the generators' noise is an ordinary eager draw.</remarks>
     internal static Tensor<T> StandardNormalPairTensor(int[] shape, Random random)
     {
         if (random is null) throw new ArgumentNullException(nameof(random));
         int count = ElementCount(shape);
-        if (count == 0) return new Tensor<T>(shape);
-
-        var draws = new double[count];
-        for (int i = 0; i < count; i += 2)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = random.NextDouble();
-            double r = Math.Sqrt(-2.0 * Math.Log(u1));
-            double theta = 2.0 * Math.PI * u2;
-            draws[i] = r * Math.Cos(theta);
-            if (i + 1 < count)
-                draws[i + 1] = r * Math.Sin(theta);
-        }
-
-        return new Tensor<double>(draws, shape).Cast<T>();
+        var result = new Tensor<T>(shape);
+        if (count != 0)
+            AiDotNet.Training.CompiledStepRandom<T>.FillStandardNormal(result, random);
+        return result;
     }
 
     /// <summary>
