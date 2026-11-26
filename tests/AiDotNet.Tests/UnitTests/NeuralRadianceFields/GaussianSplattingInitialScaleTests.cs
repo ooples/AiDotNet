@@ -51,9 +51,13 @@ public class GaussianSplattingInitialScaleTests
         Assert.Equal(4.0 * options.InitialScaleMultiplier, gaussians[2].MaxScale, 4);
     }
 
-    [Fact(Timeout = 120000)]
+    [SkippableFact(Timeout = 120000)]
     public async System.Threading.Tasks.Task LargeCloud_InitializesInLinearMemory()
     {
+#if !NETCOREAPP3_0_OR_GREATER
+        // net471 has no per-thread allocation counter, and a process-wide one counts parallel tests too.
+        Skip.If(true, "GC.GetAllocatedBytesForCurrentThread needs .NET Core 3.0 or later.");
+#else
         await System.Threading.Tasks.Task.Yield();
         const int points = 20000;
         var random = new Random(3);
@@ -73,5 +77,6 @@ public class GaussianSplattingInitialScaleTests
         // About 9 MB: the per-point tables and the grid. The all-pairs search materialized [rows, N, 3] blocks of
         // pair offsets, gigabytes in total for 20000 points.
         Assert.True(allocated < 64L * 1024 * 1024, $"allocated {allocated / (1024.0 * 1024.0):F1} MB");
+#endif
     }
 }

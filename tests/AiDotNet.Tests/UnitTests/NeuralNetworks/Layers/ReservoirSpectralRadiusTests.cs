@@ -51,9 +51,13 @@ public class ReservoirSpectralRadiusTests
         Assert.Equal(expected, layer.ComputeMaxEigenvalue(RandomReservoir(size, density, seed)), 10);
     }
 
-    [Fact]
+    [SkippableFact]
     public void ComputeMaxEigenvalue_DefaultReservoir_AllocatesOnlyItsWorkingCopy()
     {
+#if !NETCOREAPP3_0_OR_GREATER
+        // net471 has no per-thread allocation counter, and a process-wide one counts parallel tests too.
+        Skip.If(true, "GC.GetAllocatedBytesForCurrentThread needs .NET Core 3.0 or later.");
+#else
         // The census shape: LiquidStateMachine's 100-neuron reservoir. The full Linalg.Eig allocated ~98 MB and took
         // ~170 ms here, 4.7x LiquidStateMachine's construction time; the in-place QR needs one n x n copy.
         var layer = new ReservoirLayer<double>(inputSize: 1, reservoirSize: 2);
@@ -65,6 +69,7 @@ public class ReservoirSpectralRadiusTests
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         Assert.True(allocated < 1_000_000, $"spectral radius of a 100 x 100 reservoir allocated {allocated:N0} bytes");
+#endif
     }
 
     private static Tensor<double> RandomReservoir(int size, double density, int seed)

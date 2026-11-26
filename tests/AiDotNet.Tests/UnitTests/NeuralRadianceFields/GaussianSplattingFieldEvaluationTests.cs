@@ -61,9 +61,13 @@ public class GaussianSplattingFieldEvaluationTests
         }
     }
 
-    [Fact(Timeout = 120000)]
+    [SkippableFact(Timeout = 120000)]
     public async System.Threading.Tasks.Task LargeQuery_AllocatesOnlyItsInputsAndOutputs()
     {
+#if !NETCOREAPP3_0_OR_GREATER
+        // net471 has no per-thread allocation counter, and a process-wide one counts parallel tests too.
+        Skip.If(true, "GC.GetAllocatedBytesForCurrentThread needs .NET Core 3.0 or later.");
+#else
         await System.Threading.Tasks.Task.Yield();
         const int gaussians = 2000;
         const int points = 500;
@@ -91,5 +95,6 @@ public class GaussianSplattingFieldEvaluationTests
         // The per-Gaussian tables are about 0.5 MB. One [points, Gaussians] float temporary alone is 4 MB, and the
         // tensor form made dozens per query.
         Assert.True(allocated < 4L * 1024 * 1024, $"allocated {allocated / (1024.0 * 1024.0):F1} MB");
+#endif
     }
 }

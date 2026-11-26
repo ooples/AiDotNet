@@ -310,9 +310,13 @@ public class DiffusersGuidanceReferenceTests
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public void MelFilterbank_CensusShape_AllocatesAboutItsOwnSize()
     {
+#if !NETCOREAPP3_0_OR_GREATER
+        // net471 has no per-thread allocation counter, and a process-wide one counts parallel tests too.
+        Skip.If(true, "GC.GetAllocatedBytesForCurrentThread needs .NET Core 3.0 or later.");
+#else
         // A census audio model's filterbank, built once per construction. Built from engine ops it took about a
         // dozen [nMels, numFreqs] double temporaries plus kernels only it used, 2.6-3x the construction time of
         // Tempogram, PANNs, ConformerFP, SpeakerEmbeddingExtractor and PeakNetFP. 128 x 1025 floats are 0.5 MB.
@@ -321,6 +325,7 @@ public class DiffusersGuidanceReferenceTests
         MelFilterbank<float>(128, 2048, 16000);
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         Assert.True(allocated < 3_000_000, $"a 128 x 1025 mel filterbank allocated {allocated:N0} bytes");
+#endif
     }
 
     private static Tensor<TNum> MelFilterbank<TNum>(int nMels, int nFft, int sampleRate)
