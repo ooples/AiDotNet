@@ -23,23 +23,26 @@ internal static class TtsIdTensors
 
         int count = ids.Count;
 
-        // Typed fast paths: one allocation and one widening pass, no Tensor<int> staging and no Cast copy. Short id
-        // lists (often a single id) are the common call, where the staging cost dominated. int -> double is exact,
-        // and int -> float rounds once to nearest, the same as the int -> double -> float route of FromDouble.
+        // Typed fast paths: the result tensor is the only allocation and is filled in one pass through its span,
+        // with no Tensor<int> staging and no Cast copy, so a single id costs what the old element loop did. int ->
+        // double is exact, and int -> float rounds once to nearest, the same as the int -> double -> float route of
+        // FromDouble.
         if (typeof(T) == typeof(double))
         {
-            var widened = new double[count];
+            var widened = new Tensor<double>(new[] { count });
+            var span = widened.AsWritableSpan();
             for (int i = 0; i < count; i++)
-                widened[i] = ids[i];
-            return (Tensor<T>)(object)new Tensor<double>(widened, new[] { count });
+                span[i] = ids[i];
+            return (Tensor<T>)(object)widened;
         }
 
         if (typeof(T) == typeof(float))
         {
-            var narrowed = new float[count];
+            var narrowed = new Tensor<float>(new[] { count });
+            var span = narrowed.AsWritableSpan();
             for (int i = 0; i < count; i++)
-                narrowed[i] = ids[i];
-            return (Tensor<T>)(object)new Tensor<float>(narrowed, new[] { count });
+                span[i] = ids[i];
+            return (Tensor<T>)(object)narrowed;
         }
 
         var values = ids as int[] ?? ids.ToArray();
