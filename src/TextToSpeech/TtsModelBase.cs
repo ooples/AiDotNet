@@ -630,11 +630,7 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
 
     /// <summary>Token or symbol ids as a <c>[count]</c> tensor of T.</summary>
     protected static Tensor<T> IdTensor(IReadOnlyList<int> ids)
-    {
-        Guard.NotNull(ids);
-        var values = ids as int[] ?? ids.ToArray();
-        return new Tensor<int>(values, new[] { values.Length }).Cast<T>();
-    }
+        => TtsIdTensors.From<T>(ids);
 
     /// <summary>Each element rounded half to even (as <see cref="Math.Round(double)"/>), as ints: ids carried in T.</summary>
     protected int[] RoundedIds(Tensor<T> tensor)
