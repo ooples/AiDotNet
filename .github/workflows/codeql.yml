@@ -85,13 +85,27 @@ jobs:
     # PR #2294's full traced build took 43 minutes, then its analysis was cancelled after
     # another 37 minutes by the 85-minute job limit. Keep the full build and query suite,
     # with enough time for analysis and upload on the expanded native model source.
-    timeout-minutes: 120
+    #
+    # 120 -> 180. This job is BIMODAL ON THE SAME COMMIT, so its duration is not explained by what the commit
+    # contains. Measured, push run then scheduled run of the same SHA:
+    #   b45f47fa   84.0 min (45528916680)   120.7 min (45588195426, cancelled by the limit)
+    #   e97be25c  118.0 min (45122256041)    80.0 min (45149825219)
+    #   2b1bacf5  101.9 min (44779402237)    77.1 min (44890972618)
+    # The fast mode is 77-84 minutes and the slow one 102-122. The 120-minute limit cancelled the job three
+    # times in five days: 2026-11-21 (44916160403), 2026-11-23 (45172056679) and 2026-11-25 (45588195426).
+    # Why a run lands in the slow mode is not known; nothing here fixes that. 180 only keeps the slow mode
+    # from being cancelled, and the last step of this job warns above 135 minutes so that a third, slower
+    # mode - or steady growth - shows up as an annotation instead of hiding under the higher limit.
+    timeout-minutes: 180
     if: "${{ !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     permissions:
       contents: read
       security-events: write
 
     steps:
+      - name: Record job start
+        run: echo "CODEQL_JOB_STARTED=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
@@ -162,3 +176,21 @@ jobs:
         with:
           category: "/language:csharp-traced"
           upload: always
+
+      # Always last. The 180-minute limit is far above the slow mode (102-122 minutes), so without this a
+      # job that grows from 120 to 170 minutes would stay green and silent. CODEQL_JOB_STARTED is written by
+      # the first step; if that step never ran there is nothing to measure.
+      - name: Report job duration
+        if: always()
+        env:
+          WARN_MINUTES: 135
+        run: |
+          if [ -z "${CODEQL_JOB_STARTED:-}" ]; then
+            echo "Job start was not recorded; no duration to report."
+            exit 0
+          fi
+          elapsed=$(( ($(date +%s) - CODEQL_JOB_STARTED) / 60 ))
+          echo "### CodeQL Analysis (traced): ${elapsed} minutes (warns above ${WARN_MINUTES}, limit 180)" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$elapsed" -gt "$WARN_MINUTES" ]; then
+            echo "::warning title=CodeQL traced job is slower than its slow mode::${elapsed} minutes; the slow mode measured in November 2026 was 102-122 and the limit is 180. See the comment on timeout-minutes in codeql.yml."
+          fi
