@@ -174,11 +174,10 @@ public class NewConditionerContractTests : DiffusionUnitTestBase
         var predictor = new SiTPredictor<double>();
 
         // What this proves at paper scale: a flat read, a flat write and a second flat read fit the lane's
-        // memory, and the second read is bit-for-bit the first. It writes back the vector it just read, so a
-        // SetParameters that did nothing would pass it. That SetParameters stores what it is given is proven
-        // at reduced width, with distinct values, by PredictorParameterIoDiskFootprintTests.
-        // FlatRoundTrip_OfAStreamedSiTPredictor_WritesTheModelToDiskOnce_AndRestoresEveryValue.
-        var (length, expected) = ReadFingerprintAndWriteBack(predictor);
+        // memory, and the second read is bit-for-bit what was written. The first value is changed before the
+        // fingerprint is taken and the vector written back, so a SetParameters that did nothing leaves the
+        // original first value in place and the fingerprints differ. Only the one vector is ever held.
+        var (length, expected) = ReadChangeFingerprintAndWriteBack(predictor);
         Assert.True(length > 0);
 
         var retrieved = predictor.GetParameters();
@@ -189,10 +188,13 @@ public class NewConditionerContractTests : DiffusionUnitTestBase
     // The first flat vector lives only inside this frame, so it is unreachable by the time the caller
     // reads the parameters back. Not inlined: an inlined body would keep the vector in the caller's frame.
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private static (int Length, (double Sum, double Weighted, long Bits) Fingerprint) ReadFingerprintAndWriteBack(
+    private static (int Length, (double Sum, double Weighted, long Bits) Fingerprint) ReadChangeFingerprintAndWriteBack(
         SiTPredictor<double> predictor)
     {
         var parameters = predictor.GetParameters();
+        Assert.True(parameters.Length > 0, "A paper-scale SiT predictor has parameters to round-trip.");
+        // Differs from the stored value whatever it is, so the write is observable.
+        parameters[0] = parameters[0] + 0.5;
         var fingerprint = Fingerprint(parameters);
         predictor.SetParameters(parameters);
         return (parameters.Length, fingerprint);

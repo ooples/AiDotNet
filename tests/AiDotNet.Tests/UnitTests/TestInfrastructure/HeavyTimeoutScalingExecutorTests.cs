@@ -67,7 +67,7 @@ public class HeavyTimeoutScalingExecutorTests
         Assert.Equal(int.MaxValue, heavy.Timeout);
     }
 
-    private static XunitTestCase CaseFor(Type fixture, string method)
+    internal static XunitTestCase CaseFor(Type fixture, string method)
     {
         var assembly = new TestAssembly(Reflector.Wrap(fixture.Assembly));
         var collection = new TestCollection(assembly, null, "HeavyTimeoutScalingExecutorTests fixtures");
@@ -78,18 +78,32 @@ public class HeavyTimeoutScalingExecutorTests
     }
 }
 
-// Fixtures the executor test builds xUnit cases from. They are discovered like any class, so they run as empty
-// tests: a skipped one would leave the heavy lane a chunk in which nothing ran, which that lane reports as a
-// failure (#2447), and the heavy one doubles as a canary that the lane runs what it discovers.
+// Fixtures the executor test builds xUnit cases from. They are discovered like any class, so they run as tests
+// too: a skipped one would leave the heavy lane a chunk in which nothing ran, which that lane reports as a
+// failure (#2447), and the heavy one doubles as a canary that the lane runs what it discovers. Each checks its
+// own case's scaling, so wherever it runs it asserts something about itself.
 [Trait("Category", "HeavyTimeout")]
 public class HeavyTimeoutScalingHeavyFixture
 {
     [Fact(Timeout = 1500)]
-    public System.Threading.Tasks.Task Heavy() => System.Threading.Tasks.Task.CompletedTask;
+    public System.Threading.Tasks.Task Heavy()
+    {
+        var testCase = HeavyTimeoutScalingExecutorTests.CaseFor(typeof(HeavyTimeoutScalingHeavyFixture), nameof(Heavy));
+        Assert.True(HeavyTimeoutScalingExecutor.ApplyScale(new IXunitTestCase[] { testCase }, 4));
+        Assert.Equal(6000, testCase.Timeout);
+        return System.Threading.Tasks.Task.CompletedTask;
+    }
 }
 
 public class HeavyTimeoutScalingOrdinaryFixture
 {
     [Fact(Timeout = 1500)]
-    public System.Threading.Tasks.Task Ordinary() => System.Threading.Tasks.Task.CompletedTask;
+    public System.Threading.Tasks.Task Ordinary()
+    {
+        var testCase = HeavyTimeoutScalingExecutorTests.CaseFor(
+            typeof(HeavyTimeoutScalingOrdinaryFixture), nameof(Ordinary));
+        HeavyTimeoutScalingExecutor.ApplyScale(new IXunitTestCase[] { testCase }, 4);
+        Assert.Equal(1500, testCase.Timeout);
+        return System.Threading.Tasks.Task.CompletedTask;
+    }
 }
