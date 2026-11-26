@@ -1162,8 +1162,36 @@ public static class Program
         var singleGpuMses = new List<double>();
         var twoGpuMses = new List<double>();
 
+        // Acceptance across the two card models (measured 2026-11-25, deterministic mode): the same run is bit-identical
+        // on the same card, but the RTX 3080 and RTX 3090 differ. A per-op probe with identical inputs on each card
+        // (raw float32 outputs, two reruns per card) found every elementwise, softmax, layer-norm and most GEMM
+        // outputs bit-identical across the cards, and one GEMM shape (512x128x384) different in 171,719 of 196,608
+        // elements (max 2.15e-6): the GEMM algorithm is chosen per device (the cards differ in SM count), so the summation order
+        // differs. Bit-identity across card models is therefore not the contract. The 2-GPU run must instead stay
+        // within the cross-device spread this test measures: the same 1-process run on each card.
         foreach (int seed in seeds)
         {
+            WorkerResult otherCardRes;
+            using (var otherCard = StartWorkerProcess(new WorkerSpec
+            {
+                Mode = "StreamingTrain",
+                BackendKind = "SingleProcess",
+                Rank = 0,
+                WorldSize = 1,
+                UseGpu = true,
+                PhysicalGpuIndex = 1,
+                SampleCount = 32,
+                LocalBatchSize = 16,
+                MaxSteps = 8,
+                DataSeed = seed,
+                InitWeightSeed = seed + 50,
+            }))
+            {
+                otherCardRes = RequireSucceededResult(
+                    await WaitForWorkerAsync(otherCard, TimeSpan.FromSeconds(90)),
+                    $"1-process GPU 1 seed {seed}");
+            }
+
             WorkerResult singleGpuRes;
             using (var singleGpu = StartWorkerProcess(new WorkerSpec
             {
@@ -1230,9 +1258,16 @@ public static class Program
             Assert.True(MaxAbsDiff(res0.FinalWeights, res1.FinalWeights) < 1e-6,
                 $"Rank 0 and Rank 1 GPU weights diverged on seed {seed}: {MaxAbsDiff(res0.FinalWeights, res1.FinalWeights)}.");
             double diffVsSingle = MaxAbsDiff(singleGpuRes.FinalWeights, res0.FinalWeights);
-            _output.WriteLine($"Seed {seed}: 1-GPU FinalMSE={singleGpuRes.FinalMse:F6}, 2-GPU FinalMSE={res0.FinalMse:F6}, MaxWeightDiff={diffVsSingle:E3}");
-            Assert.True(diffVsSingle < 1e-3,
-                $"2-GPU (RTX 3080 + RTX 3090) diverged from 1-GPU on seed {seed} by {diffVsSingle}.");
+            double crossDevice = MaxAbsDiff(singleGpuRes.FinalWeights, otherCardRes.FinalWeights);
+            _output.WriteLine($"Seed {seed}: 1-GPU FinalMSE={singleGpuRes.FinalMse:F6}, 2-GPU FinalMSE={res0.FinalMse:F6}, "
+                + $"MaxWeightDiff 2-GPU vs GPU 0 = {diffVsSingle:E3}, GPU 0 vs GPU 1 (same run) = {crossDevice:E3}");
+            // The 2-GPU step also runs its GEMMs at the half batch (8, not 16), a second summation-order change of the
+            // same kind, hence twice the measured cross-device spread (and an FP32 floor when the cards happen to
+            // agree on this seed).
+            double bound = Math.Max(2.0 * crossDevice, 1e-6);
+            Assert.True(diffVsSingle <= bound,
+                $"2-GPU (RTX 3080 + RTX 3090) diverged from 1-GPU on seed {seed} by {diffVsSingle}, beyond twice the "
+                + $"cross-device spread {crossDevice}.");
 
             singleGpuMses.Add(singleGpuRes.FinalMse);
             twoGpuMses.Add(res0.FinalMse);
