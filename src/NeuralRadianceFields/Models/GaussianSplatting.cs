@@ -704,6 +704,13 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
             throw new ArgumentException("Point cloud must have shape [N, 3].", nameof(pointCloud));
         }
 
+        if (colors is not null && (colors.Rows != pointCloud.Rows || colors.Columns != 3))
+        {
+            throw new ArgumentException(
+                $"Colors must have shape [N, 3] with one RGB row per point ({pointCloud.Rows}); got [{colors.Rows}, {colors.Columns}].",
+                nameof(colors));
+        }
+
         InitializeFromPoints(PointsAsDoubles(pointCloud), pointCloud.Rows, colors);
     }
 
@@ -788,8 +795,15 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
     /// <summary>
     /// Initial isotropic scale of each point: its nearest-neighbour distance within the 3x3x3 block of grid cells
     /// around it (cell size from the cloud's mean spacing) times <see cref="InitialScaleMultiplier"/>, at least
-    /// <see cref="MinScale"/>; points without a neighbour use the mean spacing.
+    /// <see cref="MinScale"/>; points without a neighbour, and points that coincide with another point, use the mean
+    /// spacing.
     /// </summary>
+    /// <remarks>
+    /// Coincident points are collapsed before the grid is built: a point with an exact duplicate takes the mean
+    /// spacing without a search, and only distinct positions enter the buckets (a duplicate of a neighbour is at the
+    /// same distance as that neighbour). The cost is therefore linear in N plus the pairs within occupied neighbouring
+    /// buckets of distinct positions; a fully coincident cloud does no pairwise work at all.
+    /// </remarks>
     private double[] InitialScales(double[] xyz, int n)
     {
         double minX = double.PositiveInfinity, minY = double.PositiveInfinity, minZ = double.PositiveInfinity;
@@ -826,10 +840,30 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
 
         double cellSize = Math.Max(baseSpacing, MinScale * InitialNeighborSearchScale);
         double invCellSize = cellSize > 0.0 ? 1.0 / cellSize : 0.0;
-        var cells = new (long X, long Y, long Z)[n];
-        var grid = new Dictionary<(long X, long Y, long Z), List<int>>(n);
+        // Adding 0.0 maps -0.0 to +0.0 so both land on the same position key.
+        var distinct = new Dictionary<(double X, double Y, double Z), int>(n);
+        var representative = new int[n];
+        var hasDuplicate = new bool[n];
         for (int i = 0; i < n; i++)
         {
+            var position = (xyz[3 * i] + 0.0, xyz[3 * i + 1] + 0.0, xyz[3 * i + 2] + 0.0);
+            if (distinct.TryGetValue(position, out int first))
+            {
+                representative[i] = first;
+                hasDuplicate[first] = true;
+            }
+            else
+            {
+                distinct[position] = i;
+                representative[i] = i;
+            }
+        }
+
+        var cells = new (long X, long Y, long Z)[n];
+        var grid = new Dictionary<(long X, long Y, long Z), List<int>>(distinct.Count);
+        for (int i = 0; i < n; i++)
+        {
+            if (representative[i] != i) continue;
             var key = ((long)Math.Floor((xyz[3 * i] - minX) * invCellSize),
                 (long)Math.Floor((xyz[3 * i + 1] - minY) * invCellSize),
                 (long)Math.Floor((xyz[3 * i + 2] - minZ) * invCellSize));
@@ -846,6 +880,13 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         var scales = new double[n];
         for (int i = 0; i < n; i++)
         {
+            if (hasDuplicate[representative[i]])
+            {
+                // Nearest-neighbour distance 0, which falls back to the mean spacing as below.
+                scales[i] = Math.Max(MinScale, baseSpacing * InitialScaleMultiplier);
+                continue;
+            }
+
             double nearestSq = double.PositiveInfinity;
             var (cx, cy, cz) = cells[i];
             for (long dx = -1; dx <= 1; dx++)
@@ -1014,6 +1055,12 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         {
             throw new ArgumentException("Viewing directions must have shape [N, 3].", nameof(viewingDirections));
         }
+        if (viewingDirections.Shape[0] != positions.Shape[0])
+        {
+            throw new ArgumentException(
+                $"Viewing directions must have one row per position ({positions.Shape[0]}); got {viewingDirections.Shape[0]}.",
+                nameof(viewingDirections));
+        }
 
         int numPoints = positions.Shape[0];
         var rgb = new T[numPoints * 3];
@@ -1052,6 +1099,12 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
     /// size (4 points, 8 Gaussians) every op is dispatch overhead, so the steady forward went 0.1 -> 1.0 ms, and the
     /// first forward JIT-compiled ~500 methods (cold forward 23 -> 76 ms). The field has no tape gradient: training
     /// uses the analytic ray and image gradients.
+    /// </para>
+    /// <para>
+    /// Large queries keep their throughput: blocks of points run in parallel under
+    /// <c>CpuParallelSettings</c> (inline at one thread or for small workloads), and the spatial-index candidate rule
+    /// is checked before a pair's quadratic form and exponential, so excluded pairs cost one integer-valued compare.
+    /// Grid cells are computed in T, matching the engine form's rounding at cell boundaries.
     /// </para>
     /// </remarks>
     [AiDotNet.Attributes.ScalarKernel("Per-point Gaussian field evaluation: tiny per-pair work where engine dispatch dominated.")]
@@ -1093,9 +1146,9 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         // within the radius on every axis.
         bool useGrid = EnableSpatialIndex;
         bool noCandidates = false;
-        double invCellSize = 0.0;
+        T invCellSize = ops.Zero;
         double gridRadius = 1.0;
-        double originX = 0.0, originY = 0.0, originZ = 0.0;
+        T originX = ops.Zero, originY = ops.Zero, originZ = ops.Zero;
         double[]? gaussianCells = null;
         if (useGrid)
         {
@@ -1135,103 +1188,125 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
                 }
                 else
                 {
-                    invCellSize = 1.0 / cellSize;
-                    originX = originY = originZ = double.PositiveInfinity;
+                    // Cell membership is computed in T, as the engine form did: in float, a point a rounding step
+                    // below a cell boundary rounds onto it, and double arithmetic would place it one cell lower.
+                    invCellSize = ops.Divide(ops.One, ops.FromDouble(cellSize));
+                    double minX = double.PositiveInfinity, minY = double.PositiveInfinity, minZ = double.PositiveInfinity;
                     for (int g = 0; g < n; g++)
                     {
-                        originX = Math.Min(originX, centres[3 * g]);
-                        originY = Math.Min(originY, centres[3 * g + 1]);
-                        originZ = Math.Min(originZ, centres[3 * g + 2]);
+                        minX = Math.Min(minX, centres[3 * g]);
+                        minY = Math.Min(minY, centres[3 * g + 1]);
+                        minZ = Math.Min(minZ, centres[3 * g + 2]);
                     }
 
+                    // The centres came from T, so the round trip back is exact.
+                    originX = ops.FromDouble(minX);
+                    originY = ops.FromDouble(minY);
+                    originZ = ops.FromDouble(minZ);
                     gaussianCells = new double[3 * n];
                     for (int g = 0; g < n; g++)
                     {
-                        gaussianCells[3 * g] = Math.Floor((centres[3 * g] - originX) * invCellSize);
-                        gaussianCells[3 * g + 1] = Math.Floor((centres[3 * g + 1] - originY) * invCellSize);
-                        gaussianCells[3 * g + 2] = Math.Floor((centres[3 * g + 2] - originZ) * invCellSize);
+                        gaussianCells[3 * g] = CellOf(centres[3 * g], originX, invCellSize);
+                        gaussianCells[3 * g + 1] = CellOf(centres[3 * g + 1], originY, invCellSize);
+                        gaussianCells[3 * g + 2] = CellOf(centres[3 * g + 2], originZ, invCellSize);
                     }
                 }
             }
         }
 
-        var basis = new double[basisCount];
-        for (int i = 0; i < numPoints; i++)
+        // Points are independent, so blocks of them run in parallel under the CPU thread limit; within a point the
+        // candidate rule runs before the quadratic form and the exponential, so pairs outside the index cost no exp.
+        const int pointsPerBlock = 64;
+        int blocks = (numPoints + pointsPerBlock - 1) / pointsPerBlock;
+        AiDotNet.Tensors.Helpers.CpuParallelSettings.ParallelForOrSerial(0, blocks, (long)numPoints * n * (basisCount + 16), block =>
         {
-            int p = i * positionStride + positionOffset;
-            double px = positions[p], py = positions[p + 1], pz = positions[p + 2];
-            int d = i * directionStride + directionOffset;
-            double dx = directions[d], dy = directions[d + 1], dz = directions[d + 2];
-            // Normalised once for the query and again by the basis, as the tensor form did.
-            NormalizeInPlace(ref dx, ref dy, ref dz);
-            NormalizeInPlace(ref dx, ref dy, ref dz);
-            if (_useSphericalHarmonics) ShBasisOnHost(degree, dx, dy, dz, basis);
-
-            double cellX = 0.0, cellY = 0.0, cellZ = 0.0;
-            if (useGrid && !noCandidates)
+            int blockEnd = Math.Min(numPoints, (block + 1) * pointsPerBlock);
+            var basis = new double[basisCount];
+            for (int i = block * pointsPerBlock; i < blockEnd; i++)
             {
-                cellX = Math.Floor((px - originX) * invCellSize);
-                cellY = Math.Floor((py - originY) * invCellSize);
-                cellZ = Math.Floor((pz - originZ) * invCellSize);
-            }
+                int p = i * positionStride + positionOffset;
+                double px = positions[p], py = positions[p + 1], pz = positions[p + 2];
+                int d = i * directionStride + directionOffset;
+                double dx = directions[d], dy = directions[d + 1], dz = directions[d + 2];
+                // Normalised once for the query and again by the basis, as the tensor form did.
+                NormalizeInPlace(ref dx, ref dy, ref dz);
+                NormalizeInPlace(ref dx, ref dy, ref dz);
+                if (_useSphericalHarmonics) ShBasisOnHost(degree, dx, dy, dz, basis);
 
-            double accumDensity = 0.0, accumR = 0.0, accumG = 0.0, accumB = 0.0;
-            for (int g = 0; g < n && !noCandidates; g++)
-            {
-                double ox = px - centres[3 * g];
-                double oy = py - centres[3 * g + 1];
-                double oz = pz - centres[3 * g + 2];
-                int k = 6 * g;
-                double q = ox * (inverse[k] * ox + inverse[k + 1] * oy + inverse[k + 2] * oz)
-                    + oy * (inverse[k + 1] * ox + inverse[k + 3] * oy + inverse[k + 4] * oz)
-                    + oz * (inverse[k + 2] * ox + inverse[k + 4] * oy + inverse[k + 5] * oz);
-                double alpha = opacity[g] * Math.Exp(-0.5 * q);
-                if (alpha <= 1e-8) continue;
+                double cellX = 0.0, cellY = 0.0, cellZ = 0.0;
                 if (gaussianCells is not null)
                 {
-                    double gap = Math.Max(Math.Abs(cellX - gaussianCells[3 * g]),
-                        Math.Max(Math.Abs(cellY - gaussianCells[3 * g + 1]), Math.Abs(cellZ - gaussianCells[3 * g + 2])));
-                    if (!(gap <= gridRadius)) continue;
+                    cellX = CellOf(px, originX, invCellSize);
+                    cellY = CellOf(py, originY, invCellSize);
+                    cellZ = CellOf(pz, originZ, invCellSize);
                 }
 
-                int c0 = g * basisCount * 3;
-                double r, gr, b;
-                if (_useSphericalHarmonics)
+                double accumDensity = 0.0, accumR = 0.0, accumG = 0.0, accumB = 0.0;
+                for (int g = 0; g < n && !noCandidates; g++)
                 {
-                    r = gr = b = 0.0;
-                    for (int j = 0; j < basisCount; j++)
+                    if (gaussianCells is not null)
                     {
-                        r += basis[j] * coefficients[c0 + 3 * j];
-                        gr += basis[j] * coefficients[c0 + 3 * j + 1];
-                        b += basis[j] * coefficients[c0 + 3 * j + 2];
+                        double gap = Math.Max(Math.Abs(cellX - gaussianCells[3 * g]),
+                            Math.Max(Math.Abs(cellY - gaussianCells[3 * g + 1]), Math.Abs(cellZ - gaussianCells[3 * g + 2])));
+                        if (!(gap <= gridRadius)) continue;
                     }
+
+                    double ox = px - centres[3 * g];
+                    double oy = py - centres[3 * g + 1];
+                    double oz = pz - centres[3 * g + 2];
+                    int k = 6 * g;
+                    double q = ox * (inverse[k] * ox + inverse[k + 1] * oy + inverse[k + 2] * oz)
+                        + oy * (inverse[k + 1] * ox + inverse[k + 3] * oy + inverse[k + 4] * oz)
+                        + oz * (inverse[k + 2] * ox + inverse[k + 4] * oy + inverse[k + 5] * oz);
+                    double alpha = opacity[g] * Math.Exp(-0.5 * q);
+                    if (alpha <= 1e-8) continue;
+
+                    int c0 = g * basisCount * 3;
+                    double r, gr, b;
+                    if (_useSphericalHarmonics)
+                    {
+                        r = gr = b = 0.0;
+                        for (int j = 0; j < basisCount; j++)
+                        {
+                            r += basis[j] * coefficients[c0 + 3 * j];
+                            gr += basis[j] * coefficients[c0 + 3 * j + 1];
+                            b += basis[j] * coefficients[c0 + 3 * j + 2];
+                        }
+                    }
+                    else
+                    {
+                        r = coefficients[c0];
+                        gr = coefficients[c0 + 1];
+                        b = coefficients[c0 + 2];
+                    }
+
+                    accumDensity += alpha;
+                    accumR += alpha * Clamp01(r);
+                    accumG += alpha * Clamp01(gr);
+                    accumB += alpha * Clamp01(b);
                 }
-                else
+
+                if (accumDensity > 1e-8)
                 {
-                    r = coefficients[c0];
-                    gr = coefficients[c0 + 1];
-                    b = coefficients[c0 + 2];
+                    accumR /= accumDensity;
+                    accumG /= accumDensity;
+                    accumB /= accumDensity;
                 }
 
-                accumDensity += alpha;
-                accumR += alpha * Clamp01(r);
-                accumG += alpha * Clamp01(gr);
-                accumB += alpha * Clamp01(b);
+                int o = i * rgbStride;
+                rgb[o] = ops.FromDouble(Clamp01(accumR));
+                rgb[o + 1] = ops.FromDouble(Clamp01(accumG));
+                rgb[o + 2] = ops.FromDouble(Clamp01(accumB));
+                density[i * densityStride + densityOffset] = ops.FromDouble(accumDensity);
             }
+        });
+    }
 
-            if (accumDensity > 1e-8)
-            {
-                accumR /= accumDensity;
-                accumG /= accumDensity;
-                accumB /= accumDensity;
-            }
-
-            int o = i * rgbStride;
-            rgb[o] = ops.FromDouble(Clamp01(accumR));
-            rgb[o + 1] = ops.FromDouble(Clamp01(accumG));
-            rgb[o + 2] = ops.FromDouble(Clamp01(accumB));
-            density[i * densityStride + densityOffset] = ops.FromDouble(accumDensity);
-        }
+    /// <summary>The spatial-index cell floor((x - origin) * invCellSize), evaluated in T.</summary>
+    private double CellOf(double x, T origin, T invCellSize)
+    {
+        var ops = NumOps;
+        return ops.ToDouble(ops.Floor(ops.Multiply(ops.Subtract(ops.FromDouble(x), origin), invCellSize)));
     }
 
     /// <summary>0 for x &lt;= 0, 1 for x &gt;= 1, x otherwise (NaN stays NaN).</summary>

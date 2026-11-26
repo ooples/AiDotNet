@@ -34,6 +34,133 @@ public class GaussianSplattingFieldEvaluationTests
     }
 
     [Fact]
+    public void PointCloudColors_MustHaveOneRgbRowPerPoint()
+    {
+        var cloud = new Matrix<float>(2, 3);
+        cloud[1, 0] = 1f;
+
+        // One colour row for two points: rejected before any initialization work.
+        Assert.Throws<ArgumentException>(() => new GaussianSplatting<float>(new GaussianSplattingOptions(), cloud, new Matrix<float>(1, 3)));
+        // A fourth colour column would be silently ignored.
+        Assert.Throws<ArgumentException>(() => new GaussianSplatting<float>(new GaussianSplattingOptions(), cloud, new Matrix<float>(2, 4)));
+    }
+
+    [Fact]
+    public void QueryField_RejectsDirectionRowCountMismatch()
+    {
+        var model = new GaussianSplatting<float>(new GaussianSplattingOptions { UseSphericalHarmonics = false }, new Matrix<float>(1, 3));
+
+        Assert.Throws<ArgumentException>(() =>
+            model.QueryField(new Tensor<float>(new[] { 2, 3 }), new Tensor<float>(new[] { 1, 3 })));
+    }
+
+    [Fact]
+    public void CoincidentPoints_TakeTheDefaultSpacingScale()
+    {
+        // Three points at the origin: each has a neighbour at distance 0, so each falls back to the default spacing
+        // (scale 0.025), and the three identical Gaussians add their densities.
+        var model = new GaussianSplatting<float>(new GaussianSplattingOptions(), new Matrix<float>(3, 3));
+        var positions = new Tensor<float>(new[] { 1, 3 });
+        positions[0, 0] = 0.02f;
+        var directions = new Tensor<float>(new[] { 1, 3 });
+        directions[0, 2] = 1f;
+
+        var (_, density) = model.QueryField(positions, directions);
+
+        double variance = 0.025 * 0.025 + 1e-6;
+        Assert.Equal(3 * 0.5 * Math.Exp(-0.5 * 0.0004 / variance), density[0, 0], 4);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async System.Threading.Tasks.Task FullyCoincidentLargeCloud_SkipsTheNeighbourSearch()
+    {
+        await System.Threading.Tasks.Task.Yield();
+
+        // 100,000 points in one grid bucket: the pairwise scan was ~10^10 distance evaluations (minutes); the
+        // duplicate collapse makes it linear.
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var model = new GaussianSplatting<float>(
+            new GaussianSplattingOptions { UseSphericalHarmonics = false }, new Matrix<float>(100_000, 3));
+        watch.Stop();
+
+        Assert.Equal(100_000, model.GaussianCount);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(30), $"construction took {watch.Elapsed.TotalSeconds:F1} s");
+    }
+
+    [Fact]
+    public void SpatialIndex_CellMembershipUsesFloatRounding()
+    {
+        // Unit-scale Gaussians at x = 2e-7 and x = 2.4: cell width 2.5, radius 2. In float, the query at x = 7.5 is
+        // (7.5f - 2e-7f) * 0.4f = 3 exactly, three cells from the second Gaussian (cell 0), so it is excluded; double
+        // arithmetic gives cell 2 and would include it, turning the result red.
+        var model = new GaussianSplatting<float>(new GaussianSplattingOptions { UseSphericalHarmonics = false }, new Matrix<float>(2, 3));
+        var centres = new Tensor<float>(new[] { 2, 3 });
+        centres[0, 0] = 2e-7f;
+        centres[1, 0] = 2.4f;
+        var rotations = new Tensor<float>(new[] { 2, 4 });
+        rotations[0, 0] = 1f;
+        rotations[1, 0] = 1f;
+        var sh = new Tensor<float>(new[] { 2, 1, 3 });
+        sh[1, 0, 0] = 1f;
+        model.SetGaussianStateForTest(centres, rotations, new Tensor<float>(new[] { 2, 3 }), new Tensor<float>(new[] { 2 }), sh);
+        var positions = new Tensor<float>(new[] { 1, 3 });
+        positions[0, 0] = 7.5f;
+        var directions = new Tensor<float>(new[] { 1, 3 });
+        directions[0, 2] = 1f;
+
+        var (rgb, density) = model.QueryField(positions, directions);
+
+        Assert.Equal(0f, density[0, 0]);
+        Assert.Equal(0f, rgb[0, 0]);
+
+        // Without the index the second Gaussian's alpha (0.5 exp(-5.1^2 / 2) ~ 1.1e-6) clears the 1e-8 cutoff.
+        model.EnableSpatialIndex = false;
+        var (unindexedRgb, unindexedDensity) = model.QueryField(positions, directions);
+        Assert.True(unindexedDensity[0, 0] > 1e-8f);
+        Assert.Equal(1f, unindexedRgb[0, 0], 5);
+    }
+
+    [Fact]
+    public void LargeQuery_MatchesPointByPointEvaluation()
+    {
+        // The query is evaluated in parallel blocks of points; every row must equal the same point queried alone.
+        const int gaussians = 300;
+        const int points = 1000;
+        var random = new Random(11);
+        var cloud = new Matrix<float>(gaussians, 3);
+        for (int i = 0; i < gaussians; i++)
+            for (int c = 0; c < 3; c++) cloud[i, c] = (float)random.NextDouble();
+        var model = new GaussianSplatting<float>(new GaussianSplattingOptions(), cloud);
+        var positions = new Tensor<float>(new[] { points, 3 });
+        var directions = new Tensor<float>(new[] { points, 3 });
+        for (int i = 0; i < points; i++)
+        {
+            for (int c = 0; c < 3; c++)
+            {
+                positions[i, c] = (float)random.NextDouble();
+                directions[i, c] = (float)(random.NextDouble() - 0.5);
+            }
+        }
+
+        var (rgb, density) = model.QueryField(positions, directions);
+
+        for (int i = 0; i < points; i += 37)
+        {
+            var onePosition = new Tensor<float>(new[] { 1, 3 });
+            var oneDirection = new Tensor<float>(new[] { 1, 3 });
+            for (int c = 0; c < 3; c++)
+            {
+                onePosition[0, c] = positions[i, c];
+                oneDirection[0, c] = directions[i, c];
+            }
+
+            var (oneRgb, oneDensity) = model.QueryField(onePosition, oneDirection);
+            Assert.Equal(oneDensity[0, 0], density[i, 0]);
+            for (int c = 0; c < 3; c++) Assert.Equal(oneRgb[0, c], rgb[i, c]);
+        }
+    }
+
+    [Fact]
     public void ForwardRows_MatchQueryField()
     {
         var model = new GaussianSplatting<float>();
