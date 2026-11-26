@@ -342,7 +342,8 @@ public partial class SlimSAM<T> : Common.PromptableSegmentationBase<T>
     /// <inheritdoc />
     public override List<PromptedSegmentationResult<T>> SegmentEverything()
     {
-        var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
+        var features = Common.SegmentationPostProcessing.PromptFeatures(
+            _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width])));
         var probs = _imageProbabilities ?? Common.SegmentationTensorOps.SoftmaxAlongClassDim(features);
         return Common.SegmentationPostProcessing.SegmentEveryClass(features, probs);
     }
