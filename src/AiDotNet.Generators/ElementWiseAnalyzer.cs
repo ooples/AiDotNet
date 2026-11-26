@@ -487,6 +487,9 @@ public sealed class ElementWiseAnalyzer : DiagnosticAnalyzer
                     return prefix.IsKind(SyntaxKind.PointerIndirectionExpression);
                 case TupleExpressionSyntax tuple:
                     return tuple.Arguments.Any(a => IsElementExpression(a.Expression));
+                case ConditionalExpressionSyntax conditional:
+                    // i < values.Length ? values[i] : padding returns an element on one branch.
+                    return IsElementExpression(conditional.WhenTrue) || IsElementExpression(conditional.WhenFalse);
                 default:
                     return false;
             }

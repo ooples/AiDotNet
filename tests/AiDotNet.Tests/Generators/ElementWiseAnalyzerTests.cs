@@ -84,9 +84,13 @@ public sealed class Subject<T>
             ? ImmutableArray<AdditionalText>.Empty
             : ImmutableArray.Create<AdditionalText>(new InMemoryText("ElementWiseBaseline.txt", baseline));
         var options = new AnalyzerOptions(additionalFiles, new GateOptionsProvider(gate));
-        return await compilation
+        var diagnostics = await compilation
             .WithAnalyzers(ImmutableArray.Create<DiagnosticAnalyzer>(new ElementWiseAnalyzer()), options)
             .GetAnalyzerDiagnosticsAsync();
+
+        // AD0001/AD0002 mean the analyzer threw: a zero count would then be a crash, not a clean result.
+        Assert.DoesNotContain(diagnostics, d => d.Id == "AD0001" || d.Id == "AD0002");
+        return diagnostics;
     }
 
     private static int Count(ImmutableArray<Diagnostic> diagnostics, string id) => diagnostics.Count(d => d.Id == id);
@@ -321,6 +325,7 @@ public static class ElementExtensions
     [InlineData(2, "for (int i = 0; i < values.Length; i++) total = _ops.Add(total, _ops.FromDouble(AsDouble(values, i)));")]
     [InlineData(1, "for (int i = 0; i < values.Length; i++) total = _ops.Add(total, values.ElementAt(i));")]
     [InlineData(1, "T At(int i) => values[i]; for (int i = 0; i < values.Length; i++) total = _ops.Add(total, At(i));")]
+    [InlineData(1, "T At(int i) => i < values.Length ? values[i] : _ops.Zero; for (int i = 0; i < values.Length; i++) total = _ops.Add(total, At(i));")]
     [InlineData(1, "Func<int, T> at = i => values[i]; for (int i = 0; i < values.Length; i++) total = _ops.Add(total, at(i));")]
     [InlineData(1, "var wrapper = new Wrapper(values); for (int i = 0; i < values.Length; i++) total = _ops.Add(total, wrapper.Get(i));")]
     [InlineData(1, "ref T first = ref values[0]; for (int i = 0; i < values.Length; i++) { ref T r = ref System.Runtime.CompilerServices.Unsafe.Add(ref first, i); total = _ops.Add(total, r); }")]
@@ -343,6 +348,7 @@ public static class ElementExtensions
     [InlineData("Func<int, T> rate = e => _ops.FromDouble(e); for (int epoch = 0; epoch < 3; epoch++) total = _ops.Add(total, rate(epoch));")]
     [InlineData("for (int k = 0; k < 3; k++) total = _ops.Add(total, Percentile(values, k));")]
     [InlineData("T Twice(int k) => _ops.FromDouble(2.0 * k); for (int k = 0; k < 3; k++) total = _ops.Add(total, Twice(k));")]
+    [InlineData("T Pick(int k) => k > 1 ? _ops.One : _ops.Zero; for (int k = 0; k < 3; k++) total = _ops.Add(total, Pick(k));")]
     public async Task ScalarReachedThroughACall_IsNotReported(string body)
     {
         var diagnostics = await RunAsync(Sum(body));
