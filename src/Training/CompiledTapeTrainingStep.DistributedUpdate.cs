@@ -53,6 +53,11 @@ public static partial class CompiledTapeTrainingStep<T>
         internal T[]? Host;
         // A replay check still pending once the update runs in the plan: checked at the exchange, before the update.
         internal bool VerifyPending;
+        // The shared-memory slots registered as page-locked staging (registered once; null until the first exchange or
+        // when registration failed, then SlotStagingFailed keeps the page-locked copy path).
+        internal AiDotNet.Tensors.Engines.DirectGpu.IGradientHostStaging? SlotStaging;
+        internal int SlotStride;
+        internal bool SlotStagingFailed;
         internal double? EagerReplayLoss;
         internal double ReplayTolerance;
     }
@@ -142,9 +147,16 @@ public static partial class CompiledTapeTrainingStep<T>
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         var coordinator = state.Coordinator;
-        // Page-locked path (float plans on a backend with it): every gradient and the loss in one batch of async copies
-        // and a single wait, written back stream-ordered before the update. Otherwise the per-buffer Read/Write below.
-        bool isStaged = exchange.TryReadStaged(out Span<float> staged, out float stagedLoss);
+        // Shared memory with float device gradients: the gradients go straight into the shared slots and back (see
+        // TryExchangeInSharedSlots); the loss is read on its own first, since the metadata collectives use the slots.
+        var slotBackend = typeof(T) == typeof(float) && coordinator.WorldSize > 1 && !state.SlotStagingFailed
+            ? coordinator.Backend as SharedMemoryCommunicationBackend<T> : null;
+        // Otherwise the page-locked copy path (float plans on a backend with it): every gradient and the loss in one
+        // batch of async copies and a single wait, written back stream-ordered before the update. Otherwise the
+        // per-buffer Read/Write below.
+        Span<float> staged = default;
+        float stagedLoss = 0f;
+        bool isStaged = slotBackend is null && exchange.TryReadStaged(out staged, out stagedLoss);
         double localLoss = state.LocalTokens <= 0 ? 0.0
             : isStaged ? stagedLoss : numOps.ToDouble(exchange.ReadLoss());
         if (state.VerifyPending)
@@ -170,6 +182,16 @@ public static partial class CompiledTapeTrainingStep<T>
                     $"Rank {coordinator.Rank}: the ranks' compiled plans exchange different gradient layouts "
                     + $"({length} elements here, a different count on another rank).");
             state.LayoutChecked = true;
+        }
+
+        if (slotBackend is not null)
+        {
+            if (TryExchangeInSharedSlots(exchange, state, slotBackend, coordinator, rankWeight))
+            {
+                state.Exchanged = true;
+                return;
+            }
+            isStaged = exchange.TryReadStaged(out staged, out _);
         }
 
         if (isStaged)
@@ -210,12 +232,85 @@ public static partial class CompiledTapeTrainingStep<T>
         state.Exchanged = true;
     }
 
+    /// <summary>
+    /// The shared-memory exchange with no host copies of the gradients: the slots every rank maps are page-locked in
+    /// place, each rank's gradients are copied from the device straight into its own slot, each rank reduces one
+    /// partition (the weighted sum over the ranks, in rank order: bitwise the scaled all-reduce), and each rank copies
+    /// every partition from its owner's slot straight back to the device. False (after a warning) where the slots
+    /// cannot be registered or are too small; the caller then uses the page-locked copy path.
+    /// </summary>
+    private static bool TryExchangeInSharedSlots(GradientExchange<T> exchange, DistributedCompiledUpdate state,
+        SharedMemoryCommunicationBackend<T> shm, DistributedTapeCoordinator<T> coordinator, double rankWeight)
+    {
+        int rank = coordinator.Rank, worldSize = coordinator.WorldSize;
+        int length = exchange.TotalLength;
+        if (state.SlotStaging is null)
+        {
+            string? why = null;
+            AiDotNet.Tensors.Engines.DirectGpu.IGradientHostStaging? staging = null;
+            if (exchange.DeviceGradientCount == 0) why = "the gradients are on the host";
+            else if (shm.TryGetSlotRegion(length, out IntPtr start, out int floats, out int stride, out why))
+            {
+                staging = exchange.TryRegisterHostStaging(start, floats, out why);
+                if (staging is not null)
+                {
+                    shm.AttachMappingResource(staging);   // unregistered before the mapping goes, also on a failed run
+                    state.SlotStaging = staging;
+                    state.SlotStride = stride;
+                }
+            }
+            // Every rank takes the same path, or their collectives would not pair up.
+            if (!coordinator.RanksAgree(staging is null ? 0 : 1) && staging is not null)
+            {
+                staging = null;
+                why = "another rank could not register its slots";
+            }
+            if (staging is null)
+            {
+                state.SlotStagingFailed = true;
+                System.Diagnostics.Trace.TraceWarning(
+                    $"Rank {rank}: the data-parallel exchange cannot stage through the shared-memory slots ({why}); "
+                    + "it copies the gradients through page-locked host memory instead.");
+                return false;
+            }
+        }
+        if (length > state.SlotStride)
+        {
+            state.SlotStagingFailed = true;
+            System.Diagnostics.Trace.TraceWarning(
+                $"Rank {rank}: the gradients ({length} floats) outgrew a shared-memory slot ({state.SlotStride} floats); "
+                + "the data-parallel exchange copies them through page-locked host memory instead.");
+            return false;
+        }
+
+        var slots = state.SlotStaging!;
+        // The weights first: the gather uses the slots, which hold the gradients from the download to the last read.
+        var weights = shm.AllGatherFloat((float)rankWeight);
+        exchange.DownloadInto(slots, rank * state.SlotStride);
+        shm.ReduceSlotPartitions(length, weights);
+        for (int q = 0; q < worldSize; q++)
+        {
+            var (offset, count) = shm.SlotPartition(q, length);
+            if (count > 0) exchange.UploadRangeFrom(slots, q * state.SlotStride, offset, count);
+        }
+        slots.WaitForTransfers();   // the uploads read the peers' slots, which are written again next step
+        shm.FinishSlotReads(length);
+        return true;
+    }
+
     private static void ExchangeStaged(GradientExchange<T> exchange, DistributedCompiledUpdate state,
         DistributedTapeCoordinator<T> coordinator, Span<float> staged, double rankWeight)
     {
         int length = staged.Length;
         if (coordinator.WorldSize > 1)
         {
+            // Shared memory: scaled straight into this rank's slot and summed straight back into the staging.
+            if (coordinator.Backend is SharedMemoryCommunicationBackend<T> shm
+                && shm.TryAllReduceScaledSum(staged, (float)rankWeight, staged))
+            {
+                exchange.WriteStaged();
+                return;
+            }
             var flat = state.Flat is { } f && f.Length == length ? f : state.Flat = new Vector<T>(length);
             var flatSpan = ((Vector<float>)(object)flat).AsWritableSpan();
             ScaleInto(staged, (float)rankWeight, flatSpan);
@@ -234,18 +329,7 @@ public static partial class CompiledTapeTrainingStep<T>
     }
 
     private static void ScaleInto(ReadOnlySpan<float> source, float factor, Span<float> destination)
-    {
-        int i = 0;
-        if (System.Numerics.Vector.IsHardwareAccelerated)
-        {
-            var f = new System.Numerics.Vector<float>(factor);
-            var src = System.Runtime.InteropServices.MemoryMarshal.Cast<float, System.Numerics.Vector<float>>(source);
-            var dst = System.Runtime.InteropServices.MemoryMarshal.Cast<float, System.Numerics.Vector<float>>(destination);
-            for (int k = 0; k < src.Length; k++) dst[k] = src[k] * f;
-            i = src.Length * System.Numerics.Vector<float>.Count;
-        }
-        for (; i < source.Length; i++) destination[i] = source[i] * factor;
-    }
+        => System.Numerics.Tensors.TensorPrimitives.Multiply(source, factor, destination);
 
     /// <summary>
     /// One engaged step: configures the plan's fused optimizer on the first (taking over the eager optimizer's state,

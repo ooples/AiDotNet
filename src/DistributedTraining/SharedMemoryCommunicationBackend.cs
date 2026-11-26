@@ -80,6 +80,9 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
     private const int OpReduceScatterData = 17;
     private const int OpReduceScatterAck = 18;
     private const int OpInitAck = 19;
+    private const int OpSlotGradientsWritten = 20;
+    private const int OpSlotGradientsReduced = 21;
+    private const int OpSlotGradientsRead = 22;
 
     private const int RankStateUninitialized = 0;
     private const int RankStateActive = 1;
@@ -593,6 +596,193 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         }
 
         RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - start);
+    }
+
+    private readonly System.Collections.Generic.List<IDisposable> _attachedMappingResources = new();
+
+    /// <summary>
+    /// Ties <paramref name="resource"/> (for example a page-locked registration of <see cref="TryGetSlotRegion"/>'s
+    /// memory) to the mapping: it is disposed before the mapping is released, on shutdown, dispose or a failed
+    /// collective's teardown.
+    /// </summary>
+    internal void AttachMappingResource(IDisposable resource)
+    {
+        if (resource is null) throw new ArgumentNullException(nameof(resource));
+        lock (_attachedMappingResources) _attachedMappingResources.Add(resource);
+    }
+
+    private void DisposeAttachedMappingResources()
+    {
+        IDisposable[] resources;
+        lock (_attachedMappingResources)
+        {
+            resources = _attachedMappingResources.ToArray();
+            _attachedMappingResources.Clear();
+        }
+        foreach (var resource in resources)
+        {
+            try { resource.Dispose(); }
+            catch (Exception ex) { Trace.TraceWarning("Shared-memory backend: releasing a mapping resource failed: " + ex.Message); }
+        }
+    }
+
+    /// <summary>
+    /// The collective slots as one page-aligned host region: slot r holds <paramref name="floats"/> floats at float
+    /// r * <paramref name="slotStrideFloats"/> of <paramref name="start"/>. False, with the reason, where the slots
+    /// cannot hold <paramref name="floats"/> floats, the backend is not float, the world is one rank, or the region is
+    /// not page-aligned.
+    /// </summary>
+    internal bool TryGetSlotRegion(int floats, out IntPtr start, out int regionFloats, out int slotStrideFloats,
+        out string? failure)
+    {
+        start = IntPtr.Zero;
+        regionFloats = 0;
+        slotStrideFloats = 0;
+        failure = null;
+#if AIDN_LEGACY_TFM
+        failure = "the slot exchange needs the vectorized path (not on this framework)";
+        return false;
+#else
+        if (typeof(T) != typeof(float)) { failure = "the backend is not float"; return false; }
+        if (_worldSize <= 1) { failure = "a world of one rank has no peers"; return false; }
+        EnsureInitialized();
+        if ((long)floats * sizeof(float) > _slotCapacityBytes)
+        {
+            failure = $"the gradients ({(long)floats * sizeof(float)} bytes) exceed a slot ({_slotCapacityBytes} bytes)";
+            return false;
+        }
+        const long page = 4096;
+        long regionBytes = _worldSize * _slotCapacityBytes;
+        nint regionStart = _basePtr + CollectiveRegionOffset;
+        if (regionStart % page != 0 || _slotCapacityBytes % page != 0 || regionBytes / sizeof(float) > int.MaxValue)
+        {
+            failure = "the slot region is not page-aligned";
+            return false;
+        }
+        start = regionStart;
+        regionFloats = (int)(regionBytes / sizeof(float));
+        slotStrideFloats = (int)(_slotCapacityBytes / sizeof(float));
+        return true;
+#endif
+    }
+
+    /// <summary>
+    /// Gathers one float from every rank (rank order). Used to share the ranks' weights before their gradients occupy
+    /// the slots, since a gather uses the slots too.
+    /// </summary>
+    internal float[] AllGatherFloat(float value)
+    {
+        if (typeof(T) != typeof(float)) throw new NotSupportedException("The backend is not float.");
+        var gathered = AllGather((Vector<T>)(object)new Vector<float>(new[] { value }));
+        var result = new float[_worldSize];
+        var span = ((Vector<float>)(object)gathered).AsSpan();
+        for (int r = 0; r < _worldSize; r++) result[r] = span[r];
+        return result;
+    }
+
+    /// <summary>The flat range of the gradients rank <paramref name="rank"/> reduces in <see cref="ReduceSlotPartitions"/>.</summary>
+    internal (int Offset, int Count) SlotPartition(int rank, int length)
+    {
+        long begin = (long)length * rank / _worldSize, end = (long)length * (rank + 1) / _worldSize;
+        return ((int)begin, (int)(end - begin));
+    }
+
+    /// <summary>
+    /// Every rank has written its <paramref name="length"/> gradients into its own slot (unweighted). Waits for all of
+    /// them, then this rank reduces its partition (<see cref="SlotPartition"/>) in place in its own slot:
+    /// sum over ranks, in rank order, of weight[r] * slot r (each product rounded, then added: the same arithmetic,
+    /// bitwise, as each rank scaling its gradient and an all-reduce summing them in rank order). Returns once every
+    /// rank's partition is reduced, so each partition is readable from its owner's slot. Each rank must then read
+    /// what it needs and call <see cref="FinishSlotReads"/> before the slots are written again.
+    /// </summary>
+    internal void ReduceSlotPartitions(int length, float[] weights)
+    {
+#if AIDN_LEGACY_TFM
+        throw new NotSupportedException("The slot exchange needs the vectorized path.");
+#else
+        if (typeof(T) != typeof(float)) throw new NotSupportedException("The backend is not float.");
+        if (weights is null || weights.Length != _worldSize) throw new ArgumentException("One weight per rank.", nameof(weights));
+        EnsureInitialized();
+        lock (_collectiveLock)
+        {
+            AdvancePhaseAndWait(OpSlotGradientsWritten, length);
+            var (offset, count) = SlotPartition(_rank, length);
+            if (count > 0)
+            {
+                long byteOffset = (long)offset * sizeof(float);
+                var dest = GetMappedSpan<float>(SlotByteOffset(_rank) + byteOffset, count);
+                // Element by element (vectorized): every rank's element is read before the destination element (one of
+                // them, in place) is written.
+                int i = 0;
+                if (System.Numerics.Vector.IsHardwareAccelerated && _worldSize == 2)
+                {
+                    var a = MemoryMarshal.Cast<float, System.Numerics.Vector<float>>(GetMappedReadOnlySpan<float>(SlotByteOffset(0) + byteOffset, count));
+                    var b = MemoryMarshal.Cast<float, System.Numerics.Vector<float>>(GetMappedReadOnlySpan<float>(SlotByteOffset(1) + byteOffset, count));
+                    var d = MemoryMarshal.Cast<float, System.Numerics.Vector<float>>(dest);
+                    var w0 = new System.Numerics.Vector<float>(weights[0]);
+                    var w1 = new System.Numerics.Vector<float>(weights[1]);
+                    for (int k = 0; k < d.Length; k++) d[k] = a[k] * w0 + b[k] * w1;
+                    i = d.Length * System.Numerics.Vector<float>.Count;
+                }
+                for (; i < count; i++)
+                {
+                    float acc = GetMappedReadOnlySpan<float>(SlotByteOffset(0) + byteOffset, count)[i] * weights[0];
+                    for (int r = 1; r < _worldSize; r++) acc += GetMappedReadOnlySpan<float>(SlotByteOffset(r) + byteOffset, count)[i] * weights[r];
+                    dest[i] = acc;
+                }
+            }
+            AdvancePhaseAndWait(OpSlotGradientsReduced, length);
+        }
+#endif
+    }
+
+    /// <summary>This rank has finished reading the reduced partitions; waits until every rank has, so the slots are free.</summary>
+    internal void FinishSlotReads(int length)
+    {
+        EnsureInitialized();
+        lock (_collectiveLock) AdvancePhaseAndWait(OpSlotGradientsRead, length);
+    }
+
+    /// <summary>
+    /// A float sum all-reduce of <paramref name="source"/> scaled by <paramref name="scale"/>, into
+    /// <paramref name="destination"/> (which may be <paramref name="source"/>): each rank's scaled values go straight
+    /// into its slot and the slots are summed straight into the destination, in rank order. The same result, bitwise,
+    /// as scaling into a vector and <see cref="AllReduce"/> with Sum, without the two extra passes over the buffer
+    /// (the scaled copy and the copy into the slot). Returns false (nothing done) where it does not apply: not float,
+    /// a world of one, or a framework without the vectorized path.
+    /// </summary>
+    internal bool TryAllReduceScaledSum(ReadOnlySpan<float> source, float scale, Span<float> destination)
+    {
+#if AIDN_LEGACY_TFM
+        return false;
+#else
+        if (typeof(T) != typeof(float) || _worldSize <= 1) return false;
+        if (destination.Length != source.Length)
+            throw new ArgumentException("The destination and the source differ in length.", nameof(destination));
+        EnsureInitialized();
+        DrainAsyncCollectives();
+        long start = Stopwatch.GetTimestamp();
+        lock (_collectiveLock)
+        {
+            int maxChunkElements = (int)Math.Min(int.MaxValue, _slotCapacityBytes / sizeof(float));
+            int offset = 0;
+            while (offset < source.Length)
+            {
+                int count = Math.Min(maxChunkElements, source.Length - offset);
+                TensorPrimitives.Multiply(source.Slice(offset, count), scale, GetMappedSpan<float>(SlotByteOffset(_rank), count));
+                AdvancePhaseAndWait(OpAllReduceData, count);
+                var dest = destination.Slice(offset, count);
+                TensorPrimitives.Add(GetMappedReadOnlySpan<float>(SlotByteOffset(0), count),
+                    GetMappedReadOnlySpan<float>(SlotByteOffset(1), count), dest);
+                for (int r = 2; r < _worldSize; r++)
+                    TensorPrimitives.Add(dest, GetMappedReadOnlySpan<float>(SlotByteOffset(r), count), dest);
+                AdvancePhaseAndWait(OpAllReduceAck, count);
+                offset += count;
+            }
+        }
+        RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - start);
+        return true;
+#endif
     }
 
     /// <inheritdoc/>
@@ -1774,6 +1964,9 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
 
     private void ReleaseResources()
     {
+        // Registrations of the mapped memory (page-locked staging) go before the view does.
+        DisposeAttachedMappingResources();
+
         if (_viewHandleAcquired && _basePtr != 0)
         {
             long myHeader = RankHeaderOffset(_rank);
