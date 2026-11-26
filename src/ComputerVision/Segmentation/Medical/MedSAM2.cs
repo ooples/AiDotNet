@@ -34,7 +34,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 /// </remarks>
 /// <example>
 /// <code>
-/// var volume = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
+/// var volume = Tensor&lt;float&gt;.CreateRandom(1, 64, 512, 512);   // [1, D, H, W], values in 0..1; noise stands in for a CT
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,

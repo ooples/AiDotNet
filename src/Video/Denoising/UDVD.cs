@@ -42,15 +42,19 @@ namespace AiDotNet.Video.Denoising;
 /// </remarks>
 /// <example>
 /// <code>
-/// var noisyFrames = Tensor&lt;double&gt;.CreateRandom(8, 3, 128, 128);   // [T, 3, H, W], pixel values 0-255
+/// // [clips, frames, 3, H, W]: the builder splits and shuffles along the first axis, so that axis is clips.
+/// // Pixel values are 0-255; noise in [0, 1) stands in for the video here.
+/// var noisyClips = Tensor&lt;double&gt;.CreateRandom(new[] { 8, 8, 3, 128, 128 });
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 128, inputWidth: 128, inputDepth: 3);
+/// var model = new UDVD&lt;double&gt;(architecture, new UDVDOptions());
 /// var result = new AiModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
-///     .ConfigureModel(new UDVD&lt;double&gt;(architecture, new UDVDOptions()))
-///     .Build(noisyFrames, noisyFrames);   // unsupervised: the noisy video is its own target
-/// var clean = result.Predict(noisyFrames);   // [T, 3, H, W]
+///     .ConfigureModel(model)
+///     .Build(noisyClips, noisyClips);   // unsupervised: the noisy video is its own target
+/// var noisyFrames = Tensor&lt;double&gt;.CreateRandom(8, 3, 128, 128);   // one clip, [frames, 3, H, W]
+/// var clean = model.Denoise(noisyFrames);   // [T, 3, H, W]
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

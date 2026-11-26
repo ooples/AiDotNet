@@ -30,18 +30,13 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a MinMo model for multimodal voice interaction
-/// // with unified speech understanding and generation capabilities
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new MinMo&lt;double&gt;(architecture, "minmo.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new MinMo&lt;double&gt;(architecture, new MinMoOptions());
+///     inputSize: 1, outputSize: 1);
+/// var model = new MinMo&lt;double&gt;(architecture, new MinMoOptions());
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// // Untrained native layers; the MinMo(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

@@ -37,18 +37,18 @@ namespace AiDotNet.Audio.Foundations;
 /// </remarks>
 /// <example>
 /// <code>
-/// // 16 kHz mono recordings, [batch, samples]
-/// var unlabeledSpeech = Tensor&lt;float&gt;.CreateRandom(2, 16000);
+/// // 16 kHz mono recordings, one row each: the builder splits and shuffles along the first axis.
+/// var unlabeledSpeech = Tensor&lt;float&gt;.CreateRandom(8, 16000);   // noise stands in for the recordings
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 1, outputSize: 1024);
+/// var model = new W2vBert&lt;float&gt;(architecture, new W2vBertOptions());
 /// // self-supervised pre-training: the recordings are their own target
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
-///     .ConfigureModel(new W2vBert&lt;float&gt;(architecture, new W2vBertOptions()))
+///     .ConfigureModel(model)
 ///     .Build(unlabeledSpeech, unlabeledSpeech);
 ///
-/// // Semantic tokens from a pre-trained w2v-BERT
-/// var pretrained = new W2vBert&lt;float&gt;(architecture, "w2v-bert.onnx", new W2vBertOptions());
-/// pretrained.FitSemanticTokenizer(new List&lt;Tensor&lt;float&gt;&gt; { Tensor&lt;float&gt;.CreateRandom(1, 16000) });
-/// int[] tokens = pretrained.SemanticTokens(Tensor&lt;float&gt;.CreateRandom(1, 16000));   // 25 tokens a second
+/// // Semantic tokens from the same model: k-means needs at least SemanticClusters (1024) frames at 25 a second.
+/// model.FitSemanticTokenizer(new List&lt;Tensor&lt;float&gt;&gt; { Tensor&lt;float&gt;.CreateRandom(1, 45 * 16000) });
+/// int[] tokens = model.SemanticTokens(Tensor&lt;float&gt;.CreateRandom(1, 16000));   // 25 tokens a second
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

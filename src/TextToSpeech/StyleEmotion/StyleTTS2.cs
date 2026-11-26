@@ -41,18 +41,13 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a StyleTTS 2 model for human-level expressive TTS
-/// // with style diffusion, adversarial training, and WavLM discriminator
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new StyleTTS2&lt;double&gt;(architecture, "styletts2.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new StyleTTS2&lt;double&gt;(architecture, new StyleTTS2Options());
+///     inputSize: 1, outputSize: 1);
+/// var model = new StyleTTS2&lt;double&gt;(architecture, new StyleTTS2Options());
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// // Untrained native layers; the StyleTTS2(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

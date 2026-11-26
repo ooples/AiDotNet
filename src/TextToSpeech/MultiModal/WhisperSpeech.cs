@@ -30,18 +30,13 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a WhisperSpeech model for TTS using Whisper encoder features
-/// // as semantic tokens with acoustic generation for high-quality output
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new WhisperSpeech&lt;double&gt;(architecture, "whisperspeech.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new WhisperSpeech&lt;double&gt;(architecture, new WhisperSpeechOptions());
+///     inputSize: 1, outputSize: 1);
+/// var model = new WhisperSpeech&lt;double&gt;(architecture, new WhisperSpeechOptions());
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// // Untrained native layers; the WhisperSpeech(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

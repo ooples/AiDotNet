@@ -34,7 +34,8 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 ///     inputSize: 512,
 ///     outputSize: 16000);
 ///
-/// var model = new StepAudio&lt;float&gt;(architecture, "step_audio.onnx");
+/// var model = new StepAudio&lt;float&gt;(architecture, new StepAudioOptions());
+/// // Untrained native layers; the StepAudio(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 ///
 /// // Synthesize speech with streaming support
 /// Tensor&lt;float&gt; audio = model.Synthesize("Hello from Step-Audio!");

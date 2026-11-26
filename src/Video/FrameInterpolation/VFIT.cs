@@ -55,9 +55,10 @@ namespace AiDotNet.Video.FrameInterpolation;
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var options = new VFITOptions();
 /// var vfit = new VFIT&lt;double&gt;(architecture, options);
-///
-/// // Or load a pre-trained ONNX model for inference
-/// var vfitOnnx = new VFIT&lt;double&gt;(architecture, "vfit_model.onnx");
+/// var frame0 = Tensor&lt;double&gt;.CreateRandom(1, 3, 256, 256);   // stands in for two consecutive frames, [1, 3, H, W]
+/// var frame1 = Tensor&lt;double&gt;.CreateRandom(1, 3, 256, 256);
+/// var middle = vfit.Interpolate(frame0, frame1, t: 0.5);   // the frame halfway between
+/// // The VFIT(architecture, modelPath) constructor runs an exported ONNX checkpoint instead.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

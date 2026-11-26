@@ -53,9 +53,10 @@ namespace AiDotNet.Video.FrameInterpolation;
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var options = new VFIformerOptions();
 /// var vfiFormer = new VFIformer&lt;double&gt;(architecture, options);
-///
-/// // Or load a pre-trained ONNX model for inference
-/// var vfiFormerOnnx = new VFIformer&lt;double&gt;(architecture, "vfiformer_model.onnx");
+/// var frame0 = Tensor&lt;double&gt;.CreateRandom(1, 3, 256, 256);   // stands in for two consecutive frames, [1, 3, H, W]
+/// var frame1 = Tensor&lt;double&gt;.CreateRandom(1, 3, 256, 256);
+/// var middle = vfiFormer.Interpolate(frame0, frame1, t: 0.5);   // the frame halfway between
+/// // The VFIformer(architecture, modelPath) constructor runs an exported ONNX checkpoint instead.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

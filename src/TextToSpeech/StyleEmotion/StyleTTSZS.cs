@@ -44,18 +44,15 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a StyleTTS-ZS model for zero-shot voice cloning
-/// // with distilled time-varying style diffusion for efficient synthesis
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new StyleTTSZS&lt;double&gt;(architecture, "styletts_zs.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new StyleTTSZS&lt;double&gt;(architecture, new StyleTTSZSOptions());
+///     inputSize: 1, outputSize: 1);
+/// var model = new StyleTTSZS&lt;double&gt;(architecture, new StyleTTSZSOptions());
+/// var reference = Tensor&lt;double&gt;.CreateRandom(1, 3 * model.SampleRate);   // stands in for 3 s of the style to copy
+/// model.Voice = model.CreateVoice(reference);
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// // Untrained native layers; the StyleTTSZS(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

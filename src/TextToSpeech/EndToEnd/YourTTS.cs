@@ -33,18 +33,15 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a YourTTS model for multilingual zero-shot multi-speaker TTS
-/// // with VITS backbone and speaker/language conditioning
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new YourTTS&lt;double&gt;(architecture, "yourtts.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new YourTTS&lt;double&gt;(architecture, new YourTTSOptions());
+///     inputSize: 1, outputSize: 1);
+/// var model = new YourTTS&lt;double&gt;(architecture, new YourTTSOptions());
+/// var reference = Tensor&lt;double&gt;.CreateRandom(1, 3 * model.SampleRate);   // stands in for 3 s of the target speaker
+/// model.Voice = new TtsVoice&lt;double&gt; { ReferenceAudio = reference };
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// // Untrained native layers; the YourTTS(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

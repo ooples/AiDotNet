@@ -36,18 +36,14 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create an EmotiVoice model for emotion-controlled multi-voice TTS
-/// // with prompt-based emotion and style control (happy, sad, angry, etc.)
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new EmotiVoice&lt;double&gt;(architecture, "emotivoice.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new EmotiVoice&lt;double&gt;(architecture, new EmotiVoiceOptions());
+///     inputSize: 1, outputSize: 1);
+/// var model = new EmotiVoice&lt;double&gt;(architecture, new EmotiVoiceOptions());
+/// model.Voice = model.CreateVoice(speaker: 0, prompt: "Happy");   // a speaker and an emotion/style prompt
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// // Untrained native layers; the EmotiVoice(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

@@ -37,15 +37,19 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// </remarks>
 /// <example>
 /// <code>
-/// var clip1 = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
-/// var text1 = "example";
-/// var durations1 = new int[] { 0, 1, 2 };
-/// var clip2 = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
-/// var text2 = "example";
-/// var durations2 = new int[] { 0, 1, 2 };
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var model = new MegaTTS2&lt;float&gt;(architecture, new MegaTTS2Options());
 /// model.LoadVocoderWeights("generator_v1");   // a HiFi-GAN V1 generator trained on this model's mel spectrograms
+/// // Two prompt sentences of the target speaker: recordings at the model's rate (noise stands in here), their
+/// // transcripts, and mel frames per token from a forced aligner (spread evenly here so they sum to the clip).
+/// var clip1 = Tensor&lt;float&gt;.CreateRandom(1, 3 * model.SampleRate);
+/// var text1 = "what the first prompt says";
+/// var durations1 = new int[model.TextToTokens(text1).Length];
+/// for (int i = 0; i &lt; durations1.Length; i++) durations1[i] = clip1.Length / model.HopSize / durations1.Length;
+/// var clip2 = Tensor&lt;float&gt;.CreateRandom(1, 3 * model.SampleRate);
+/// var text2 = "what the second prompt says";
+/// var durations2 = new int[model.TextToTokens(text2).Length];
+/// for (int i = 0; i &lt; durations2.Length; i++) durations2[i] = clip2.Length / model.HopSize / durations2.Length;
 /// model.PromptSentences = new[]
 /// {
 ///     new TtsVoice&lt;float&gt; { ReferenceAudio = clip1, ReferenceTokens = model.TextToTokens(text1), ReferenceDurations = durations1 },

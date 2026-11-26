@@ -42,18 +42,15 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a StyleTTS model for style-based expressive speech synthesis
-/// // with style diffusion and adversarial training for diverse prosody
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new StyleTTS&lt;double&gt;(architecture, "styletts.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new StyleTTS&lt;double&gt;(architecture, new StyleTTSOptions());
+///     inputSize: 200, outputSize: 80);
+/// var model = new StyleTTS&lt;double&gt;(architecture, new StyleTTSOptions());
+/// var reference = Tensor&lt;double&gt;.CreateRandom(1, 3 * model.SampleRate);   // stands in for 3 s of the style to copy
+/// model.Voice = model.CreateVoice(reference);
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel spectrogram; a vocoder turns it into audio
+/// // Untrained native layers; the StyleTTS(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

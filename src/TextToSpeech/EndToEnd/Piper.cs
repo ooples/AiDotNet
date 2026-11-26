@@ -22,18 +22,13 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Piper model for lightweight edge-optimized TTS
-/// // based on VITS architecture with fast CPU inference
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new Piper&lt;double&gt;(architecture, "piper.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new Piper&lt;double&gt;(architecture, new PiperOptions());
+///     inputSize: 1, outputSize: 1);
+/// var model = new Piper&lt;double&gt;(architecture, new PiperOptions());
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// // Untrained native layers; the Piper(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

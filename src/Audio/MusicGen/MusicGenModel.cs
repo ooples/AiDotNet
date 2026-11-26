@@ -39,10 +39,16 @@ namespace AiDotNet.Audio.MusicGen;
 /// </remarks>
 /// <example>
 /// <code>
-/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
-/// var clip = Tensor&lt;float&gt;.CreateRandom(1, 32000);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional,
+///     NeuralNetworkTaskType.Generative, inputSize: 1, outputSize: 1);
+/// var clip = Tensor&lt;float&gt;.CreateRandom(1, 32000);   // stands in for 1 s of music at 32 kHz
 /// var musicGen = new MusicGenModel&lt;float&gt;(architecture, new MusicGenOptions { ModelSize = MusicGenModelSize.Small });
-/// musicGen.Train(new MusicGenTrainingSample&lt;float&gt; { Audio = clip, Description = "lofi hip hop with a mellow piano" });
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(musicGen)
+///     .Build(new List&lt;MusicGenTrainingSample&lt;float&gt;&gt;
+///     {
+///         new MusicGenTrainingSample&lt;float&gt; { Audio = clip, Description = "lofi hip hop with a mellow piano" }
+///     });
 /// var music = musicGen.GenerateMusic("an upbeat 80s synth-pop track", durationSeconds: 10);
 /// </code>
 /// </example>

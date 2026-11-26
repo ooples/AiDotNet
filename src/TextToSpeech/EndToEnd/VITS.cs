@@ -28,18 +28,13 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a VITS model for end-to-end TTS with conditional VAE,
-/// // normalizing flows, and adversarial training for parallel synthesis
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new VITS&lt;double&gt;(architecture, "vits.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new VITS&lt;double&gt;(architecture, new VITSOptions());
+///     inputSize: 1, outputSize: 1);
+/// var model = new VITS&lt;double&gt;(architecture, new VITSOptions());
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// // Untrained native layers; the VITS(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

@@ -33,18 +33,13 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a MeloTTS model for high-quality multilingual end-to-end TTS
-/// // with VITS backbone, language-specific G2P, and mixed-language support
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new MeloTTS&lt;double&gt;(architecture, "melotts.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new MeloTTS&lt;double&gt;(architecture, new MeloTTSOptions());
+///     inputSize: 1, outputSize: 1);
+/// var model = new MeloTTS&lt;double&gt;(architecture, new MeloTTSOptions());
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// // Untrained native layers; the MeloTTS(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

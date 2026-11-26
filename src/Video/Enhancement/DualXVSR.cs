@@ -50,14 +50,18 @@ namespace AiDotNet.Video.Enhancement;
 /// </remarks>
 /// <example>
 /// <code>
-/// var degradedClip = Tensor&lt;float&gt;.CreateRandom(16, 3, 64, 64);     // [frames, 3, H, W], pixel values 0-255
-/// var cleanClip = Tensor&lt;float&gt;.CreateRandom(16, 3, 256, 256);  // the same frames at 4x
+/// // [clips, frames, 3, H, W]: the builder splits and shuffles along the first axis, so that axis is clips.
+/// // Pixel values are 0-255; noise in [0, 1) stands in for the video here.
+/// var degradedClips = Tensor&lt;float&gt;.CreateRandom(new[] { 8, 16, 3, 64, 64 });
+/// var cleanClips = Tensor&lt;float&gt;.CreateRandom(new[] { 8, 16, 3, 256, 256 });   // the same clips at 4x
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputType: InputType.FourDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression, inputFrames: 16, inputHeight: 64, inputWidth: 64, inputDepth: 3);
+/// var model = new DualXVSR&lt;float&gt;(arch, new DualXVSROptions());
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
-///     .ConfigureModel(new DualXVSR&lt;float&gt;(arch, new DualXVSROptions()))
-///     .Build(degradedClip, cleanClip);
-/// var upscaled = result.Predict(degradedClip);   // [16, 3, 256, 256]
+///     .ConfigureModel(model)
+///     .Build(degradedClips, cleanClips);
+/// var degradedClip = Tensor&lt;float&gt;.CreateRandom(16, 3, 64, 64);   // one clip, [frames, 3, H, W]
+/// var upscaled = model.Upscale(degradedClip);   // [16, 3, 256, 256]
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]
