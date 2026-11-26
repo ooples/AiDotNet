@@ -75,28 +75,23 @@ public class ConformalClassifier<T>
         var numCalibration = calibrationInputs.Rows;
         if (numCalibration == 0)
             throw new ArgumentException("Calibration set must contain at least one sample.", nameof(calibrationInputs));
-        _calibrationScores = new Vector<T>(numCalibration);
 
-        // Compute conformity scores (probability of true class)
-        for (int i = 0; i < numCalibration; i++)
+        var engine = AiDotNetEngine.Current;
+        var labels = Tensor<int>.FromVector(calibrationLabels, new[] { numCalibration, 1 });
+        var outOfRange = engine.TensorAdd(engine.TensorLessThan(labels, 0), engine.TensorGreaterThan(labels, _numClasses - 1));
+        if (engine.TensorSum(outOfRange) > 0)
         {
-            var input = new Tensor<T>([calibrationInputs.Columns], calibrationInputs.GetRow(i));
-            var probabilities = _model.Predict(input);
-            if (probabilities.Length != _numClasses)
-                throw new InvalidOperationException($"Model must return exactly {_numClasses} class probabilities. Got {probabilities.Length} (sample index {i}).");
-
-            var trueLabel = calibrationLabels[i];
-            if (trueLabel < 0 || trueLabel >= _numClasses)
-                throw new ArgumentException($"Label {trueLabel} is out of range [0, {_numClasses})");
-
-            // Conformity score is the probability assigned to the true class
-            _calibrationScores[i] = probabilities[trueLabel];
+            int firstBad = engine.TensorArgMax(engine.Reshape(outOfRange, new[] { numCalibration }), 0).ToArray()[0];
+            throw new ArgumentException($"Label {calibrationLabels[firstBad]} is out of range [0, {_numClasses})");
         }
 
+        // Conformity score is the probability assigned to the true class
+        var probabilities = PredictRows(calibrationInputs, includeSampleIndex: true);           // [n, C]
+        var scores = engine.Reshape(engine.TensorTakeAlongDim(probabilities, labels, 1), new[] { numCalibration });
+
         // Sort scores (ascending order)
-        var scoresArray = _calibrationScores.ToArray();
-        Array.Sort(scoresArray);
-        _calibrationScores = new Vector<T>(scoresArray);
+        var (sorted, _) = engine.TensorSort(scores, 0, false);
+        _calibrationScores = sorted.ToVector();
 
         _isCalibrated = true;
     }
@@ -136,53 +131,79 @@ public class ConformalClassifier<T>
         if (probabilities.Length != _numClasses)
             throw new InvalidOperationException($"Model must return exactly {_numClasses} class probabilities. Got {probabilities.Length}.");
 
-        // Compute the threshold score
-        var threshold = ComputeThreshold(confidenceLevel);
+        var engine = AiDotNetEngine.Current;
+        var threshold = ConformalThreshold(_calibrationScores, confidenceLevel);
+        var membership = PredictionSetMask(engine.Reshape(probabilities, new[] { 1, _numClasses }), threshold);
+        var classes = engine.TensorMaskedSelect(
+            engine.TensorArange<int>(0, _numClasses, 1),
+            engine.TensorEqScalar(engine.Reshape(membership, new[] { _numClasses }), _numOps.One));
 
-        // Build prediction set: include classes with probability >= threshold
-        var predictionSet = new HashSet<int>();
-        for (int c = 0; c < _numClasses; c++)
+        return new HashSet<int>(classes.ToArray());
+    }
+
+    /// <summary>
+    /// 0/1 membership of every class in the prediction set of every row of an [n, C] probability tensor.
+    /// </summary>
+    /// <remarks>
+    /// A class is in the set when its probability is at least the threshold. A row with no such class
+    /// gets its top class (the first one on ties), so every set is non-empty.
+    /// </remarks>
+    private Tensor<T> PredictionSetMask(Tensor<T> probabilities, T threshold)
+    {
+        var engine = AiDotNetEngine.Current;
+        int rows = probabilities._shape[0];
+
+        // p >= threshold, written as (p > t) + (p == t) so a NaN probability stays out of the set.
+        var included = engine.TensorAdd(engine.TensorGreaterThan(probabilities, threshold), engine.TensorEquals(probabilities, threshold));
+        var setSize = engine.ReduceSum(included, new[] { 1 }, keepDims: true);                    // [n, 1]
+        var isEmpty = engine.TensorEquals(setSize, _numOps.Zero);                                 // [n, 1]
+        var topClass = engine.TensorOneHot<T>(engine.TensorArgMax(probabilities, 1), _numClasses); // [n, C]
+
+        return engine.TensorAdd(included,
+            engine.TensorMultiply(engine.TensorBroadcastTo(isEmpty, new[] { rows, _numClasses }), topClass));
+    }
+
+    /// <summary>
+    /// Runs the model on every row and returns the class probabilities as an [n, C] tensor.
+    /// </summary>
+    private Tensor<T> PredictRows(Matrix<T> inputs, bool includeSampleIndex)
+    {
+        var outputs = new Tensor<T>[inputs.Rows];
+        for (int i = 0; i < inputs.Rows; i++)
         {
-            if (_numOps.GreaterThanOrEquals(probabilities[c], threshold))
+            var probabilities = _model.Predict(new Tensor<T>([inputs.Columns], inputs.GetRow(i)));
+            if (probabilities.Length != _numClasses)
             {
-                predictionSet.Add(c);
+                string where = includeSampleIndex ? $" (sample index {i})" : string.Empty;
+                throw new InvalidOperationException($"Model must return exactly {_numClasses} class probabilities. Got {probabilities.Length}{where}.");
             }
+
+            outputs[i] = AiDotNetEngine.Current.Reshape(probabilities, new[] { 1, _numClasses });
         }
 
-        // Ensure prediction set is non-empty (include at least the top predicted class)
-        if (predictionSet.Count == 0)
-        {
-            var maxProb = probabilities[0];
-            var maxClass = 0;
-            for (int c = 1; c < _numClasses; c++)
-            {
-                if (_numOps.GreaterThan(probabilities[c], maxProb))
-                {
-                    maxProb = probabilities[c];
-                    maxClass = c;
-                }
-            }
-            predictionSet.Add(maxClass);
-        }
-
-        return predictionSet;
+        return outputs.Length == 0
+            ? new Tensor<T>([0, _numClasses])
+            : AiDotNetEngine.Current.TensorConcatenate(outputs, 0);
     }
 
     /// <summary>
     /// Computes the threshold for prediction set inclusion.
     /// </summary>
-    private T ComputeThreshold(double confidenceLevel)
+    /// <remarks>
+    /// Least-ambiguous set-valued classifier (Sadinle, Lei and Wasserman 2019; Angelopoulos and Bates 2021, Sec. 1):
+    /// with non-conformity s = 1 - p_y, the threshold is the k-th smallest s, k = ceil((n + 1) * confidenceLevel).
+    /// On the ascending conformity scores p that is element n - k (0-based). When k &gt; n no finite threshold
+    /// guarantees the coverage, so every class is included (threshold -infinity).
+    /// </remarks>
+    internal static T ConformalThreshold(Vector<T> sortedConformityScores, double confidenceLevel)
     {
-        var n = (_calibrationScores ?? throw new InvalidOperationException("_calibrationScores has not been initialized.")).Length;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = sortedConformityScores.Length;
+        int k = (int)Math.Ceiling((n + 1) * confidenceLevel);
+        if (k > n)
+            return numOps.FromDouble(double.NegativeInfinity);
 
-        // Compute quantile index (using floor for conservative estimates)
-        var quantileLevel = 1.0 - confidenceLevel;
-        var index = (int)Math.Floor(n * quantileLevel);
-
-        if (index < 0) index = 0;
-        if (index >= n) index = n - 1;
-
-        return _calibrationScores[index];
+        return sortedConformityScores[n - Math.Max(k, 1)];
     }
 
     /// <summary>
@@ -196,26 +217,23 @@ public class ConformalClassifier<T>
     /// <b>For Beginners:</b> This verifies that your prediction sets achieve the desired coverage.
     /// For 90% confidence, coverage should be ≥ 0.90. If it's lower, check your calibration set.
     /// </remarks>
-    public double EvaluateCoverage(Matrix<T> testInputs, Vector<int> testLabels, double confidenceLevel = 0.9)
+    public T EvaluateCoverage(Matrix<T> testInputs, Vector<int> testLabels, double confidenceLevel = 0.9)
     {
-        if (!_isCalibrated)
-            throw new InvalidOperationException("Must calibrate classifier before evaluation");
+        if (testLabels.Length != testInputs.Rows)
+            throw new ArgumentException(
+                $"testLabels has {testLabels.Length} entries but testInputs has {testInputs.Rows} rows.", nameof(testLabels));
 
-        int coveredCount = 0;
+        var membership = PredictionSetMasks(testInputs, confidenceLevel, "Must calibrate classifier before evaluation");
+        var engine = AiDotNetEngine.Current;
         int totalCount = testInputs.Rows;
 
-        for (int i = 0; i < totalCount; i++)
-        {
-            var input = new Tensor<T>([testInputs.Columns], testInputs.GetRow(i));
-            var predictionSet = PredictSet(input, confidenceLevel);
+        // A label outside [0, C) is never in a set; it is clamped for the lookup and masked out.
+        var labels = Tensor<int>.FromVector(testLabels, new[] { testLabels.Length, 1 });
+        var valid = engine.ScalarMinusTensor(1, engine.TensorAdd(engine.TensorLessThan(labels, 0), engine.TensorGreaterThan(labels, _numClasses - 1)));
+        var inSet = engine.TensorTakeAlongDim(membership, engine.TensorClamp(labels, 0, _numClasses - 1), 1).Cast<int>();
+        int coveredCount = engine.TensorSum(engine.TensorMultiply(inSet, valid));
 
-            if (predictionSet.Contains(testLabels[i]))
-            {
-                coveredCount++;
-            }
-        }
-
-        return (double)coveredCount / totalCount;
+        return _numOps.Divide(_numOps.FromDouble(coveredCount), _numOps.FromDouble(totalCount));
     }
 
     /// <summary>
@@ -230,21 +248,22 @@ public class ConformalClassifier<T>
     /// - Average size = 2-3: Good model with some uncertainty
     /// - Average size close to num_classes: Poor model (very uncertain)
     /// </remarks>
-    public double ComputeAverageSetSize(Matrix<T> testInputs, double confidenceLevel = 0.9)
+    public T ComputeAverageSetSize(Matrix<T> testInputs, double confidenceLevel = 0.9)
     {
-        if (!_isCalibrated)
-            throw new InvalidOperationException("Must calibrate classifier before computing set size");
+        var membership = PredictionSetMasks(testInputs, confidenceLevel, "Must calibrate classifier before computing set size");
+        int totalSize = AiDotNetEngine.Current.TensorSum(membership.Cast<int>());
+        return _numOps.Divide(_numOps.FromDouble(totalSize), _numOps.FromDouble(testInputs.Rows));
+    }
 
-        int totalSize = 0;
-        int count = testInputs.Rows;
+    private Tensor<T> PredictionSetMasks(Matrix<T> testInputs, double confidenceLevel, string notCalibratedMessage)
+    {
+        if (!_isCalibrated || _calibrationScores == null)
+            throw new InvalidOperationException(notCalibratedMessage);
 
-        for (int i = 0; i < count; i++)
-        {
-            var input = new Tensor<T>([testInputs.Columns], testInputs.GetRow(i));
-            var predictionSet = PredictSet(input, confidenceLevel);
-            totalSize += predictionSet.Count;
-        }
+        if (confidenceLevel <= 0 || confidenceLevel >= 1)
+            throw new ArgumentException("Confidence level must be between 0 and 1", nameof(confidenceLevel));
 
-        return (double)totalSize / count;
+        var threshold = ConformalThreshold(_calibrationScores, confidenceLevel);
+        return PredictionSetMask(PredictRows(testInputs, includeSampleIndex: false), threshold);
     }
 }

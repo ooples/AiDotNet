@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -112,7 +112,7 @@ public partial class Qwen3ASRSmall<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         string? forced = ForcedLanguage(language);
         int[] tokens;
         using (new Tensors.Engines.Autodiff.NoGradScope<T>())
-            tokens = network.Greedy(network.Prompt(network.Encode(network.Spectrogram(Waveform(audio))), _options.Context, forced), _options.MaxTextLength);
+            tokens = network.Greedy(network.Prompt(network.Encode(network.Spectrogram(TruncateAudioWaveform(audio, _options.MaxAudioLengthSeconds))), _options.Context, forced), _options.MaxTextLength);
         var (named, text) = Split(network, tokens);
         return new TranscriptionResult<T>
         {
@@ -178,35 +178,11 @@ public partial class Qwen3ASRSmall<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         Layers.AddRange(layers);
     }
 
-    // The 16 kHz waveform, truncated to the longest recording transcribed.
-    private Tensor<T> Waveform(Tensor<T> audio)
-    {
-        int length = Math.Min(audio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var waveform = new Tensor<T>(new[] { length });
-        audio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
-    }
-
-    private Tensor<T> Row(Tensor<T> input, int row, int rows)
-    {
-        if (rows == 1) return input;
-        int samples = input.Length / rows;
-        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(input, new[] { rows, samples }), new[] { row, 0 }, new[] { 1, samples }), new[] { samples });
-    }
-
     private Tensor<T> PromptOf(Qwen3AsrNetwork<T> network, Tensor<T> audio) =>
-        network.Prompt(network.Encode(network.Spectrogram(Waveform(audio))), _options.Context, ForcedLanguage(null));
+        network.Prompt(network.Encode(network.Spectrogram(TruncateAudioWaveform(audio, _options.MaxAudioLengthSeconds))), _options.Context, ForcedLanguage(null));
 
-    // The logits [1, vocabulary] of the answer's first token for a waveform [S], or [batch, 1, vocabulary] for [batch, S].
-    private Tensor<T> FirstLogits(Tensor<T> input)
-    {
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-        int rows = input.Rank == 1 ? 1 : input.Shape[0];
-        var outputs = new Tensor<T>[rows];
-        for (int r = 0; r < rows; r++) outputs[r] = _network.FirstLogits(PromptOf(_network, Row(input, r, rows)));
-        return rows == 1 && input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
-    }
+    private Tensor<T> FirstLogits(Tensor<T> input) =>
+        ForwardNativeWaveformBatch(input, _network, (net, wave) => net.FirstLogits(PromptOf(net, wave)));
 
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
 
@@ -214,70 +190,22 @@ public partial class Qwen3ASRSmall<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
 
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : FirstLogits(input);
 
-    // The answer a training target names: ids [length] (the transcript when the language is forced, otherwise the whole
-    // answer with its language prefix), or one distribution per token [length, vocabulary], read as its most likely
-    // tokens; the end token is never a target.
-    private int[] Answer(Qwen3AsrNetwork<T> network, Tensor<T> target)
-    {
-        int vocabulary = _options.VocabSize, end = network.EndToken;
-        var span = target.Data.Span;
-        if (target.Rank >= 2 && target.Shape[^1] == vocabulary)
-        {
-            var tokens = new int[target.Length / vocabulary];
-            for (int r = 0; r < tokens.Length; r++)
-            {
-                int best = -1;
-                for (int v = 0; v < vocabulary; v++)
-                    if (v != end && (best < 0 || NumOps.GreaterThan(span[r * vocabulary + v], span[r * vocabulary + best]))) best = v;
-                tokens[r] = best;
-            }
-            return tokens;
-        }
-        var ids = new int[target.Length];
-        for (int i = 0; i < ids.Length; i++)
-        {
-            double value = Math.Round(NumOps.ToDouble(span[i]));
-            if (value < 0 || value >= vocabulary || (int)value == end)
-                throw new ArgumentException($"Token {value} is outside the vocabulary or the end token.", nameof(target));
-            ids[i] = (int)value;
-        }
-        return ids;
-    }
-
-    private Tensor<T> BatchLoss(Qwen3AsrNetwork<T> network, Tensor<T> input, Tensor<T> target)
-    {
-        int rows = input.Rank == 1 ? 1 : input.Shape[0];
-        Tensor<T>? total = null;
-        for (int r = 0; r < rows; r++)
-        {
-            var loss = Engine.Reshape(network.Loss(PromptOf(network, Row(input, r, rows)), Answer(network, Row(target, r, rows))), new[] { 1 });
-            total = total is null ? loss : Engine.TensorAdd(total, loss);
-        }
-        return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
-    }
+    private int[] Answer(Qwen3AsrNetwork<T> network, Tensor<T> target) =>
+        ParseVocabularyTargetTokens(target, _options.VocabSize, network.EndToken);
 
     /// <inheritdoc />
-    /// <remarks>The answer's cross-entropy after the prompt, averaged over the batch.</remarks>
-    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
-    {
-        var network = _network;
-        if (network is null) return false;
-        TrainWithCustomLoss(input, _ => BatchLoss(network, input, target));
-        return true;
-    }
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target) =>
+        TrainNativeWaveformBatch(input, target, _network, null, Answer,
+            (net, wave, ans) => net.Loss(PromptOf(net, wave), ans));
 
     TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
 
     Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
 
     /// <inheritdoc />
-    /// <remarks>The objective <see cref="TryApplyLearningRule"/> minimizes.</remarks>
-    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
-    {
-        var network = _network ?? throw new NotSupportedException("The objective is defined on the native network.");
-        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
-        return BatchLoss(network, input, target)[0];
-    }
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target) =>
+        EvaluateNativeWaveformBatchObjective(input, target, _network, Answer,
+            (net, wave, ans) => net.Loss(PromptOf(net, wave), ans));
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

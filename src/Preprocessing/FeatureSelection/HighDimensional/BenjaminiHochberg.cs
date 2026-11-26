@@ -1,3 +1,5 @@
+using AiDotNet.Preprocessing.FeatureSelection.Filter.Univariate;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
@@ -28,16 +30,16 @@ public class BenjaminiHochberg<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
     private readonly int _nFeaturesToSelect;
     private readonly double _alpha;
 
-    private double[]? _pValues;
-    private double[]? _adjustedPValues;
+    private Vector<T>? _pValues;
+    private Vector<T>? _adjustedPValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Alpha => _alpha;
-    public double[]? PValues => _pValues;
-    public double[]? AdjustedPValues => _adjustedPValues;
+    public Vector<T>? PValues => _pValues;
+    public Vector<T>? AdjustedPValues => _adjustedPValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -72,100 +74,29 @@ public class BenjaminiHochberg<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        // Step 1: Compute p-values for each feature using correlation t-test
-        _pValues = new double[p];
+        // Step 1: p-values of the correlation t-test, t = r sqrt((n - 2) / (1 - r^2)) on n - 2 degrees of freedom
+        // (scikit-learn f_regression, F = t^2); a constant feature has p = 1
+        var (_, pValueVector) = StatisticalTestHelper.ComputeScoresWithPValues(data, target, SelectKBestScoreFunc.FRegression);
+        var pValues = FilterStatisticTensorOps.AsTensor(pValueVector);
+        _pValues = pValueVector;
 
-        for (int j = 0; j < p; j++)
-        {
-            // Compute correlation
-            double xMean = 0, yMean = 0;
-            for (int i = 0; i < n; i++)
-            {
-                xMean += NumOps.ToDouble(data[i, j]);
-                yMean += NumOps.ToDouble(target[i]);
-            }
-            xMean /= n;
-            yMean /= n;
+        // Step 2: Benjamini-Hochberg adjusted p-values
+        var adjusted = StatisticalTestHelper.BenjaminiHochbergCorrection(pValueVector);
+        _adjustedPValues = adjusted;
 
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            double r = (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
-
-            // Convert correlation to t-statistic and then to p-value
-            double t = r * Math.Sqrt((n - 2) / (1 - r * r + 1e-10));
-            double df = n - 2;
-
-            // Approximate p-value using normal distribution for large n
-            _pValues[j] = 2 * (1 - NormalCDF(Math.Abs(t)));
-        }
-
-        // Step 2: Apply Benjamini-Hochberg procedure
-        var sortedPValues = _pValues
-            .Select((pval, idx) => (PValue: pval, Index: idx))
-            .OrderBy(x => x.PValue)
-            .ToList();
-
-        _adjustedPValues = new double[p];
-
-        // Compute adjusted p-values (BH adjusted)
-        double[] qValues = new double[p];
-        double minAdjusted = 1.0;
-        for (int k = p - 1; k >= 0; k--)
-        {
-            int originalIdx = sortedPValues[k].Index;
-            double adjusted = Math.Min(1.0, sortedPValues[k].PValue * p / (k + 1));
-            adjusted = Math.Min(minAdjusted, adjusted);
-            minAdjusted = adjusted;
-            _adjustedPValues[originalIdx] = adjusted;
-            qValues[k] = adjusted;
-        }
-
-        // Step 3: Select features with adjusted p-value <= alpha
-        var selected = new List<int>();
-        for (int k = 0; k < sortedPValues.Count; k++)
-        {
-            if (qValues[k] <= _alpha)
-                selected.Add(sortedPValues[k].Index);
-        }
+        // Step 3: features with adjusted p-value <= alpha, by increasing p-value (ties by index)
+        var order = PreprocessingTensorOps.StableOrder(pValues, descending: false);
+        var rejected = Engine.TensorGreaterThan(FilterStatisticTensorOps.AsTensor(adjusted), NumOps.FromDouble(_alpha))
+            .Cast<int>().ToArray();
+        var selected = order.Where(j => rejected[j] == 0).ToList();
 
         // If not enough selected, take top features by p-value
-        if (selected.Count == 0)
-        {
-            _selectedIndices = sortedPValues
-                .Take(Math.Min(_nFeaturesToSelect, p))
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-        else
-        {
-            _selectedIndices = selected
-                .Take(_nFeaturesToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
-
+        _selectedIndices = selected.Count == 0
+            ? order.Take(Math.Min(_nFeaturesToSelect, p)).OrderBy(x => x).ToArray()
+            : selected.Take(_nFeaturesToSelect).OrderBy(x => x).ToArray();
         IsFitted = true;
-    }
-
-    private double NormalCDF(double x)
-    {
-        // Approximation of standard normal CDF
-        double t = 1.0 / (1.0 + 0.2316419 * Math.Abs(x));
-        double d = 0.3989423 * Math.Exp(-x * x / 2);
-        double p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-        return x > 0 ? 1 - p : p;
     }
 
     /// <inheritdoc />
@@ -181,15 +112,7 @@ public class BenjaminiHochberg<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         if (_selectedIndices is null)
             throw new InvalidOperationException("BenjaminiHochberg has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

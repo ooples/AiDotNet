@@ -365,58 +365,45 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         }
 
         GetImageDimensions(documentImage, out int imageWidth, out int imageHeight);
-
-        for (int i = 0; i < numDetections; i++)
+        if (numClasses <= 0)
         {
-            double maxConf = double.MinValue;
-            int maxClass = -1;
-            int offset = i * numValues;
-
-            for (int c = 0; c < numClasses; c++)
-            {
-                double conf = NumOps.ToDouble(layoutOutput.Data.Span[offset + c]);
-                if (conf > maxConf)
-                {
-                    maxConf = conf;
-                    maxClass = c;
-                }
-            }
-
-            if (maxClass <= 0 || maxConf < threshold)
-            {
-                continue;
-            }
-
-            var elementType = MapElementType(maxClass);
-            var bbox = hasBbox
-                ? ExtractBoundingBox(layoutOutput, i, numValues, imageWidth, imageHeight)
-                : EstimateGridBoundingBox(i, numDetections, imageWidth, imageHeight);
-
-            if (bbox.Length == 4)
-            {
-                double x1 = NumOps.ToDouble(bbox[0]);
-                double y1 = NumOps.ToDouble(bbox[1]);
-                double x2 = NumOps.ToDouble(bbox[2]);
-                double y2 = NumOps.ToDouble(bbox[3]);
-
-                if (x2 <= x1 || y2 <= y1)
-                {
-                    continue;
-                }
-            }
-
-            regions.Add(new LayoutRegion<T>
-            {
-                ElementType = elementType,
-                Confidence = NumOps.FromDouble(maxConf),
-                ConfidenceValue = maxConf,
-                Index = i,
-                BoundingBox = bbox
-            });
+            return regions;
         }
+
+        var (maxClass, maxConf) = DocumentTensorOps.RowMax(Engine, layoutOutput, numClasses);
+        var boxes = hasBbox
+            ? ExtractBoundingBoxes(layoutOutput, numValues, imageWidth, imageHeight)
+            : EstimateGridBoundingBoxes(numDetections, imageWidth, imageHeight);
+
+        // A detection is kept when its best class is not the background, reaches the threshold and its box
+        // has a positive area.
+        var x1 = Column(boxes, 0);
+        var y1 = Column(boxes, 1);
+        var x2 = Column(boxes, 2);
+        var y2 = Column(boxes, 3);
+        var keep = Engine.TensorMultiply(
+            Engine.TensorMultiply(
+                Engine.TensorGreaterThan(DocumentTensorOps.IntTensor<T>(maxClass), NumOps.Zero),
+                DocumentTensorOps.AtLeast(Engine, maxConf, NumOps.FromDouble(threshold))),
+            Engine.TensorMultiply(Engine.TensorGreaterThan(x2, x1), Engine.TensorGreaterThan(y2, y1)));
+        int[] kept = DocumentTensorOps.Hits(Engine, keep);
+        T[] confidence = DocumentTensorOps.Pick(Engine, maxConf, kept);
+        T[] corners = boxes.ToArray();
+
+        regions.AddRange(kept.Select((i, k) => new LayoutRegion<T>
+        {
+            ElementType = MapElementType(maxClass[i]),
+            Confidence = confidence[k],
+            Index = i,
+            BoundingBox = new Vector<T>(new[] { corners[4 * i], corners[(4 * i) + 1], corners[(4 * i) + 2], corners[(4 * i) + 3] })
+        }));
 
         return regions;
     }
+
+    /// <summary>Column <paramref name="c"/> of a <c>[N, 4]</c> box tensor as a 1-D tensor.</summary>
+    private Tensor<T> Column(Tensor<T> boxes, int c)
+        => Engine.Reshape(Engine.TensorSlice(boxes, new[] { 0, c }, new[] { boxes.Shape[0], 1 }), new[] { boxes.Shape[0] });
 
     private Tensor<T> NormalizeLayoutOutput(Tensor<T> output)
     {
@@ -472,58 +459,53 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         return LayoutElementType.Other;
     }
 
-    private Vector<T> ExtractBoundingBox(Tensor<T> output, int detectionIndex, int numValues, int imageWidth, int imageHeight)
+    /// <summary>
+    /// The <c>[N, 4]</c> pixel boxes in the last four columns of the detections: read as corners, or as
+    /// centre and size when the corners do not span a positive area, scaled to the page when every value lies
+    /// in [-0.5, 1.5] (normalized coordinates), and clamped to the page.
+    /// </summary>
+    private Tensor<T> ExtractBoundingBoxes(Tensor<T> output, int numValues, int imageWidth, int imageHeight)
     {
-        int bboxOffset = detectionIndex * numValues + numValues - 4;
-        double b0 = NumOps.ToDouble(output.Data.Span[bboxOffset]);
-        double b1 = NumOps.ToDouble(output.Data.Span[bboxOffset + 1]);
-        double b2 = NumOps.ToDouble(output.Data.Span[bboxOffset + 2]);
-        double b3 = NumOps.ToDouble(output.Data.Span[bboxOffset + 3]);
+        int n = output.Shape[0];
+        var raw = Engine.TensorSlice(output, new[] { 0, numValues - 4 }, new[] { n, 4 });
+        var one = NumOps.One;
+        var below = Engine.TensorLessThan(raw, NumOps.FromDouble(-0.5));
+        var above = Engine.TensorGreaterThan(raw, NumOps.FromDouble(1.5));
+        var outside = Engine.ReduceSum(Engine.TensorAdd(below, above), new[] { 1 }, false);
+        var normalized = Engine.TensorEquals(outside, NumOps.Zero);
 
-        bool looksNormalized = b0 >= -0.5 && b0 <= 1.5 &&
-                               b1 >= -0.5 && b1 <= 1.5 &&
-                               b2 >= -0.5 && b2 <= 1.5 &&
-                               b3 >= -0.5 && b3 <= 1.5;
+        var b0 = Column(raw, 0);
+        var b1 = Column(raw, 1);
+        var b2 = Column(raw, 2);
+        var b3 = Column(raw, 3);
+        var spans = Engine.TensorMultiply(Engine.TensorGreaterThan(b2, b0), Engine.TensorGreaterThan(b3, b1));
+        var half = NumOps.FromDouble(0.5);
+        var halfWidth = Engine.TensorMultiplyScalar(Engine.TensorAbs(b2), half);
+        var halfHeight = Engine.TensorMultiplyScalar(Engine.TensorAbs(b3), half);
+        var x1 = Engine.TensorWhere(spans, b0, Engine.TensorSubtract(b0, halfWidth));
+        var y1 = Engine.TensorWhere(spans, b1, Engine.TensorSubtract(b1, halfHeight));
+        var x2 = Engine.TensorWhere(spans, b2, Engine.TensorAdd(b0, halfWidth));
+        var y2 = Engine.TensorWhere(spans, b3, Engine.TensorAdd(b1, halfHeight));
 
-        double x1 = b0;
-        double y1 = b1;
-        double x2 = b2;
-        double y2 = b3;
-
-        if (x2 <= x1 || y2 <= y1)
+        T width = NumOps.FromDouble(imageWidth);
+        T height = NumOps.FromDouble(imageHeight);
+        var ones = Tensor<T>.CreateDefault(new[] { n }, one);
+        var xScale = Engine.TensorWhere(normalized, Tensor<T>.CreateDefault(new[] { n }, width), ones);
+        var yScale = Engine.TensorWhere(normalized, Tensor<T>.CreateDefault(new[] { n }, height), ones);
+        var columns = new[]
         {
-            double cx = x1;
-            double cy = y1;
-            double w = Math.Abs(x2);
-            double h = Math.Abs(y2);
-            x1 = cx - w / 2.0;
-            y1 = cy - h / 2.0;
-            x2 = cx + w / 2.0;
-            y2 = cy + h / 2.0;
-        }
-
-        if (looksNormalized)
-        {
-            x1 *= imageWidth;
-            x2 *= imageWidth;
-            y1 *= imageHeight;
-            y2 *= imageHeight;
-        }
-
-        x1 = Clamp(x1, 0, imageWidth);
-        x2 = Clamp(x2, 0, imageWidth);
-        y1 = Clamp(y1, 0, imageHeight);
-        y2 = Clamp(y2, 0, imageHeight);
-
-        return new Vector<T>([
-            NumOps.FromDouble(x1),
-            NumOps.FromDouble(y1),
-            NumOps.FromDouble(x2),
-            NumOps.FromDouble(y2)
-        ]);
+            Engine.TensorClamp(Engine.TensorMultiply(x1, xScale), NumOps.Zero, width),
+            Engine.TensorClamp(Engine.TensorMultiply(y1, yScale), NumOps.Zero, height),
+            Engine.TensorClamp(Engine.TensorMultiply(x2, xScale), NumOps.Zero, width),
+            Engine.TensorClamp(Engine.TensorMultiply(y2, yScale), NumOps.Zero, height)
+        };
+        return Engine.TensorConcatenate(columns.Select(c => Engine.Reshape(c, new[] { n, 1 })).ToArray(), 1);
     }
 
-    private Vector<T> EstimateGridBoundingBox(int index, int numDetections, int imageWidth, int imageHeight)
+    /// <summary>
+    /// The <c>[N, 4]</c> boxes of the cells of a square grid over the page, one per detection in row-major order.
+    /// </summary>
+    private Tensor<T> EstimateGridBoundingBoxes(int numDetections, int imageWidth, int imageHeight)
     {
         int gridSize = (int)Math.Ceiling(Math.Sqrt(numDetections));
         if (gridSize <= 0)
@@ -533,20 +515,13 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
 
         int cellWidth = Math.Max(1, imageWidth / gridSize);
         int cellHeight = Math.Max(1, imageHeight / gridSize);
-        int row = index / gridSize;
-        int col = index % gridSize;
-
-        double x1 = (double)col * cellWidth;
-        double y1 = (double)row * cellHeight;
-        double x2 = Math.Min(imageWidth, x1 + cellWidth);
-        double y2 = Math.Min(imageHeight, y1 + cellHeight);
-
-        return new Vector<T>([
-            NumOps.FromDouble(x1),
-            NumOps.FromDouble(y1),
-            NumOps.FromDouble(x2),
-            NumOps.FromDouble(y2)
-        ]);
+        int[] corners = Enumerable.Range(0, numDetections).SelectMany(index =>
+        {
+            int x1 = (index % gridSize) * cellWidth;
+            int y1 = (index / gridSize) * cellHeight;
+            return new[] { x1, y1, Math.Min(imageWidth, x1 + cellWidth), Math.Min(imageHeight, y1 + cellHeight) };
+        }).ToArray();
+        return Engine.Reshape(DocumentTensorOps.IntTensor<T>(corners), new[] { numDetections, 4 });
     }
 
     private void GetImageDimensions(Tensor<T> image, out int width, out int height)
@@ -574,13 +549,6 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         }
     }
 
-    private static double Clamp(double value, double min, double max)
-    {
-        if (value < min) return min;
-        if (value > max) return max;
-        return value;
-    }
-
     #endregion
 
     #region IDocumentQA Implementation
@@ -606,8 +574,7 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         return new DocumentQAResult<T>
         {
             Answer = answer,
-            Confidence = NumOps.FromDouble(confidence),
-            ConfidenceValue = confidence,
+            Confidence = confidence,
             Question = question,
             ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds
         };
@@ -616,12 +583,12 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
     /// <summary>
     /// Extracts answer from model output using a token-probability decoding pass.
     /// </summary>
-    private (string answer, double confidence) ExtractAnswer(Tensor<T> output, int maxAnswerLength, double temperature)
+    private (string answer, T confidence) ExtractAnswer(Tensor<T> output, int maxAnswerLength, double temperature)
     {
         var logits = NormalizeAnswerLogits(output);
         if (logits.Shape.Length < 2)
         {
-            return ("[No answer found]", 0.0);
+            return ("[No answer found]", NumOps.Zero);
         }
 
         int seqLen = logits.Shape[0];
@@ -633,42 +600,31 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
 
         if (seqLen <= 0 || vocabSize <= 0)
         {
-            return ("[No answer found]", 0.0);
+            return ("[No answer found]", NumOps.Zero);
         }
 
         if (maxAnswerLength <= 0)
         {
-            return ("[No answer found]", 0.0);
+            return ("[No answer found]", NumOps.Zero);
         }
 
         int maxLen = Math.Min(seqLen, maxAnswerLength);
         var tokens = new List<int>(maxLen);
-        double confidenceSum = 0.0;
-        int confidenceCount = 0;
+        var answerSteps = new List<int>(maxLen);
 
         int eosId = GetSpecialTokenId(_tokenizer.SpecialTokens.EosToken);
         int sepId = GetSpecialTokenId(_tokenizer.SpecialTokens.SepToken);
         int padId = GetSpecialTokenId(_tokenizer.SpecialTokens.PadToken);
         int clsId = GetSpecialTokenId(_tokenizer.SpecialTokens.ClsToken);
 
-        var random = RandomHelper.Shared;
-        bool sampleTokens = temperature > 0.0;
+        var steps = Engine.TensorSlice(logits, new[] { 0, 0 }, new[] { maxLen, vocabSize });
+        var (stepTokens, probabilities) = temperature > 0.0
+            ? DocumentTensorOps.SampleWithProbabilities(Engine, steps, NumOps.FromDouble(temperature), RandomHelper.Shared.Next())
+            : DocumentTensorOps.GreedyWithProbabilities(Engine, steps);
 
         for (int i = 0; i < maxLen; i++)
         {
-            int offset = i * logits.Shape[1];
-            int tokenId;
-            double tokenProb;
-
-            if (sampleTokens)
-            {
-                tokenId = SampleToken(logits, offset, vocabSize, temperature, random, out tokenProb);
-            }
-            else
-            {
-                tokenId = SelectGreedyToken(logits, offset, vocabSize, out tokenProb);
-            }
-
+            int tokenId = stepTokens[i];
             if ((eosId >= 0 && tokenId == eosId) || (sepId >= 0 && tokenId == sepId))
             {
                 break;
@@ -680,23 +636,21 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
             }
 
             tokens.Add(tokenId);
-            confidenceSum += tokenProb;
-            confidenceCount++;
+            answerSteps.Add(i);
         }
 
         if (tokens.Count == 0)
         {
-            return ("[No answer found]", 0.0);
+            return ("[No answer found]", NumOps.Zero);
         }
 
         string answer = _tokenizer.Decode(tokens, skipSpecialTokens: true).Trim();
         if (string.IsNullOrWhiteSpace(answer))
         {
-            return ("[No answer found]", 0.0);
+            return ("[No answer found]", NumOps.Zero);
         }
 
-        double confidence = confidenceCount > 0 ? confidenceSum / confidenceCount : 0.0;
-        return (answer, confidence);
+        return (answer, DocumentTensorOps.Mean(Engine, DocumentTensorOps.Pick(Engine, probabilities, answerSteps.ToArray())));
     }
 
     private Tensor<T> NormalizeAnswerLogits(Tensor<T> output)
@@ -729,75 +683,6 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
 
         int seqLen = output.Length / lastDim;
         return output.Reshape([seqLen, lastDim]);
-    }
-
-    private int SelectGreedyToken(Tensor<T> logits, int offset, int vocabSize, out double probability)
-    {
-        double maxVal = double.MinValue;
-        int maxIdx = 0;
-
-        for (int v = 0; v < vocabSize; v++)
-        {
-            double val = NumOps.ToDouble(logits.Data.Span[offset + v]);
-            if (val > maxVal)
-            {
-                maxVal = val;
-                maxIdx = v;
-            }
-        }
-
-        double sumExp = 0.0;
-        for (int v = 0; v < vocabSize; v++)
-        {
-            double val = NumOps.ToDouble(logits.Data.Span[offset + v]);
-            sumExp += Math.Exp(val - maxVal);
-        }
-
-        probability = sumExp > 0 ? 1.0 / sumExp : 0.0;
-        return maxIdx;
-    }
-
-    private int SampleToken(Tensor<T> logits, int offset, int vocabSize, double temperature, Random random, out double probability)
-    {
-        double maxVal = double.MinValue;
-        for (int v = 0; v < vocabSize; v++)
-        {
-            double scaled = NumOps.ToDouble(logits.Data.Span[offset + v]) / temperature;
-            if (scaled > maxVal)
-            {
-                maxVal = scaled;
-            }
-        }
-
-        double sumExp = 0.0;
-        for (int v = 0; v < vocabSize; v++)
-        {
-            double scaled = NumOps.ToDouble(logits.Data.Span[offset + v]) / temperature;
-            sumExp += Math.Exp(scaled - maxVal);
-        }
-
-        if (sumExp <= 0.0)
-        {
-            probability = 0.0;
-            return 0;
-        }
-
-        double roll = random.NextDouble() * sumExp;
-        double cumulative = 0.0;
-        for (int v = 0; v < vocabSize; v++)
-        {
-            double scaled = NumOps.ToDouble(logits.Data.Span[offset + v]) / temperature;
-            double expVal = Math.Exp(scaled - maxVal);
-            cumulative += expVal;
-            if (cumulative >= roll)
-            {
-                probability = expVal / sumExp;
-                return v;
-            }
-        }
-
-        probability = 0.0;
-        return vocabSize - 1;
     }
 
     private int GetSpecialTokenId(string token)
@@ -880,35 +765,8 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
     /// LiLT (Language-independent Layout Transformer) uses ImageNet normalization with mean=[0.485, 0.456, 0.406] and std=[0.229, 0.224, 0.225].
     /// </remarks>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
-    {
-        var image = EnsureBatchDimension(rawImage);
-        int batchSize = image.Shape[0];
-        int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        var normalized = new Tensor<T>(image._shape);
-        double[] means = [0.485, 0.456, 0.406];
-        double[] stds = [0.229, 0.224, 0.225];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                double mean = c < means.Length ? means[c] : 0.5;
-                double std = c < stds.Length ? stds[c] : 0.5;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        int idx = b * channels * height * width + c * height * width + h * width + w;
-                        normalized.Data.Span[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data.Span[idx]) - mean) / std);
-                    }
-                }
-            }
-        }
-        return normalized;
-    }
+        => DocumentTensorOps.NormalizeChannels(Engine, EnsureBatchDimension(rawImage),
+            DocumentTensorOps.ImageNetMean, DocumentTensorOps.ImageNetStd);
 
     /// <summary>
     /// Applies LiLT's industry-standard postprocessing: pass-through (layout-aware outputs are already final).
@@ -1148,7 +1006,7 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
     /// Splits a packed <c>[seq, 5]</c> or <c>[batch, seq, 5]</c> tensor into token IDs and the
     /// <c>[.., 4]</c> box tensor the layout stream consumes. False when the input is not packed.
     /// </summary>
-    private static bool TrySplitPackedLayout(Tensor<T> input, out Tensor<T> tokens, out Tensor<T>? boxes)
+    private bool TrySplitPackedLayout(Tensor<T> input, out Tensor<T> tokens, out Tensor<T>? boxes)
     {
         tokens = input;
         boxes = null;
@@ -1157,32 +1015,13 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         if (rank < 2 || input.Shape[rank - 1] != NeuralNetworks.Layers.LayoutEmbeddingLayer<T>.PackedRowWidth)
             return false;
 
-        int rows = 1;
-        for (int i = 0; i < rank - 1; i++) rows *= input.Shape[i];
-
-        var tokenShape = new int[rank - 1];
-        for (int i = 0; i < rank - 1; i++) tokenShape[i] = input.Shape[i];
-
-        var boxShape = new int[rank];
-        for (int i = 0; i < rank - 1; i++) boxShape[i] = input.Shape[i];
-        boxShape[rank - 1] = LayoutBoxWidth;
-
-        var tokenTensor = new Tensor<T>(tokenShape);
-        var boxTensor = new Tensor<T>(boxShape);
-        var src = input.Data.Span;
-        var tokenDst = tokenTensor.Data.Span;
-        var boxDst = boxTensor.Data.Span;
-
-        for (int r = 0; r < rows; r++)
-        {
-            int b = r * NeuralNetworks.Layers.LayoutEmbeddingLayer<T>.PackedRowWidth;
-            tokenDst[r] = src[b];
-            for (int c = 0; c < LayoutBoxWidth; c++)
-                boxDst[r * LayoutBoxWidth + c] = src[b + 1 + c];
-        }
-
-        tokens = tokenTensor;
-        boxes = boxTensor;
+        int width = NeuralNetworks.Layers.LayoutEmbeddingLayer<T>.PackedRowWidth;
+        int rows = input.Length / width;
+        var leading = input.Shape.ToArray().Take(rank - 1).ToArray();
+        var packed = Engine.Reshape(input, new[] { rows, width });
+        tokens = Engine.Reshape(Engine.TensorSlice(packed, new[] { 0, 0 }, new[] { rows, 1 }), leading).Clone();
+        boxes = Engine.Reshape(Engine.TensorSlice(packed, new[] { 0, 1 }, new[] { rows, LayoutBoxWidth }),
+            leading.Concat(new[] { LayoutBoxWidth }).ToArray()).Clone();
         return true;
     }
 

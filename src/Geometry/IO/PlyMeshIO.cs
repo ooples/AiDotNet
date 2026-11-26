@@ -1032,6 +1032,10 @@ public static class PlyMeshIO
         double ny,
         double nz)
     {
+        // Every fan triangle shares the polygon's normal, so it is converted once.
+        T normalX = numOps.FromDouble(nx);
+        T normalY = numOps.FromDouble(ny);
+        T normalZ = numOps.FromDouble(nz);
         int first = polygon[0];
         for (int i = 1; i < polygon.Count - 1; i++)
         {
@@ -1041,9 +1045,9 @@ public static class PlyMeshIO
 
             if (hasNormals)
             {
-                faceNormals.Add(numOps.FromDouble(nx));
-                faceNormals.Add(numOps.FromDouble(ny));
-                faceNormals.Add(numOps.FromDouble(nz));
+                faceNormals.Add(normalX);
+                faceNormals.Add(normalY);
+                faceNormals.Add(normalZ);
             }
         }
     }

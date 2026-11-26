@@ -159,7 +159,7 @@ public partial class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierB
         // Compute per-class covariance matrices
         _classCovariances = new Matrix<T>[NumClasses];
         _classCovarianceInverses = new Matrix<T>[NumClasses];
-        _classLogDets = new Vector<T>(NumClasses);
+        var logDets = new T[NumClasses];
 
         for (int c = 0; c < NumClasses; c++)
         {
@@ -168,13 +168,15 @@ public partial class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierB
             // Add regularization if specified
             if (Options.RegularizationParam > 0)
             {
-                AddRegularization(_classCovariances[c]);
+                _classCovariances[c] = AddRegularization(_classCovariances[c]);
             }
 
             // Compute inverse and log determinant
             _classCovarianceInverses[c] = ComputeInverse(_classCovariances[c]);
-            _classLogDets[c] = ComputeLogDeterminant(_classCovariances[c]);
+            logDets[c] = ComputeLogDeterminant(_classCovariances[c]);
         }
+
+        _classLogDets = Vector<T>.Wrap(logDets);
     }
 
     /// <summary>
@@ -182,36 +184,19 @@ public partial class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierB
     /// </summary>
     private Matrix<T> ComputeClassMeans(Matrix<T> x, Vector<T> y)
     {
-        var means = new Matrix<T>(NumClasses, NumFeatures);
-
-        for (int c = 0; c < NumClasses; c++)
+        if (ClassLabels is null)
         {
-            T classLabel = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[c];
-            int count = 0;
-
-            for (int i = 0; i < x.Rows; i++)
-            {
-                if (NumOps.Compare(y[i], classLabel) == 0)
-                {
-                    count++;
-                    for (int j = 0; j < NumFeatures; j++)
-                    {
-                        means[c, j] = NumOps.Add(means[c, j], x[i, j]);
-                    }
-                }
-            }
-
-            if (count > 0)
-            {
-                T countT = NumOps.FromDouble(count);
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    means[c, j] = NumOps.Divide(means[c, j], countT);
-                }
-            }
+            throw new InvalidOperationException("Model has not been fitted.");
         }
 
-        return means;
+        if (x.Rows == 0)
+        {
+            return new Matrix<T>(NumClasses, NumFeatures);
+        }
+
+        // Weighted sums of the features per class with weights 1 / class count (empty classes stay zero)
+        var engine = Engine;
+        return engine.TensorMatMul(engine.TensorTranspose(ClassMeanWeights(y)), Tensor<T>.FromMatrix(x)).ToMatrix();
     }
 
     /// <summary>
@@ -219,26 +204,14 @@ public partial class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierB
     /// </summary>
     private Vector<T> ComputeClassPriors(Vector<T> y)
     {
-        var priors = new Vector<T>(NumClasses);
-        int n = y.Length;
-
-        for (int c = 0; c < NumClasses; c++)
+        if (ClassLabels is null)
         {
-            T classLabel = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[c];
-            int count = 0;
-
-            for (int i = 0; i < n; i++)
-            {
-                if (NumOps.Compare(y[i], classLabel) == 0)
-                {
-                    count++;
-                }
-            }
-
-            priors[c] = NumOps.Divide(NumOps.FromDouble(count), NumOps.FromDouble(n));
+            throw new InvalidOperationException("Model has not been fitted.");
         }
 
-        return priors;
+        // Class counts in int (a sum of one-hot rows in T stops at 2048 for Half), divided in double
+        int n = y.Length;
+        return n == 0 ? new Vector<T>(NumClasses) : CountFractions(CountClasses(y), n).ToVector();
     }
 
     /// <summary>
@@ -246,254 +219,72 @@ public partial class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierB
     /// </summary>
     private Matrix<T> ComputeClassCovariance(Matrix<T> x, Vector<T> y, int classIndex)
     {
-        var covariance = new Matrix<T>(NumFeatures, NumFeatures);
-        T classLabel = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[classIndex];
-        int count = 0;
-
-        // Get class mean
-        var mean = new Vector<T>(NumFeatures);
-        for (int j = 0; j < NumFeatures; j++)
+        if (ClassLabels is null)
         {
-            mean[j] = _classMeans[classIndex, j];
+            throw new InvalidOperationException("Model has not been fitted.");
         }
 
-        // Compute covariance for this class
-        for (int i = 0; i < x.Rows; i++)
+        var engine = Engine;
+        if (x.Rows == 0)
         {
-            if (NumOps.Compare(y[i], classLabel) == 0)
-            {
-                count++;
-
-                // Compute centered sample
-                var centered = new Vector<T>(NumFeatures);
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    centered[j] = NumOps.Subtract(x[i, j], mean[j]);
-                }
-
-                // Outer product: centered * centered^T
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    for (int k = 0; k < NumFeatures; k++)
-                    {
-                        T product = NumOps.Multiply(centered[j], centered[k]);
-                        covariance[j, k] = NumOps.Add(covariance[j, k], product);
-                    }
-                }
-            }
+            return new Matrix<T>(NumFeatures, NumFeatures);
         }
 
-        // Divide by (n - 1) for unbiased estimate
-        T denominator = NumOps.FromDouble(Math.Max(1, count - 1));
-        for (int j = 0; j < NumFeatures; j++)
-        {
-            for (int k = 0; k < NumFeatures; k++)
-            {
-                covariance[j, k] = NumOps.Divide(covariance[j, k], denominator);
-            }
-        }
+        // Rows of this class, centered on the class mean; other rows are masked to zero
+        var inClass = ClassMembership(y).Slice(1, classIndex, classIndex + 1);
+        int count = engine.TensorCountNonzero(inClass);
+        var mean = Tensor<T>.FromMatrix(_classMeans.GetSubMatrix(classIndex, 0, 1, NumFeatures));
+        var centered = engine.TensorMultiply(engine.TensorSubtract(Tensor<T>.FromMatrix(x), mean), inClass);
 
-        return covariance;
+        // Sum of outer products divided by (n - 1) for unbiased estimate; the deviations are scaled by
+        // 1 / sqrt(n - 1) before the products, so the sums only overflow Half when the covariance does
+        var scaled = engine.TensorMultiplyScalar(centered, NumOps.FromDouble(1.0 / Math.Sqrt(Math.Max(1, count - 1))));
+        return engine.TensorMatMul(engine.TensorTranspose(scaled), scaled).ToMatrix();
     }
 
     /// <summary>
     /// Adds regularization to the covariance matrix.
     /// </summary>
-    private void AddRegularization(Matrix<T> covariance)
+    private Matrix<T> AddRegularization(Matrix<T> covariance)
     {
         T regParam = NumOps.FromDouble(Options.RegularizationParam);
 
-        for (int i = 0; i < NumFeatures; i++)
-        {
-            covariance[i, i] = NumOps.Add(covariance[i, i], regParam);
-        }
+        var engine = Engine;
+        return engine.TensorAdd(Tensor<T>.FromMatrix(covariance),
+            engine.TensorMultiplyScalar(engine.TensorEye<T>(NumFeatures), regParam)).ToMatrix();
     }
 
     /// <summary>
     /// Computes the inverse of a matrix using Gaussian elimination.
     /// </summary>
-    private Matrix<T> ComputeInverse(Matrix<T> matrix)
-    {
-        int n = matrix.Rows;
-        var augmented = new Matrix<T>(n, 2 * n);
-
-        // Create augmented matrix [A | I]
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                augmented[i, j] = matrix[i, j];
-            }
-            augmented[i, n + i] = NumOps.One;
-        }
-
-        // Forward elimination with partial pivoting
-        for (int col = 0; col < n; col++)
-        {
-            // Find pivot
-            int maxRow = col;
-            T maxVal = NumOps.Abs(augmented[col, col]);
-            for (int row = col + 1; row < n; row++)
-            {
-                T val = NumOps.Abs(augmented[row, col]);
-                if (NumOps.Compare(val, maxVal) > 0)
-                {
-                    maxVal = val;
-                    maxRow = row;
-                }
-            }
-
-            // Swap rows
-            if (maxRow != col)
-            {
-                for (int j = 0; j < 2 * n; j++)
-                {
-                    T temp = augmented[col, j];
-                    augmented[col, j] = augmented[maxRow, j];
-                    augmented[maxRow, j] = temp;
-                }
-            }
-
-            // Scale pivot row
-            T pivot = augmented[col, col];
-            T minPivot = NumOps.FromDouble(1e-12);
-            if (NumOps.Compare(NumOps.Abs(pivot), minPivot) < 0)
-            {
-                // Matrix may be singular or ill-conditioned
-                // Preserve sign of original pivot for numerical stability, or use positive minPivot if zero
-                T sign = NumOps.Compare(pivot, NumOps.Zero) >= 0 ? NumOps.One : NumOps.Negate(NumOps.One);
-                if (NumOps.Compare(pivot, NumOps.Zero) == 0)
-                {
-                    sign = NumOps.One;
-                }
-                pivot = NumOps.Multiply(sign, minPivot);
-            }
-
-            for (int j = 0; j < 2 * n; j++)
-            {
-                augmented[col, j] = NumOps.Divide(augmented[col, j], pivot);
-            }
-
-            // Eliminate other rows
-            for (int row = 0; row < n; row++)
-            {
-                if (row != col)
-                {
-                    T factor = augmented[row, col];
-                    for (int j = 0; j < 2 * n; j++)
-                    {
-                        augmented[row, j] = NumOps.Subtract(augmented[row, j], NumOps.Multiply(factor, augmented[col, j]));
-                    }
-                }
-            }
-        }
-
-        // Extract inverse
-        var inverse = new Matrix<T>(n, n);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                inverse[i, j] = augmented[i, n + j];
-            }
-        }
-
-        return inverse;
-    }
+    private Matrix<T> ComputeInverse(Matrix<T> matrix) => InvertMatrix(matrix);
 
     /// <summary>
     /// Computes the log determinant of a matrix using LU decomposition.
     /// </summary>
     private T ComputeLogDeterminant(Matrix<T> matrix)
     {
-        int n = matrix.Rows;
-        var lu = new Matrix<T>(n, n);
-
-        // Copy matrix
-        for (int i = 0; i < n; i++)
+        if (matrix.Rows == 0)
         {
-            for (int j = 0; j < n; j++)
-            {
-                lu[i, j] = matrix[i, j];
-            }
+            return NumOps.Zero;
         }
 
-        T logDet = NumOps.Zero;
-        int signChanges = 0;
-
-        // LU decomposition with partial pivoting
-        for (int k = 0; k < n; k++)
-        {
-            // Find pivot
-            int maxRow = k;
-            T maxVal = NumOps.Abs(lu[k, k]);
-            for (int i = k + 1; i < n; i++)
-            {
-                T val = NumOps.Abs(lu[i, k]);
-                if (NumOps.Compare(val, maxVal) > 0)
-                {
-                    maxVal = val;
-                    maxRow = i;
-                }
-            }
-
-            if (maxRow != k)
-            {
-                signChanges++;
-                for (int j = 0; j < n; j++)
-                {
-                    T temp = lu[k, j];
-                    lu[k, j] = lu[maxRow, j];
-                    lu[maxRow, j] = temp;
-                }
-            }
-
-            T pivot = lu[k, k];
-            T minPivot = NumOps.FromDouble(1e-12);
-            if (NumOps.Compare(NumOps.Abs(pivot), minPivot) < 0)
-            {
-                pivot = minPivot;
-            }
-
-            logDet = NumOps.Add(logDet, NumOps.Log(NumOps.Abs(pivot)));
-
-            for (int i = k + 1; i < n; i++)
-            {
-                lu[i, k] = NumOps.Divide(lu[i, k], pivot);
-                for (int j = k + 1; j < n; j++)
-                {
-                    lu[i, j] = NumOps.Subtract(lu[i, j], NumOps.Multiply(lu[i, k], lu[k, j]));
-                }
-            }
-        }
-
-        return logDet;
+        // log|det| = sum of log|pivot| of partially pivoted elimination; a pivot below 1e-12 in magnitude
+        // is replaced by 1e-12 and elimination continues with it
+        ForwardEliminate(Tensor<T>.FromMatrix(matrix), matrix.Rows, SmallPivotHandling.FloorMagnitude, out var pivots);
+        return Engine.TensorSum(Engine.TensorLog(Engine.TensorAbs(pivots)));
     }
 
     /// <inheritdoc/>
     public override Vector<T> Predict(Matrix<T> input)
     {
         var probs = PredictProbabilities(input);
-        var predictions = new Vector<T>(input.Rows);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (ClassLabels is null)
         {
-            int bestClass = 0;
-            T bestProb = probs[i, 0];
-
-            for (int c = 1; c < NumClasses; c++)
-            {
-                if (NumOps.Compare(probs[i, c], bestProb) > 0)
-                {
-                    bestProb = probs[i, c];
-                    bestClass = c;
-                }
-            }
-
-            predictions[i] = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[bestClass];
+            throw new InvalidOperationException("Model has not been fitted.");
         }
 
-        return predictions;
+        return input.Rows == 0 ? new Vector<T>(0) : ClassIndicesToLabels(ArgMaxRows(probs));
     }
 
     /// <inheritdoc/>
@@ -505,92 +296,47 @@ public partial class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierB
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var logProbs = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0)
         {
-            T maxLogProb = NumOps.MinValue;
-
-            for (int c = 0; c < NumClasses; c++)
-            {
-                // Get sample
-                var sample = new Vector<T>(NumFeatures);
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    sample[j] = input[i, j];
-                }
-
-                // Compute (x - mu_c)
-                var diff = new Vector<T>(NumFeatures);
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    diff[j] = NumOps.Subtract(sample[j], _classMeans[c, j]);
-                }
-
-                // Compute (x - mu_c)^T * Sigma_c^(-1) * (x - mu_c)
-                T mahalanobis = NumOps.Zero;
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    T temp = NumOps.Zero;
-                    for (int k = 0; k < NumFeatures; k++)
-                    {
-                        temp = NumOps.Add(temp, NumOps.Multiply(_classCovarianceInverses[c][j, k], diff[k]));
-                    }
-                    mahalanobis = NumOps.Add(mahalanobis, NumOps.Multiply(diff[j], temp));
-                }
-
-                // Log posterior = log(prior) - 0.5 * log|Sigma_c| - 0.5 * mahalanobis
-                T logPrior = NumOps.Log(_classPriors[c]);
-                T logDetTerm = NumOps.Multiply(NumOps.FromDouble(-0.5), _classLogDets[c]);
-                T mahalanobisTerm = NumOps.Multiply(NumOps.FromDouble(-0.5), mahalanobis);
-
-                logProbs[i, c] = NumOps.Add(NumOps.Add(logPrior, logDetTerm), mahalanobisTerm);
-
-                if (NumOps.Compare(logProbs[i, c], maxLogProb) > 0)
-                {
-                    maxLogProb = logProbs[i, c];
-                }
-            }
-
-            // Convert to probabilities using softmax
-            T sumExp = NumOps.Zero;
-            for (int c = 0; c < NumClasses; c++)
-            {
-                T expVal = NumOps.Exp(NumOps.Subtract(logProbs[i, c], maxLogProb));
-                sumExp = NumOps.Add(sumExp, expVal);
-            }
-
-            T logSumExp = NumOps.Add(maxLogProb, NumOps.Log(sumExp));
-            for (int c = 0; c < NumClasses; c++)
-            {
-                logProbs[i, c] = NumOps.Exp(NumOps.Subtract(logProbs[i, c], logSumExp));
-            }
+            return new Matrix<T>(0, NumClasses);
         }
 
-        return logProbs;
+        var engine = Engine;
+        var samples = Tensor<T>.FromMatrix(input.Columns == NumFeatures
+            ? input
+            : input.GetSubMatrix(0, 0, input.Rows, NumFeatures));
+
+        // Per-class offset log(prior) - 0.5 * log|Sigma_c|
+        T minusHalf = NumOps.FromDouble(-0.5);
+        var offsets = engine.TensorAdd(engine.TensorLog(_classPriors.AsTensor()),
+            engine.TensorMultiplyScalar(_classLogDets.AsTensor(), minusHalf)).ToArray();
+
+        // Log posterior = offset_c - 0.5 * (x - mu_c)^T Sigma_c^(-1) (x - mu_c)
+        var columns = new Vector<T>[NumClasses];
+        for (int c = 0; c < NumClasses; c++)
+        {
+            var diff = engine.TensorSubtract(samples, Tensor<T>.FromMatrix(_classMeans.GetSubMatrix(c, 0, 1, NumFeatures)));
+            var inverse = Tensor<T>.FromMatrix(_classCovarianceInverses[c]);
+            var mahalanobis = engine.ReduceSum(
+                engine.TensorMultiply(engine.TensorMatMul(diff, inverse), diff), new[] { 1 }, false);
+            columns[c] = engine.TensorAddScalar(engine.TensorMultiplyScalar(mahalanobis, minusHalf), offsets[c]).ToVector();
+        }
+
+        // Convert to probabilities using softmax
+        return engine.Softmax(Tensor<T>.FromMatrix(StackColumns(columns)), 1).ToMatrix();
     }
 
     /// <inheritdoc/>
     public override Matrix<T> PredictLogProbabilities(Matrix<T> input)
     {
         var probs = PredictProbabilities(input);
-        var logProbs = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (probs.Rows == 0)
         {
-            for (int c = 0; c < NumClasses; c++)
-            {
-                T p = probs[i, c];
-                T minP = NumOps.FromDouble(1e-15);
-                if (NumOps.Compare(p, minP) < 0)
-                {
-                    p = minP;
-                }
-                logProbs[i, c] = NumOps.Log(p);
-            }
+            return new Matrix<T>(0, NumClasses);
         }
 
-        return logProbs;
+        var engine = Engine;
+        return engine.TensorLog(engine.TensorClampMin(Tensor<T>.FromMatrix(probs), Tolerance(1e-15))).ToMatrix();
     }
 
     /// <inheritdoc/>
@@ -611,17 +357,7 @@ public partial class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierB
             return new Vector<T>(0);
         }
 
-        int length = NumClasses * NumFeatures;
-        var parameters = new Vector<T>(length);
-        int idx = 0;
-        for (int c = 0; c < NumClasses; c++)
-        {
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                parameters[idx++] = _classMeans[c, j];
-            }
-        }
-        return parameters;
+        return _classMeans.ToRowVector();
     }
 
     /// <inheritdoc/>
@@ -640,12 +376,7 @@ public partial class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierB
     private void SerializeMatrix(Dictionary<string, object> data, string name, Matrix<T>? matrix)
     {
         if (matrix is null) return;
-        var arr = new double[matrix.Rows * matrix.Columns];
-        int idx = 0;
-        for (int i = 0; i < matrix.Rows; i++)
-            for (int j = 0; j < matrix.Columns; j++)
-                arr[idx++] = NumOps.ToDouble(matrix[i, j]);
-        data[name] = arr;
+        data[name] = matrix.ToRowVector().ToArray();
         data[$"{name}Rows"] = matrix.Rows;
         data[$"{name}Cols"] = matrix.Columns;
     }
@@ -654,7 +385,7 @@ public partial class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierB
     {
         var token = obj[name];
         if (token is null) return null;
-        var arr = token.ToObject<double[]>() ?? Array.Empty<double>();
+        var arr = token.ToObject<T[]>() ?? Array.Empty<T>();
         int rows = obj[$"{name}Rows"]?.ToObject<int>() ?? 0;
         int cols = obj[$"{name}Cols"]?.ToObject<int>() ?? 0;
         if (rows <= 0 || cols <= 0) return null;
@@ -663,32 +394,23 @@ public partial class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierB
             throw new InvalidOperationException(
                 $"Deserialization failed: {name} array length {arr.Length} is less than expected {rows}x{cols}={rows * cols}.");
         }
-        var matrix = new Matrix<T>(rows, cols);
-        int idx = 0;
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                matrix[i, j] = NumOps.FromDouble(arr[idx++]);
-        return matrix;
+        var values = new T[rows * cols];
+        Array.Copy(arr, values, values.Length);
+        return new Tensor<T>(values, new[] { rows, cols }).ToMatrix();
     }
 
     private void SerializeVector(Dictionary<string, object> data, string name, Vector<T>? vector)
     {
         if (vector is null) return;
-        var arr = new double[vector.Length];
-        for (int i = 0; i < vector.Length; i++)
-            arr[i] = NumOps.ToDouble(vector[i]);
-        data[name] = arr;
+        data[name] = vector.ToArray();
     }
 
     private Vector<T>? DeserializeVector(JObject obj, string name)
     {
         var token = obj[name];
         if (token is null) return null;
-        var arr = token.ToObject<double[]>() ?? Array.Empty<double>();
+        var arr = token.ToObject<T[]>() ?? Array.Empty<T>();
         if (arr.Length == 0) return null;
-        var vector = new Vector<T>(arr.Length);
-        for (int i = 0; i < arr.Length; i++)
-            vector[i] = NumOps.FromDouble(arr[i]);
-        return vector;
+        return Vector<T>.Wrap(arr);
     }
 }

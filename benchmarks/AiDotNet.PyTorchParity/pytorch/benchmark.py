@@ -22,12 +22,13 @@ CPU thread count:
 
 Usage:
     pip install -r requirements.txt
-    python benchmark.py --models mlp,cnn,lstm,transformer --device cpu \
+    python benchmark.py --models mlp,cnn,lstm,transformer --device cpu --compile \
         --threads 8 --output ../results/pytorch.json
 """
 
 from __future__ import annotations
 
+import contextlib
 import argparse
 import json
 import math
@@ -47,15 +48,21 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from benchmark_telemetry import begin_peak_window, mark_phase, window_peaks
+
 BATCH_SIZES = [1, 8, 32, 128]
 
 
 @dataclass
 class ResourceSummary:
-    cpu_percent_avg: float
-    rss_mb_peak: float
+    cpu_percent_avg: float | None
+    rss_mb_peak: float | None
     gpu_util_percent_avg: float | None
     gpu_mem_mb_peak: float | None
+    # This process's caching-allocator peaks over the phase (torch.cuda.max_memory_allocated / max_memory_reserved):
+    # unlike gpu_mem_mb_peak (device-wide nvidia-smi), they exclude the CUDA context and every other process.
+    gpu_allocated_mb_peak: float | None = None
+    gpu_reserved_mb_peak: float | None = None
 
 
 @dataclass
@@ -86,7 +93,8 @@ class InferenceBatchResult:
     steady_state_latency_ms_p25: float
     steady_state_latency_ms_p75: float
     throughput_samples_per_second: float
-    memory_mb_peak: float
+    memory_mb_peak: float | None
+    gpu_tensor_allocated_mb_peak: float | None = None
 
 
 @dataclass
@@ -103,8 +111,14 @@ class ModelResult:
 
 
 class ResourceMonitor:
-    def __init__(self, sample_seconds: float = 0.1, track_gpu: bool = True) -> None:
+    def __init__(self, sample_seconds: float = 0.1, track_gpu: bool = True, gpu_id: str | None = None,
+                 torch_device: torch.device | None = None) -> None:
         self.sample_seconds = sample_seconds
+        # The CUDA device whose allocator peaks the phase reports (None: not a CUDA run).
+        self.torch_device = torch_device if torch_device is not None and torch_device.type == "cuda" else None
+        # The GPU the benchmark runs on, as an nvidia-smi --id (its UUID): unqualified, nvidia-smi lists every GPU and
+        # the first line was read, which on a two-GPU machine is not necessarily this one (the C# side does the same).
+        self.gpu_id = gpu_id
         # nvidia-smi reports SYSTEM-WIDE GPU utilization/memory, not this
         # process's. On a CPU-only benchmark run that attributes whatever the
         # desktop GPU happens to be doing (browser, compositor, other apps)
@@ -121,20 +135,25 @@ class ResourceMonitor:
         self._thread = threading.Thread(target=self._sample, daemon=True)
 
     def __enter__(self) -> ResourceMonitor:
+        if self.torch_device is not None:
+            torch.cuda.synchronize(self.torch_device)
+            begin_peak_window(self.torch_device)
         self.process.cpu_percent(interval=None)
-        self._thread.start()
+        if os.environ.get("AIDOTNET_BENCH_EXTERNAL_MONITOR") != "1":
+            self._thread.start()
         return self
 
     def __exit__(self, *exc: object) -> None:
         self._stop.set()
-        self._thread.join(timeout=2)
+        if self._thread.ident is not None:
+            self._thread.join(timeout=2)
 
     def _sample(self) -> None:
         while not self._stop.is_set():
             self.cpu.append(self.process.cpu_percent(interval=None))
             self.rss_mb.append(self.process.memory_info().rss / 1024 / 1024)
             if self.track_gpu:
-                gpu = query_nvidia_smi()
+                gpu = query_nvidia_smi(self.gpu_id)
                 if gpu is not None:
                     util, mem = gpu
                     self.gpu_util.append(util)
@@ -142,22 +161,39 @@ class ResourceMonitor:
             time.sleep(self.sample_seconds)
 
     def summary(self) -> ResourceSummary:
+        # Over the whole phase: the phase markers reset torch's peak counters at every epoch boundary, so the
+        # maxima are accumulated across those resets (benchmark_telemetry) instead of read from the counters.
+        allocated_peak, reserved_peak = window_peaks(self.torch_device) if self.torch_device is not None else (0, 0)
         return ResourceSummary(
-            cpu_percent_avg=round(statistics.fmean(self.cpu), 3) if self.cpu else 0.0,
-            rss_mb_peak=round(max(self.rss_mb), 3) if self.rss_mb else 0.0,
+            # No samples (the external monitor owns sampling, or the run was shorter than one interval) is
+            # unavailable, not zero.
+            cpu_percent_avg=round(statistics.fmean(self.cpu), 3) if self.cpu else None,
+            rss_mb_peak=round(max(self.rss_mb), 3) if self.rss_mb else None,
             gpu_util_percent_avg=round(statistics.fmean(self.gpu_util), 3) if self.gpu_util else None,
             gpu_mem_mb_peak=round(max(self.gpu_mem), 3) if self.gpu_mem else None,
+            gpu_allocated_mb_peak=round(allocated_peak / 1024 / 1024, 3) if self.torch_device is not None else None,
+            gpu_reserved_mb_peak=round(reserved_peak / 1024 / 1024, 3) if self.torch_device is not None else None,
         )
 
 
-def query_nvidia_smi() -> tuple[float, float] | None:
+def cuda_smi_id(device: torch.device) -> str | None:
+    """nvidia-smi's --id for a CUDA device: its UUID, as torch reports it (None when torch cannot tell)."""
+    if device.type != "cuda":
+        return None
+    try:
+        return "GPU-" + str(torch.cuda.get_device_properties(device).uuid)
+    except (RuntimeError, AttributeError):
+        return None
+
+
+def query_nvidia_smi(gpu_id: str | None = None) -> tuple[float, float] | None:
     try:
         output = subprocess.check_output(
             [
                 "nvidia-smi",
                 "--query-gpu=utilization.gpu,memory.used",
                 "--format=csv,noheader,nounits",
-            ],
+            ] + ([f"--id={gpu_id}"] if gpu_id else []),
             text=True,
             timeout=1,
             stderr=subprocess.DEVNULL,
@@ -236,6 +272,10 @@ MODEL_NOTES = {
     "gat": "One sample is the whole Cora-sized graph (2,708 nodes); run at --batch-size 1 --inference-batches 1. "
            "Dense masked attention on both sides.",
     "dcgan": "One training step updates the discriminator then the generator; the loss is the discriminator's.",
+    "wav2vec2-base": "Feature encoder frozen and LayerDrop 0 on both sides; CTC loss averaged per utterance (not "
+                     "transformers' sum or target-length reduction).",
+    "hifigan-v1": "One utterance per step: run at --batch-size 1. A step updates the discriminators then the "
+                  "generator; the loss is the generator's (adversarial + 2 x feature matching + 45 x mel L1).",
 }
 
 
@@ -1314,6 +1354,21 @@ class CoraGAT(nn.Module):
         return x.to(device), x[..., :GAT_CLASSES].argmax(dim=-1).to(device)
 
 
+# --precision (main sets it): "fp32" or "bf16".
+PRECISION = "fp32"
+
+
+def autocast_region(device: torch.device) -> contextlib.AbstractContextManager:
+    """--precision bf16: ONE forward/loss region under torch.autocast (a no-op context for fp32).
+
+    A fresh context per region, left before the optimizer update. Autocast caches the BF16 cast of each parameter for
+    the life of the outermost context, keyed by the tensor and not by its version: a context held across
+    optimizer.step() feeds the next forward the weights from before the update.
+    """
+    if PRECISION == "bf16":
+        return torch.autocast(device_type=device.type, dtype=torch.bfloat16)
+    return contextlib.nullcontext()
+
 DCGAN_LATENT, DCGAN_IMAGE = 100, 64
 
 
@@ -1364,10 +1419,11 @@ class DCGAN64(nn.Module):
         generator_optimizer, discriminator_optimizer = self._optimizers
         batch = z.shape[0]
 
-        with torch.no_grad():
-            fake = self.generator(z)
         labels = torch.cat([torch.ones(batch, 1, device=z.device), torch.zeros(batch, 1, device=z.device)])
-        discriminator_loss = F.binary_cross_entropy_with_logits(self.discriminator(torch.cat([real, fake])), labels)
+        with autocast_region(z.device):
+            with torch.no_grad():
+                fake = self.generator(z)
+            discriminator_loss = F.binary_cross_entropy_with_logits(self.discriminator(torch.cat([real, fake])), labels)
         discriminator_optimizer.zero_grad(set_to_none=True)
         discriminator_loss.backward()
         torch.nn.utils.clip_grad_norm_(self.discriminator.parameters(), 1.0)
@@ -1376,7 +1432,9 @@ class DCGAN64(nn.Module):
         self.discriminator.eval()
         self.discriminator.requires_grad_(False)
         try:
-            generator_loss = F.softplus(-self.discriminator(self.generator(z))).mean()
+            # A new region: the discriminator's weights changed in the update above.
+            with autocast_region(z.device):
+                generator_loss = F.softplus(-self.discriminator(self.generator(z))).mean()
             generator_optimizer.zero_grad(set_to_none=True)
             generator_loss.backward()
             torch.nn.utils.clip_grad_norm_(self.generator.parameters(), 1.0)
@@ -1391,6 +1449,433 @@ class DCGAN64(nn.Module):
         """Standard-normal latents and real images uniform in [-1, 1], the tanh range."""
         z = torch.randn(batch_size, DCGAN_LATENT).to(device)
         return z, (torch.rand(batch_size, 3, DCGAN_IMAGE, DCGAN_IMAGE) * 2 - 1).to(device)
+
+
+PANNS_FRAMES, PANNS_MELS, PANNS_CLASSES, PANNS_TAGS = 1001, 64, 527, 2
+
+
+class PannsConvBlock(nn.Module):
+    """Kong et al.'s ConvBlock: two 3x3 convolutions, each with BatchNorm + ReLU, then average pooling. The
+    convolutions carry biases because AiDotNet's ConvolutionalLayer does (Kong's have none: 2 x the channel count more
+    parameters per block, 8,064 in all)."""
+
+    def __init__(self, inputs: int, outputs: int) -> None:
+        super().__init__()
+        self.conv1 = nn.Conv2d(inputs, outputs, 3, 1, 1)
+        self.conv2 = nn.Conv2d(outputs, outputs, 3, 1, 1)
+        self.bn1 = nn.BatchNorm2d(outputs)
+        self.bn2 = nn.BatchNorm2d(outputs)
+
+    def forward(self, x: torch.Tensor, pool: int) -> torch.Tensor:
+        x = F.relu(self.bn2(self.conv2(F.relu(self.bn1(self.conv1(x))))))
+        return F.avg_pool2d(x, pool) if pool > 1 else x
+
+
+class PannsCnn14(nn.Module):
+    """The "panns-cnn14" row: Kong et al.'s released Cnn14 (qiuqiangkong/audioset_tagging_cnn) without its STFT/log-mel
+    front end, on [B, 1, 1001 frames, 64 mels] log-mel clips: bn0 over the mel bins, six ConvBlocks 64 -> 2048 with 2x2
+    average pooling in the first five and dropout 0.2 after each, mean over frequency, max + mean over time, dropout
+    0.5, fc1 2048 (ReLU), dropout 0.5, 527 AudioSet logits. Trained with BCE on logits against multi-hot labels (two
+    tags per clip); inference returns the sigmoid clip-wise probabilities, as AiDotNet's PANNs.Predict does. The
+    trainable parameter count equals AiDotNet's (see PannsConvBlock for the convolution biases)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.bn0 = nn.BatchNorm2d(PANNS_MELS)
+        widths = [1, 64, 128, 256, 512, 1024, 2048]
+        self.blocks = nn.ModuleList(PannsConvBlock(widths[i], widths[i + 1]) for i in range(6))
+        self.fc1 = nn.Linear(2048, 2048)
+        self.fc_audioset = nn.Linear(2048, PANNS_CLASSES)
+
+    def logits(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.bn0(x.transpose(1, 3)).transpose(1, 3)
+        for index, block in enumerate(self.blocks):
+            x = F.dropout(block(x, 2 if index < 5 else 1), 0.2, self.training)
+        x = x.mean(dim=3)
+        x = x.max(dim=2).values + x.mean(dim=2)
+        x = F.relu(self.fc1(F.dropout(x, 0.5, self.training)))
+        return self.fc_audioset(F.dropout(x, 0.5, self.training))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return torch.sigmoid(self.logits(x))
+
+    def training_loss(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        return F.binary_cross_entropy_with_logits(self.logits(x), y)
+
+    @staticmethod
+    def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        """Standard-normal log-mel features and multi-hot labels with two distinct random tags per clip."""
+        x = torch.randn(batch_size, 1, PANNS_FRAMES, PANNS_MELS)
+        y = torch.zeros(batch_size, PANNS_CLASSES)
+        # The top-k of independent uniform draws is a sample without replacement: randint could repeat a class.
+        y.scatter_(1, torch.rand(batch_size, PANNS_CLASSES).topk(PANNS_TAGS, dim=1).indices, 1.0)
+        return x.to(device), y.to(device)
+
+
+W2V_SAMPLES, W2V_TRANSCRIPT, W2V_VOCAB, W2V_HIDDEN, W2V_HEADS = 32000, 24, 34, 768, 12
+
+
+class Wav2Vec2EncoderLayer(nn.Module):
+    """transformers' Wav2Vec2EncoderLayer (post-norm): x = LN(x + drop(attn(x))); x = LN(x + drop(W2 drop(gelu(W1 x)))).
+    Attention runs through scaled_dot_product_attention with its attention-probability dropout."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.q_proj = nn.Linear(W2V_HIDDEN, W2V_HIDDEN)
+        self.k_proj = nn.Linear(W2V_HIDDEN, W2V_HIDDEN)
+        self.v_proj = nn.Linear(W2V_HIDDEN, W2V_HIDDEN)
+        self.out_proj = nn.Linear(W2V_HIDDEN, W2V_HIDDEN)
+        self.layer_norm = nn.LayerNorm(W2V_HIDDEN)
+        self.intermediate_dense = nn.Linear(W2V_HIDDEN, 3072)
+        self.output_dense = nn.Linear(3072, W2V_HIDDEN)
+        self.final_layer_norm = nn.LayerNorm(W2V_HIDDEN)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        b, t, _ = x.shape
+
+        def heads(projection: nn.Linear) -> torch.Tensor:
+            return projection(x).view(b, t, W2V_HEADS, -1).transpose(1, 2)
+
+        context = F.scaled_dot_product_attention(heads(self.q_proj), heads(self.k_proj), heads(self.v_proj),
+                                                 dropout_p=0.1 if self.training else 0.0)
+        attention = self.out_proj(context.transpose(1, 2).reshape(b, t, W2V_HIDDEN))
+        x = self.layer_norm(x + F.dropout(attention, 0.1, self.training))
+        hidden = F.dropout(F.gelu(self.intermediate_dense(x)), 0.1, self.training)
+        return self.final_layer_norm(x + F.dropout(self.output_dense(hidden), 0.1, self.training))
+
+
+class Wav2Vec2BaseCtc(nn.Module):
+    """The "wav2vec2-base" row: transformers' Wav2Vec2ForCTC at the BASE configuration, written out layer for layer
+    (transformers is not a dependency): a 7-layer feature encoder (512 channels, kernels 10, 3, 3, 3, 3, 2, 2, strides
+    5, 2, 2, 2, 2, 2, 2, no conv bias, GroupNorm(512, 512) after the first, GELU), feature projection (LayerNorm 512,
+    Linear 512 -> 768), SpecAugment time masks replaced by a learned embedding (p 0.05, span 10, at least 2 spans), a
+    16-group positional convolution of kernel 128 with weight norm over dim 2 (GELU), LayerNorm, dropout, 12 post-norm
+    Transformer layers (12 heads, FFN 3072, dropout 0.1), final dropout 0.1 and a 34-symbol CTC head (blank 0). It is
+    fine-tuned as AiDotNet's Wav2Vec2Model is: feature encoder frozen, LayerDrop 0, log-softmax + CTC per utterance
+    over every frame averaged over the batch, AdamW lr 5e-5 without weight decay and the global-norm clip at 1. On
+    2-second clips of 16 kHz audio (99 frames) with 24-symbol transcripts; inference returns the CTC logits
+    [B, 99, 34]. Trainable parameter counts are equal."""
+
+    optimizer_settings = {"lr": 5e-5, "weight_decay": 0.0}
+    kernels, strides = (10, 3, 3, 3, 3, 2, 2), (5, 2, 2, 2, 2, 2, 2)
+
+    def __init__(self) -> None:
+        super().__init__()
+        from torch.nn.utils.parametrizations import weight_norm
+
+        self.conv_layers = nn.ModuleList(
+            nn.Conv1d(1 if i == 0 else 512, 512, k, s, bias=False) for i, (k, s) in enumerate(zip(self.kernels, self.strides)))
+        self.conv_norm = nn.GroupNorm(512, 512)
+        self.projection_norm = nn.LayerNorm(512)
+        self.projection = nn.Linear(512, W2V_HIDDEN)
+        self.masked_spec_embed = nn.Parameter(torch.rand(W2V_HIDDEN))
+        self.pos_conv = weight_norm(nn.Conv1d(W2V_HIDDEN, W2V_HIDDEN, 128, padding=64, groups=16), name="weight", dim=2)
+        self.encoder_norm = nn.LayerNorm(W2V_HIDDEN)
+        self.layers = nn.ModuleList(Wav2Vec2EncoderLayer() for _ in range(12))
+        self.lm_head = nn.Linear(W2V_HIDDEN, W2V_VOCAB)
+        # freeze_feature_encoder(): the convolutional feature encoder does not train.
+        self.conv_layers.requires_grad_(False)
+        self.conv_norm.requires_grad_(False)
+
+    def time_mask(self, batch: int, frames: int, device: torch.device) -> torch.Tensor:
+        """transformers' _compute_mask_indices: per utterance floor(p * L / M + U(0, 1)) spans of M frames, at least
+        two, with starts drawn without replacement."""
+        span = 10
+        mask = torch.zeros(batch, frames, dtype=torch.bool, device=device)
+        for row in range(batch):
+            spans = max(2, int(0.05 * frames / span + random.random()))
+            starts = torch.randperm(frames - span + 1, device=device)[:spans]
+            mask[row, (starts[:, None] + torch.arange(span, device=device)).flatten()] = True
+        return mask
+
+    def logits(self, x: torch.Tensor) -> torch.Tensor:
+        h = x.unsqueeze(1)
+        for index, conv in enumerate(self.conv_layers):
+            h = conv(h)
+            if index == 0:
+                h = self.conv_norm(h)
+            h = F.gelu(h)
+        h = self.projection(self.projection_norm(h.transpose(1, 2)))
+        if self.training:
+            mask = self.time_mask(h.shape[0], h.shape[1], h.device)
+            h = torch.where(mask[..., None], self.masked_spec_embed.to(h.dtype), h)
+        position = F.gelu(self.pos_conv(h.transpose(1, 2))[:, :, :-1]).transpose(1, 2)
+        h = F.dropout(self.encoder_norm(h + position), 0.1, self.training)
+        for layer in self.layers:
+            h = layer(h)
+        return self.lm_head(F.dropout(h, 0.1, self.training))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.logits(x)
+
+    def training_loss(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        log_probs = F.log_softmax(self.logits(x), dim=-1).transpose(0, 1)
+        frames, batch = log_probs.shape[0], log_probs.shape[1]
+        input_lengths = torch.full((batch,), frames, dtype=torch.long, device=x.device)
+        target_lengths = torch.full((batch,), y.shape[1], dtype=torch.long, device=x.device)
+        return F.ctc_loss(log_probs, y, input_lengths, target_lengths, blank=0, reduction="none").mean()
+
+    @staticmethod
+    def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        """A random 100-400 Hz tone plus 0.5 x standard-normal noise per clip, and transcripts of random non-blank symbols."""
+        t = torch.arange(W2V_SAMPLES) / 16000.0
+        frequency = 100 + 300 * torch.rand(batch_size, 1)
+        x = torch.sin(2 * math.pi * frequency * t) + 0.5 * torch.randn(batch_size, W2V_SAMPLES)
+        y = torch.randint(1, W2V_VOCAB, (batch_size, W2V_TRANSCRIPT))
+        return x.to(device), y.to(device)
+
+
+HIFI_RATE, HIFI_MELS, HIFI_HOP, HIFI_FFT, HIFI_FRAMES, HIFI_SEGMENT = 22050, 80, 256, 1024, 256, 8192
+
+
+def slaney_mel_basis(rate: int, fft: int, mels: int, fmin: float, fmax: float) -> torch.Tensor:
+    """librosa.filters.mel(sr, n_fft, n_mels, fmin, fmax) with its defaults (Slaney scale and area normalization), the
+    basis the reference meldataset.mel_spectrogram uses; written out because librosa is not a dependency."""
+    f_sp, min_log_hz, min_log_mel, log_step = 200.0 / 3, 1000.0, 15.0, math.log(6.4) / 27.0
+
+    def hz_to_mel(f: float) -> float:
+        return min_log_mel + math.log(f / min_log_hz) / log_step if f >= min_log_hz else f / f_sp
+
+    def mel_to_hz(m: torch.Tensor) -> torch.Tensor:
+        return torch.where(m >= min_log_mel, min_log_hz * torch.exp(log_step * (m - min_log_mel)), f_sp * m)
+
+    fft_freqs = torch.linspace(0, rate / 2, fft // 2 + 1, dtype=torch.float64)
+    edges = mel_to_hz(torch.linspace(hz_to_mel(fmin), hz_to_mel(fmax), mels + 2, dtype=torch.float64))
+    widths = edges[1:] - edges[:-1]
+    ramps = edges[:, None] - fft_freqs[None, :]
+    lower = -ramps[:-2] / widths[:-1, None]
+    upper = ramps[2:] / widths[1:, None]
+    weights = torch.clamp(torch.minimum(lower, upper), min=0.0)
+    weights *= (2.0 / (edges[2:] - edges[:-2]))[:, None]
+    return weights.float()
+
+
+class HifiMel(nn.Module):
+    """meldataset.mel_spectrogram: reflect padding of (n_fft - hop) / 2, a Hann-windowed STFT without centring,
+    magnitude sqrt(re^2 + im^2 + 1e-9), the Slaney mel basis, log(max(x, 1e-5)). [B, T] -> [B, 80, frames]."""
+
+    def __init__(self, fmax: float) -> None:
+        super().__init__()
+        self.register_buffer("basis", slaney_mel_basis(HIFI_RATE, HIFI_FFT, HIFI_MELS, 0.0, fmax), persistent=False)
+        self.register_buffer("window", torch.hann_window(HIFI_FFT), persistent=False)
+
+    def forward(self, y: torch.Tensor) -> torch.Tensor:
+        pad = (HIFI_FFT - HIFI_HOP) // 2
+        y = F.pad(y.unsqueeze(1), (pad, pad), mode="reflect").squeeze(1)
+        spec = torch.view_as_real(torch.stft(y, HIFI_FFT, HIFI_HOP, HIFI_FFT, self.window, center=False,
+                                             return_complex=True))
+        magnitude = torch.sqrt(spec.pow(2).sum(-1) + 1e-9)
+        return torch.log(torch.clamp(self.basis @ magnitude, min=1e-5))
+
+
+def hifi_init(module: nn.Module) -> nn.Module:
+    """The reference init_weights: N(0, 0.01) weights (drawn before weight norm splits them); biases keep their default."""
+    nn.init.normal_(module.weight, 0.0, 0.01)
+    return module
+
+
+class HifiResBlock1(nn.Module):
+    def __init__(self, channels: int, kernel: int, dilations: tuple[int, ...]) -> None:
+        super().__init__()
+        from torch.nn.utils.parametrizations import weight_norm
+
+        def conv(dilation: int) -> nn.Module:
+            return weight_norm(hifi_init(nn.Conv1d(channels, channels, kernel, 1, dilation=dilation,
+                                                   padding=(kernel * dilation - dilation) // 2)))
+
+        self.convs1 = nn.ModuleList(conv(d) for d in dilations)
+        self.convs2 = nn.ModuleList(conv(1) for _ in dilations)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        for first, second in zip(self.convs1, self.convs2):
+            x = second(F.leaky_relu(first(F.leaky_relu(x, 0.1)), 0.1)) + x
+        return x
+
+
+class HifiGenerator(nn.Module):
+    """The reference Generator at V1: conv_pre 80 -> 512 (7), per stage leaky ReLU 0.1 + ConvTranspose1d (rates 8, 8, 2,
+    2; kernels 16, 16, 4, 4) and the mean of three ResBlock1s (kernels 3, 7, 11; dilations 1, 3, 5), leaky ReLU 0.01,
+    conv_post -> 1 (7), tanh; weight norm on every convolution."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        from torch.nn.utils.parametrizations import weight_norm
+
+        self.conv_pre = weight_norm(nn.Conv1d(HIFI_MELS, 512, 7, 1, padding=3))
+        self.ups = nn.ModuleList()
+        self.resblocks = nn.ModuleList()
+        channels = 512
+        for rate, kernel in zip((8, 8, 2, 2), (16, 16, 4, 4)):
+            self.ups.append(weight_norm(hifi_init(
+                nn.ConvTranspose1d(channels, channels // 2, kernel, rate, padding=(kernel - rate) // 2))))
+            channels //= 2
+            for block_kernel in (3, 7, 11):
+                self.resblocks.append(HifiResBlock1(channels, block_kernel, (1, 3, 5)))
+        self.conv_post = weight_norm(hifi_init(nn.Conv1d(channels, 1, 7, 1, padding=3)))
+
+    def forward(self, mel: torch.Tensor) -> torch.Tensor:
+        x = self.conv_pre(mel)
+        for stage, up in enumerate(self.ups):
+            x = up(F.leaky_relu(x, 0.1))
+            x = (self.resblocks[stage * 3](x) + self.resblocks[stage * 3 + 1](x) + self.resblocks[stage * 3 + 2](x)) / 3
+        return torch.tanh(self.conv_post(F.leaky_relu(x)))
+
+
+class HifiPeriodDiscriminator(nn.Module):
+    def __init__(self, period: int) -> None:
+        super().__init__()
+        from torch.nn.utils.parametrizations import weight_norm
+
+        self.period = period
+        widths = [1, 32, 128, 512, 1024, 1024]
+        self.convs = nn.ModuleList(
+            weight_norm(nn.Conv2d(widths[i], widths[i + 1], (5, 1), (3 if i < 4 else 1, 1), padding=(2, 0)))
+            for i in range(5))
+        self.conv_post = weight_norm(nn.Conv2d(1024, 1, (3, 1), 1, padding=(1, 0)))
+
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, list[torch.Tensor]]:
+        b, c, t = x.shape
+        if t % self.period:
+            x = F.pad(x, (0, self.period - t % self.period), "reflect")
+            t = x.shape[-1]
+        x = x.view(b, c, t // self.period, self.period)
+        features = []
+        for conv in self.convs:
+            x = F.leaky_relu(conv(x), 0.1)
+            features.append(x)
+        x = self.conv_post(x)
+        features.append(x)
+        return x.flatten(1), features
+
+
+class HifiScaleDiscriminator(nn.Module):
+    def __init__(self, spectral: bool) -> None:
+        super().__init__()
+        from torch.nn.utils.parametrizations import spectral_norm, weight_norm
+
+        norm = spectral_norm if spectral else weight_norm
+        layout = [(1, 128, 15, 1, 1, 7), (128, 128, 41, 2, 4, 20), (128, 256, 41, 2, 16, 20), (256, 512, 41, 4, 16, 20),
+                  (512, 1024, 41, 4, 16, 20), (1024, 1024, 41, 1, 16, 20), (1024, 1024, 5, 1, 1, 2)]
+        self.convs = nn.ModuleList(norm(nn.Conv1d(i, o, k, s, groups=g, padding=p)) for i, o, k, s, g, p in layout)
+        self.conv_post = norm(nn.Conv1d(1024, 1, 3, 1, padding=1))
+
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, list[torch.Tensor]]:
+        features = []
+        for conv in self.convs:
+            x = F.leaky_relu(conv(x), 0.1)
+            features.append(x)
+        x = self.conv_post(x)
+        features.append(x)
+        return x.flatten(1), features
+
+
+class HifiDiscriminators(nn.Module):
+    """MultiPeriodDiscriminator (periods 2, 3, 5, 7, 11) and MultiScaleDiscriminator (3 scales, AvgPool1d(4, 2, 2)
+    between them, spectral norm on the raw scale) of the reference, as one list of (score, feature maps)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.periods = nn.ModuleList(HifiPeriodDiscriminator(p) for p in (2, 3, 5, 7, 11))
+        self.scales = nn.ModuleList(HifiScaleDiscriminator(i == 0) for i in range(3))
+
+    def forward(self, y: torch.Tensor) -> list[tuple[torch.Tensor, list[torch.Tensor]]]:
+        outputs = [d(y) for d in self.periods]
+        for index, d in enumerate(self.scales):
+            if index > 0:
+                y = F.avg_pool1d(y, 4, 2, padding=2)
+            outputs.append(d(y))
+        return outputs
+
+
+class HifiGanV1(nn.Module):
+    """The "hifigan-v1" row: jik876/hifi-gan's V1 generator, multi-period and multi-scale discriminators, losses and
+    optimizers, in AiDotNet HiFiGAN's step order. A step crops a random 32-frame mel segment and its 8192 samples from
+    the 256-frame utterance, updates the discriminators on a detached generation (least squares on D(real) and
+    D(fake)), then the generator on a fresh generation (least-squares adversarial + 2 x feature matching against
+    no-grad real features + 45 x L1 of the full-band log-mel), each with AdamW (lr 2e-4, betas 0.8 / 0.99, weight
+    decay 0.01) and no clipping. The discriminators are frozen during the generator update (AiDotNet trains only the
+    generator's parameters there). One utterance per step: run at --batch-size 1. The reported loss is the
+    generator's. Inference is the generator on the whole mel. Weight norm and spectral norm are torch's
+    parametrizations; trainable parameters are counted over all three networks."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.generator = HifiGenerator()
+        self.discriminators = HifiDiscriminators()
+        self.loss_mel = HifiMel(HIFI_RATE / 2)
+        self._optimizers: tuple[torch.optim.Optimizer, torch.optim.Optimizer] | None = None
+        self._benchmark_fixture = None
+
+
+    def forward(self, mel: torch.Tensor) -> torch.Tensor:
+        return self.generator(mel)
+
+    def compile_parts(self) -> None:
+        """--compile: train_step calls the networks directly, so compile them rather than only forward."""
+        # The protocol fixes training to 32 frames and inference to 256 at b1/b8/b16.
+        # Automatic dynamic promotion can leave MPD reflection padding symbolic when the
+        # frozen discriminator recompiles for generator gradients. Specialize every shape.
+        self.generator = torch.compile(self.generator, dynamic=False)
+        self.discriminators = torch.compile(self.discriminators, dynamic=False)
+
+    def train_step(self, mel: torch.Tensor, audio: torch.Tensor) -> torch.Tensor:
+        if mel.shape[0] != 1:
+            raise ValueError("The hifigan-v1 row trains one utterance per step, as AiDotNet's HiFiGAN does: use "
+                             "--batch-size 1.")
+        if self._optimizers is None:
+            settings = {"lr": 2e-4, "betas": (0.8, 0.99), "eps": 1e-8, "weight_decay": 0.01}
+            self._optimizers = (torch.optim.AdamW(self.generator.parameters(), **settings),
+                                torch.optim.AdamW(self.discriminators.parameters(), **settings))
+        generator_optimizer, discriminator_optimizer = self._optimizers
+        frames = HIFI_SEGMENT // HIFI_HOP
+        start = (self._benchmark_fixture.next_crop(0, mel.shape[2] - frames, mel, audio)
+                 if self._benchmark_fixture is not None else random.randint(0, mel.shape[2] - frames))
+
+        mel = mel[:, :, start:start + frames]
+        real = audio[:, start * HIFI_HOP:(start + frames) * HIFI_HOP].unsqueeze(1)
+
+        with autocast_region(mel.device):
+            with torch.no_grad():
+                fake = self.generator(mel)
+            discriminator_loss = sum(torch.mean((1 - r) ** 2) + torch.mean(g ** 2)
+                                     for (r, _), (g, _) in zip(self.discriminators(real), self.discriminators(fake)))
+        discriminator_optimizer.zero_grad(set_to_none=True)
+        discriminator_loss.backward()
+        discriminator_optimizer.step()
+
+        self.discriminators.requires_grad_(False)
+        try:
+            # A new region: the discriminators' weights changed in the update above.
+            with autocast_region(mel.device):
+                generated = self.generator(mel)
+                fake_out = self.discriminators(generated)
+                with torch.no_grad():
+                    real_out = self.discriminators(real)
+                    real_mel = self.loss_mel(real.squeeze(1))
+                adversarial = sum(torch.mean((1 - g) ** 2) for g, _ in fake_out)
+                matching = sum(torch.mean(torch.abs(r - g)) for (_, rf), (_, gf) in zip(real_out, fake_out)
+                               for r, g in zip(rf, gf))
+                mel_loss = F.l1_loss(self.loss_mel(generated.squeeze(1)), real_mel)
+                generator_loss = adversarial + 2.0 * matching + 45.0 * mel_loss
+            generator_optimizer.zero_grad(set_to_none=True)
+            generator_loss.backward()
+            generator_optimizer.step()
+        finally:
+            self.discriminators.requires_grad_(True)
+        return generator_loss.detach()
+
+    @staticmethod
+    def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        """Three random 100-1000 Hz partials plus uniform noise, peak 0.95, and their input mel (fmax 8 kHz)."""
+        samples = HIFI_FRAMES * HIFI_HOP
+        t = torch.arange(samples) / HIFI_RATE
+        frequency = 100 + 900 * torch.rand(batch_size, 3, 1)
+        phase = 2 * math.pi * torch.rand(batch_size, 3, 1)
+        audio = torch.sin(2 * math.pi * frequency * t + phase).sum(1) + 0.3 * (2 * torch.rand(batch_size, samples) - 1)
+        audio = audio / audio.abs().amax(dim=1, keepdim=True) * 0.95
+        with torch.no_grad():
+            mel = HifiMel(8000.0)(audio)
+        return mel.to(device), audio.to(device)
 
 
 def make_vision_model(name: str) -> nn.Module:
@@ -1445,6 +1930,12 @@ def make_model(name: str) -> tuple[nn.Module, tuple[int, ...]]:
         return CoraGAT(), (GAT_NODES, GAT_FEATURES)
     if name == "dcgan":
         return DCGAN64(), (DCGAN_LATENT,)
+    if name == "panns-cnn14":
+        return PannsCnn14(), (1, PANNS_FRAMES, PANNS_MELS)
+    if name == "wav2vec2-base":
+        return Wav2Vec2BaseCtc(), (W2V_SAMPLES,)
+    if name == "hifigan-v1":
+        return HifiGanV1(), (HIFI_MELS, HIFI_FRAMES)
     if name in VISION_MODELS:
         return make_vision_model(name), (3, 32, 32)
     if name in TIME_SERIES_MODELS:
@@ -1506,7 +1997,7 @@ def synthetic_batch(batch_size: int, shape: tuple[int, ...], device: torch.devic
 
 
 def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.device, epochs: int, batches: int, batch_size: int, breakdown: bool = False,
-                       optimizer_impl: str = "default", cuda_graphs: bool = False) -> TrainingResult:
+                       optimizer_impl: str = "default", cuda_graphs: bool = False, model_name: str = "") -> TrainingResult:
     criterion = nn.CrossEntropyLoss()
     # A row whose model trains with another recipe (the detector's paper SGD) builds its own optimizer.
     # A row whose step updates several networks (the GAN) owns its optimizers and its whole step (train_step).
@@ -1523,21 +2014,26 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
     # Batches are generated BEFORE the timed epochs (the AiDotNet twin does the same) so epoch
     # time is pure training, not each framework's very different synthetic-data RNG cost.
     pool: list[tuple[torch.Tensor, torch.Tensor]] = []
-    for _ in range(batches):
+    fixture = getattr(model, "_benchmark_fixture", None)
+    for index in range(batches):
         start_data = time.perf_counter()
-        pool.append(synthetic_batch(batch_size, shape, device, model))
+        pool.append(fixture.pool[index] if fixture is not None else synthetic_batch(batch_size, shape, device, model))
+
         synchronize(device)
         data_seconds.append(time.perf_counter() - start_data)
 
     start_total = time.perf_counter()
     first_loss: torch.Tensor | None = None
-    with ResourceMonitor(track_gpu=device.type == "cuda") as monitor:
+    # --precision bf16: each forward/loss region runs under its own torch.autocast (autocast_region), as the C# side
+    # runs the steps under AutocastScope; the backward and the optimizer update run outside it.
+    with ResourceMonitor(track_gpu=device.type == "cuda", gpu_id=cuda_smi_id(device), torch_device=device) as monitor:
         for epoch in range(epochs):
             # PROFILE_RANGE=1: bracket the last epoch for `nsys --capture-range=cudaProfilerApi` (same as the C# side).
             profile_epoch = os.environ.get("PROFILE_RANGE") == "1" and epoch == epochs - 1 and device.type == "cuda"
             if profile_epoch:
                 synchronize(device)
                 torch.cuda.profiler.start()
+            mark_phase(model_name, f"training-epoch-{epoch}")
             start_epoch = time.perf_counter()
             for x, y in pool:
                 begin_step(cuda_graphs)
@@ -1549,20 +2045,22 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
                     continue
 
                 optimizer.zero_grad(set_to_none=True)
-                if hasattr(model, "training_loss"):
-                    # A row with its own objective (DDPM's noise regression) computes its loss itself.
-                    loss = model.training_loss(x, y)
-                elif getattr(model, "loss_from_forward", False):
-                    # A row whose forward returns its own loss given the target (DeepAR's likelihood), called through
-                    # the module so a --compile run compiles the loss too.
-                    loss = model(x, y)
-                elif getattr(model, "regression", False):
-                    # A forecaster: mean squared error of the forecast against the continuation.
-                    loss = F.mse_loss(model(x), y)
-                else:
-                    logits = model(x)
-                    # Flattened so a per-position target (the decoder LM's [B, S] next tokens) is scored like a class one.
-                    loss = criterion(logits.reshape(-1, logits.shape[-1]), y.reshape(-1))
+                with autocast_region(device):
+                    if hasattr(model, "training_loss"):
+                        # A row with its own objective (DDPM's noise regression) computes its loss itself.
+                        loss = model.training_loss(x, y)
+                    elif getattr(model, "loss_from_forward", False):
+                        # A row whose forward returns its own loss given the target (DeepAR's likelihood), called
+                        # through the module so a --compile run compiles the loss too.
+                        loss = model(x, y)
+                    elif getattr(model, "regression", False):
+                        # A forecaster: mean squared error of the forecast against the continuation.
+                        loss = F.mse_loss(model(x), y)
+                    else:
+                        logits = model(x)
+                        # Flattened so a per-position target (the decoder LM's [B, S] next tokens) is scored like a
+                        # class one.
+                        loss = criterion(logits.reshape(-1, logits.shape[-1]), y.reshape(-1))
                 if first_loss is None:
                     # A copy: a CUDA-graph replay overwrites the step's output buffer.
                     first_loss = loss.detach().clone()
@@ -1578,8 +2076,11 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
                 # Same global-norm clip AiDotNet applies by default (MaxGradNorm 1.0).
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 optimizer.step()
+                if model_name == "lstm" and fixture is not None:
+                    fixture.trained(x, y)
             synchronize(device)
             epoch_seconds.append(time.perf_counter() - start_epoch)
+            mark_phase(model_name, f"training-epoch-{epoch}-complete")
             if profile_epoch:
                 torch.cuda.profiler.stop()
     total = time.perf_counter() - start_total
@@ -1615,10 +2116,15 @@ def json_loss(value: float) -> float | str:
 
 @torch.inference_mode()
 def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.device, iterations: int, warmup: int,
-                        batch_sizes: list[int], warmup_min_ms: float = 0.0, cuda_graphs: bool = False) -> list[InferenceBatchResult]:
+                        batch_sizes: list[int], warmup_min_ms: float = 0.0, cuda_graphs: bool = False,
+                        model_name: str = "") -> list[InferenceBatchResult]:
     results: list[InferenceBatchResult] = []
     for batch_size in batch_sizes:
-        x, _ = synthetic_batch(batch_size, shape, device, model)
+        mark_phase(model_name, f"inference-b{batch_size}-prepare")
+        fixture = getattr(model, "_benchmark_fixture", None)
+        x = fixture.inference(batch_size) if fixture is not None else synthetic_batch(batch_size, shape, device, model)[0]
+
+        mark_phase(model_name, f"inference-b{batch_size}-warmup")
         warmup_times: list[float] = []
         # Same rule as the C# twin: at least warmup calls and at least warmup_min_ms of warm-up per batch size.
         warmup_start = time.perf_counter()
@@ -1629,8 +2135,11 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
             synchronize(device)
             warmup_times.append(time.perf_counter() - start)
 
-        if device.type == "cuda":
+        # The steady marker snapshots the warm-up peaks and then resets them. Reset here only when it did not, so
+        # the marker never records already-reset values as the warm-up peaks.
+        if not mark_phase(model_name, f"inference-b{batch_size}-steady") and device.type == "cuda":
             torch.cuda.reset_peak_memory_stats(device)
+        external_monitor = os.environ.get("AIDOTNET_BENCH_EXTERNAL_MONITOR") == "1"
         process = psutil.Process(os.getpid())
         rss_peak = process.memory_info().rss / 1024 / 1024
         steady: list[float] = []
@@ -1641,9 +2150,11 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
             synchronize(device)
             elapsed = time.perf_counter() - start
             steady.append(elapsed)
-            rss_peak = max(rss_peak, process.memory_info().rss / 1024 / 1024)
+            if not external_monitor:
+                rss_peak = max(rss_peak, process.memory_info().rss / 1024 / 1024)
         total = sum(steady)
         cuda_peak = torch.cuda.max_memory_allocated(device) / 1024 / 1024 if device.type == "cuda" else 0.0
+        mark_phase(model_name, f"inference-b{batch_size}-complete")
         # p95 latency: robust to rig-contention noise that swings the mean.
         steady_sorted = sorted(steady)
         p95_idx = min(len(steady_sorted) - 1, round(0.95 * (len(steady_sorted) - 1)))
@@ -1656,7 +2167,10 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
             steady_state_latency_ms_p25=round(quantile(steady_sorted, 0.25) * 1000, 3),
             steady_state_latency_ms_p75=round(quantile(steady_sorted, 0.75) * 1000, 3),
             throughput_samples_per_second=round((iterations * batch_size) / total, 3),
-            memory_mb_peak=round(max(rss_peak, cuda_peak), 3),
+            # Under the external monitor this process does not sample during steady inference: report the host
+            # peak as unavailable rather than one pre-steady sample. The CUDA allocator peak below is still measured.
+            memory_mb_peak=None if external_monitor else round(rss_peak, 3),
+            gpu_tensor_allocated_mb_peak=round(cuda_peak, 3) if device.type == "cuda" else None,
         ))
     return results
 
@@ -1682,7 +2196,62 @@ def parse_inference_batches(text: str) -> list[int]:
     return batches
 
 
+def _reject_artifact_collisions(args: argparse.Namespace) -> None:
+    """The report and each workload receipt are separate files; one path for two of them loses the first write."""
+    output = getattr(args, "output", None)
+    if output is None:
+        return
+    artifacts = {"--output": Path(output)}
+    numerics = getattr(args, "lstm_numerics", None)
+    if getattr(args, "hifigan_fixture", None) is not None:
+        artifacts["the HiFi-GAN workload receipt"] = Path(
+            getattr(args, "hifigan_workload_receipt", None) or (str(output) + ".workload.json"))
+    if getattr(args, "lstm_fixture", None) is not None:
+        artifacts["the LSTM workload receipt"] = Path(
+            getattr(args, "lstm_workload_receipt", None)
+            or (Path(numerics) / "workload.json" if numerics else str(output) + ".workload.json"))
+    seen: dict[str, str] = {}
+    for label, path in artifacts.items():
+        key = os.path.normcase(os.path.realpath(path))
+        if key in seen:
+            raise ValueError(f"{seen[key]} and {label} resolve to the same file: {path}")
+        seen[key] = label
+
+
 def run(args: argparse.Namespace) -> dict[str, object]:
+    fixture_path = getattr(args, "hifigan_fixture", None)
+    lstm_path = getattr(args, "lstm_fixture", None)
+    required = getattr(args, "require_matched_workload", False)
+    if required and fixture_path is None and lstm_path is None:
+        raise ValueError("Matched mode requires an explicit shared workload fixture.")
+    cpu_mkldnn = getattr(args, "lstm_cpu_mkldnn", None)
+    if lstm_path is None and (getattr(args, "lstm_numerics", None) or getattr(args, "lstm_workload_receipt", None)
+                              or cpu_mkldnn is not None):
+        raise ValueError("LSTM receipts require --lstm-fixture")
+    if fixture_path is None and getattr(args, "hifigan_workload_receipt", None) is not None:
+        raise ValueError("--hifigan-workload-receipt requires --hifigan-fixture")
+    selected = [item.strip() for item in args.models.split(",") if item.strip()]
+    if "hifigan-v1" in selected and args.batch_size != 1:
+        # Checked here, before the synthetic batch pool is built and retained, not in the first train step.
+        raise ValueError("The hifigan-v1 row trains one utterance per step: use --batch-size 1.")
+    _reject_artifact_collisions(args)
+    if lstm_path is not None:
+        if fixture_path is not None or args.models.strip() != "lstm" or not args.compile:
+            raise ValueError("A shared LSTM workload requires --models lstm --compile and its own fixture")
+        from lstm_fixture import strict_lstm_settings
+        cpu = args.device == "cpu" or (args.device == "auto" and not torch.cuda.is_available())
+        if not cpu and cpu_mkldnn is not None:
+            raise ValueError("--lstm-cpu-mkldnn requires the CPU LSTM row")
+        with strict_lstm_settings(cpu_mkldnn=(cpu_mkldnn == "enabled") if cpu_mkldnn is not None else None):
+            return _run(args)
+    return _run(args)
+
+
+def _run(args: argparse.Namespace) -> dict[str, object]:
+    fixture_path = getattr(args, "hifigan_fixture", None)
+    if fixture_path is not None and [name.strip() for name in args.models.split(",")] != ["hifigan-v1"]:
+        raise ValueError("The shared fixture must be used with the single full HiFi row.")
+
     seed = args.seed
     random.seed(seed)
     torch.manual_seed(seed)
@@ -1717,8 +2286,25 @@ def run(args: argparse.Namespace) -> dict[str, object]:
 
         dataset = scale_data.ScaleDataset(args.data)
     for name in [item.strip() for item in args.models.split(",") if item.strip()]:
+        mark_phase(name, "construction")
         model, shape = make_model(name)
         model.to(device)
+        fixture = None
+        original = model
+        lstm_path = getattr(args, "lstm_fixture", None)
+        if lstm_path is not None:
+            from lstm_fixture import LstmFixture
+            fixture = LstmFixture(lstm_path, args, device, inference_batches, model)
+            model._benchmark_fixture = fixture
+        if getattr(args, "hifigan_fixture", None) is not None:
+            from hifigan_fixture import HifiBenchmarkFixture
+            receipt = getattr(args, "hifigan_workload_receipt", None) or (str(args.output) + ".workload.json")
+            fixture = HifiBenchmarkFixture(str(args.hifigan_fixture), epochs=args.epochs, batches=args.train_batches,
+                                          batch_size=args.batch_size, seed=args.seed,
+                                          inference_batches=inference_batches, receipt=str(receipt), device=device)
+            fixture.import_state(model)
+            model._benchmark_fixture = fixture
+
         # Trainable only: the decoder LM's frozen, zeroed in_proj_bias stands in for attention AiDotNet builds without
         # a Q/K/V bias, and counting it reported 768 parameters the C# row does not have.
         parameters = sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad)
@@ -1740,7 +2326,12 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                 model.compile_parts(**compile_options)
             elif hasattr(model, "training_loss"):
                 model.training_loss = torch.compile(model.training_loss, **compile_options)
-            model = torch.compile(model, **compile_options)
+            if lstm_path is not None:
+                model = torch.compile(model, backend=fixture.compilation, fullgraph=True, dynamic=False)
+                if args.lstm_numerics:
+                    return fixture.numeric(original, model, args.lstm_numerics)
+            else:
+                model = torch.compile(model, **compile_options)
         if dataset is not None:
             adamw_options = {"fused": True} if args.optimizer_impl == "fused" else {}
             optimizer = torch.optim.AdamW(model.parameters(), **optimizer_settings, **adamw_options)
@@ -1752,15 +2343,29 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                 compiled_graphs[name] = total - sum(compiled_graphs.values())
             model_results.append(ModelResult(name, str(device), parameters, None, [], MODEL_NOTES.get(name, ""), scale))
             continue
+        if fixture_path is not None:
+            model.eval()
+            with torch.no_grad():
+                model(fixture.input_values["inference/1/mel"])
+            model.train()
+            fixture.emit_preflight(model)
+
+        mark_phase(name, "construction-complete")
+        mark_phase(name, "training-prepare")
         training = benchmark_training(model, shape, device, args.epochs, args.train_batches, args.batch_size, args.breakdown,
-                                      args.optimizer_impl, cuda_graphs)
+                                      args.optimizer_impl, cuda_graphs, model_name=name)
+        mark_phase(name, "training-complete")
         model.eval()
         inference = benchmark_inference(model, shape, device, args.inference_iterations, args.warmup_iterations,
-                                        inference_batches, args.warmup_min_ms, cuda_graphs)
+                                        inference_batches, args.warmup_min_ms, cuda_graphs, model_name=name)
         if args.compile:
             # Graphs Dynamo compiled for this model (training and inference). Zero means torch.compile ran it eagerly.
             total = torch._dynamo.utils.counters["stats"]["unique_graphs"]
             compiled_graphs[name] = total - sum(compiled_graphs.values())
+        if fixture is not None:
+            fixture.complete()
+
+        mark_phase(name, "complete")
         model_results.append(ModelResult(name, str(device), parameters, training, inference, MODEL_NOTES.get(name, "")))
 
     return {
@@ -1788,6 +2393,7 @@ def run(args: argparse.Namespace) -> dict[str, object]:
             "inference_batch_sizes": inference_batches,
             "seed": args.seed,
             "data": str(args.data) if args.data else None,
+            "precision": PRECISION,
         },
         "results": [asdict(result) for result in model_results],
     }
@@ -1824,9 +2430,31 @@ def main() -> None:
     parser.add_argument("--optimizer-impl", default="default", choices=["default", "fused"],
                         help="AdamW implementation: PyTorch's default choice (foreach on CUDA) or the fused kernel.")
     parser.add_argument("--output", type=Path, default=Path("../results/pytorch.json"))
-    args = parser.parse_args()
+    parser.add_argument("--hifigan-fixture", type=Path)
+    parser.add_argument("--hifigan-workload-receipt", type=Path)
+    parser.add_argument("--lstm-fixture", type=Path)
+    parser.add_argument("--lstm-workload-receipt", type=Path)
+    parser.add_argument("--lstm-numerics", type=Path, help="Write three matched AdamW updates and inference observations.")
+    parser.add_argument("--lstm-cpu-mkldnn", choices=("enabled", "disabled"),
+                        help="Select the installed CPU backend only for a shared LSTM run. Omit to keep PyTorch's runtime default.")
+    parser.add_argument("--require-matched-workload", action="store_true")
 
-    report = run(args)
+    parser.add_argument("--precision", default="fp32", choices=["fp32", "bf16"],
+                        help="Training steps under torch.autocast(bfloat16) (the C# side's AutocastScope). fp16 needs "
+                             "GradScaler loss scaling in both arms and is not wired yet.")
+    args = parser.parse_args()
+    global PRECISION
+    PRECISION = args.precision
+
+    allocation_trace = os.environ.get("AIDOTNET_BENCH_CPU_ALLOCATION_TRACE")
+    if allocation_trace:
+        if os.environ.get("AIDOTNET_BENCH_DIAGNOSTICS") != "1":
+            raise ValueError("Allocation profiling requires a separate diagnostic run.")
+        with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU], profile_memory=True) as profiler:
+            report = run(args)
+        profiler.export_chrome_trace(allocation_trace)
+    else:
+        report = run(args)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2))

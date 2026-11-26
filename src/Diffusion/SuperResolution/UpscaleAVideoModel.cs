@@ -807,6 +807,7 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         int width = latents.Shape[4];
         int stride = windowSize - overlap;
         var predictions = new Tensor<T>?[frames];
+        T half = NumOps.FromDouble(0.5);
         int previousStart = -1;
 
         for (int candidate = 0; candidate < frames; candidate += stride)
@@ -829,11 +830,10 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
                 int frame = start + offset;
                 var framePrediction = Engine.TensorSlice(windowPrediction,
                     [0, 0, offset, 0, 0], [batch, latentChannels, 1, height, width]);
-                predictions[frame] = predictions[frame] is null
+                var existing = predictions[frame];
+                predictions[frame] = existing is null
                     ? framePrediction
-                    : Engine.TensorMultiplyScalar(
-                        Engine.TensorAdd((predictions[frame] ?? throw new InvalidOperationException("predictions[frame] is null where it is required.")), framePrediction),
-                        NumOps.FromDouble(0.5));
+                    : Engine.TensorMultiplyScalar(Engine.TensorAdd(existing, framePrediction), half);
             }
         }
 
@@ -926,6 +926,7 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         int width = input.Shape[4];
         var output = new Tensor<T>?[frames];
         Tensor<T>? propagated = null;
+        T half = NumOps.FromDouble(0.5);
 
         for (int iteration = 0; iteration < frames; iteration++)
         {
@@ -944,12 +945,8 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
                 var reverseFlow = ExtractFlowFrame(consistencyFlows, flowIndex);
                 var warped = WarpNearest(propagated, flow);
                 var mask = CreateConsistencyMask(flow, reverseFlow, channels);
-                var fused = Engine.TensorMultiplyScalar(
-                    Engine.TensorAdd(warped, current), NumOps.FromDouble(0.5));
-                var inverseMask = Engine.TensorSubtract(
-                    Engine.TensorAddScalar(
-                        Engine.TensorMultiplyScalar(mask, NumOps.Zero), NumOps.One),
-                    mask);
+                var fused = Engine.TensorMultiplyScalar(Engine.TensorAdd(warped, current), half);
+                var inverseMask = Engine.ScalarMinusTensor(NumOps.One, mask);
                 propagated = Engine.TensorAdd(
                     Engine.TensorMultiply(mask, fused),
                     Engine.TensorMultiply(inverseMask, current));
@@ -978,12 +975,10 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         int batch = input.Shape[0];
         int height = input.Shape[2];
         int width = input.Shape[3];
-        var identity = new Tensor<T>([batch, 2, 3]);
-        for (int b = 0; b < batch; b++)
-        {
-            identity[b, 0, 0] = NumOps.One;
-            identity[b, 1, 1] = NumOps.One;
-        }
+        var theta = new Tensor<T>([1, 2, 3]);
+        theta[0, 0, 0] = NumOps.One;
+        theta[0, 1, 1] = NumOps.One;
+        var identity = Engine.TensorBroadcastTo(theta, [batch, 2, 3]).Clone();
 
         var baseGrid = Engine.AffineGrid(identity, height, width);
         var scale = new Tensor<T>([1, 1, 1, 2]);

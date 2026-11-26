@@ -421,13 +421,13 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
          the nondeterministic parallel paths WGANGP's identically seeded builds diverged on. Evolution stays at
          0.9.0, above the 0.7.0 that 0.150.0 depends on. -->
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.148.0" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.151.0" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.152.1" />
     <PackageVersion Include="AiDotNet.Evolution" Version="0.9.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.148.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.15" />
-    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.11.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.11.1" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.ML" Version="3.0.1" />
     <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.32.0" />

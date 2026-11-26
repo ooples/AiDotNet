@@ -257,11 +257,12 @@ internal sealed class VerifiedInferenceGate<T>
         for (int i = 0; i < memo.InputShape.Length; i++)
             if (memo.InputShape[i] != input._shape[i]) return false;
 
-        var span = input.AsSpan();
-        if (memo.Input.Length != span.Length) return false;
-        for (int i = 0; i < span.Length; i++)
-            if (!_numOps.Equals(memo.Input[i], span[i])) return false;
-        return true;
+        if (memo.Input.Length != input.Length) return false;
+
+        // Every element must compare equal (so a NaN anywhere never matches)
+        var engine = AiDotNetEngine.Current;
+        var remembered = new Tensor<T>(memo.Input, (int[])input._shape.Clone());
+        return engine.TensorCountNonzero(engine.TensorNotEquals(remembered, input)) == 0;
     }
 
     private long ComputeValueHash(Tensor<T> input)
@@ -283,23 +284,25 @@ internal sealed class VerifiedInferenceGate<T>
         for (int i = 0; i < a._shape.Length; i++)
             if (a._shape[i] != b._shape[i]) return false;
 
-        var sa = a.AsSpan();
-        var sb = b.AsSpan();
-        if (sa.Length != sb.Length) return false;
+        if (a.Length != b.Length) return false;
 
         double rel = typeof(T) == typeof(float) ? 2e-3 : 1e-6;
         const double abs = 1e-5;
-        for (int i = 0; i < sa.Length; i++)
-        {
-            double x = _numOps.ToDouble(sa[i]);
-            double y = _numOps.ToDouble(sb[i]);
-            if (double.IsNaN(x) != double.IsNaN(y)) return false;
-            if (double.IsNaN(x)) continue;
-            double diff = System.Math.Abs(x - y);
-            double tol = abs + rel * System.Math.Max(System.Math.Abs(x), System.Math.Abs(y));
-            if (diff > tol) return false;
-        }
-        return true;
+        var engine = AiDotNetEngine.Current;
+
+        // NaN must line up: one side NaN and the other not is a mismatch, both NaN is a match
+        var zeros = engine.TensorZerosLike(a);
+        var ones = engine.TensorOnesLike(a);
+        var nanA = engine.TensorWhere(engine.TensorIsNan(a), ones, zeros);
+        var nanB = engine.TensorWhere(engine.TensorIsNan(b), ones, zeros);
+        if (engine.TensorCountNonzero(engine.TensorNotEquals(nanA, nanB)) > 0) return false;
+
+        // |x - y| > abs + rel * max(|x|, |y|) fails; NaN differences never compare greater
+        var diff = engine.TensorAbs(engine.TensorSubtract(a, b));
+        var scale = engine.TensorMax(engine.TensorAbs(a), engine.TensorAbs(b));
+        var tol = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(scale, _numOps.FromDouble(rel)), _numOps.FromDouble(abs));
+        return engine.TensorCountNonzero(engine.TensorGreaterThan(diff, tol)) == 0;
     }
 
     private static long ComputeShapeKey(int[] shape)

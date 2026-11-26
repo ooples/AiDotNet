@@ -55,6 +55,9 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
     private LossBalancer<T>? _balancer;
     private double? _reported;
 
+    /// <summary>The generator's loss balancer (null without native layers).</summary>
+    internal LossBalancer<T>? Balancer => _balancer;
+
     /// <summary>Creates an EnCodec that runs an exported ONNX graph.</summary>
     public EnCodec(NeuralNetworkArchitecture<T> architecture, string modelPath, EnCodecOptions? options = null)
         : base(architecture, modelPath, options ?? new EnCodecOptions())
@@ -109,18 +112,26 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
         layers.Add(quantizer);
         _quantizer = quantizer;
         _decoder = new SeanetDecoder<T>(Engine, config, layers);
-        _melScales = o.MelScales.Select(i => new CodecMelScale<T>(Engine, o.SampleRate, 1 << i, (1 << i) / 4, o.MelBins, o.MelMinFrequency, null,
-            normalized: true)).ToList();
-        var weights = new Dictionary<string, double>
+        if (o.IncludeDiscriminators)
         {
-            ["t"] = o.TimeLossWeight,
-            ["f"] = o.FrequencyLossWeight,
-            ["g"] = o.AdversarialLossWeight,
-            ["feat"] = o.FeatureLossWeight,
-        };
-        _balancer = new LossBalancer<T>(Engine, weights, o.BalancerTotalNorm, o.BalancerDecay);
+            _melScales = BuildMelScales(o);
+            var weights = new Dictionary<string, double>
+            {
+                ["t"] = o.TimeLossWeight,
+                ["f"] = o.FrequencyLossWeight,
+                ["g"] = o.AdversarialLossWeight,
+                ["feat"] = o.FeatureLossWeight,
+            };
+            _balancer = new LossBalancer<T>(Engine, weights, o.BalancerTotalNorm, o.BalancerDecay);
+        }
         return quantizer;
     }
+
+    private List<CodecMelScale<T>> MelScales => _melScales ??= BuildMelScales(PaperOptions);
+
+    private List<CodecMelScale<T>> BuildMelScales(EnCodecOptions o) =>
+        o.MelScales.Select(i => new CodecMelScale<T>(Engine, o.SampleRate, 1 << i, (1 << i) / 4, o.MelBins, o.MelMinFrequency, null,
+            normalized: true)).ToList();
 
     /// <inheritdoc />
     protected override IReadOnlyList<LayerBase<T>> CreateDiscriminators()
@@ -209,17 +220,18 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
     private Tensor<T> FrequencyLoss(IReadOnlyList<IReadOnlyList<Tensor<T>>> realMels, Tensor<T> generated)
     {
         var o = PaperOptions;
+        var scales = MelScales;
         var channels = Channels(generated).ToList();
         var terms = new List<Tensor<T>>();
         for (int c = 0; c < channels.Count; c++)
-            for (int i = 0; i < _melScales!.Count; i++)
+            for (int i = 0; i < scales.Count; i++)
             {
-                var d = Engine.TensorSubtract(realMels[c][i], _melScales[i].Forward(channels[c]));
+                var d = Engine.TensorSubtract(realMels[c][i], scales[i].Forward(channels[c]));
                 double count = d.Length;
                 var l1 = Total(Engine.TensorAbs(d));
                 var l2 = Engine.TensorPow(Engine.TensorAddScalar(Total(Engine.TensorMultiply(d, d)), NumOps.FromDouble(1e-24)), NumOps.FromDouble(0.5));
                 terms.Add(Engine.TensorMultiplyScalar(Engine.TensorAdd(l1, Engine.TensorMultiplyScalar(l2, NumOps.FromDouble(o.MelL2Coefficient))),
-                    NumOps.FromDouble(1.0 / (count * _melScales.Count))));
+                    NumOps.FromDouble(1.0 / (count * scales.Count))));
             }
         return Sum(terms);
     }
@@ -227,7 +239,8 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
     private List<IReadOnlyList<Tensor<T>>> RealMels(Tensor<T> real)
     {
         using var _ = new NoGradScope<T>();
-        return Channels(real).Select(ch => (IReadOnlyList<Tensor<T>>)_melScales!.Select(m => Detached(m.Forward(ch))).ToList()).ToList();
+        var scales = MelScales;
+        return Channels(real).Select(ch => (IReadOnlyList<Tensor<T>>)scales.Select(m => Detached(m.Forward(ch))).ToList()).ToList();
     }
 
     /// <summary>ℓ_g = (1/K) Σ_k max(0, 1 − D_k(x̂)), per channel, averaged over channels.</summary>
@@ -257,9 +270,9 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
                 for (int l = 0; l < fake[k].Features.Count; l++)
                 {
                     var r = real[c][k].Features[l];
-                    double scale = NumOps.ToDouble(Mean(Engine.TensorAbs(r))[0]);
-                    layerTerms.Add(Engine.TensorMultiplyScalar(Mean(Engine.TensorAbs(Engine.TensorSubtract(r, fake[k].Features[l]))),
-                        NumOps.FromDouble(1.0 / Math.Max(scale, 1e-12))));
+                    // r is detached, so its scale is too; kept on the engine so a compiled plan recomputes it.
+                    var scale = Engine.TensorClampMin(Mean(Engine.TensorAbs(r)), NumOps.FromDouble(1e-12));
+                    layerTerms.Add(Engine.TensorDivide(Mean(Engine.TensorAbs(Engine.TensorSubtract(r, fake[k].Features[l]))), scale));
                 }
             terms.Add(Engine.TensorMultiplyScalar(Sum(layerTerms), NumOps.FromDouble(1.0 / layerTerms.Count)));
             c++;
@@ -281,24 +294,31 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
     {
         var o = PaperOptions;
         var discriminator = _discriminators[DiscriminatorIndex(bandwidth)].Discriminator;
-        var realMels = RealMels(real);
-        var realFeatures = RealFeatures(discriminator, real);
-        var losses = new Dictionary<string, Func<Tensor<T>, Tensor<T>>>
+        Dictionary<string, Func<Tensor<T>, Tensor<T>>> LossesAgainst(Tensor<T> recording)
         {
-            ["t"] = x => TimeLoss(real, x),
-            ["f"] = x => FrequencyLoss(realMels, x),
-            ["g"] = x => AdversarialLoss(discriminator, x),
-            ["feat"] = x => FeatureLoss(discriminator, realFeatures, x),
-        };
+            var realMels = RealMels(recording);
+            var realFeatures = RealFeatures(discriminator, recording);
+            return new Dictionary<string, Func<Tensor<T>, Tensor<T>>>
+            {
+                ["t"] = x => TimeLoss(recording, x),
+                ["f"] = x => FrequencyLoss(realMels, x),
+                ["g"] = x => AdversarialLoss(discriminator, x),
+                ["feat"] = x => FeatureLoss(discriminator, realFeatures, x),
+            };
+        }
         var commitment = Engine.TensorMultiplyScalar(Quantizer!.CommitmentLoss ?? new Tensor<T>(new[] { 1 }), NumOps.FromDouble(o.CommitmentLossWeight));
+        _reported = null;
         if (o.UseBalancer)
         {
             // The balancer (Eq. 5) takes each loss's gradient at the output on a nested tape and averages its norm on the
-            // host, so this step trains on the eager tape.
-            var surrogate = _balancer!.Surrogate(generated, losses);
-            _reported = _balancer.LastWeightedLoss + NumOps.ToDouble(commitment[0]);
-            return Engine.TensorAdd(surrogate, commitment);
+            // host; under a trace that is one node the plan reruns on every replay with the step's output and recording.
+            // The objective's value is the weighted loss (the reported one); its gradient is the surrogate's.
+            var (surrogate, weighted) = _balancer!.TracedSurrogate(generated, new[] { real },
+                context => LossesAgainst(context[0]));
+            var valued = Engine.TensorAdd(surrogate, Engine.StopGradient(Engine.TensorSubtract(weighted, surrogate)));
+            return Engine.TensorAdd(valued, commitment);
         }
+        var losses = LossesAgainst(real);
         var weights = new Dictionary<string, double>
         {
             ["t"] = o.TimeLossWeight,
@@ -308,7 +328,6 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
         };
         var total = Engine.TensorAdd(Sum(losses.Select(l => Engine.TensorMultiplyScalar(l.Value(generated), NumOps.FromDouble(weights[l.Key])))), commitment);
         // The returned loss is the reported one; nothing is read on the host, so a compiled plan replays this objective.
-        _reported = null;
         return total;
     }
 

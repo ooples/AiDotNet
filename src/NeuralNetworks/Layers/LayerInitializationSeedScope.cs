@@ -238,6 +238,40 @@ internal static class LayerInitializationSeedScope
     }
 
     /// <summary>
+    /// Pins <see cref="AmbientFallbackSeed"/> to the test harness fallback (1337) when no outer ambient seed is active,
+    /// clearing any leftover sequence from an earlier construction on the same worker thread, and restores both on dispose.
+    /// Invocable via reflection from dynamically compiled generator contract tests whose assembly name is not in
+    /// <c>InternalsVisibleTo</c>.
+    /// </summary>
+    internal static IDisposable EnterDefaultAmbientFallbackSeedScope() => new AmbientFallbackSeedGuard(1337);
+
+    private sealed class AmbientFallbackSeedGuard : IDisposable
+    {
+        private readonly int? _prevSeed;
+        private readonly ScopeSnapshot _prevScope;
+        private bool _disposed;
+
+        internal AmbientFallbackSeedGuard(int fallbackSeed)
+        {
+            _prevSeed = _ambientFallbackSeed;
+            _prevScope = CaptureScope();
+            _ambientFallbackSeed = _prevSeed ?? fallbackSeed;
+            if (!_prevSeed.HasValue)
+            {
+                ResumeSequence(null);
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _ambientFallbackSeed = _prevSeed;
+            RestoreScope(_prevScope);
+        }
+    }
+
+    /// <summary>
     /// Returns the next deterministic per-layer init seed, or <c>null</c> when no
     /// seeded construction scope is active (no architecture seed was set). A
     /// <c>null</c> return tells the layer to keep its existing initialization

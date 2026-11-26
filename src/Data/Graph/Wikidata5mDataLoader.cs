@@ -98,31 +98,26 @@ public class Wikidata5mDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
         int totalSamples = triplets.Count;
         _sampleCount = totalSamples;
         int embDim = _options.EmbeddingDimension;
-        int featSize = embDim * 2;
-        var featuresData = new T[totalSamples * featSize];
-        var labelsData = new T[totalSamples];
+        var headIds = new int[totalSamples];
+        var tailIds = new int[totalSamples];
+        var labelsData = new int[totalSamples];
         int totalEntities = Math.Max(entityToId.Count, 1);
 
         for (int i = 0; i < totalSamples; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var (head, relation, tail) = triplets[i];
-
-            // Simple hash-based embedding: distribute entity ID across embedding dimensions
-            int featOff = i * featSize;
-            for (int d = 0; d < embDim; d++)
-            {
-                double headVal = Math.Sin((head + 1.0) * (d + 1.0) / totalEntities);
-                double tailVal = Math.Sin((tail + 1.0) * (d + 1.0) / totalEntities);
-                featuresData[featOff + d] = NumOps.FromDouble(headVal);
-                featuresData[featOff + embDim + d] = NumOps.FromDouble(tailVal);
-            }
-
-            labelsData[i] = NumOps.FromDouble(relation);
+            headIds[i] = head + 1;
+            tailIds[i] = tail + 1;
+            labelsData[i] = relation;
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, featSize });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, 1 });
+        // Simple hash-based embedding: distribute entity ID across embedding dimensions,
+        // sin((id + 1) * (d + 1) / totalEntities), as engine outer products. Formed in double and cast to T
+        // once, like the scalar Math.Sin: in T the product overflows half precision and rounds in single
+        // precision once it passes 2^24.
+        LoadedFeatures = HashEmbeddings(headIds, tailIds, embDim, totalEntities);
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, 1 }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 
@@ -199,5 +194,27 @@ public class Wikidata5mDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
     {
         var (bf, bl) = ExtractBatch(indices);
         return new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(bf, bl);
+    }
+
+    /// <summary>
+    /// <c>[n, 2 * embDim]</c> features <c>[sin(head * (d + 1) / N), sin(tail * (d + 1) / N)]</c> for the given
+    /// (already one-based) ids, formed in double and cast to <typeparamref name="T"/> once.
+    /// </summary>
+    internal static Tensor<T> HashEmbeddings(int[] headIdsPlusOne, int[] tailIdsPlusOne, int embDim, int totalEntities)
+    {
+        int n = headIdsPlusOne.Length;
+        if (n == 0 || embDim == 0)
+        {
+            return new Tensor<T>(new[] { n, 2 * embDim });
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var dims = new Tensor<int>(Enumerable.Range(1, embDim).ToArray(), new[] { embDim }).Cast<double>();
+        double entityCount = totalEntities;
+        var headEmb = engine.TensorSin(engine.TensorDivideScalar(
+            engine.TensorOuter(new Tensor<int>(headIdsPlusOne, new[] { n }).Cast<double>(), dims), entityCount));
+        var tailEmb = engine.TensorSin(engine.TensorDivideScalar(
+            engine.TensorOuter(new Tensor<int>(tailIdsPlusOne, new[] { n }).Cast<double>(), dims), entityCount));
+        return engine.TensorConcatenate(new[] { headEmb, tailEmb }, 1).Cast<T>();
     }
 }

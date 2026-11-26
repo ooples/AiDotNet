@@ -135,11 +135,7 @@ public class BufferedAsyncFederatedTrainer<T> : Infrastructure.FederatedLearning
         foreach (var layerName in layerNames)
         {
             int layerLen = reference[layerName].Length;
-            var aggregated = new T[layerLen];
-            for (int j = 0; j < aggregated.Length; j++)
-            {
-                aggregated[j] = NumOps.Zero;
-            }
+            var aggregated = new Vector<T>(layerLen);
 
             for (int i = 0; i < snapshot.Count; i++)
             {
@@ -148,15 +144,23 @@ public class BufferedAsyncFederatedTrainer<T> : Infrastructure.FederatedLearning
                     continue; // Skip clients missing this layer.
                 }
 
+                // One weight conversion per client; a shorter client layer only adds to the leading entries.
                 var nw = NumOps.FromDouble(weights[i] / totalWeight);
-                int len = Math.Min(cp.Length, layerLen);
-                for (int j = 0; j < len; j++)
+                Vector<T> contribution;
+                if (cp.Length >= layerLen)
                 {
-                    aggregated[j] = NumOps.Add(aggregated[j], NumOps.Multiply(cp[j], nw));
+                    contribution = Vector<T>.Wrap(cp, 0, layerLen);
                 }
+                else
+                {
+                    contribution = new Vector<T>(layerLen);
+                    cp.AsSpan().CopyTo(contribution.AsWritableSpan());
+                }
+
+                aggregated = Engine.Add(aggregated, Engine.Multiply(contribution, nw));
             }
 
-            result[layerName] = aggregated;
+            result[layerName] = aggregated.ToArray();
         }
 
         Interlocked.Increment(ref _currentGlobalRound);

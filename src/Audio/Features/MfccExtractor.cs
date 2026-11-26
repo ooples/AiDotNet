@@ -107,9 +107,13 @@ public class MfccExtractor<T> : AudioFeatureExtractorBase<T>
         // Features are computed from fresh values as before (not part of the autodiff graph).
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
 
-        // Compute log mel spectrogram
+        // Compute log mel spectrogram: [numFrames, numMels] for 1D audio, or [batch, numFrames, numMels] for batched audio.
         var melSpec = _melSpectrogram.Forward(audio);
+        return ExtractSpectrogramBatch(melSpec, (_, slice) => Extract2D(slice));
+    }
 
+    private Tensor<T> Extract2D(Tensor<T> melSpec)
+    {
         int numFrames = melSpec.Shape[0];
         int numMels = melSpec.Shape[1];
 

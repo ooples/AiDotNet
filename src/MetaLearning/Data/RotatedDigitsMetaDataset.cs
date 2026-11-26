@@ -104,7 +104,6 @@ public class RotatedDigitsMetaDataset<T, TInput, TOutput> : MetaDatasetBase<T, T
             for (int i = 0; i < numShots; i++)
             {
                 GenerateExample(supportX, sIdx, baseAngle);
-                supportY[sIdx] = NumOps.FromDouble(w);
                 sIdx++;
             }
 
@@ -112,10 +111,15 @@ public class RotatedDigitsMetaDataset<T, TInput, TOutput> : MetaDatasetBase<T, T
             for (int i = 0; i < numQueryPerClass; i++)
             {
                 GenerateExample(queryX, qIdx, baseAngle);
-                queryY[qIdx] = NumOps.FromDouble(w);
                 qIdx++;
             }
         }
+
+        // Labels are the way index, numShots (numQueryPerClass) times each, in way order.
+        var engine = AiDotNetEngine.Current;
+        var wayIds = engine.TensorArange<T>(0, numWays, 1);
+        engine.TensorRepeatInterleave(wayIds, numShots, 0).AsSpan().CopyTo(supportY.AsWritableSpan());
+        engine.TensorRepeatInterleave(wayIds, numQueryPerClass, 0).AsSpan().CopyTo(queryY.AsWritableSpan());
 
         return BuildTask(supportX, supportY, queryX, queryY, numWays, numShots, numQueryPerClass);
     }

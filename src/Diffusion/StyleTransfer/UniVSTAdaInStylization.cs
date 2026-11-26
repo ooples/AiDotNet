@@ -69,47 +69,24 @@ public class UniVSTAdaInStylization<T>
         if (contentPer == 0 || stylePer == 0)
             throw new ArgumentException("Each channel must contain at least one element.");
 
-        var result = new Tensor<T>(content.Shape.ToArray());
+        // Per-channel population mean and standard deviation (Huang and Belongie, 2017):
+        // AdaIN(x, y) = sigma(y) * (x - mu(x)) / (sigma(x) + eps) + mu(y).
+        // The statistics and the result are formed in double and rounded to T once (master's precision): the
+        // engine reduces in T, and a Half running sum stops absorbing values once it passes 2048, so a channel of
+        // a few thousand elements would get the wrong mean and deviation.
+        var engine = AiDotNetEngine.Current;
+        var contentRows = content.Reshape(new[] { channels, contentPer }).Cast<double>();
+        var styleRows = style.Reshape(new[] { channels, stylePer }).Cast<double>();
+        var (contentMean, contentStd) = MeanAndPopulationStd(engine, contentRows, channels, contentPer);
+        var (styleMean, styleStd) = MeanAndPopulationStd(engine, styleRows, channels, stylePer);
 
-        // Per-channel reductions run once per denoising step over a latent, not per element inside a
-        // training loop, so a direct pass is the clearer expression here.
-        for (int c = 0; c < channels; c++)
-        {
-            int co = c * contentPer, so = c * stylePer;
-
-            double cMean = 0.0;
-            for (int i = 0; i < contentPer; i++) cMean += NumOps.ToDouble(content[co + i]);
-            cMean /= contentPer;
-
-            double cVar = 0.0;
-            for (int i = 0; i < contentPer; i++)
-            {
-                double d = NumOps.ToDouble(content[co + i]) - cMean;
-                cVar += d * d;
-            }
-            double cStd = Math.Sqrt(cVar / contentPer);
-
-            double sMean = 0.0;
-            for (int i = 0; i < stylePer; i++) sMean += NumOps.ToDouble(style[so + i]);
-            sMean /= stylePer;
-
-            double sVar = 0.0;
-            for (int i = 0; i < stylePer; i++)
-            {
-                double d = NumOps.ToDouble(style[so + i]) - sMean;
-                sVar += d * d;
-            }
-            double sStd = Math.Sqrt(sVar / stylePer);
-
-            double scale = sStd / (cStd + Epsilon);
-            for (int i = 0; i < contentPer; i++)
-            {
-                double v = ((NumOps.ToDouble(content[co + i]) - cMean) * scale) + sMean;
-                result[co + i] = NumOps.FromDouble(v);
-            }
-        }
-
-        return result;
+        var grid = new[] { channels, contentPer };
+        var scale = engine.TensorDivide(styleStd, engine.TensorAddScalar(contentStd, Epsilon));
+        var centered = engine.TensorSubtract(contentRows, engine.TensorBroadcastTo(contentMean, grid));
+        var stylized = engine.TensorAdd(
+            engine.TensorMultiply(centered, engine.TensorBroadcastTo(scale, grid)),
+            engine.TensorBroadcastTo(styleMean, grid));
+        return stylized.Cast<T>().Reshape(content.Shape.ToArray());
     }
 
     /// <summary>
@@ -166,15 +143,7 @@ public class UniVSTAdaInStylization<T>
         if (contentQuery == null) throw new ArgumentNullException(nameof(contentQuery));
         RequireSameShape(editQuery, contentQuery, nameof(contentQuery));
 
-        double gamma = _options.QueryBlendGamma;
-        var result = new Tensor<T>(editQuery.Shape.ToArray());
-        for (int i = 0; i < editQuery.Length; i++)
-        {
-            double v = (gamma * NumOps.ToDouble(editQuery[i])) +
-                       ((1.0 - gamma) * NumOps.ToDouble(contentQuery[i]));
-            result[i] = NumOps.FromDouble(v);
-        }
-        return result;
+        return Blend(editQuery, contentQuery, _options.QueryBlendGamma);
     }
 
     /// <summary>
@@ -194,14 +163,7 @@ public class UniVSTAdaInStylization<T>
         double beta = BetaAt(timestepFraction);
         var aligned = AdaIn(editKv, styleKv);
 
-        var result = new Tensor<T>(editKv.Shape.ToArray());
-        for (int i = 0; i < result.Length; i++)
-        {
-            double v = (beta * NumOps.ToDouble(aligned[i])) +
-                       ((1.0 - beta) * NumOps.ToDouble(styleKv[i]));
-            result[i] = NumOps.FromDouble(v);
-        }
-        return result;
+        return Blend(aligned, styleKv, beta);
     }
 
     /// <summary>
@@ -223,19 +185,41 @@ public class UniVSTAdaInStylization<T>
                 $"Mask of {spatial} elements does not tile a latent of {edited.Length} elements.", nameof(mask));
 
         int channels = edited.Length / spatial;
-        var result = new Tensor<T>(edited.Shape.ToArray());
-        for (int c = 0; c < channels; c++)
-        {
-            int offset = c * spatial;
-            for (int p = 0; p < spatial; p++)
-            {
-                double m = NumOps.ToDouble(mask[p]);
-                double v = (m * NumOps.ToDouble(edited[offset + p])) +
-                           ((1.0 - m) * NumOps.ToDouble(content[offset + p]));
-                result[offset + p] = NumOps.FromDouble(v);
-            }
-        }
-        return result;
+        // mask * edited + (1 - mask) * content, with the [spatial] mask broadcast over the channels.
+        var engine = AiDotNetEngine.Current;
+        var rows = new[] { channels, spatial };
+        var weights = engine.TensorBroadcastTo(mask.Reshape(new[] { 1, spatial }), rows);
+        var editedRows = edited.Reshape(rows);
+        var contentRows = content.Reshape(rows);
+        var blended = engine.TensorAdd(
+            engine.TensorMultiply(weights, editedRows),
+            engine.TensorMultiply(engine.ScalarMinusTensor(NumOps.One, weights), contentRows));
+        return blended.Reshape(edited.Shape.ToArray());
+    }
+
+    /// <summary>
+    /// The per-row mean and population standard deviation [rows, 1] of <paramref name="rows"/> [rows, width],
+    /// in double.
+    /// </summary>
+    private static (Tensor<double> Mean, Tensor<double> Std) MeanAndPopulationStd(
+        IEngine engine, Tensor<double> rows, int count, int width)
+    {
+        var axis = new[] { 1 };
+        var mean = engine.ReduceMean(rows, axis, true);
+        var centered = engine.TensorSubtract(rows, engine.TensorBroadcastTo(mean, new[] { count, width }));
+        var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), axis, true));
+        return (mean, std);
+    }
+
+    /// <summary>
+    /// weight * a + (1 - weight) * b.
+    /// </summary>
+    private static Tensor<T> Blend(Tensor<T> a, Tensor<T> b, double weight)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorAdd(
+            engine.TensorMultiplyScalar(a, NumOps.FromDouble(weight)),
+            engine.TensorMultiplyScalar(b, NumOps.FromDouble(1.0 - weight)));
     }
 
     private static void RequireSameShape(Tensor<T> a, Tensor<T> b, string paramName)

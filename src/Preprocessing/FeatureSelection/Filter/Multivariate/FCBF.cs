@@ -25,13 +25,14 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Multivariate;
 [PipelineStage(PipelineStage.Preprocessing)]
 public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
+    private const int DiscretizationBins = 10;
     private readonly double _threshold;
 
-    private double[]? _symmetricalUncertainties;
+    private Vector<T>? _symmetricalUncertainties;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
-    public double[]? SymmetricalUncertainties => _symmetricalUncertainties;
+    public Vector<T>? SymmetricalUncertainties => _symmetricalUncertainties;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -59,67 +60,21 @@ public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        var info = DiscreteInformation<T>.ForTarget(
+            FeatureScoringTensorOps.ScaledBins(FilterStatisticTensorOps.AsTensor(data), DiscretizationBins), DiscretizationBins, target);
+        var suTarget = info.SymmetricUncertainty();
+        _symmetricalUncertainties = suTarget.ToVector();
 
-        // Discretize continuous features for MI computation
-        int nBins = 10;
-        var discretizedData = new int[n, p];
-        var targetDiscrete = new int[n];
+        // Relevant features (SU > threshold) by decreasing SU, ties by index
+        var above = Engine.TensorGreaterThan(suTarget, NumOps.FromDouble(_threshold)).Cast<int>().ToArray();
+        var relevant = PreprocessingTensorOps.StableOrder(suTarget, descending: true)
+            .Where(j => above[j] == 1)
+            .ToList();
 
-        // Discretize target
-        var uniqueClasses = new HashSet<int>();
-        for (int i = 0; i < n; i++)
-        {
-            targetDiscrete[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            uniqueClasses.Add(targetDiscrete[i]);
-        }
-        int nClasses = uniqueClasses.Count;
-
-        // Discretize features
-        for (int j = 0; j < p; j++)
-        {
-            double minVal = double.MaxValue, maxVal = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                minVal = Math.Min(minVal, val);
-                maxVal = Math.Max(maxVal, val);
-            }
-            double range = maxVal - minVal;
-            if (range < 1e-10) range = 1;
-
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                discretizedData[i, j] = Math.Min((int)(((val - minVal) / range) * nBins), nBins - 1);
-            }
-        }
-
-        // Compute symmetrical uncertainty between each feature and target
-        _symmetricalUncertainties = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            var featureValues = new int[n];
-            for (int i = 0; i < n; i++)
-                featureValues[i] = discretizedData[i, j];
-
-            _symmetricalUncertainties[j] = ComputeSymmetricalUncertainty(featureValues, targetDiscrete, nBins, nClasses);
-        }
-
-        // Get relevant features (SU > threshold)
-        var relevant = new List<int>();
-        for (int j = 0; j < p; j++)
-            if (_symmetricalUncertainties[j] > _threshold)
-                relevant.Add(j);
-
-        // Sort by SU descending
-        relevant = relevant.OrderByDescending(j => _symmetricalUncertainties[j]).ToList();
-
-        // Remove redundant features
+        // Remove redundant features: fq is dominated by an earlier fp when SU(fp, fq) >= SU(fq, Y)
         var selectedList = new List<int>();
         var processed = new HashSet<int>();
-
         foreach (int fp in relevant)
         {
             if (processed.Contains(fp))
@@ -127,73 +82,22 @@ public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
 
             selectedList.Add(fp);
             processed.Add(fp);
-
-            // Check remaining features for dominance
-            foreach (int fq in relevant.Where(f => !processed.Contains(f)))
+            var notDominated = Engine.TensorLessThan(info.FeatureSymmetricUncertainty(fp), suTarget).Cast<int>().ToArray();
+            foreach (int fq in relevant.Where(f => !processed.Contains(f)).ToList())
             {
-                var fp_values = new int[n];
-                var fq_values = new int[n];
-                for (int i = 0; i < n; i++)
-                {
-                    fp_values[i] = discretizedData[i, fp];
-                    fq_values[i] = discretizedData[i, fq];
-                }
-
-                double su_pq = ComputeSymmetricalUncertainty(fp_values, fq_values, nBins, nBins);
-
-                // If SU(fp, fq) >= SU(fq, target), fq is dominated
-                if (su_pq >= _symmetricalUncertainties[fq])
+                if (notDominated[fq] == 0)
                     processed.Add(fq);
             }
         }
 
         _selectedIndices = selectedList.OrderBy(x => x).ToArray();
+
         if (_selectedIndices.Length == 0)
         {
             // Fall back to top by SU
-            _selectedIndices = Enumerable.Range(0, p)
-                .OrderByDescending(j => _symmetricalUncertainties[j])
-                .Take(Math.Min(10, p))
-                .OrderBy(x => x)
-                .ToArray();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(suTarget, Math.Min(10, p));
         }
-
         IsFitted = true;
-    }
-
-    private double ComputeSymmetricalUncertainty(int[] x, int[] y, int nBinsX, int nBinsY)
-    {
-        int n = x.Length;
-
-        // Compute entropies
-        var pX = new double[nBinsX];
-        var pY = new double[nBinsY];
-        var pXY = new double[nBinsX, nBinsY];
-
-        for (int i = 0; i < n; i++)
-        {
-            pX[x[i]] += 1.0 / n;
-            pY[y[i]] += 1.0 / n;
-            pXY[x[i], y[i]] += 1.0 / n;
-        }
-
-        double hX = 0, hY = 0, hXY = 0;
-        for (int i = 0; i < nBinsX; i++)
-            if (pX[i] > 1e-10) hX -= pX[i] * Math.Log(pX[i]);
-
-        for (int i = 0; i < nBinsY; i++)
-            if (pY[i] > 1e-10) hY -= pY[i] * Math.Log(pY[i]);
-
-        for (int i = 0; i < nBinsX; i++)
-            for (int j = 0; j < nBinsY; j++)
-                if (pXY[i, j] > 1e-10) hXY -= pXY[i, j] * Math.Log(pXY[i, j]);
-
-        // Mutual information
-        double mi = hX + hY - hXY;
-
-        // Symmetrical uncertainty
-        double denom = hX + hY;
-        return denom > 1e-10 ? 2 * mi / denom : 0;
     }
 
     /// <inheritdoc />
@@ -209,15 +113,7 @@ public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         if (_selectedIndices is null)
             throw new InvalidOperationException("FCBF has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

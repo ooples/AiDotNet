@@ -61,17 +61,7 @@ public sealed class DPMSolverSinglestepScheduler<T> : NoiseSchedulerBase<T>
 
     private void ComputeSigmas()
     {
-        var timesteps = Timesteps;
-        _sigmas = new Vector<T>(timesteps.Length + 1);
-
-        for (int i = 0; i < timesteps.Length; i++)
-        {
-            T alphaCumprod = AlphasCumulativeProduct[timesteps[i]];
-            T oneMinusAlpha = NumOps.Subtract(NumOps.One, alphaCumprod);
-            _sigmas[i] = NumOps.Sqrt(NumOps.Divide(oneMinusAlpha, alphaCumprod));
-        }
-
-        _sigmas[timesteps.Length] = NumOps.Zero;
+        _sigmas = ComputeTimestepSigmas();
     }
 
     /// <summary>

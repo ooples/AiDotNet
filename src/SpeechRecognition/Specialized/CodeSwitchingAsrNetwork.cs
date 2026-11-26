@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Audio.Foundations;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -142,6 +143,13 @@ internal sealed class CodeSwitchingAsrNetwork<T>
         return features;
     }
 
+    public Tensor<T> FeatureTensor(Tensor<T> waveform)
+    {
+        if (waveform.Length < 400) waveform = _engine.TensorConcatenate(new[] { _engine.Reshape(waveform, new[] { waveform.Length }), new Tensor<T>(new[] { 400 - waveform.Length }) }, 0);
+        var mel = _mel.Forward(waveform);
+        return ConformerAsrNetwork<T>.NormalizePerBin(_engine, mel);
+    }
+
     /// <summary>The encoder output <c>[L, EncoderProjection]</c> of features <c>[frames, bins]</c>.</summary>
     public Tensor<T> Encode(Tensor<T> features, bool training = false, Random? random = null)
     {
@@ -188,10 +196,8 @@ internal sealed class CodeSwitchingAsrNetwork<T>
     private Tensor<T> Dropout(Tensor<T> x, bool training, Random? random)
     {
         if (!training || random is null || _o.DropoutRate <= 0) return x;
-        var mask = new Tensor<T>(x._shape);
-        var keep = NumOps.FromDouble(1.0 / (1.0 - _o.DropoutRate));
-        for (int i = 0; i < mask.Length; i++) mask[i] = random.NextDouble() < _o.DropoutRate ? NumOps.Zero : keep;
-        return _engine.TensorMultiply(x, mask);
+        // A per-step draw: a compiled training plan refills the mask before every replay.
+        return _engine.TensorMultiply(x, AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(x._shape, random, _o.DropoutRate));
     }
 
     private Tensor<T> Embed(EmbeddingLayer<T> embedding, int id)

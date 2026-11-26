@@ -101,7 +101,7 @@ public partial class DiffWave<T> : DiffusionVocoderBase<T>
             throw new ArgumentException("A discrete label count requires DiffWave's class-conditioned task.", nameof(o.NumClasses));
         if (o.Conditioner != DiffWaveConditioner.MelSpectrogram && o.UtteranceSamples <= 0)
             throw new ArgumentException("A DiffWave without a spectrogram needs UtteranceSamples, the length it generates.");
-        _network = new DiffWaveNetwork<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7),
+        _network = new DiffWaveNetwork<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 7),
             o.MelChannels, o.ResChannels, o.NumResLayers, o.DilationCycle, o.NoiseSchedule.Length, o.UpsampleStrides,
             melConditioned: o.Conditioner == DiffWaveConditioner.MelSpectrogram,
             labelClasses: o.Conditioner == DiffWaveConditioner.ClassLabel ? o.NumClasses : 0);

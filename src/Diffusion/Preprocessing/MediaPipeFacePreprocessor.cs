@@ -47,39 +47,18 @@ public class MediaPipeFacePreprocessor<T> : DiffusionPreprocessorBase<T>
     /// <inheritdoc />
     public override Tensor<T> Transform(Tensor<T> data)
     {
+        var engine = AiDotNetEngine.Current;
         var shape = data._shape;
-        int batch = shape[0];
         int channels = Math.Min(shape[1], 3);
-        int height = shape[2];
-        int width = shape[3];
-        var result = new Tensor<T>(new[] { batch, 3, height, width });
+        if (!PreprocessorFilters.HasInterior(shape[2], shape[3]))
+            return new Tensor<T>(new[] { shape[0], 3, shape[2], shape[3] });
 
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 1; h < height - 1; h++)
-            {
-                for (int w = 1; w < width - 1; w++)
-                {
-                    // Multi-scale gradient for facial feature detection
-                    double totalEdge = 0;
-                    for (int c = 0; c < channels; c++)
-                    {
-                        double dx = Math.Abs(NumOps.ToDouble(data[b, c, h, w + 1]) - NumOps.ToDouble(data[b, c, h, w - 1]));
-                        double dy = Math.Abs(NumOps.ToDouble(data[b, c, h + 1, w]) - NumOps.ToDouble(data[b, c, h - 1, w]));
-                        totalEdge += Math.Sqrt(dx * dx + dy * dy);
-                    }
+        // Multi-channel gradient for facial feature detection: mean over channels of the central-difference magnitude
+        var magnitudes = PreprocessorFilters.ChannelGradientMagnitudes(data, channels);
+        var totalEdge = engine.TensorDivideScalar(engine.ReduceSum(magnitudes, new[] { 1 }, true), NumOps.FromDouble(channels));
+        var meshIntensity = engine.TensorMin(engine.TensorMultiplyScalar(totalEdge, NumOps.FromDouble(_sensitivity)), NumOps.One);
 
-                    totalEdge /= channels;
-                    double meshIntensity = Math.Min(1.0, totalEdge * _sensitivity);
-
-                    // Color-coded output: green for mesh lines, darker for background
-                    result[b, 0, h, w] = NumOps.FromDouble(meshIntensity * 0.3);
-                    result[b, 1, h, w] = NumOps.FromDouble(meshIntensity);
-                    result[b, 2, h, w] = NumOps.FromDouble(meshIntensity * 0.3);
-                }
-            }
-        }
-
-        return result;
+        // Color-coded output: green for mesh lines, darker for background
+        return PreprocessorFilters.PadBorder(PreprocessorFilters.ColorChannels(meshIntensity, 0.3, 1.0, 0.3));
     }
 }

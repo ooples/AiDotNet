@@ -31,7 +31,7 @@ public class GeneticAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private readonly double _crossoverRate;
     private readonly int? _randomState;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -39,7 +39,7 @@ public class GeneticAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int PopulationSize => _populationSize;
     public int NGenerations => _nGenerations;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -80,22 +80,15 @@ public class GeneticAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
         var rand = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
+        // a subset's fitness is the mean absolute correlation of its features with the target
+        var correlation = FeatureScoringTensorOps.AbsoluteCorrelation(
+            FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target));
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
 
         // Initialize population
@@ -108,25 +101,21 @@ public class GeneticAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
                 population[i][idx] = true;
         }
 
-        _featureImportances = new double[p];
+        // the importances (each generation's fitness-weighted feature counts, summed over the generations) are summed
+        // in double whatever T is, and normalised there: a running sum in Half stops taking a contribution c once it
+        // passes 2048 c, which capped the frequently kept features and skewed their normalised ratios
+        var importances = new Tensor<double>(new[] { p });
 
         // Evolution
         for (int gen = 0; gen < _nGenerations; gen++)
         {
-            // Evaluate fitness
-            var fitness = new double[_populationSize];
-            for (int i = 0; i < _populationSize; i++)
-                fitness[i] = EvaluateFitness(X, y, population[i], n, p);
-
-            // Track feature importance
-            for (int i = 0; i < _populationSize; i++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    if (population[i][j])
-                        _featureImportances[j] += fitness[i];
-                }
-            }
+            // Evaluate fitness, and add each member's fitness to the importance of the features it keeps
+            var masks = MaskTensor(population, p);
+            var fitness = FeatureScoringTensorOps.MeanOverMask(masks, correlation);
+            importances = Engine.TensorAdd(importances, Engine.Reshape(
+                Engine.TensorMatMul(Engine.TensorTranspose(masks), Engine.Reshape(fitness, new[] { _populationSize, 1 })), new[] { p })
+                .Cast<double>());
+            var rank = FeatureScoringTensorOps.LessCounts(fitness);
 
             // Selection (tournament)
             var newPopulation = new bool[_populationSize][];
@@ -134,7 +123,7 @@ public class GeneticAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             {
                 int idx1 = rand.Next(_populationSize);
                 int idx2 = rand.Next(_populationSize);
-                newPopulation[i] = (bool[])population[fitness[idx1] > fitness[idx2] ? idx1 : idx2].Clone();
+                newPopulation[i] = (bool[])population[rank[idx1] > rank[idx2] ? idx1 : idx2].Clone();
             }
 
             // Crossover
@@ -161,61 +150,27 @@ public class GeneticAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             population = newPopulation;
         }
 
-        // Normalize feature importances
-        double maxImportance = _featureImportances.Max();
-        if (maxImportance > 0)
-        {
-            for (int j = 0; j < p; j++)
-                _featureImportances[j] /= maxImportance;
-        }
+        // Normalize by the largest value when it is positive
+        double largest = Engine.TensorMaxValue(importances);
+        if (largest > 0)
+            importances = Engine.TensorDivideScalar(importances, largest);
 
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureImportances[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        _featureImportances = importances.Cast<T>().ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(importances, numToSelect);
         IsFitted = true;
     }
 
-    private double EvaluateFitness(double[,] X, double[] y, bool[] mask, int n, int p)
+    // 0/1 [m, p] tensor of a population of feature masks
+    private static Tensor<T> MaskTensor(bool[][] population, int p)
     {
-        var selectedFeatures = Enumerable.Range(0, p).Where(j => mask[j]).ToList();
-        if (selectedFeatures.Count == 0) return 0;
-
-        // Use correlation-based fitness
-        double totalCorr = 0;
-        foreach (int j in selectedFeatures)
+        var flat = new int[population.Length * p];
+        for (int i = 0; i < population.Length; i++)
         {
-            double corr = ComputeCorrelation(X, y, j, n);
-            totalCorr += Math.Abs(corr);
+            for (int j = 0; j < p; j++)
+                flat[i * p + j] = population[i][j] ? 1 : 0;
         }
 
-        return totalCorr / selectedFeatures.Count;
-    }
-
-    private double ComputeCorrelation(double[,] X, double[] y, int j, int n)
-    {
-        double xMean = 0, yMean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            xMean += X[i, j];
-            yMean += y[i];
-        }
-        xMean /= n;
-        yMean /= n;
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xd = X[i, j] - xMean;
-            double yd = y[i] - yMean;
-            sxy += xd * yd;
-            sxx += xd * xd;
-            syy += yd * yd;
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
+        return new Tensor<int>(flat, new[] { population.Length, p }).Cast<T>();
     }
 
     /// <inheritdoc />
@@ -231,15 +186,7 @@ public class GeneticAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         if (_selectedIndices is null)
             throw new InvalidOperationException("GeneticAlgorithmSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

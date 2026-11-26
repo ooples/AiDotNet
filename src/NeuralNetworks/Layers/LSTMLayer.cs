@@ -1127,10 +1127,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
 
         // Scale by the scale factor and copy to weight tensor using flat indexer
         var scaled = Engine.TensorMultiplyScalar(shifted, scale);
-        for (int i = 0; i < weight.Length; i++)
-        {
-            weight[i] = scaled[i];
-        }
+        Engine.TensorCopy(scaled, weight);
     }
 
     /// <summary>
@@ -1246,9 +1243,13 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         // Engines without a fused state adjoint retain their differentiable fallback internally.
         bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null;
         bool graphActive = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive;
-        bool standardActivations = (_useVectorActivation ? _tanhVectorActivation?.GetType() : _tanhActivation?.GetType()) == typeof(TanhActivation<T>)
-            && (_useVectorActivation ? _sigmoidVectorActivation?.GetType() : _sigmoidActivation?.GetType()) == typeof(SigmoidActivation<T>);
-        if (standardActivations && _stateCellClip == 0 && _stateZoneout is null
+        bool standardActivations = UsesStandardSequenceActivations;
+        // A stateless training trace binds the stacked weights and input at each replay. The engine
+        // records the fused sequence operation where supported. Explicit h/c outputs still use
+        // the state-aware recurrence below when tracing.
+        bool statelessTrainingTrace = graphActive && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsInferenceTrace
+            && IsTrainingMode && !_stateStepping && Engine.Unwrap() is CpuEngine;
+        if (standardActivations && (!graphActive || statelessTrainingTrace) && _stateCellClip == 0 && _stateZoneout is null
             && timeSteps > 0 && (typeof(T) == typeof(float) || typeof(T) == typeof(double)))
         {
             Tensor<T>? fusedOutput = null;
@@ -1288,17 +1289,10 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         // when the sequence primitive is unavailable, for other numeric types, or when the engine declines the primitive.
         var hiddenStatesList = new System.Collections.Generic.List<Tensor<T>>(timeSteps);
 
-        var currentH = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
-        var currentC = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
-        // TensorAllocator.Rent returns POOLED memory that is not zero-initialized.
-        // currentH/currentC are the initial hidden/cell state (h0/c0) consumed at
-        // t=0 before being overwritten, so they MUST be zeroed — otherwise the
-        // sequence starts from leftover pool garbage. That garbage is consistent
-        // within one instance (hence deterministic per model) but differs across
-        // instances, so a clone with identical weights produced a different output
-        // (Clone_ShouldProduceIdenticalOutput). Standard LSTM init is h0 = c0 = 0.
-        currentH.Fill(NumOps.Zero);
-        currentC.Fill(NumOps.Zero);
+        // Non-pooled zero initial states: GraphMode captures h0/c0 leaf tensors by reference,
+        // so arena-rented buffers would be recycled and overwritten across compiled-plan steps.
+        var currentH = new Tensor<T>(new int[] { batchSize, _hiddenSize });
+        var currentC = new Tensor<T>(new int[] { batchSize, _hiddenSize });
         if (_initialHidden is not null && _initialCell is not null)
         {
             if (_initialHidden.Shape.Length != 2 || _initialHidden.Shape[0] != batchSize || _initialHidden.Shape[1] != _hiddenSize
@@ -1363,12 +1357,44 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         return output;
     }
 
+    private bool UsesStandardSequenceActivations =>
+        (_useVectorActivation ? _tanhVectorActivation?.GetType() : _tanhActivation?.GetType()) == typeof(TanhActivation<T>) &&
+        (_useVectorActivation ? _sigmoidVectorActivation?.GetType() : _sigmoidActivation?.GetType()) == typeof(SigmoidActivation<T>);
+
+    // A following last-token slice needs this output only. Shape discovery and graph
+    // observers must still see the full sequence and the slice as individual layers.
+    internal bool TryForwardLastHiddenState(Tensor<T> input, out Tensor<T> result)
+    {
+        result = input;
+        if (GetType() != typeof(LSTMLayer<T>) || IsTrainingMode || !_isInitialized || !IsShapeResolved || RequiresForwardInputValidation ||
+            IsInferringShapes || AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is not null ||
+            AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive ||
+            AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null ||
+            _stateStepping || Math.Abs(_stateCellClip) > 0.0 || _stateZoneout is not null || !UsesStandardSequenceActivations ||
+            (typeof(T) != typeof(float) && typeof(T) != typeof(double)) ||
+            input.Rank != 3 || input.Shape[1] <= 0 || input.Shape[2] != _inputSize)
+            return false;
+
+        try
+        {
+            var last = TryFusedLstmForward(input, differentiable: false, returnSequences: false);
+            if (last is null) return false;
+            _originalInputShape = input._shape;
+            _lastHiddenState = null;
+            _lastCellState = null;
+            result = last;
+            return true;
+        }
+        catch (NotSupportedException) { return false; }
+        catch (InvalidOperationException) { return false; }
+    }
+
     /// <summary>
     /// Packs gates in i/f/g/o order on the active device and invokes its sequence primitive.
     /// Tape/graph packing stays connected to the original weights; inference packing is cached by
     /// engine and mutation version so a checkpoint restore or engine change cannot reuse stale weights.
     /// </summary>
-    private Tensor<T>? TryFusedLstmForward(Tensor<T> input, bool differentiable)
+    private Tensor<T>? TryFusedLstmForward(Tensor<T> input, bool differentiable, bool returnSequences = true)
     {
         Tensor<T> wIh, wHh, bias;
         var engine = Engine;
@@ -1392,7 +1418,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
             result = engine.LstmSequenceForward(input, _initialHidden, _initialCell, wIh, wHh, bias, null,
                 out _lastHiddenState, out _lastCellState, returnSequences: true);
         else
-            result = engine.LstmSequenceForward(input, null, null, wIh, wHh, bias, null, returnSequences: true);
+            result = engine.LstmSequenceForward(input, null, null, wIh, wHh, bias, null, returnSequences);
 
         // An older engine may return an inference-only result under a tape. Never silently lose gradients.
         if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null

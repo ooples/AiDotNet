@@ -117,12 +117,16 @@ public partial class UniAudio<T>
         _codecDiscriminatorTurn = true;
         try
         {
-            T discriminator = TrainWithCustomObjective(audio, audio, (input, _) =>
+            // The released loop reconstructs again, after the generator's update, and feeds the critics that detached
+            // waveform: the discriminator step's data, computed before its objective.
+            Tensor<T> generated;
+            using (new NoGradScope<T>())
             {
-                Tensor<T> generated;
-                using (new NoGradScope<T>()) generated = _codec!.TrainingForward(input, quantizers).Waveform;
-                return _codecGan!.DiscriminatorObjective(input, generated);
-            }, _codecDiscriminatorOptimizer!);
+                var waveform = _codec!.TrainingForward(audio, quantizers).Waveform;
+                generated = new Tensor<T>(waveform._shape, waveform.ToVector());
+            }
+            T discriminator = TrainWithCustomObjective(audio, audio, (input, _) =>
+                _codecGan!.DiscriminatorObjective(input, generated), _codecDiscriminatorOptimizer!);
             LastCodecDiscriminatorLoss = NumOps.ToDouble(discriminator);
         }
         finally { _codecDiscriminatorTurn = false; }

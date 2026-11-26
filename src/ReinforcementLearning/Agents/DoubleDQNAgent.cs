@@ -229,43 +229,25 @@ public partial class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, 
         int actionSize = _options.ActionSize;
 
         // Build batched state tensor
-        var batchStates = new Tensor<T>([batch.Count, stateSize]);
-        for (int i = 0; i < batch.Count; i++)
-            for (int j = 0; j < stateSize; j++)
-                batchStates[i, j] = batch[i].State[j];
+        var batchStates = RLTensorOps.Batch(batch.Select(experience => experience.State), stateSize);
 
         // Compute Double DQN targets outside tape
         var currentQBatch = _qNetwork.Predict(batchStates);
-        var targetQBatch = new Tensor<T>([batch.Count, actionSize]);
+        // Next states for the bootstrap, batched; a terminal row's value is discarded, so its own state stands in.
+        int count = batch.Count;
+        var nextStates = RLTensorOps.Batch(batch.Select(experience => experience.Done ? experience.State : experience.NextState), stateSize);
+        var rewards = Vector<T>.FromEnumerable(batch.Select(experience => experience.Reward));
+        var done = batch.Select(experience => experience.Done).ToArray();
+        var takenActions = batch.Select(experience => ArgMax(experience.Action)).ToList();
 
-        for (int i = 0; i < batch.Count; i++)
-        {
-            for (int a = 0; a < actionSize; a++)
-                targetQBatch[i, a] = currentQBatch[i * actionSize + a];
-
-            int actionIndex = ArgMax(batch[i].Action);
-            T tdTarget;
-            if (batch[i].Done)
-            {
-                tdTarget = batch[i].Reward;
-            }
-            else
-            {
-                // Double DQN: online network SELECTS action, target network EVALUATES it
-                var nextState = new Tensor<T>([1, stateSize]);
-                for (int j = 0; j < stateSize; j++)
-                    nextState[0, j] = batch[i].NextState[j];
-
-                var nextQOnline = _qNetwork.Predict(nextState).ToVector();
-                int bestAction = ArgMax(nextQOnline);
-
-                var nextQTarget = _targetNetwork.Predict(nextState).ToVector();
-                tdTarget = NumOps.Add(batch[i].Reward,
-                    NumOps.Multiply(DiscountFactor, nextQTarget[bestAction]));
-            }
-
-            targetQBatch[i, actionIndex] = tdTarget;
-        }
+        // Double DQN: the online network SELECTS a' = argmax Q(s', .), the target network EVALUATES Q_target(s', a').
+        var nextQOnline = RLTensorOps.Rows(_qNetwork.Predict(nextStates), count);
+        var bestActions = nextQOnline.Select(ArgMax).ToList();
+        var nextQTarget = _targetNetwork.Predict(nextStates);
+        int targetWidth = count == 0 ? 0 : nextQTarget.ToVector().Length / count;
+        var evaluated = RLTensorOps.PickPerRow(nextQTarget, count, targetWidth, bestActions);
+        var tdTargets = RLTensorOps.TdTargets(rewards, evaluated, done, DiscountFactor);
+        var targetQBatch = RLTensorOps.ReplaceTakenActionValues(currentQBatch, count, actionSize, takenActions, tdTargets);
 
         // Single batched training step
         _qNetwork.Train(batchStates, targetQBatch);
@@ -344,19 +326,7 @@ public partial class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, 
     // Helper methods
     private int ArgMax(Vector<T> vector)
     {
-        int maxIndex = 0;
-        T maxValue = vector[0];
-
-        for (int i = 1; i < vector.Length; i++)
-        {
-            if (NumOps.GreaterThan(vector[i], maxValue))
-            {
-                maxValue = vector[i];
-                maxIndex = i;
-            }
-        }
-
-        return maxIndex;
+        return RLTensorOps.ArgMax(vector);
     }
     /// <inheritdoc/>
     public override void SaveModel(string filepath)

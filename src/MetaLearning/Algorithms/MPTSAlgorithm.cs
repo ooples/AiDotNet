@@ -84,9 +84,8 @@ public partial class MPTSAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         _groupSize = (_paramDim + _numGroups - 1) / _numGroups;
 
         // Initialize priorities: last group gets highest priority (classifier head pattern)
-        _priorityScores = new Vector<T>(_numGroups);
-        for (int g = 0; g < _numGroups; g++)
-            _priorityScores[g] = NumOps.FromDouble((double)(g + 1) / _numGroups);
+        _priorityScores = Engine.TensorDivideScalar(
+            Engine.TensorArange<T>(1, _numGroups + 1, 1), NumOps.FromDouble(_numGroups)).ToVector();
     }
 
     /// <inheritdoc/>
@@ -98,58 +97,8 @@ public partial class MPTSAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
         foreach (var task in taskBatch.Tasks)
         {
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
-
-            int K = _algoOptions.AdaptationSteps;
-            for (int step = 0; step < K; step++)
-            {
-                ParamModel.SetParameters(adaptedParams);
-                var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-
-                double progress = (double)step / Math.Max(K - 1, 1);
-
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    int g = Math.Min(d / _groupSize, _numGroups - 1);
-                    double priority = NumOps.ToDouble(_priorityScores[g]);
-
-                    // Sigmoid activation: higher priority → active earlier
-                    double activation = 1.0 / (1.0 + Math.Exp(-(progress - (1.0 - priority)) * 10.0 / _algoOptions.PriorityDecayRate));
-
-                    adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                        NumOps.FromDouble(_algoOptions.InnerLearningRate * activation * NumOps.ToDouble(grad[d])));
-                }
-            }
-
-            ParamModel.SetParameters(adaptedParams);
-            var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
-
-            // Group coherence regularization
-            double groupReg = 0;
-            for (int g = 0; g < _numGroups; g++)
-            {
-                double sumDiff = 0, sumDiffSq = 0;
-                int count = 0;
-                int start = g * _groupSize;
-                for (int d = start; d < start + _groupSize && d < _paramDim; d++)
-                {
-                    double diff = NumOps.ToDouble(adaptedParams[d]) - NumOps.ToDouble(initParams[d]);
-                    sumDiff += diff;
-                    sumDiffSq += diff * diff;
-                    count++;
-                }
-                if (count > 1)
-                {
-                    double mean = sumDiff / count;
-                    groupReg += (sumDiffSq / count - mean * mean);
-                }
-            }
-
-            var totalLoss = NumOps.Add(queryLoss,
-                NumOps.FromDouble(_algoOptions.GroupRegWeight * groupReg));
-
-            losses.Add(totalLoss);
+            // Leaves the adapted parameters on the model for the query gradient below
+            losses.Add(TaskObjective(task, initParams));
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
@@ -164,57 +113,112 @@ public partial class MPTSAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         var initParams = ParamModel.GetParameters();
-        var adaptedParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+        var adaptedParams = AdaptWithPriorities(task, initParams);
+
+        ParamModel.SetParameters(initParams);
+        return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
+    }
+
+    /// <summary>
+    /// The prioritized inner loop: at step k of K every parameter of group g moves by
+    /// lr * sigmoid((progress - (1 - priority_g)) * 10 / decay) * g_d, with progress = k / max(K - 1, 1).
+    /// </summary>
+    private Vector<T> AdaptWithPriorities(IMetaLearningTask<T, TInput, TOutput> task, Vector<T> initParams)
+    {
+        var adaptedParams = initParams.Clone();
+        var priorities = PerParameterPriorities();
+        T slope = NumOps.FromDouble(10.0 / _algoOptions.PriorityDecayRate);
+        T learningRate = NumOps.FromDouble(_algoOptions.InnerLearningRate);
 
         int K = _algoOptions.AdaptationSteps;
         for (int step = 0; step < K; step++)
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            double progress = (double)step / Math.Max(K - 1, 1);
-
-            for (int d = 0; d < _paramDim; d++)
-            {
-                int g = Math.Min(d / _groupSize, _numGroups - 1);
-                double priority = NumOps.ToDouble(_priorityScores[g]);
-                double activation = 1.0 / (1.0 + Math.Exp(-(progress - (1.0 - priority)) * 10.0 / _algoOptions.PriorityDecayRate));
-                adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                    NumOps.FromDouble(_algoOptions.InnerLearningRate * activation * NumOps.ToDouble(grad[d])));
-            }
+            var activation = StepActivation(priorities, slope, step, K);
+            adaptedParams = Engine.Subtract(adaptedParams,
+                Engine.Multiply(Engine.Multiply(activation, grad.GetSubVector(0, _paramDim)), learningRate));
         }
 
-        ParamModel.SetParameters(initParams);
-        return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
+        return adaptedParams;
     }
 
-    private double ComputeMPTSLoss(TaskBatch<T, TInput, TOutput> taskBatch)
+    /// <summary>
+    /// sigmoid((progress - (1 - p_d)) * slope) per parameter, progress = step / max(K - 1, 1): higher priority
+    /// activates earlier. progress - (1 - p) = p + (progress - 1).
+    /// </summary>
+    private Vector<T> StepActivation(Vector<T> priorities, T slope, int step, int K)
     {
-        double totalLoss = 0;
-        var initParams = ParamModel.GetParameters();
-        int K = _algoOptions.AdaptationSteps;
-        foreach (var task in taskBatch.Tasks)
-        {
-            var ap = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) ap[d] = initParams[d];
-            for (int step = 0; step < K; step++)
-            {
-                ParamModel.SetParameters(ap);
-                var g = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                double progress = (double)step / Math.Max(K - 1, 1);
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    int grp = Math.Min(d / _groupSize, _numGroups - 1);
-                    double pr = NumOps.ToDouble(_priorityScores[grp]);
-                    double act = 1.0 / (1.0 + Math.Exp(-(progress - (1.0 - pr)) * 10.0 / _algoOptions.PriorityDecayRate));
-                    ap[d] = NumOps.Subtract(ap[d],
-                        NumOps.FromDouble(_algoOptions.InnerLearningRate * act * NumOps.ToDouble(g[d])));
-                }
-            }
-            ParamModel.SetParameters(ap);
-            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-        }
-        ParamModel.SetParameters(initParams);
-        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
+        T progress = NumOps.FromDouble((double)step / Math.Max(K - 1, 1));
+        var shift = Engine.Add(priorities, Engine.Fill(_paramDim, NumOps.Subtract(progress, NumOps.One)));
+        return Engine.Sigmoid(Engine.Multiply(shift, slope));
     }
+
+    /// <summary>Each parameter's group priority: group g covers [g * groupSize, (g + 1) * groupSize).</summary>
+    private Vector<T> PerParameterPriorities()
+    {
+        var repeated = Engine.TensorBroadcastTo(
+            Tensor<T>.FromVector(_priorityScores, new[] { _numGroups, 1 }), new[] { _numGroups, _groupSize });
+        return Engine.Reshape(repeated, new[] { _numGroups * _groupSize }).ToVector().GetSubVector(0, _paramDim);
+    }
+
+    /// <summary>
+    /// Sum over groups with more than one parameter of the population variance of theta' - theta in the group.
+    /// </summary>
+    private T GroupCoherence(Vector<T> adaptedParams, Vector<T> initParams)
+    {
+        int padded = _numGroups * _groupSize;
+        var diff = Engine.Subtract(adaptedParams.GetSubVector(0, _paramDim), initParams.GetSubVector(0, _paramDim));
+        var present = Engine.Fill(_paramDim, NumOps.One);
+        if (padded > _paramDim)
+        {
+            diff = Vector<T>.Concatenate(diff, new Vector<T>(padded - _paramDim));
+            present = Vector<T>.Concatenate(present, new Vector<T>(padded - _paramDim));
+        }
+
+        var shape = new[] { _numGroups, _groupSize };
+        var rows = Tensor<T>.FromVector(diff, shape);
+        var count = Engine.ReduceSum(Tensor<T>.FromVector(present, shape), new[] { 1 }, keepDims: false);
+        var safeCount = Engine.TensorMax(count, NumOps.One);
+        var mean = Engine.TensorDivide(Engine.ReduceSum(rows, new[] { 1 }, keepDims: false), safeCount);
+        var meanSquare = Engine.TensorDivide(Engine.ReduceSum(Engine.TensorSquare(rows), new[] { 1 }, keepDims: false), safeCount);
+        var variance = Engine.TensorSubtract(meanSquare, Engine.TensorSquare(mean));
+        return Engine.TensorSum(Engine.TensorMultiply(variance, Engine.TensorGreaterThan(count, NumOps.One)));
+    }
+
+    /// <summary>
+    /// One task's trained objective: the query loss after prioritized adaptation plus GroupRegWeight times the
+    /// group coherence of the adaptation. The adapted parameters are left on the model.
+    /// </summary>
+    private T TaskObjective(IMetaLearningTask<T, TInput, TOutput> task, Vector<T> initParams)
+    {
+        var adaptedParams = AdaptWithPriorities(task, initParams);
+
+        ParamModel.SetParameters(adaptedParams);
+        var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
+
+        // Group coherence regularization
+        T groupReg = GroupCoherence(adaptedParams, initParams);
+        return NumOps.Add(queryLoss, NumOps.Multiply(NumOps.FromDouble(_algoOptions.GroupRegWeight), groupReg));
+    }
+
+    /// <summary>
+    /// The batch mean of the trained objective (query loss plus the group regularizer) at the current
+    /// parameters and priorities, restoring the model's parameters. This is what MetaTrain reports and what the
+    /// SPSA priority update must estimate; it used to drop the regularizer, so SPSA tuned the priorities against
+    /// a different objective from the one being trained.
+    /// </summary>
+    internal T ComputeMPTSObjective(TaskBatch<T, TInput, TOutput> taskBatch)
+    {
+        var losses = new List<T>(taskBatch.Tasks.Length);
+        var initParams = ParamModel.GetParameters();
+        foreach (var task in taskBatch.Tasks)
+            losses.Add(TaskObjective(task, initParams));
+        ParamModel.SetParameters(initParams);
+        return ComputeMean(losses);
+    }
+
+    // The SPSA callback contract is a double; the batch mean is reduced in T and converted once.
+    private double ComputeMPTSLoss(TaskBatch<T, TInput, TOutput> taskBatch)
+        => NumOps.ToDouble(ComputeMPTSObjective(taskBatch));
 }

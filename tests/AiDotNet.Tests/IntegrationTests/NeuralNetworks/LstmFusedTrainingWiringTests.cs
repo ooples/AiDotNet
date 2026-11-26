@@ -3,6 +3,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Engines.Compilation;
 using AiDotNet.Tensors.Engines.Optimization;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -21,6 +22,38 @@ namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 [Collection("NonParallelIntegration")]
 public class LstmFusedTrainingWiringTests
 {
+    [Fact]
+    public void LastHiddenInferenceMatchesTheFullSequenceAcrossChangingInputsAndWeights()
+    {
+        var layer = new LSTMLayer<float>(hiddenSize: 8);
+        var last = new SequenceTokenSliceLayer<float>(SequenceTokenSliceLayer<float>.Position.Last);
+        var first = new SequenceTokenSliceLayer<float>(SequenceTokenSliceLayer<float>.Position.First);
+        layer.SetTrainingMode(false);
+        last.SetTrainingMode(false);
+        first.SetTrainingMode(false);
+        var input = Rand([2, 5, 4], 17);
+        var full = layer.Forward(input);
+        var expected = last.Forward(full);
+        _ = first.Forward(full);
+        Assert.True(last.CanConsumeLastHiddenState);
+        Assert.False(first.CanConsumeLastHiddenState);
+        Assert.True(layer.TryForwardLastHiddenState(input, out var actual));
+        Assert.Equal(expected.Shape.ToArray(), actual.Shape.ToArray());
+        Assert.InRange(Mse(actual, expected), 0f, 1e-12f);
+
+        var changed = Rand([2, 5, 4], 18);
+        var weights = layer.GetParameters();
+        weights[0] += .25f;
+        layer.SetParameters(weights);
+        var updated = last.Forward(layer.Forward(changed));
+        Assert.True(layer.TryForwardLastHiddenState(changed, out var updatedLast));
+        Assert.InRange(Mse(updatedLast, updated), 0f, 1e-12f);
+        Assert.True(Mse(updatedLast, actual) > 1e-8f);
+
+        layer.SetTrainingMode(true);
+        Assert.False(layer.TryForwardLastHiddenState(input, out _));
+    }
+
     private static Tensor<float> Rand(int[] shape, int seed, float scale = 0.4f)
     {
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
@@ -111,9 +144,8 @@ public class LstmFusedTrainingWiringTests
     }
 
     /// <summary>
-    /// Compiled CPU training records the fused LSTM node into the plan (instead of the per-timestep loop). One training
-    /// step through that plan must update every parameter the way the eager tape step does: same starting weights, same
-    /// data, compilation on vs off.
+    /// Replays compiled LSTM training on changing batches and compares the parameter updates
+    /// to eager training from the same initial state.
     /// </summary>
     [Fact]
     public void CompiledTrainingStep_MatchesEagerStep()
@@ -138,13 +170,27 @@ public class LstmFusedTrainingWiringTests
         eager.SetParameters(compiled.GetParameters());
         var start = compiled.GetParameters().ToArray();
 
+        // Reference eager gradient at the starting weights (a third, untouched copy), used below to size the
+        // per-element tolerance of Adam's first step.
+        var reference = Build();
+        reference.Predict(input);
+        reference.SetParameters(compiled.GetParameters());
+        var grad = reference.ComputeGradients(input, target).ToArray();
+        double gradScale = 0;
+        foreach (var gv in grad) gradScale = System.Math.Max(gradScale, System.Math.Abs(gv));
+
         var saved = TensorCodecOptions.Current;
         try
         {
-            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
-            compiled.Train(input, target);
-            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = false });
-            eager.Train(input, target);
+            for (int step = 0; step < 3; step++)
+            {
+                var batch = step == 0 ? input : Rand(new[] { seq, features }, 21 + 2 * step, scale: 1f);
+                var labels = step == 0 ? target : Rand(new[] { seq, outputs }, 22 + 2 * step, scale: 1f);
+                TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+                compiled.Train(batch, labels);
+                TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = false });
+                eager.Train(batch, labels);
+            }
         }
         finally
         {
@@ -154,18 +200,59 @@ public class LstmFusedTrainingWiringTests
         var a = compiled.GetParameters().ToArray();
         var b = eager.GetParameters().ToArray();
         Assert.Equal(b.Length, a.Length);
-        double dot = 0, na = 0, nb = 0, maxAbs = 0, maxMag = 0;
+        Assert.Equal(grad.Length, a.Length);
+        double dot = 0, na = 0, nb = 0, maxMag = 0;
         for (int i = 0; i < a.Length; i++)
         {
             double da = a[i] - start[i], db = b[i] - start[i];
             dot += da * db; na += da * da; nb += db * db;
-            maxAbs = System.Math.Max(maxAbs, System.Math.Abs(a[i] - b[i]));
             maxMag = System.Math.Max(maxMag, System.Math.Abs(db));
         }
         Assert.True(nb > 0, "the eager step changed no parameter");
         double cos = dot / System.Math.Sqrt(na * nb);
         Assert.True(cos > 0.9999, $"compiled and eager updates point different ways: cos {cos:R}");
-        Assert.True(maxAbs <= 1e-3 * maxMag + 1e-7, $"compiled vs eager parameters differ by {maxAbs:E3} (largest update {maxMag:E3})");
+
+        // The default optimizer is Adam (lr 1e-3, eps 1e-8); its bias-corrected first step is u = -lr * g / (|g| + eps),
+        // so du/dg = lr * eps / (|g| + eps)^2. That is ~0 for ordinary gradients (u saturates at lr) but ~1e3 for a
+        // gradient that cancels to ~1e-7: here one weight's gradient is ~9e-8 against a largest gradient of ~0.1, i.e.
+        // a few float32 ulps of the gradient scale. The compiled plan and the eager tape run different kernels (fused
+        // vs per-op, different reduction order / SIMD width per CPU ISA), so their gradients agree only to float32
+        // rounding of the gradient scale, and Adam amplifies that rounding on such a near-zero gradient into an update
+        // gap of up to ~2e-6 (seen on an AVX-512 CI runner; 3e-8 on an AVX2 laptop). So each element gets the fixed
+        // 1e-3 relative bound plus the Adam-propagated float32 gradient noise floor, 1e-6 * max|g| (~17 ulps of the
+        // gradient scale): a real wiring bug (wrong/missing gradient, step skipped, clip applied on one side only)
+        // still moves saturated elements by O(lr) and fails.
+        const double lr = 1e-3, adamEps = 1e-8;
+        double gradNoise = 1e-6 * gradScale;
+        for (int i = 0; i < a.Length; i++)
+        {
+            double diff = System.Math.Abs(a[i] - b[i]);
+            double gi = System.Math.Abs(grad[i]) + adamEps;
+            double tol = 1e-3 * maxMag + 1e-7 + lr * adamEps / (gi * gi) * gradNoise;
+            Assert.True(diff <= tol,
+                $"compiled vs eager parameter {i} differ by {diff:E3} > {tol:E3} (largest update {maxMag:E3}, |g| {grad[i]:E3}, max|g| {gradScale:E3})");
+        }
+    }
+
+    [Fact]
+    public void StatelessCompiledTraining_HasConstantPlanSizeAcrossSequenceLengths()
+    {
+        var engine = new CpuEngine();
+        var layer = new LSTMLayer<float>(6, (AiDotNet.Interfaces.IActivationFunction<float>?)null);
+        layer.SetTrainingMode(true);
+        layer.Forward(Rand(new[] { 2, 3, 4 }, 31));
+
+        (int Forward, int Backward) PlanSize(int steps)
+        {
+            var input = Rand(new[] { 2, steps, 4 }, steps);
+            using var scope = GraphMode.EnableTraining(new[] { input });
+            var loss = engine.ReduceSum(layer.Forward(input), null, false);
+            Assert.Null(scope.HostReadOp);
+            using var plan = scope.CompileTraining(new[] { input }, loss);
+            return (plan.ForwardStepCount, plan.BackwardStepCount);
+        }
+
+        Assert.Equal(PlanSize(3), PlanSize(17));
     }
 
     /// <summary>

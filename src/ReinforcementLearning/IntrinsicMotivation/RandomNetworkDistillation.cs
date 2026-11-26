@@ -156,9 +156,7 @@ public sealed class RandomNetworkDistillation<T> : IIntrinsicRewardModule<T>
 
     private double[] ToDoubles(Vector<T> v)
     {
-        var d = new double[v.Length];
-        for (int i = 0; i < v.Length; i++) d[i] = _numOps.ToDouble(v[i]);
-        return d;
+        return v.Length == 0 ? System.Array.Empty<double>() : v.AsTensor().Cast<double>().ToVector().ToArray();
     }
 
     private double[,] RandomMatrix(int rows, int cols)

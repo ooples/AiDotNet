@@ -25,7 +25,7 @@ shard:
   - name: Unit - 03a Diffusion Core/Schedulers/Encoding
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
-    filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~UnitTests.Encoding|FullyQualifiedName~UnitTests.Diffusion.AudioProcessingTests|FullyQualifiedName~UnitTests.Diffusion.MemoryManagementTests|FullyQualifiedName~UnitTests.Diffusion.SchedulerTests|FullyQualifiedName~UnitTests.Diffusion.Conditioning|FullyQualifiedName~UnitTests.Diffusion.Schedulers|FullyQualifiedName~UnitTests.Diffusion.LatentDiffusionTrainingSampleTests.)'
+    filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~UnitTests.Encoding|FullyQualifiedName~UnitTests.Diffusion.AudioProcessingTests|FullyQualifiedName~UnitTests.Diffusion.MemoryManagementTests|FullyQualifiedName~UnitTests.Diffusion.SchedulerTests|FullyQualifiedName~UnitTests.Diffusion.Conditioning|FullyQualifiedName~UnitTests.Diffusion.Schedulers|FullyQualifiedName~UnitTests.Diffusion.LatentDiffusionTrainingSampleTests.|FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.MmditReplayTests.)'
   - name: Unit - 03b1 Diffusion Preprocessors
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -168,7 +168,7 @@ shard:
   - name: Unit - 08d NN-Adapters/Other
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
-    filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests|FullyQualifiedName~RBFLayerInitializationTests)'
+    filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests|FullyQualifiedName~RBFLayerInitializationTests|FullyQualifiedName~Elementwise02bNumericalRegressionTests|FullyQualifiedName~MixtureOfExpertsNoisyGatingTests|FullyQualifiedName~ObliviousDecisionTreeChoiceFunctionTests|FullyQualifiedName~SparseLinearLayerManualGradientTests|FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.DenseFeatureImportanceTests.)'
   # 'Unit - 08e NN-Remaining (catch-all)' removed: it was a duplicate
   # of the ModelFamily NeuralNetworks shards (`A-F` + `G-L` + `M-N` +
   # `O-R` + `S` + `T` + `U-Z`, same ModelFamilyTests.NeuralNetworks scope,
@@ -241,10 +241,6 @@ shard:
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
     filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~AiDotNet.Tests.PromptEngineering'
-  - name: Other - Recovery/Concurrency
-    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-    framework: net10.0
-    filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~AiDotNet.Tests.Recovery|FullyQualifiedName~AiDotNet.Tests.Concurrency)'
   - name: Other - Playground
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -529,12 +525,20 @@ shard:
   # jobs (798 + 759 tests after ParaformerLarge rejoined the PR lane). The filters
   # are gap-free and non-overlapping over the generated P inventory; their union is
   # the original P shard.
-  - name: ModelFamily - Generated Layers N-O
+  # N-O hit the 60-min job timeout with 0 failures (47 N classes + 36 O classes = 83
+  # generated classes). Alongside OuteTTSSamplingSession candidate-restricted sampling and
+  # bounded OpenVoice/OpenVoiceV2 scaffold iterations, split N-O cleanly into N and O
+  # (~10 min and ~15 min wall-clock). Gap-free + non-overlapping: union == N-O.
+  - name: ModelFamily - Generated Layers N
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
     filter: >-
-      FullyQualifiedName~ModelFamilyTests.Generated&
-      (FullyQualifiedName~Generated.N|FullyQualifiedName~Generated.O)
+      FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.N
+  - name: ModelFamily - Generated Layers O
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: >-
+      FullyQualifiedName~ModelFamilyTests.Generated&FullyQualifiedName~Generated.O
   - name: ModelFamily - Generated Layers P A,C,I,L,N,P
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1478,6 +1482,8 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.Video.ShiftNetPaperTests.|
       FullyQualifiedName~AiDotNet.Tests.Video.UDVDPaperTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.ConvolutionalLayerGroupsTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.Elementwise02RegressionTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.ReservoirSpectralRadiusTests.|
       FullyQualifiedName~AiDotNet.Tests.Helpers.ZlibDeflateTests.|
       FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Lfm2ReferenceTests.|
       FullyQualifiedName~AiDotNet.Tests.Video.FloRNNPaperTests.|
@@ -1549,6 +1555,10 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.LayerGradientPublishReuseTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.VariationalAutoencoderLatentTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.ArchitectureSharingGuardTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.OwnedDerivedTensorCacheTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.UnmatchedGradientPublicationTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.DerivedTensorCacheStorageReplacementTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.GraphAttentionSparseKernelTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.AudioVisualCorrespondenceExecutionTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.BertEmbeddingLayerTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.RestrictedBackwardSourcesParityTests.|
@@ -1565,6 +1575,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.ExtraBranchFusedCollectionTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.FusedInferenceParityTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.FusedTrainingArenaBoundednessTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.GANs.ConsumingDetachedForwardTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.GANs.GanAdversarialStepTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Generation.AutoregressiveDecoderTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.GenomeActivationCollectionTests.|
@@ -1583,6 +1594,8 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.DenseLayerRegistrationSwapTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.DuelingCombinationLayerDistributionalTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.MultiHeadAttentionDropoutTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SpatialPoolerCompiledInferenceTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SpatialPoolerNormalizationTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.TransformerBlockAttentionConfigurationRoundTripTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.DenseLayerInitializationRollbackTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.TransformerDecoderLayerDecoderOnlyTests.|
@@ -1601,11 +1614,15 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.NonFiniteAndStatefulComparisonRegressionTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.QkvTransformHookTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.ShapeOracleIssue1370Tests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.GatedDeltaNetPaperRuleTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.HybridBlockSchedulerTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.IncrementalStepGpuTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.IncrementalStepTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.Mamba2BlockSSDEquivalenceTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.MambaBlockTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.SsmLateSeedInitializationTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.MambaLanguageModelTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.MultiLatentAttentionLayerCausalityTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.RealGatedLinearRecurrenceLayerTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.RWKV7LanguageModelTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.RWKVLayerTests.|
@@ -1655,9 +1672,21 @@ shard:
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.TrainerTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.TrainingRecipeIntegrationTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.TransformerTrainingPipelineTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.ClosureObjectiveRecordedShapeTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.NestedFusedStepArenaTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.DisabledGroupedClippingFusedTests.|
       FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.Layers.GraphLayerTests.|
       FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.Layers.TransformerShapeCompatibilityTests.|
-      FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.NeuralNetworkBaseResolveShapesTests.)
+      FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.NeuralNetworkBaseResolveShapesTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.NODEEntmaxTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.NeuralNetworkSweepAdversarialTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.RetrievalModuleTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TabNetSparsityLossTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TabPFNContextTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TabRRetrievalTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TabularFeatureImportanceTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TabularPaperDefaultsTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.NeuralNetworkSweepReferenceTests.)
 
   - name: Unassigned - 02
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
@@ -1699,6 +1728,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.Generators.GeneratedVisionFixtureContractTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.ModelMetadataValidationGeneratorTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.PaperOptimizerAnalyzerTests.|
+      FullyQualifiedName~AiDotNet.Tests.Generators.HamiltonianOptionObservationTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.OptionsFidelityReadGraphTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.ParameterAutomationAnalyzerTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.ShapeDeclarationValidationGeneratorTests.|
@@ -1716,7 +1746,9 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.MergedPRBugFixTests.|
       FullyQualifiedName~AiDotNet.Tests.MetaLearning.iMAMLAlgorithmTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Base.LayerTestBaseHarnessRegressionTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Base.MedicalSam2OptionControlTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Base.NaturalSpeechOptionControlTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Base.Pix2StructOptionControlTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Base.LossCompatibleTargetProjectionTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Diffusion.MGIETests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.MetaLearning.AdaptedMetaModelTests.|
@@ -1749,6 +1781,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.Performance.Phase2GateTests.|
       FullyQualifiedName~AiDotNet.Tests.Pruning.PruningStrategyTests.|
       FullyQualifiedName~AiDotNet.Tests.SelfSupervisedLearning.ContrastiveObjectiveGradientTests.|
+      FullyQualifiedName~AiDotNet.Tests.SelfSupervisedLearning.SelfSupervisedLearningMetricsTests.|
       FullyQualifiedName~AiDotNet.Tests.SelfSupervisedLearning.SelfSupervisedTrainingContractTests.|
       FullyQualifiedName~AiDotNet.Tests.Diffusion.Causal3DVAEReferenceTests.|
       FullyQualifiedName~AiDotNet.Tests.Diffusion.AudioVAEReferenceTests.|
@@ -1759,6 +1792,8 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.DiTNoisePredictorResidentCloneTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.MVDreamCloneTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.NoisePredictorWeightStreamingTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.SDXLAddEmbeddingTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.ThreeDGeometryTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.TimestepDependentLoraTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.StyleTransfer.UniVSTComponentTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.VaeDecodeAliasingTests.|
@@ -1797,6 +1832,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.RotaryPositionalEncodingLayerTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.ExtendedLSTMLayerTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.GatedDeltaNetLayerTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.GatedDeltaNetPaperRuleTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.GatedLinearAttentionLayerTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.Mamba2BlockTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.Rwkv7ValueResidualGradientTests.|
@@ -1850,6 +1886,11 @@ shard:
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedLrScheduleMappingTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Regularization.RegularizationContractTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.SyntheticData.PrivBayesDifferentialPrivacyTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.SyntheticData.AIMPaperFidelityTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.SyntheticData.PrivBayesPaperFidelityTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Elementwise03bNumericalRegressionTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.EntmaxAttentionTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.GANDALFTrainingTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.Elementwise02bNumericalRegressionTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.MixtureOfExpertsNoisyGatingTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.ObliviousDecisionTreeChoiceFunctionTests.|
@@ -1860,7 +1901,15 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.Generators.ModelDefectPaperKeyTests.|
       FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.TransformerDecoderCausalityTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.DiffusionBatchedNoisePredictionTests.|
-      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.BlipImageGroundingTests.)
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.BlipImageGroundingTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.DreamFusionSdsStepTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Elementwise01NumericalRegressionTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.GraphLayerTapeGradientTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.RestrictedBackwardSourcesParityTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.CustomObjectiveFusedRoutingTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.PreActivationCacheTraceTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedLrScheduleEverySchedulerTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedScheduledMomentumParityTests.)
   # =====================================================================
   # TEXT-TO-SPEECH PAPER TESTS - the per-model paper-fidelity suites (AiDotNet.Tests.TextToSpeech.*).
   # =====================================================================
@@ -1870,6 +1919,7 @@ shard:
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
     filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~AiDotNet.Tests.TextToSpeech.'
+    heavy: true
   # =====================================================================
   # REFERENCE PARITY TESTS - vision and vision-language networks checked against their official code
   # (AiDotNet.Tests.ComputerVision.*, AiDotNet.Tests.VisionLanguage.*), and the PR #2294 additions

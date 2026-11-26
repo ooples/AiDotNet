@@ -236,11 +236,13 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         var domain = GetInputDomain(new[] { count });
         int range = Math.Max(1, domain.MaxExclusive - domain.MinInclusive);
         double space = domain.IsResolved ? domain.MinInclusive + ' ' % range : ' ';
+        var isSpace = Engine.TensorLessThan(Engine.TensorAbs(Engine.TensorAddScalar(Engine.Reshape(tokens, new[] { count }),
+            NumOps.FromDouble(-space))), NumOps.FromDouble(0.5)).Cast<int>().ToArray();
         var words = new List<int>();
         int run = 0;
         for (int i = 0; i < count; i++)
         {
-            if (Math.Abs(NumOps.ToDouble(tokens[i]) - space) < 0.5)
+            if (isSpace[i] != 0)
             {
                 if (run > 0) words.Add(run);
                 words.Add(1);
@@ -255,11 +257,11 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     // [words, tokens] with 1 where the token belongs to the word.
     private Tensor<T> Membership(int[] words, int tokens)
     {
-        var m = new Tensor<T>(new[] { words.Length, tokens });
-        int p = 0;
-        for (int w = 0; w < words.Length; w++)
-            for (int i = 0; i < words[w]; i++, p++) m[w, p] = NumOps.One;
-        return m;
+        int covered = words.Sum();
+        if (covered > tokens)
+            throw new ArgumentException($"The words cover {covered} tokens but there are {tokens}.", nameof(words));
+        var m = DurationAlignment(words);
+        return covered == tokens ? m : Engine.TensorConcatenate(new[] { m, new Tensor<T>(new[] { words.Length, tokens - covered }) }, 1);
     }
 
     private (Tensor<T> Phonemes, Tensor<T> Words) Encode(Tensor<T> tokens, int[] words)
@@ -269,10 +271,8 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         foreach (var block in _phonemeBlocks) x = block.Forward(x);
 
         // Word-level pooling (Fig. 4d): the mean of each word's phoneme states.
-        var pooling = Membership(words, tokens.Length);
-        for (int w = 0; w < words.Length; w++)
-            for (int p = 0; p < tokens.Length; p++)
-                if (NumOps.ToDouble(pooling[w, p]) > 0) pooling[w, p] = NumOps.FromDouble(1.0 / words[w]);
+        var wordSizes = new Tensor<int>((int[])words.Clone(), new[] { words.Length, 1 }).Cast<T>();
+        var pooling = Engine.TensorDivide(Membership(words, tokens.Length), Engine.TensorTile(wordSizes, new[] { 1, tokens.Length }));
         var y = _wordPrenet!.Forward(Engine.TensorMatMul(pooling, x));
         foreach (var block in _wordBlocks) y = block.Forward(y);
         return (x, y);
@@ -282,7 +282,7 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     /// gradient scaled by <see cref="PortaSpeechOptions.DurationPredictorGradientScale"/>.</summary>
     private Tensor<T> PredictWordDurations(Tensor<T> phonemes, int[] words)
     {
-        var detached = new Tensor<T>(phonemes._shape, phonemes.ToVector());
+        var detached = DetachTensor(phonemes);
         var input = Engine.TensorAdd(detached, Engine.TensorMultiplyScalar(Engine.TensorSubtract(phonemes, detached),
             NumOps.FromDouble(_options.DurationPredictorGradientScale)));
         var perPhoneme = Engine.Softplus(Engine.Reshape(_durationPredictor!.Forward(input), new[] { phonemes.Shape[0], 1 }));
@@ -297,19 +297,29 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     private Tensor<T> MixtureAlign(Tensor<T> phonemes, Tensor<T> words, int[] wordLengths, int[] wordFrames)
     {
         int h = _options.HiddenDim, frames = wordFrames.Sum(), tokens = phonemes.Shape[0], heads = _options.AttentionHeads;
-        var frameFraction = new Tensor<T>(new[] { frames, 1 });
-        var tokenFraction = new Tensor<T>(new[] { tokens, 1 });
+        var frameStep = new int[frames];
+        var frameSpan = new int[frames];
+        var tokenStep = new int[tokens];
+        var tokenSpan = new int[tokens];
         var frameWord = new int[frames];
         var tokenWord = new int[tokens];
         for (int w = 0, f = 0, p = 0; w < wordLengths.Length; w++)
         {
-            for (int j = 0; j < wordFrames[w]; j++, f++) { frameFraction[f, 0] = NumOps.FromDouble((double)j / wordFrames[w]); frameWord[f] = w; }
-            for (int i = 0; i < wordLengths[w]; i++, p++) { tokenFraction[p, 0] = NumOps.FromDouble((double)i / wordLengths[w]); tokenWord[p] = w; }
+            for (int j = 0; j < wordFrames[w]; j++, f++) { frameStep[f] = j; frameSpan[f] = wordFrames[w]; frameWord[f] = w; }
+            for (int i = 0; i < wordLengths[w]; i++, p++) { tokenStep[p] = i; tokenSpan[p] = wordLengths[w]; tokenWord[p] = w; }
         }
-        var mask = new Tensor<T>(new[] { frames, tokens });
-        for (int f = 0; f < frames; f++)
-            for (int p = 0; p < tokens; p++)
-                if (frameWord[f] != tokenWord[p]) mask[f, p] = NumOps.FromDouble(-1e9);
+        // (j / T_w) and (i / L_w) as T.
+        var frameFraction = Engine.TensorDivide(new Tensor<int>(frameStep, new[] { frames, 1 }).Cast<T>(),
+            new Tensor<int>(frameSpan, new[] { frames, 1 }).Cast<T>());
+        var tokenFraction = Engine.TensorDivide(new Tensor<int>(tokenStep, new[] { tokens, 1 }).Cast<T>(),
+            new Tensor<int>(tokenSpan, new[] { tokens, 1 }).Cast<T>());
+        // -1e9 where a frame and a phoneme belong to different words: same-word compares the two word ids, frames × tokens
+        // comparisons rather than a product of word one-hots that also scales with the word count.
+        var sameWord = Engine.TensorEquals(
+            Engine.TensorTile(new Tensor<int>(frameWord, new[] { frames, 1 }), new[] { 1, tokens }),
+            Engine.TensorTile(new Tensor<int>(tokenWord, new[] { 1, tokens }), new[] { frames, 1 })).Cast<T>();
+        var mask = Engine.TensorWhere(sameWord, new Tensor<T>(new[] { frames, tokens }),
+            Tensor<T>.CreateDefault(new[] { frames, tokens }, NumOps.FromDouble(-1e9)));
 
         var query = Engine.TensorAdd(LengthRegulator.Expand(words, wordFrames), _queryPosition!.Forward(frameFraction));
         var keyValue = Engine.TensorAdd(phonemes, _keyValuePosition!.Forward(tokenFraction));
@@ -380,17 +390,8 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         int batch = input.Shape[0], count = input.Shape[1];
         var outputs = new List<Tensor<T>>(batch);
         for (int b = 0; b < batch; b++)
-        {
-            var row = new Tensor<T>(new[] { count });
-            for (int i = 0; i < count; i++) row[i] = input[b, i];
-            outputs.Add(SynthesizeOne(row));
-        }
-        int longest = outputs.Max(o => o.Shape[0]);
-        var result = new Tensor<T>(new[] { batch, longest, _options.MelChannels });
-        for (int b = 0; b < batch; b++)
-            for (int f = 0; f < outputs[b].Shape[0]; f++)
-                for (int m = 0; m < _options.MelChannels; m++) result[b, f, m] = outputs[b][f, m];
-        return result;
+            outputs.Add(SynthesizeOne(BatchRow(input, b)));
+        return PadAndStack(outputs, _options.MelChannels);
     }
 
     private Tensor<T> SynthesizeOne(Tensor<T> tokens)
@@ -399,9 +400,7 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         var words = ResolveWords(tokens, null);
         var (phonemes, wordStates) = Encode(tokens, words);
         var predicted = PredictWordDurations(phonemes, words);
-        var wordFrames = new int[words.Length];
-        for (int w = 0; w < words.Length; w++)
-            wordFrames[w] = (int)Math.Round(NumOps.ToDouble(predicted[w]) * _options.DurationScale, MidpointRounding.ToEven);
+        var wordFrames = RoundedIds(Engine.TensorMultiplyScalar(predicted, NumOps.FromDouble(_options.DurationScale)));
         wordFrames = ClipFrames(wordFrames);
         int frames = wordFrames.Sum();
 
@@ -520,8 +519,7 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         if (frames > full)
             throw new ArgumentException($"PortaSpeech needs at least {frames} frames (its generator stride); got {full}.", nameof(sample));
         var mel = Engine.TensorSlice(targets.Mel, new[] { 0, 0 }, new[] { frames, _options.MelChannels });
-        var target = new Tensor<T>(new[] { words.Length });
-        for (int w = 0; w < words.Length; w++) target[w] = NumOps.FromDouble(Math.Log(1 + wordFrames[w]));
+        var target = Engine.TensorLog(Engine.TensorAddScalar(IdTensor(wordFrames), NumOps.One));
         var noise = Gaussian(new[] { 1, _options.ProsodyDim, frames / _options.GeneratorStride }, random, 1.0);
         var phase = CurrentPhase;
         bool klActive = GeneratorUpdates >= _options.KlStartUpdates;
@@ -540,7 +538,7 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
                     var (latent, _) = _generator!.Encode(melChannelsFirst, _generator.SqueezeCondition(lingustic), noise);
                     var coarse = _generator.Decode(latent, lingustic);
                     var joined = Engine.TensorConcatenate(new[] { coarse, lingustic }, 1);
-                    condition = new Tensor<T>(joined._shape, joined.ToVector());
+                    condition = DetachTensor(joined);
                 }
                 return _postNet!.NegativeLogLikelihood(melChannelsFirst, condition);
             }
@@ -554,7 +552,7 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
             var (z, kl) = _generator!.Encode(melChannelsFirst, _generator.SqueezeCondition(linguistic), noise);
             var reconstruction = _generator.Decode(z, linguistic);
             var l1 = Engine.ReduceMean(Engine.TensorAbs(Engine.TensorSubtract(reconstruction, melChannelsFirst)), new[] { 0, 1, 2 }, keepDims: false);
-            var klTerm = klActive ? kl : new Tensor<T>(kl._shape, kl.ToVector());
+            var klTerm = klActive ? kl : DetachTensor(kl);
             return Engine.TensorAdd(Engine.TensorAdd(durationLoss, l1), klTerm);
         }
 

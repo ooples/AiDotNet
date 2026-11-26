@@ -92,7 +92,7 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
     /// improvement and make coaching adjustments.
     /// </para>
     /// </remarks>
-    private List<T> _generatorLosses = new List<T>();
+    private GeneratorLossHistory _generatorLosses = new GeneratorLossHistory();
 
     /// <summary>
     /// Gets the generator network that creates synthetic data.
@@ -305,14 +305,115 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
     private T _lastFeatureMatchingLoss;
 
     /// <summary>
-    /// Stores the last discriminator loss for diagnostics.
+    /// The discriminator loss of the last GAN iteration, for diagnostics. The compiled step keeps its loss on the
+    /// device, and reading it every step made the host wait for the device to finish that step before it could prepare
+    /// the next one; so the step's loss is held as an unread copy (<see cref="_discriminatorLossCopy"/>) and read when
+    /// asked for. A copy, not the discriminator's current loss: a discriminator update made outside this network's
+    /// <c>Train</c> must not be reported as this iteration's loss.
     /// </summary>
-    private T _lastDiscriminatorLoss;
+    private T _lastDiscriminatorLoss
+    {
+        get
+        {
+            if (_discriminatorLossCopy is { } copy)
+            {
+                _discriminatorLossCopy = null;
+                _discriminatorLossValue = copy.Length > 0 ? copy[0] : NumOps.Zero;
+                copy.Dispose();
+            }
+            return _discriminatorLossValue;
+        }
+        set
+        {
+            _discriminatorLossCopy?.Dispose();
+            _discriminatorLossCopy = null;
+            _discriminatorLossValue = value;
+        }
+    }
+
+    private T _discriminatorLossValue;
+    private Tensor<T>? _discriminatorLossCopy;
 
     /// <summary>
-    /// Stores the last generator loss for diagnostics.
+    /// The last generator loss, for diagnostics. A compiled generator step leaves it on the device
+    /// (<see cref="_pendingGeneratorLoss"/>) until something asks for it.
     /// </summary>
-    private T _lastGeneratorLoss;
+    private T _lastGeneratorLoss
+    {
+        get
+        {
+            if (_pendingGeneratorLoss is { } pending)
+            {
+                _generatorLossValue = pending.Length > 0 ? pending[0] : NumOps.Zero;
+                _pendingGeneratorLoss = null;
+            }
+            return _generatorLossValue;
+        }
+        set
+        {
+            _generatorLossValue = value;
+            _pendingGeneratorLoss = null;
+        }
+    }
+
+    private T _generatorLossValue;
+
+    // The compiled generator step's loss tensor: the plan reuses it every step, so it always holds the latest loss.
+    private Tensor<T>? _pendingGeneratorLoss;
+
+    /// <summary>
+    /// The last 100 generator losses. A step's loss is a device tensor the plan overwrites on the next step, so each
+    /// one is copied on the device into a one-element snapshot and read on the host only when the history is.
+    /// </summary>
+    private sealed class GeneratorLossHistory
+    {
+        private const int Capacity = 100;
+        private readonly List<Tensor<T>> _snapshots = new();
+        private readonly List<T?> _values = new();
+        private readonly Stack<Tensor<T>> _free = new();
+
+        public int Count => _values.Count;
+
+        public void Add(T value) => Push(null, value);
+
+        public void AddDeferred(IEngine engine, Tensor<T> loss)
+        {
+            var snapshot = _free.Count > 0 ? _free.Pop() : new Tensor<T>(new[] { 1 });
+            engine.TensorCopy(loss.Reshape(new[] { 1 }), snapshot);
+            Push(snapshot, default);
+        }
+
+        private void Push(Tensor<T>? snapshot, T? value)
+        {
+            _snapshots.Add(snapshot!);
+            _values.Add(value);
+            if (_values.Count > Capacity)
+            {
+                if (_snapshots[0] is { } evicted) _free.Push(evicted);
+                _snapshots.RemoveAt(0);
+                _values.RemoveAt(0);
+            }
+        }
+
+        public T this[int index]
+        {
+            get
+            {
+                if (_snapshots[index] is { } snapshot)
+                {
+                    _values[index] = snapshot[0];
+                    _snapshots[index] = null!;
+                    _free.Push(snapshot);
+                }
+                return _values[index]!;
+            }
+        }
+
+        public IEnumerable<T> Skip(int count)
+        {
+            for (int i = Math.Max(0, count); i < Count; i++) yield return this[i];
+        }
+    }
 
     /// <summary>
     /// Gets or sets whether to use auxiliary losses (gradient penalty, feature matching) during training.
@@ -427,11 +528,11 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         AuxiliaryLossWeight = NumOps.FromDouble(10.0);
         _lastGradientPenalty = NumOps.Zero;
         _lastFeatureMatchingLoss = NumOps.Zero;
-        _lastDiscriminatorLoss = NumOps.Zero;
-        _lastGeneratorLoss = NumOps.Zero;
+        _discriminatorLossValue = NumOps.Zero;
+        _generatorLossValue = NumOps.Zero;
 
         // Initialize tracking collections
-        _generatorLosses = new List<T>();
+        _generatorLosses = new GeneratorLossHistory();
         // Use each architecture's own InputType for its wrapper. Sharing one
         // `inputType` across both (e.g., ThreeDimensional for DCGAN) wraps
         // the 1D-latent generator in a CNN whose pre-Forward shape walk
@@ -460,15 +561,14 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         Discriminator = CreateNetworkForInputType(discriminatorArchitecture,
             discriminatorArchitecture.InputType, lossFunction: lossFunction);
 
-        // Generator and discriminator are subgraphs of one adversarial update,
-        // not independently-trained top-level models. The GAN keeps the generator
-        // tape open across the discriminator step and freezes/reuses the
-        // discriminator for the generator objective. A standalone fused optimizer
-        // trace on either child cannot represent that parent-owned state transition;
-        // use an explicit graph break (the same contract torch.compile applies to
-        // dynamic/stateful regions) and let the eager nested tapes compose safely.
+        // The generator is a subgraph of the adversarial generator update (TrainCustomTapeStep runs the frozen
+        // discriminator on its tape), so it never trains standalone. The discriminator update IS a standalone
+        // supervised step: its fake batch comes from a detached generator forward that records nothing (#1390), so
+        // Discriminator.Train sees only concat(real, fake) and labels, which its fused compiled session handles. It
+        // used to be opted out too, from when the generator tape stayed open across the discriminator step; that
+        // kept every discriminator update on the eager tape, with host syncs for gradient accumulation and the batch
+        // norm running statistics (the larger share of a DCGAN step on CUDA).
         Generator.DisableStandaloneFusedTraining();
-        Discriminator.DisableStandaloneFusedTraining();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 
         // Initialize optimizers (default to GAN-standard Adam if not provided). Derived GANs can
@@ -640,9 +740,9 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
 
         // Convert to list for statistical calculations
         var scoresList = new List<double>(sampleSize);
-        for (int i = 0; i < sampleSize; i++)
+        if (sampleSize > 0)
         {
-            scoresList.Add(Convert.ToDouble(discriminatorScores[i, 0]));
+            scoresList.AddRange(Engine.TensorSlice(discriminatorScores, [0, 0], [sampleSize, 1]).Cast<double>().ToVector().ToArray());
         }
 
         // Calculate metrics
@@ -830,6 +930,46 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
     }
 
     /// <summary>
+    /// One discriminator step on <c>[real; fake]</c> labelled <c>[1; 0]</c>.
+    /// </summary>
+    /// <remarks>
+    /// Train the discriminator on real and fake samples in a SINGLE
+    /// forward+backward+optimizer-step instead of two sequential Train
+    /// calls. The BCE loss over a concatenated [real; fake] batch with
+    /// labels [1; 0] is mathematically equivalent to the average of the
+    /// two separate-step losses, but at half the disc compute per
+    /// iteration (one tape, one forward, one backward, one optimizer
+    /// step instead of two of each).
+    /// Secondary effect: BN now sees batch=2 instead of batch=1, so the
+    /// training-mode forward goes through the actual Engine.BatchNorm
+    /// path (computes real batch stats and updates running mean/variance)
+    /// instead of falling through the batch=1 inference fallback that
+    /// leaves running stats at defaults forever. That fixes a latent
+    /// bug where DCGAN's BN layers never accumulated useful running
+    /// statistics during training. (Pre-fix the batch=1 routing was the
+    /// only safe option because variance over one sample is 0 and the
+    /// gradient was pathological; at batch=2 variance is well-defined
+    /// and gradients flow normally per Ioffe and Szegedy 2015.)
+    /// </remarks>
+    /// <param name="insideGeneratorArena">The batch is built in the generator forward's arena
+    /// (<see cref="NeuralNetworkBase{T}.ForwardForTrainingDetached(Tensor{T}, Action{Tensor{T}})"/>): the
+    /// discriminator's step must not allocate what it keeps from that arena.</param>
+    private void TrainDiscriminatorOnCombinedBatch(Tensor<T> realImages, Tensor<T> fakeImages, int batchSize,
+        bool insideGeneratorArena)
+    {
+        var combinedImages = Engine.TensorConcatenate(new[] { realImages, fakeImages }, axis: 0);
+        var combinedLabels = new Tensor<T>(new[] { batchSize * 2, 1 });
+        var lblSpan = combinedLabels.Data.Span;
+        for (int i = 0; i < batchSize; i++) lblSpan[i] = NumOps.One;
+        for (int i = batchSize; i < batchSize * 2; i++) lblSpan[i] = NumOps.Zero;
+        // What the discriminator's step keeps (its loss, its compiled plan's buffers) is its own: no caller's scope may
+        // free it, and the generator forward's arena must not hand its memory back to the pool.
+        using (AiDotNet.Tensors.Engines.TensorScope.Suspend())
+        using (insideGeneratorArena ? AiDotNet.Tensors.Helpers.TensorArena.Suspend() : null)
+            Discriminator.Train(combinedImages, combinedLabels);
+    }
+
+    /// <summary>
     /// Trains both the generator and discriminator using tensor-based operations throughout.
     /// </summary>
     /// <param name="input">The noise input for the generator (for batch training).</param>
@@ -926,48 +1066,48 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         // computes below (same weights, same batch statistics), with the statistics still advancing once per
         // iteration, in that step. That step runs on the generator's fused session, so it needs a forward of its own;
         // sharing one taped forward between the two steps (#1390) kept the generator step eager.
+        //
+        // The fake batch, the concatenated batch and the generator forward's intermediates are dead once the
+        // discriminator step returns: this scope frees their device memory then, as PyTorch frees them at their last
+        // use, instead of leaving them to the garbage collector (which let DCGAN's footprint climb by ~1.5 GB of dead
+        // batches between collections). The discriminator step itself runs with the scope suspended: what it keeps
+        // (its loss, its compiled plan's buffers) is its own.
         var trainableGen = Generator;
-        var fakeImages = trainableGen.ForwardForTrainingDetached(input);
-
-        // Cache real / fake batches only when an auxiliary loss path needs
-        // them. Previously this clone ran unconditionally for UseFeatureMatching;
-        // the WGAN-GP gradient-penalty path silently saw null batches and the
-        // penalty contributed nothing (EnableGradientPenalty looked like a
-        // working toggle but never applied a real penalty signal during
-        // training). Both paths now share the same gated cache.
-        if (UseFeatureMatching || _useGradientPenalty)
+        var dStepScope = AiDotNet.Tensors.Engines.TensorScope.Begin();
+        try
         {
-            _lastRealBatch = expectedOutput.Clone();
-            _lastFakeBatch = fakeImages.Clone();
+            // Cache real / fake batches only when an auxiliary loss path needs
+            // them. Previously this clone ran unconditionally for UseFeatureMatching;
+            // the WGAN-GP gradient-penalty path silently saw null batches and the
+            // penalty contributed nothing (EnableGradientPenalty looked like a
+            // working toggle but never applied a real penalty signal during
+            // training). Both paths now share the same gated cache.
+            if (UseFeatureMatching || _useGradientPenalty)
+            {
+                var fakeImages = trainableGen.ForwardForTrainingDetached(input);
+                _lastRealBatch = dStepScope.Keep(expectedOutput.Clone());
+                _lastFakeBatch = dStepScope.Keep(fakeImages.Clone());
+                TrainDiscriminatorOnCombinedBatch(expectedOutput, fakeImages, batchSize, insideGeneratorArena: false);
+            }
+            else
+            {
+                // Nothing keeps the generated samples past this step, so the step trains on the generator forward's
+                // own output: the combined batch is built in that forward's arena and returned to its pool with it.
+                trainableGen.ForwardForTrainingDetached(input,
+                    fakeImages => TrainDiscriminatorOnCombinedBatch(expectedOutput, fakeImages, batchSize, insideGeneratorArena: true));
+            }
         }
-
-        // === Combined discriminator step ===
-        //
-        // Train the discriminator on real and fake samples in a SINGLE
-        // forward+backward+optimizer-step instead of two sequential Train
-        // calls. The BCE loss over a concatenated [real; fake] batch with
-        // labels [1; 0] is mathematically equivalent to the average of the
-        // two separate-step losses, but at half the disc compute per
-        // iteration (one tape, one forward, one backward, one optimizer
-        // step instead of two of each).
-        //
-        // Secondary effect: BN now sees batch=2 instead of batch=1, so the
-        // training-mode forward goes through the actual Engine.BatchNorm
-        // path (computes real batch stats and updates running mean/variance)
-        // instead of falling through the batch=1 inference fallback that
-        // leaves running stats at defaults forever. That fixes a latent
-        // bug where DCGAN's BN layers never accumulated useful running
-        // statistics during training. (Pre-fix the batch=1 routing was the
-        // only safe option because variance over one sample is 0 and the
-        // gradient was pathological; at batch=2 variance is well-defined
-        // and gradients flow normally per Ioffe & Szegedy 2015.)
-        var combinedImages = Engine.TensorConcatenate(new[] { expectedOutput, fakeImages }, axis: 0);
-        var combinedLabels = new Tensor<T>(new[] { batchSize * 2, 1 });
-        var lblSpan = combinedLabels.Data.Span;
-        for (int i = 0; i < batchSize; i++) lblSpan[i] = NumOps.One;
-        for (int i = batchSize; i < batchSize * 2; i++) lblSpan[i] = NumOps.Zero;
-        Discriminator.Train(combinedImages, combinedLabels);
-        T combinedDiscLoss = Discriminator.GetLastLoss();
+        finally
+        {
+            dStepScope.Dispose();
+        }
+        // The gradient-penalty step below trains the discriminator again and replaces its last loss, so that path
+        // reads this step's loss now; otherwise it stays on the device until something asks for it.
+        bool readDiscriminatorLossNow = _useGradientPenalty && _lastRealBatch is not null && _lastFakeBatch is not null;
+        T combinedDiscLoss;
+        Tensor<T>? combinedDiscLossCopy = null;
+        if (readDiscriminatorLossNow) combinedDiscLoss = Discriminator.GetLastLoss();
+        else Discriminator.CaptureLastLoss(out combinedDiscLoss, out combinedDiscLossCopy);
 
         // WGAN-GP penalty step (Gulrajani et al. 2017 §4): if gradient
         // penalty is enabled, run a separate discriminator optimizer step
@@ -1016,6 +1156,7 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         // with labels [1; 0] is the average of the per-half losses, so the
         // monitoring value is comparable to the old two-step formulation.
         _lastDiscriminatorLoss = combinedDiscLoss;
+        _discriminatorLossCopy = combinedDiscLossCopy;
 
         // Train generator to fool discriminator (adversarial objective).
         // The non-saturating BCE-with-logits generator term below is
@@ -1040,6 +1181,7 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         var prevDiscriminatorTrainingMode = Discriminator.IsTrainingMode;
         Discriminator.SetTrainingMode(false);
         T generatorLoss;
+        Tensor<T>? generatorLossTensor;
         try
         {
             // One step on the generator's fused session: the generator forward, the frozen discriminator's score and
@@ -1047,39 +1189,44 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
             // the BCE-with-logits discriminator), compiled with the backward and the update. The discriminator is
             // read, never stepped: only the generator's parameters are trained. The target is unused.
             var discriminator = Discriminator;
-            generatorLoss = trainableGen.TrainCustomTapeStep(
+            generatorLossTensor = trainableGen.TrainCustomTapeStepDeferred(
                 input,
                 GeneratorStepTarget,
                 z => discriminator.ForwardFrozenOnTape(trainableGen.ForwardForTraining(z)),
                 (discScore, _) => Engine.ReduceMean(
                     Engine.Softplus(Engine.TensorNegate(discScore)),
                     Enumerable.Range(0, discScore.Shape.Length).ToArray(),
-                    keepDims: false));        }
+                    keepDims: false),
+                out generatorLoss);        }
         finally
         {
             Discriminator.SetTrainingMode(prevDiscriminatorTrainingMode);
         }
         _lastGeneratorLoss = generatorLoss;
+        _pendingGeneratorLoss = generatorLossTensor;
 
-        // Calculate auxiliary losses if enabled
-        T auxiliaryLoss = NumOps.Zero;
-        if (UseAuxiliaryLoss)
+        // ComputeAuxiliaryLoss adds a term only for the gradient penalty or feature matching; UseAuxiliaryLoss alone
+        // (on by default) contributes zero, and must not force a host read of the device loss.
+        bool hasAuxiliaryTerm = UseAuxiliaryLoss && (_useGradientPenalty || UseFeatureMatching);
+        if (hasAuxiliaryTerm || generatorLossTensor is null || generatorLossTensor.Length != 1)
         {
-            var auxLoss = ComputeAuxiliaryLoss();
-            auxiliaryLoss = NumOps.Multiply(auxLoss, AuxiliaryLossWeight);
+            // Combine generator loss with auxiliary losses (a host value either way).
+            T auxiliaryLoss = NumOps.Zero;
+            if (hasAuxiliaryTerm)
+            {
+                var auxLoss = ComputeAuxiliaryLoss();
+                auxiliaryLoss = NumOps.Multiply(auxLoss, AuxiliaryLossWeight);
+            }
+            var totalGeneratorLoss = NumOps.Add(_lastGeneratorLoss, auxiliaryLoss);
+            _generatorLosses.Add(totalGeneratorLoss);
+            LastLoss = totalGeneratorLoss;
         }
-
-        // Combine generator loss with auxiliary losses
-        var totalGeneratorLoss = NumOps.Add(generatorLoss, auxiliaryLoss);
-
-        // Track generator loss for monitoring
-        _generatorLosses.Add(totalGeneratorLoss);
-        if (_generatorLosses.Count > 100)
+        else
         {
-            _generatorLosses.RemoveAt(0);
+            // No auxiliary term: the generator loss is the total, and it stays on the device until read.
+            _generatorLosses.AddDeferred(Engine, generatorLossTensor);
+            SetLastLossDeferred(generatorLossTensor);
         }
-
-        LastLoss = totalGeneratorLoss;
 
         return true;
     }
@@ -1112,20 +1259,18 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         T totalLoss = NumOps.Zero;
         T epsilon = NumOps.FromDouble(1e-10); // Small value to prevent log(0)
 
-        for (int i = 0; i < batchSize; i++)
+        if (batchSize > 0)
         {
-            T prediction = predictions[i, 0];
-            T target = targets[i, 0];
-
-            // Binary cross-entropy: -target * log(prediction) - (1-target) * log(1-prediction)
-            T logP = NumOps.Log(NumOps.Add(prediction, epsilon));
-            T logOneMinusP = NumOps.Log(NumOps.Add(NumOps.Subtract(NumOps.One, prediction), epsilon));
-
-            T termOne = NumOps.Multiply(target, logP);
-            T termTwo = NumOps.Multiply(NumOps.Subtract(NumOps.One, target), logOneMinusP);
-
-            T sampleLoss = NumOps.Negate(NumOps.Add(termOne, termTwo));
-            totalLoss = NumOps.Add(totalLoss, sampleLoss);
+            // Binary cross-entropy on column 0: -target * log(prediction) - (1-target) * log(1-prediction)
+            var prediction = Engine.TensorSlice(predictions, [0, 0], [batchSize, 1]);
+            var target = Engine.TensorSlice(targets, [0, 0], [batchSize, 1]);
+            var ones = new Tensor<T>([batchSize, 1]);
+            ones.Fill(NumOps.One);
+            var logP = Engine.TensorLog(Engine.TensorAddScalar(prediction, epsilon));
+            var logOneMinusP = Engine.TensorLog(Engine.TensorAddScalar(Engine.TensorSubtract(ones, prediction), epsilon));
+            var termOne = Engine.TensorMultiply(target, logP);
+            var termTwo = Engine.TensorMultiply(Engine.TensorSubtract(ones, target), logOneMinusP);
+            totalLoss = Engine.TensorSum(Engine.TensorNegate(Engine.TensorAdd(termOne, termTwo)));
         }
 
         // Average the loss across the batch
@@ -1157,15 +1302,15 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
     {
         // Calculate gradients for binary cross-entropy: (prediction - target)
         int batchSize = predictions.Shape[0];
-        var gradients = new Tensor<T>(predictions._shape);
+        if (batchSize == 0) return new Tensor<T>(predictions._shape);
 
-        for (int i = 0; i < batchSize; i++)
-        {
-            // For binary cross-entropy, the gradient simplifies to (prediction - target)
-            gradients[i, 0] = NumOps.Subtract(predictions[i, 0], targets[i, 0]);
-        }
-
-        return gradients;
+        // For binary cross-entropy, the gradient simplifies to (prediction - target), in column 0 only
+        var column = Engine.TensorSubtract(
+            Engine.TensorSlice(predictions, [0, 0], [batchSize, 1]), Engine.TensorSlice(targets, [0, 0], [batchSize, 1]));
+        int width = predictions.Shape[1];
+        return width == 1
+            ? column
+            : Engine.TensorConcatenate(new[] { column, new Tensor<T>([batchSize, width - 1]) }, 1);
     }
 
     /// <summary>
@@ -1334,9 +1479,9 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
 
         // Extract scores for calculations
         var scoresList = new List<double>(sampleSize);
-        for (int i = 0; i < sampleSize; i++)
+        if (sampleSize > 0)
         {
-            scoresList.Add(Convert.ToDouble(discriminatorScores[i, 0]));
+            scoresList.AddRange(Engine.TensorSlice(discriminatorScores, [0, 0], [sampleSize, 1]).Cast<double>().ToVector().ToArray());
         }
 
         // Calculate metrics
@@ -1402,9 +1547,15 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         var threshold = NumOps.FromDouble(minDiscriminatorScore);
         var qualityImages = new List<Tensor<T>>();
 
+        // score >= threshold per candidate (NaN is not)
+        var passes = oversampling > 0
+            ? Engine.TensorMax(
+                Engine.TensorGreaterThan(Engine.TensorSlice(scores, [0, 0], [oversampling, 1]), threshold),
+                Engine.TensorEquals(Engine.TensorSlice(scores, [0, 0], [oversampling, 1]), threshold)).Cast<int>().ToVector().ToArray()
+            : Array.Empty<int>();
         for (int i = 0; i < oversampling && qualityImages.Count < count; i++)
         {
-            if (NumOps.GreaterThanOrEquals(scores[i, 0], threshold))
+            if (passes[i] != 0)
             {
                 qualityImages.Add(candidateImages.GetSlice(i));
             }
@@ -1414,11 +1565,10 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         if (qualityImages.Count < count)
         {
             // Create pairs of (index, score) and sort by score
-            var scoreIndexPairs = new List<(int index, double score)>();
-            for (int i = 0; i < oversampling; i++)
-            {
-                scoreIndexPairs.Add((i, Convert.ToDouble(scores[i, 0])));
-            }
+            var candidateScores = oversampling > 0
+                ? Engine.TensorSlice(scores, [0, 0], [oversampling, 1]).Cast<double>().ToVector().ToArray()
+                : Array.Empty<double>();
+            var scoreIndexPairs = candidateScores.Select((score, index) => (index, score)).ToList();
 
             // Sort by score descending
             scoreIndexPairs.Sort((a, b) => b.score.CompareTo(a.score));
@@ -2172,36 +2322,40 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
 
         // Work on a copy to avoid modifying the input tensor
         var inputCopy = new Tensor<T>(input._shape);
-        for (int idx = 0; idx < input.Length; idx++)
-        {
-            inputCopy[idx] = input[idx];
-        }
+        input.CopyTo(inputCopy.AsWritableSpan());
+        var originalValues = inputCopy.ToVector().ToArray();
+        var plusValues = Engine.TensorAddScalar(inputCopy, epsilon).ToVector().ToArray();
+        var minusValues = Engine.TensorSubtractScalar(inputCopy, epsilon).ToVector().ToArray();
+        var plusOutputs = new T[inputCopy.Length];
+        var minusOutputs = new T[inputCopy.Length];
 
-        // Compute gradient for each input element using central differences
+        // Compute gradient for each input element using central differences (one perturbation at a time)
         for (int i = 0; i < inputCopy.Length; i++)
         {
-            // Save original value
-            T originalValue = inputCopy[i];
-
             // Compute f(x + epsilon)
-            inputCopy[i] = NumOps.Add(originalValue, epsilon);
+            inputCopy.AsWritableSpan()[i] = plusValues[i];
             var outputPlus = Discriminator.Predict(inputCopy);
 
             // Compute f(x - epsilon)
-            inputCopy[i] = NumOps.Subtract(originalValue, epsilon);
+            inputCopy.AsWritableSpan()[i] = minusValues[i];
             var outputMinus = Discriminator.Predict(inputCopy);
 
             // Restore original value
-            inputCopy[i] = originalValue;
+            inputCopy.AsWritableSpan()[i] = originalValues[i];
 
-            // Central difference: (f(x+h) - f(x-h)) / (2h)
-            // For discriminator, we use the first output element (real/fake score)
-            // Handle both 1D and 2D output tensors
-            T plusValue = outputPlus.Shape.Length >= 2 ? outputPlus[0, 0] : outputPlus[0];
-            T minusValue = outputMinus.Shape.Length >= 2 ? outputMinus[0, 0] : outputMinus[0];
-            T outputDiff = NumOps.Subtract(plusValue, minusValue);
+            // For discriminator, we use the first output element (real/fake score); [0, 0] of a 2D
+            // output and [0] of a 1D output are both its first element
+            plusOutputs[i] = outputPlus.GetFlat(0);
+            minusOutputs[i] = outputMinus.GetFlat(0);
+        }
+
+        // Central difference: (f(x+h) - f(x-h)) / (2h)
+        if (inputCopy.Length > 0)
+        {
             T twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
-            gradients[i] = NumOps.Divide(outputDiff, twoEpsilon);
+            Engine.TensorDivideScalar(
+                Engine.TensorSubtract(new Tensor<T>(plusOutputs, [plusOutputs.Length]), new Tensor<T>(minusOutputs, [minusOutputs.Length])),
+                twoEpsilon).CopyTo(gradients.AsWritableSpan());
         }
 
         // Restore original training mode

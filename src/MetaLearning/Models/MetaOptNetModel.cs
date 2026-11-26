@@ -42,8 +42,6 @@ namespace AiDotNet.MetaLearning.Models;
 [PipelineStage(PipelineStage.Training)]
 public partial class MetaOptNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     private readonly IFullModel<T, TInput, TOutput> _featureEncoder;
     private readonly Matrix<T> _classifierWeights;
     private readonly T _temperature;
@@ -108,29 +106,21 @@ public partial class MetaOptNetModel<T, TInput, TOutput> : IModel<TInput, TOutpu
                 + $"EmbeddingDimension is {_options.EmbeddingDimension}.");
         }
 
-        var weights = new Tensor<T>(new[] { _options.NumClasses, _options.EmbeddingDimension });
-        for (int c = 0; c < _options.NumClasses; c++)
-            for (int j = 0; j < _options.EmbeddingDimension; j++)
-                weights[c * _options.EmbeddingDimension + j] = _classifierWeights[c, j];
+        // The [NumClasses, EmbeddingDimension] block of the classifier, row-major.
+        var weights = Tensor<T>.FromMatrix(_classifierWeights);
+        if (_classifierWeights.Rows != _options.NumClasses || _classifierWeights.Columns != _options.EmbeddingDimension)
+        {
+            weights = engine.TensorSlice(weights, new[] { 0, 0 }, new[] { _options.NumClasses, _options.EmbeddingDimension });
+        }
 
         var scores = engine.TensorMultiplyScalar(
             engine.TensorMatMul(embeddings, engine.TensorTranspose(weights)), _temperature);
 
         if (typeof(TOutput) == typeof(Vector<T>))
         {
+            // The highest-scoring class of each row; the first one on a tie.
             int n = scores.Shape[0];
-            var predicted = new Vector<T>(n);
-            for (int r = 0; r < n; r++)
-            {
-                int best = 0;
-                for (int c = 1; c < _options.NumClasses; c++)
-                {
-                    if (NumOps.GreaterThan(scores[r * _options.NumClasses + c], scores[r * _options.NumClasses + best])) best = c;
-                }
-
-                predicted[r] = NumOps.FromDouble(best);
-            }
-
+            var predicted = n == 0 ? new Vector<T>(0) : engine.TensorArgMax(scores, 1).Cast<T>().ToVector();
             return (TOutput)(object)predicted;
         }
 
@@ -154,13 +144,8 @@ public partial class MetaOptNetModel<T, TInput, TOutput> : IModel<TInput, TOutpu
     public Vector<T> GetParameters()
     {
         var encoderParams = InterfaceGuard.Parameterizable(_featureEncoder).GetParameters();
-        int classifierSize = _classifierWeights.Rows * _classifierWeights.Columns;
-        var combined = new Vector<T>(encoderParams.Length + classifierSize);
-        for (int i = 0; i < encoderParams.Length; i++) combined[i] = encoderParams[i];
-        int index = encoderParams.Length;
-        for (int r = 0; r < _classifierWeights.Rows; r++)
-            for (int c = 0; c < _classifierWeights.Columns; c++) combined[index++] = _classifierWeights[r, c];
-        return combined;
+        var classifier = Tensor<T>.FromMatrix(_classifierWeights).ToVector();
+        return Vector<T>.Concatenate(encoderParams, classifier);
     }
 
     /// <inheritdoc/>

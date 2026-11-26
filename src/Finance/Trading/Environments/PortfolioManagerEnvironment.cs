@@ -21,7 +21,8 @@ namespace AiDotNet.Finance.Trading.Environments;
 /// traded; (3) a pluggable <see cref="IPortfolioReward"/> objective (total return, differential Sharpe,
 /// drawdown-penalized) so the reward is an experiment knob; (4) realistic FRICTIONS — transaction cost,
 /// turnover-proportional slippage, short-borrow financing, and gross carry — all deducted from cash so portfolio
-/// value reflects true costs. Each asset's position and cash are already in the base observation, so the policy
+/// value reflects true costs. Each asset's weight and the cash fraction ride in the observation (scale-free; see
+/// <see cref="ScaleFreeAccountState"/>), so the policy
 /// conditions its exits on what it holds.
 /// </para>
 /// </summary>
@@ -156,8 +157,8 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
                 $"Action length {action.Length} must equal the tradable-asset count {_tradableCount}.", nameof(action));
         }
 
-        double portfolioValue = ToDouble(_portfolioValue);
-        if (!(portfolioValue > 0))
+        T portfolioValue = _portfolioValue;
+        if (!NumOps.GreaterThan(portfolioValue, NumOps.Zero))
         {
             _lastTurnover = 0;
             return;
@@ -172,91 +173,89 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
                 + $"({_tradableCount}); got {(weights is null ? "null" : weights.Length.ToString(CultureInfo.InvariantCulture))}.");
         }
 
-        // Reconcile each position toward its exact target weight. Sells run first (they free cash), then buys —
-        // so buy sizing sees the cash the sells released. Turnover accumulates the quantity ACTUALLY filled
-        // (ExecuteTrade caps a buy to available cash and clamps a no-short sell), not the requested delta.
-        double turnoverNotional = 0;
-        for (int pass = 0; pass < 2; pass++)
+        var engine = Engine;
+        var tradablePrices = prices.GetSubVector(0, _tradableCount);
+        var positions = _positions.GetSubVector(0, _tradableCount);
+        var zeros = new Tensor<T>(new[] { _tradableCount });
+
+        // An asset without a finite positive price (a gap in the data) is not traded this step, as before. Its price
+        // is replaced by zero in every cash reduction below, so a NaN price never reaches the cash (0 * NaN is NaN);
+        // the post-trade marking still uses the real prices.
+        var priceTensor = tradablePrices.AsTensor();
+        var tradable = engine.TensorWhere(
+            engine.TensorIsFinite(priceTensor), engine.TensorGreaterThan(priceTensor, NumOps.Zero), zeros);
+        var tradePrices = engine.TensorWhere(tradable, priceTensor, zeros).ToVector();
+        var safePrices = engine.TensorWhere(tradable, priceTensor, engine.TensorOnesLike(priceTensor)).ToVector();
+
+        // Reconcile each position toward its exact target weight: delta = w * V / p - position. An untradable asset,
+        // or one whose target is not finite, is not traded.
+        var desiredUnits = engine.Divide(engine.Multiply(weights, portfolioValue), safePrices);
+        var finiteDelta = engine.TensorWhere(
+            engine.TensorIsFinite(desiredUnits.AsTensor()),
+            engine.Subtract(desiredUnits, positions).AsTensor(),
+            zeros);
+        var delta = engine.TensorWhere(tradable, finiteDelta, zeros).ToVector();
+
+        // Sells run first (they free cash). With short selling off a sell never takes a position below zero.
+        var buys = engine.ReLU(delta);
+        var sells = engine.Subtract(delta, buys);
+        if (!AllowShortSelling)
         {
-            for (int i = 0; i < _tradableCount; i++)
-            {
-                double price = ToDouble(prices[i]);
-                if (!(price > 0))
-                {
-                    continue;
-                }
-
-                double desiredUnits = weights[i] * (portfolioValue / price);
-                if (double.IsNaN(desiredUnits) || double.IsInfinity(desiredUnits))
-                {
-                    continue;
-                }
-
-                double delta = desiredUnits - ToDouble(_positions[i]);
-                bool isSell = delta < 0;
-                if ((pass == 0) != isSell)
-                {
-                    continue; // pass 0 = sells, pass 1 = buys
-                }
-
-                if (!isSell)
-                {
-                    // Cost-aware fill: a buy can only draw the cash on hand after the transaction and slippage
-                    // charges it will incur, so cap the increase to what cash affords rather than reserving a
-                    // fixed headroom fraction. This also keeps ExecuteTrade (which checks cash before filling)
-                    // from silently rejecting the whole order.
-                    double unitCost = price * (1.0 + TransactionCost + _slippageCoefficient);
-                    double affordable = unitCost > 0 ? ToDouble(_cash) / unitCost : 0.0;
-                    if (delta > affordable)
-                    {
-                        delta = affordable;
-                    }
-
-                    if (delta <= 0)
-                    {
-                        continue;
-                    }
-                }
-
-                double before = ToDouble(_positions[i]);
-                ExecuteTrade(i, FromDouble(delta), prices[i]);
-                double filled = ToDouble(_positions[i]) - before;
-                turnoverNotional += Math.Abs(filled) * price;
-            }
+            sells = engine.Max(sells, engine.Negate(engine.ReLU(positions)));
         }
 
-        _lastTurnover = turnoverNotional / portfolioValue;
+        T soldNotional = NumOps.Negate(engine.DotProduct(sells, tradePrices));
+        _cash = NumOps.Add(_cash, NumOps.Multiply(soldNotional, NumOps.FromDouble(1.0 - TransactionCost)));
+        positions = engine.Add(positions, sells);
+
+        // Buys see the cash the sells released. Each unit costs p * (1 + c + slippage); when the whole buy book costs
+        // more than the cash on hand every buy is scaled by the same fraction, so the fill does not depend on the
+        // order the assets are listed in (the old per-asset loop filled low-index assets first and starved the rest).
+        T unitCostFactor = NumOps.FromDouble(1.0 + TransactionCost + _slippageCoefficient);
+        T required = NumOps.Multiply(engine.DotProduct(buys, tradePrices), unitCostFactor);
+        // The financing deduction below also charges slippage on the sells, so the buys may spend only the cash left
+        // after that charge; otherwise funding buys from sells could end the step with negative cash.
+        T buyCash = NumOps.Subtract(_cash, NumOps.Multiply(soldNotional, NumOps.FromDouble(_slippageCoefficient)));
+        if (NumOps.GreaterThan(required, buyCash))
+        {
+            T fraction = NumOps.GreaterThan(buyCash, NumOps.Zero) ? NumOps.Divide(buyCash, required) : NumOps.Zero;
+            buys = engine.Multiply(buys, fraction);
+        }
+
+        T boughtNotional = engine.DotProduct(buys, tradePrices);
+        _cash = NumOps.Subtract(_cash, NumOps.Multiply(boughtNotional, NumOps.FromDouble(1.0 + TransactionCost)));
+        positions = engine.Add(positions, buys);
+        positions.AsSpan().CopyTo(_positions.AsWritableSpan());
+
+        // Turnover is the quantity actually filled, not the requested delta.
+        T turnoverNotional = NumOps.Add(soldNotional, boughtNotional);
+        _lastTurnover = NumOps.ToDouble(NumOps.Divide(turnoverNotional, portfolioValue));
 
         // Post-trade positions marked at current prices.
-        double grossNotional = 0, shortNotional = 0, positionValue = 0;
-        for (int i = 0; i < _tradableCount; i++)
+        var notional = engine.Multiply(positions, tradablePrices);
+        T positionValue = engine.Sum(notional);
+        T grossNotional = engine.Sum(engine.Abs(notional));
+        T shortNotional = engine.Sum(engine.ReLU(engine.Negate(notional)));
+
+        // Financing frictions are deducted from cash FIRST (turnover-proportional slippage + short-borrow +
+        // gross carry; the per-trade transaction cost is already applied above), THEN exposures are taken
+        // against the resulting post-cost NAV, so the cached ratios and the reward context reflect every cost
+        // rather than the pre-cost book.
+        T financing = NumOps.Add(
+            NumOps.Add(
+                NumOps.Multiply(NumOps.FromDouble(_slippageCoefficient), turnoverNotional),
+                NumOps.Multiply(NumOps.FromDouble(_borrowCostPerStep), shortNotional)),
+            NumOps.Multiply(NumOps.FromDouble(_holdingCostPerStep), grossNotional));
+        if (NumOps.GreaterThan(financing, NumOps.Zero) && IsFinite(financing))
         {
-            double notional = ToDouble(_positions[i]) * ToDouble(prices[i]);
-            positionValue += notional;
-            grossNotional += Math.Abs(notional);
-            if (notional < 0)
-            {
-                shortNotional += -notional;
-            }
+            _cash = NumOps.Subtract(_cash, financing);
         }
 
-        // Financing frictions are deducted from cash FIRST — turnover-proportional slippage + short-borrow +
-        // gross carry (the per-trade transaction cost is already applied inside ExecuteTrade) — THEN exposures
-        // are taken against the resulting post-cost NAV, so the cached ratios and the reward context reflect
-        // every cost rather than the pre-cost book.
-        double financing = (_slippageCoefficient * turnoverNotional)
-                           + (_borrowCostPerStep * shortNotional)
-                           + (_holdingCostPerStep * grossNotional);
-        if (financing > 0 && (!double.IsNaN(financing) && !double.IsInfinity(financing)))
+        T nav = NumOps.Add(_cash, positionValue);
+        if (NumOps.GreaterThan(nav, NumOps.Zero) && IsFinite(nav))
         {
-            _cash = FromDouble(ToDouble(_cash) - financing);
-        }
-
-        double nav = ToDouble(_cash) + positionValue;
-        if (nav > 0 && (!double.IsNaN(nav) && !double.IsInfinity(nav)))
-        {
-            _grossExposure = grossNotional / nav;
-            _shortExposure = shortNotional / nav;
+            _grossExposure = NumOps.ToDouble(NumOps.Divide(grossNotional, nav));
+            _shortExposure = NumOps.ToDouble(NumOps.Divide(shortNotional, nav));
         }
         else
         {
@@ -264,6 +263,8 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
             _shortExposure = 0;
         }
     }
+
+    private bool IsFinite(T value) => !NumOps.IsNaN(value) && !NumOps.IsInfinity(value);
 
     /// <summary>
     /// Turns the agent's raw action into the target weight per tradable asset, before any position is
@@ -288,30 +289,18 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
     /// <para>Implementations must return exactly <c>tradableCount</c> weights; the caller verifies this and
     /// throws rather than silently trading a mis-sized book.</para>
     /// </remarks>
-    protected virtual double[] ResolveTargetWeights(Vector<T> action)
+    protected virtual Vector<T> ResolveTargetWeights(Vector<T> action)
     {
-        var weights = new double[_tradableCount];
-        double gross = 0;
-        for (int i = 0; i < _tradableCount; i++)
-        {
-            double w = ToDouble(action[i]);
-            if (double.IsNaN(w) || double.IsInfinity(w))
-            {
-                w = 0.0;
-            }
+        var engine = Engine;
+        var raw = action.GetSubVector(0, _tradableCount).AsTensor();
+        var finite = engine.TensorWhere(engine.TensorIsFinite(raw), raw, new Tensor<T>(new[] { _tradableCount }));
+        var weights = engine.Clamp(finite.ToVector(), NumOps.Negate(NumOps.One), NumOps.One);
 
-            w = MathPolyfill.Clamp(w, -1.0, 1.0);
-            weights[i] = w;
-            gross += Math.Abs(w);
-        }
-
-        if (gross > _maxLeverage && gross > 0)
+        T gross = engine.Sum(engine.Abs(weights));
+        T maxLeverage = NumOps.FromDouble(_maxLeverage);
+        if (NumOps.GreaterThan(gross, maxLeverage) && NumOps.GreaterThan(gross, NumOps.Zero))
         {
-            double scale = _maxLeverage / gross;
-            for (int i = 0; i < _tradableCount; i++)
-            {
-                weights[i] *= scale;
-            }
+            weights = engine.Multiply(weights, NumOps.Divide(maxLeverage, gross));
         }
 
         return weights;
@@ -371,4 +360,63 @@ public class PortfolioManagerEnvironment<T> : TradingEnvironment<T>
     /// new episode — without it, reward statistics and the drawdown peak leaked from one episode into the next.
     /// </summary>
     protected override void OnReset() => ResetEpisodeState();
+
+    /// <summary>
+    /// When true (the default), the account part of the observation is scale-free: each tradable asset's slot holds
+    /// its portfolio WEIGHT (units x price / portfolio value) and the last slot holds cash as a fraction of portfolio
+    /// value, each clamped to [-10, 10]. When false, the slots hold raw units and raw cash (the layout before this
+    /// option existed).
+    /// </summary>
+    /// <remarks>
+    /// Raw units and cash scale with the initial capital: at 100,000 the cash input alone is about 1e5 while prices
+    /// and features are near 1, and the RL agents, which do not normalise inputs, saturate their tanh policy heads,
+    /// so the greedy action no longer depends on the training data. The weight and cash fraction are what a
+    /// cross-sectional policy conditions on (FinRL's portfolio environment observes the last weights for the same
+    /// reason) and are identical for any capital. Observation-only feature columns hold no position and stay 0.
+    /// </remarks>
+    public bool ScaleFreeAccountState { get; init; } = true;
+
+    /// <inheritdoc />
+    protected override Vector<T> BuildObservation(int step)
+    {
+        var observation = base.BuildObservation(step);
+        if (!ScaleFreeAccountState)
+        {
+            return observation;
+        }
+
+        int offset = WindowSize * NumAssets;
+        int row = Math.Min(Math.Max(step, 0), MarketData.Shape[0] - 1);
+        var prices = MarketData.Data.Span.Slice(row * NumAssets, _tradableCount);
+        var units = _positions.AsSpan();
+        var target = observation.AsWritableSpan();
+
+        // The book marked at THIS row, for both ratios. _portfolioValue is the valuation the step just rewarded, at
+        // the row before the one observed here: dividing positions marked at this row by it mixed two valuations
+        // (5 units bought at 100 out of 1,000, observed at 200, read weight 1.0 and cash 0.5; they are 2/3 and 1/3).
+        // _portfolioValue itself is left alone: the reward is computed from it.
+        double cashHeld = ToDouble(_cash);
+        double value = cashHeld;
+        Span<double> marked = _tradableCount <= 256 ? stackalloc double[_tradableCount] : new double[_tradableCount];
+        for (int i = 0; i < _tradableCount; i++)
+        {
+            double u = ToDouble(units[i]);
+            double price = ToDouble(prices[i]);
+            marked[i] = u != 0 && IsFiniteValue(price) && price > 0 ? u * price : 0.0;
+            value += marked[i];
+        }
+
+        bool valid = IsFiniteValue(value) && value > 0;
+        for (int i = 0; i < _tradableCount; i++)
+        {
+            double weight = valid ? marked[i] / value : 0.0;
+            target[offset + i] = FromDouble(IsFiniteValue(weight) ? MathPolyfill.Clamp(weight, -10.0, 10.0) : 0.0);
+        }
+
+        double cash = valid ? cashHeld / value : 0.0;
+        target[offset + NumAssets] = FromDouble(IsFiniteValue(cash) ? MathPolyfill.Clamp(cash, -10.0, 10.0) : 0.0);
+        return observation;
+    }
+
+    private static bool IsFiniteValue(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 }

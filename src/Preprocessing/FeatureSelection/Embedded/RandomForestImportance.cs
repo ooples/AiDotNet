@@ -32,14 +32,14 @@ public class RandomForestImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     private readonly int _minSamplesLeaf;
     private readonly int? _randomState;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NTrees => _nTrees;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -87,17 +87,11 @@ public class RandomForestImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        _featureImportances = new double[p];
-
-        // Convert data to arrays
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            y[i] = NumOps.ToDouble(target[i]);
-        }
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
+        T treeCount = NumOps.FromDouble(_nTrees);
+        var featureImportances = new Tensor<T>(new[] { p });
 
         // Build trees and accumulate importances
         for (int t = 0; t < _nTrees; t++)
@@ -115,102 +109,59 @@ public class RandomForestImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>
                 .ToArray();
 
             // Build tree and get importances
-            var treeImportances = BuildTree(X, y, sampleIndices, featureSubset, 0, rand);
+            var splitFeatures = new List<int>();
+            var splitGains = new List<Tensor<T>>();
+            BuildTree(X, y, sampleIndices, featureSubset, 0, splitFeatures, splitGains);
+            var treeImportances = FeatureScoringTensorOps.ScatterAdd(splitFeatures, splitGains, p);
 
-            for (int j = 0; j < p; j++)
-                _featureImportances[j] += treeImportances[j] / _nTrees;
+            featureImportances = engine.TensorAdd(featureImportances, engine.TensorDivideScalar(treeImportances, treeCount));
         }
 
         // Normalize importances
-        double totalImportance = _featureImportances.Sum();
-        if (totalImportance > 0)
-            for (int j = 0; j < p; j++)
-                _featureImportances[j] /= totalImportance;
+        T totalImportance = engine.TensorSum(featureImportances);
+        if (PreprocessingTensorOps.IsAbove(totalImportance, NumOps.Zero))
+            featureImportances = engine.TensorDivideScalar(featureImportances, totalImportance);
+        _featureImportances = featureImportances.ToVector();
 
         // Select top features
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _featureImportances
-            .Select((imp, idx) => (Importance: imp, Index: idx))
-            .OrderByDescending(x => x.Importance)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(featureImportances, nToSelect);
 
         IsFitted = true;
     }
 
-    private double[] BuildTree(double[,] X, double[] y, int[] indices, int[] features, int depth, Random rand)
+    private void BuildTree(Tensor<T> X, Tensor<T> y, int[] indices, int[] features, int depth,
+        List<int> splitFeatures, List<Tensor<T>> splitGains)
     {
-        int p = X.GetLength(1);
-        var importances = new double[p];
-
         if (depth >= _maxDepth || indices.Length < 2 * _minSamplesLeaf)
-            return importances;
+            return;
 
         // Compute current variance (or impurity)
-        double currentMean = indices.Average(i => y[i]);
-        double currentVar = indices.Sum(i => Math.Pow(y[i] - currentMean, 2));
+        var engine = Engine;
+        var rows = new Tensor<int>(indices, new[] { indices.Length });
+        var nodeY = engine.TensorIndexSelect(y, rows, 0);
+        T currentVar = FeatureScoringTensorOps.SumSquaredDeviations(nodeY);
 
-        if (currentVar < 1e-10)
-            return importances;
+        if (PreprocessingTensorOps.IsBelow(currentVar, PreprocessingTensorOps.Tolerance<T>(1e-10)))
+            return;
 
-        // Find best split
-        int bestFeature = -1;
-        double bestThreshold = 0;
-        double bestGain = 0;
+        // Find best split (variance reduction)
+        var nodeX = engine.TensorIndexSelect(engine.TensorIndexSelect(X, rows, 0),
+            new Tensor<int>(features, new[] { features.Length }), 1);
+        if (!FeatureScoringTensorOps.TryBestSplit(nodeX, nodeY, SplitCriterion.SumOfSquares, currentVar, _minSamplesLeaf,
+            out int bestColumn, out T bestThreshold, out var bestGain))
+            return;
 
-        foreach (int f in features)
-        {
-            var values = indices.Select(i => X[i, f]).Distinct().OrderBy(v => v).ToArray();
+        splitFeatures.Add(features[bestColumn]);
+        splitGains.Add(bestGain);
 
-            for (int t = 0; t < values.Length - 1; t++)
-            {
-                double threshold = (values[t] + values[t + 1]) / 2;
+        FeatureScoringTensorOps.PartitionRows(PreprocessingTensorOps.ColumnVector(nodeX, bestColumn), bestThreshold,
+            indices, out var leftIndices, out var rightIndices);
 
-                var leftIndices = indices.Where(i => X[i, f] <= threshold).ToArray();
-                var rightIndices = indices.Where(i => X[i, f] > threshold).ToArray();
-
-                if (leftIndices.Length < _minSamplesLeaf || rightIndices.Length < _minSamplesLeaf)
-                    continue;
-
-                double leftMean = leftIndices.Average(i => y[i]);
-                double rightMean = rightIndices.Average(i => y[i]);
-                double leftVar = leftIndices.Sum(i => Math.Pow(y[i] - leftMean, 2));
-                double rightVar = rightIndices.Sum(i => Math.Pow(y[i] - rightMean, 2));
-
-                double gain = currentVar - leftVar - rightVar;
-
-                if (gain > bestGain)
-                {
-                    bestGain = gain;
-                    bestFeature = f;
-                    bestThreshold = threshold;
-                }
-            }
-        }
-
-        if (bestFeature >= 0)
-        {
-            importances[bestFeature] += bestGain;
-
-            var leftIndices = indices.Where(i => X[i, bestFeature] <= bestThreshold).ToArray();
-            var rightIndices = indices.Where(i => X[i, bestFeature] > bestThreshold).ToArray();
-
-            // Recurse
-            var leftImportances = BuildTree(X, y, leftIndices, features, depth + 1, rand);
-            var rightImportances = BuildTree(X, y, rightIndices, features, depth + 1, rand);
-
-            for (int j = 0; j < p; j++)
-            {
-                importances[j] += leftImportances[j];
-                importances[j] += rightImportances[j];
-            }
-        }
-
-        return importances;
+        // Recurse
+        BuildTree(X, y, leftIndices, features, depth + 1, splitFeatures, splitGains);
+        BuildTree(X, y, rightIndices, features, depth + 1, splitFeatures, splitGains);
     }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -224,15 +175,7 @@ public class RandomForestImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         if (_selectedIndices is null)
             throw new InvalidOperationException("RandomForestImportance has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -712,12 +712,9 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
 
             // Standard normal noise, freshly drawn every training forward from the layer's RNG stream.
             // A Random re-seeded with 42 on every call made the "noise" the same tensor at every step,
-            // a fixed bias rather than the exploration noise of Shazeer et al. 2017 §3.2.
-            Tensor<T> noise;
-            using (new NoGradScope<T>())
-            {
-                noise = Engine.TensorRandnLike(routingLogits, Random.Next());
-            }
+            // a fixed bias rather than the exploration noise of Shazeer et al. 2017 §3.2. It is a per-step draw,
+            // so a compiled training step redraws it on every replay instead of freezing the first.
+            var noise = AiDotNet.Training.CompiledStepRandom<T>.StandardNormal(routingLogits._shape.ToArray(), Random);
             routingLogits = Engine.TensorAdd(routingLogits, Engine.TensorMultiply(noise, noiseScale));
         }
 

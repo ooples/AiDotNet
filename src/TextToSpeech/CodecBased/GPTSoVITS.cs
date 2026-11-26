@@ -264,9 +264,13 @@ public partial class GPTSoVITS<T> : TtsModelBase<T>
                     o.VocoderUpsampleKernels ?? new[] { 8, 8, 4, 4, 4, 4 }, o.VocoderResblockKernels, o.VocoderResblockDilations, snakeBeta: true,
                     tanhAtFinal: false, biasAtFinal: false);
             else
+                // No N(0, 0.01) redraw: the reference (GPT-SoVITS module/models.py Generator) applies init_weights after weight_norm,
+                // so it writes only the derived `weight` tensor, which the forward pre-hook recomputes from weight_g and
+                // weight_v. Every convolution trains from PyTorch's default draw with g = ||v||. A real N(0, 0.01) shrinks
+                // each stage 3-15x and leaves an untrained generator's output to its biases.
                 _hifiGan = new HiFiGanGenerator<T>(Engine, 100, o.VocoderInitialChannels ?? 512, o.VocoderUpsampleRates ?? new[] { 10, 6, 2, 2, 2 },
                     o.VocoderUpsampleKernels ?? new[] { 20, 12, 4, 4, 4 }, o.VocoderResblockKernels, o.VocoderResblockDilations, resblockType1: true,
-                    plainEnds: true, initialization: random, plainOutputBias: true);
+                    plainEnds: true, plainOutputBias: true, defaultInitialization: random);
             if (o.LoraRank > 0) _cfm.Cfm.Estimator.AddLora(_loraLayers, o.LoraRank, o.LoraRank, random);
         }
         else
@@ -534,7 +538,7 @@ public partial class GPTSoVITS<T> : TtsModelBase<T>
     {
         if (!HasPaperLayers) return base.PreprocessText(text);
         var (phones, _, _) = Text.PhonesAndBert(GptSoVitsText.EndSentence(text, _options.TextLanguage), _options.TextLanguage);
-        return Wave(phones.Select(p => (double)p).ToArray());
+        return IdTensor(phones);
     }
 
     /// <inheritdoc />
@@ -570,10 +574,9 @@ public partial class GPTSoVITS<T> : TtsModelBase<T>
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
         if (!HasPaperLayers) return base.PredictCore(input);
         int vocabulary = TextToSemantic.Configuration.PhonemeVocab;
-        var phones = new int[input.Length];
+        var phones = RoundedIds(input);
         for (int i = 0; i < phones.Length; i++)
         {
-            phones[i] = (int)Math.Round(Ops.ToDouble(input.GetFlat(i)));
             if (phones[i] < 0 || phones[i] >= vocabulary) throw new ArgumentOutOfRangeException(nameof(input), $"Phone ids lie in [0, {vocabulary}).");
         }
         if (phones.Length == 0) throw new ArgumentException("There are no phones.", nameof(input));

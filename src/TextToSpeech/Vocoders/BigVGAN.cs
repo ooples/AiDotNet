@@ -83,7 +83,7 @@ public partial class BigVGAN<T> : GanVocoderBase<T>
     protected override IReadOnlyList<LayerBase<T>> CreateGenerator()
     {
         var o = PaperOptions;
-        _generator = new BigVganGenerator<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7),
+        _generator = new BigVganGenerator<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 7),
             o.MelChannels, o.UpsampleInitialChannels, o.UpsampleRates, o.UpsampleKernelSizes, o.ResblockKernelSizes, o.ResblockDilationSizes);
         _inputMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.MelMaxFrequency);
         _lossMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.SampleRate / 2.0);
@@ -94,9 +94,12 @@ public partial class BigVGAN<T> : GanVocoderBase<T>
     protected override IReadOnlyList<LayerBase<T>> CreateDiscriminators()
     {
         var o = PaperOptions;
-        _periods = new HiFiGanDiscriminators<T>(Engine, o.DiscriminatorPeriods, 0, useScaleDiscriminator: false, widthDivisor: o.DiscriminatorWidthDivisor);
-        _resolutions = new MultiResolutionSpectrogramDiscriminators<T>(Engine, o.ResolutionFftSizes, o.ResolutionHopSizes, o.ResolutionWindowSizes,
-            o.ResolutionDiscriminatorChannels, 0.1);
+        // Seeded from the vocoder's seeds like the generator (+ 7), each group on a stream of its own: left to the
+        // layers' own seeds, an unset architecture seed gave two models with equal seeds different discriminators.
+        _periods = new HiFiGanDiscriminators<T>(Engine, o.DiscriminatorPeriods, 0, useScaleDiscriminator: false, widthDivisor: o.DiscriminatorWidthDivisor,
+            initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 13));
+        _resolutions = MultiResolutionSpectrogramDiscriminators<T>.CreateSeeded(Engine, o.ResolutionFftSizes, o.ResolutionHopSizes, o.ResolutionWindowSizes,
+            o.ResolutionDiscriminatorChannels, 0.1, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 17));
         return _periods.Layers.Concat(_resolutions.Layers).ToList();
     }
 

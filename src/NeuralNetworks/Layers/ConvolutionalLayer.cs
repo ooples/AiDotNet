@@ -402,31 +402,61 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _kernelsGradient;
 
     /// <summary>
-    /// Input shape the fast-route verification was performed for, or <c>null</c> if never verified.
+    /// The fast-route verification state of every input shape this layer has probed: whether a verdict is final,
+    /// whether the fast route reproduced the reference exactly, and how many probes found a mismatch.
     /// </summary>
     /// <remarks>
-    /// Keyed by shape because the engine's algorithm choice is shape-dependent: a verdict reached
-    /// for one input size says nothing about another.
+    /// <para>Keyed by shape because the engine's algorithm choice is shape-dependent: a verdict reached for one input
+    /// size says nothing about another. It holds every shape, not the last one: a layer that alternates between two
+    /// shapes (a GAN discriminator sees the [real; fake] batch in its own step and the fake batch alone in the
+    /// generator's) evicted one verdict with the other, so the probe ran both routes, downloaded both outputs and
+    /// compared them on the host on every call, and the mismatch count reset before it could finish. On CUDA that was
+    /// a 6 MB download and ~6 ms of host work in every DCGAN step.</para>
+    /// <para>The engine tunes its convolution algorithm on the first calls at a shape: the reference can run before
+    /// the shape is measured (on the default algorithm) and the fast route after (on the measured one), so the first
+    /// probe can differ for a reason that is gone by the next call. A mismatch is therefore re-probed on the following
+    /// calls at that shape, up to <see cref="MaxVerificationProbes"/>, before the reference is kept for good. Latching
+    /// the first verdict left VGG-11 inference on the three-pass reference (convolution, bias, activation) for the
+    /// whole run.</para>
     /// </remarks>
-    private int[]? _optimizedVerifiedForShape;
+    private readonly List<OptimizedRouteVerdict> _optimizedVerdicts = new();
 
-    /// <summary>Whether the fast route reproduced the reference exactly at that shape.</summary>
-    private bool _optimizedMatchesReference;
+    private sealed class OptimizedRouteVerdict
+    {
+        public OptimizedRouteVerdict(int[] shape) => Shape = shape;
+        public int[] Shape { get; }
+        public bool IsFinal { get; set; }
+        public bool MatchesReference { get; set; }
+        public int MismatchProbes { get; set; }
+    }
 
-    /// <summary>Verification probes at <see cref="_optimizedVerifyingShape"/> that found a mismatch.</summary>
-    /// <remarks>
-    /// The engine tunes its convolution algorithm on the first calls at a shape: the reference can run before the
-    /// shape is measured (on the default algorithm) and the fast route after (on the measured one), so the first probe
-    /// can differ for a reason that is gone by the next call. A mismatch is therefore re-probed on the following calls,
-    /// up to <see cref="MaxVerificationProbes"/>, before the reference is kept for good. Latching the first verdict
-    /// left VGG-11 inference on the three-pass reference (convolution, bias, activation) for the whole run.
-    /// </remarks>
-    private int _optimizedMismatchProbes;
+    private OptimizedRouteVerdict VerdictFor(Tensor<T> input)
+    {
+        foreach (var verdict in _optimizedVerdicts)
+            if (ShapeMatches(verdict.Shape, input)) return verdict;
+        var created = new OptimizedRouteVerdict(ShapeSnapshot(input));
+        // Bounded: a workload whose input shape keeps changing re-probes its oldest shape instead of growing this list,
+        // which every forward scans, without limit.
+        if (_optimizedVerdicts.Count >= MaxVerdictShapes) _optimizedVerdicts.RemoveAt(0);
+        _optimizedVerdicts.Add(created);
+        return created;
+    }
 
-    /// <summary>The shape <see cref="_optimizedMismatchProbes"/> counts probes for.</summary>
-    private int[]? _optimizedVerifyingShape;
+    /// <summary>Whether the fast route is in use for <paramref name="input"/>'s shape: false until a probe at that shape
+    /// found it bitwise equal to the reference (tests).</summary>
+    internal bool OptimizedRouteMatchesReference(Tensor<T> input) => FinalVerdictFor(input)?.MatchesReference ?? false;
+
+    private OptimizedRouteVerdict? FinalVerdictFor(Tensor<T> input)
+    {
+        foreach (var verdict in _optimizedVerdicts)
+            if (verdict.IsFinal && ShapeMatches(verdict.Shape, input)) return verdict;
+        return null;
+    }
 
     private const int MaxVerificationProbes = 3;
+
+    // Input shapes a layer keeps verdicts for (see VerdictFor).
+    private const int MaxVerdictShapes = 32;
 
     private static int[] ShapeSnapshot(Tensor<T> tensor)
     {
@@ -443,7 +473,10 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         return true;
     }
 
-    /// <summary>Bit-for-bit equality. A NaN anywhere reports false, which keeps the reference.</summary>
+    /// <summary>
+    /// Element-wise equality as <c>EqualityComparer&lt;T&gt;.Default</c>: 0 equals -0 and NaN equals NaN, so
+    /// the optimized route is kept only when it reproduces every reference value.
+    /// </summary>
     private static bool BitwiseEquals(Tensor<T> a, Tensor<T> b)
     {
         if (a.Length != b.Length) return false;
@@ -458,9 +491,21 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
                 if (!comparer.Equals(sa[i], sb[i])) return false;
             return true;
         }
-        for (int i = 0; i < a.Length; i++)
-            if (!comparer.Equals(a[i], b[i])) return false;
-        return true;
+        if (a.Length == 0) return true;
+
+        // EqualityComparer<T>.Default: equal values match (0 and -0 included) and NaN matches NaN.
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var flatA = engine.Reshape(a, new[] { a.Length });
+        var flatB = engine.Reshape(b, new[] { b.Length });
+        var zeros = new Tensor<T>(flatA._shape);
+        var ones = new Tensor<T>(flatA._shape);
+        ones.Fill(numOps.One);
+        var bothNaN = engine.TensorWhere(
+            engine.TensorIsNan(flatA), engine.TensorWhere(engine.TensorIsNan(flatB), ones, zeros), zeros);
+        var matches = engine.TensorMax(engine.TensorEquals(flatA, flatB), bothNaN);
+        return numOps.Equals(engine.TensorMinValue(matches), numOps.One);
     }
 
     /// <summary>Adds the rank-1 channel bias without retaining a parameter-storage view.</summary>
@@ -1632,10 +1677,9 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             {
                 useOptimized = true;
             }
-            else if (_optimizedVerifiedForShape is not null
-                     && ShapeMatches(_optimizedVerifiedForShape, input4D))
+            else if (FinalVerdictFor(input4D) is { } final)
             {
-                useOptimized = _optimizedMatchesReference;
+                useOptimized = final.MatchesReference;
             }
             else if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
             {
@@ -1655,19 +1699,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
                 // now pass this guard without sacrificing deterministic serialize/replay behavior.
                 var referenceOnce = Reference();
                 var optimizedOnce = Optimized();
-                // Local until final: the cached verdict belongs to _optimizedVerifiedForShape, which may be another
-                // shape while this one is still being probed.
                 bool matchesReference = BitwiseEquals(referenceOnce, optimizedOnce);
-                if (_optimizedVerifyingShape is null || !ShapeMatches(_optimizedVerifyingShape, input4D))
+                var verdict = VerdictFor(input4D);
+                // A match is final; a mismatch is final only once it has repeated (see _optimizedVerdicts).
+                if (matchesReference || ++verdict.MismatchProbes >= MaxVerificationProbes)
                 {
-                    _optimizedVerifyingShape = ShapeSnapshot(input4D);
-                    _optimizedMismatchProbes = 0;
-                }
-                // A match is final; a mismatch is final only once it has repeated (see _optimizedMismatchProbes).
-                if (matchesReference || ++_optimizedMismatchProbes >= MaxVerificationProbes)
-                {
-                    _optimizedVerifiedForShape = ShapeSnapshot(input4D);
-                    _optimizedMatchesReference = matchesReference;
+                    verdict.IsFinal = true;
+                    verdict.MatchesReference = matchesReference;
                 }
                 useOptimized = matchesReference;
                 // TensorAllocator may have obtained either candidate from the active TensorArena's
@@ -1967,5 +2005,17 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         }
 
         base.Dispose(disposing);
+    }
+
+    /// <inheritdoc />
+    internal override long EstimateStructuralParameterCount(int inputChannelsOrFeatures, out int outputChannelsOrFeatures)
+    {
+        int cIn = InputDepth > 0 ? InputDepth : Math.Max(1, inputChannelsOrFeatures);
+        int cOut = Math.Max(0, OutputDepth);
+        int k = Math.Max(1, KernelSize);
+        int groups = Math.Max(1, Groups);
+        long cInPerGroup = Math.Max(1, cIn / groups);
+        outputChannelsOrFeatures = cOut > 0 ? cOut : inputChannelsOrFeatures;
+        return cInPerGroup * cOut * k * k + cOut;
     }
 }

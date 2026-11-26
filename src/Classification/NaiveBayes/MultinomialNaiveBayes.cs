@@ -77,7 +77,8 @@ public partial class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
     /// </summary>
     [Buffer]
     private Matrix<T>? _logFeatureProbs;
-    private T[]? _featureMinShift;
+    [AiDotNet.Attributes.FittedParameter]
+    private Vector<T>? _featureMinShift;
 
     /// <summary>
     /// Initializes a new instance of the MultinomialNaiveBayes class.
@@ -114,72 +115,35 @@ public partial class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
         // Negative values cause Log(negative) = NaN, silently corrupting the model.
         // Shift features to non-negative if any negatives are present.
         // Per scikit-learn: MultinomialNB handles this by shifting each feature by its minimum.
-        _featureMinShift = new T[x.Columns];
-        bool hasNegative = false;
-        for (int f = 0; f < x.Columns; f++)
+        var engine = Engine;
+        if (x.Rows == 0)
         {
-            T minVal = x[0, f];
-            for (int i = 1; i < x.Rows; i++)
-                if (NumOps.LessThan(x[i, f], minVal))
-                    minVal = x[i, f];
-            if (NumOps.LessThan(minVal, NumOps.Zero))
-            {
-                _featureMinShift[f] = NumOps.Negate(minVal);
-                hasNegative = true;
-            }
-            else
-            {
-                _featureMinShift[f] = NumOps.Zero;
-            }
+            throw new ArgumentException("Training data must contain at least one sample.", nameof(x));
         }
 
-        // Apply shift to make all features non-negative
-        Matrix<T> xShifted;
-        if (hasNegative)
-        {
-            xShifted = new Matrix<T>(x.Rows, x.Columns);
-            for (int i = 0; i < x.Rows; i++)
-                for (int f = 0; f < x.Columns; f++)
-                    xShifted[i, f] = NumOps.Add(x[i, f], _featureMinShift[f]);
-            x = xShifted;
-        }
-
-        _logFeatureProbs = new Matrix<T>(NumClasses, NumFeatures);
+        // shift_f = max(0, -min_i x[i, f]); adding a zero shift leaves the features unchanged
+        var features = Tensor<T>.FromMatrix(x);
+        var shift = engine.TensorClampMin(engine.ReduceMax(engine.TensorNegate(features), new[] { 0 }, false), NumOps.Zero);
+        _featureMinShift = shift.ToVector();
+        features = engine.TensorAdd(features, shift.Reshape(1, x.Columns));
 
         T alpha = NumOps.FromDouble(Options.Alpha);
         T alphaTimesNumFeatures = NumOps.FromDouble(Options.Alpha * NumFeatures);
 
-        // For each class, compute the feature probabilities
-        for (int c = 0; c < NumClasses; c++)
+        // Sum of all feature values per class via the one-hot membership matrix
+        var featureSums = new Tensor<T>(new[] { NumClasses, NumFeatures });
+        if (y.Length > 0 && NumClasses > 0)
         {
-            // Sum of all feature values for this class
-            var featureSums = new Vector<T>(NumFeatures);
-            T totalSum = NumOps.Zero;
-
-            // Accumulate feature sums for samples in this class
-            for (int i = 0; i < y.Length; i++)
-            {
-                if (GetClassIndex(y[i]) == c)
-                {
-                    for (int f = 0; f < NumFeatures; f++)
-                    {
-                        featureSums[f] = NumOps.Add(featureSums[f], x[i, f]);
-                        totalSum = NumOps.Add(totalSum, x[i, f]);
-                    }
-                }
-            }
-
-            // Compute log probabilities with Laplace smoothing
-            // P(f|c) = (count(f,c) + alpha) / (total_count(c) + alpha * n_features)
-            T denominator = NumOps.Add(totalSum, alphaTimesNumFeatures);
-
-            for (int f = 0; f < NumFeatures; f++)
-            {
-                T numerator = NumOps.Add(featureSums[f], alpha);
-                T prob = NumOps.Divide(numerator, denominator);
-                _logFeatureProbs[c, f] = NumOps.Log(prob);
-            }
+            featureSums = engine.TensorMatMul(engine.TensorTranspose(ClassMembership(y)), features);
         }
+
+        var totalSums = engine.ReduceSum(featureSums, new[] { 1 }, true);
+
+        // Compute log probabilities with Laplace smoothing
+        // P(f|c) = (count(f,c) + alpha) / (total_count(c) + alpha * n_features)
+        var probs = engine.TensorDivide(engine.TensorAddScalar(featureSums, alpha),
+            engine.TensorAddScalar(totalSums, alphaTimesNumFeatures));
+        _logFeatureProbs = engine.TensorLog(probs).ToMatrix();
     }
 
     /// <summary>
@@ -198,27 +162,38 @@ public partial class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
     /// </remarks>
     protected override T ComputeLogLikelihood(Vector<T> sample, int classIndex)
     {
+        return SingleSampleLogLikelihood(sample, classIndex);
+    }
+
+    /// <inheritdoc/>
+    private protected override Tensor<T> ComputeLogLikelihoods(Matrix<T> input)
+    {
         if (_logFeatureProbs == null)
         {
             throw new InvalidOperationException("Model must be trained before computing log-likelihood.");
         }
 
-        T logLikelihood = NumOps.Zero;
-
-        for (int f = 0; f < NumFeatures; f++)
+        if (input.Rows == 0 || NumClasses == 0)
         {
-            // Apply the same shift used during training to ensure non-negative features
-            T featureVal = sample[f];
-            if (_featureMinShift is not null && f < _featureMinShift.Length)
-                featureVal = NumOps.Add(featureVal, _featureMinShift[f]);
-            if (NumOps.LessThan(featureVal, NumOps.Zero))
-                featureVal = NumOps.Zero;
-
-            T contribution = NumOps.Multiply(featureVal, _logFeatureProbs[classIndex, f]);
-            logLikelihood = NumOps.Add(logLikelihood, contribution);
+            return new Tensor<T>(new[] { input.Rows, NumClasses });
         }
 
-        return logLikelihood;
+        // Apply the same shift used during training (clamped at zero), then sum x_f * log P(f|c)
+        var engine = Engine;
+        var features = Tensor<T>.FromMatrix(input);
+        if (input.Columns != NumFeatures)
+        {
+            features = features.Slice(1, 0, NumFeatures);
+        }
+
+        if (_featureMinShift is not null)
+        {
+            var shift = FitToLength(_featureMinShift, NumFeatures).AsTensor().Reshape(1, NumFeatures);
+            features = engine.TensorAdd(features, shift);
+        }
+
+        features = engine.TensorClampMin(features, NumOps.Zero);
+        return engine.TensorMatMul(features, engine.TensorTranspose(Tensor<T>.FromMatrix(_logFeatureProbs)));
     }
 
     /// <inheritdoc/>

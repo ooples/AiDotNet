@@ -138,7 +138,7 @@ public partial class E2TTS<T> : FlowMatchingTtsModelBase<T>, IAcousticModel<T>
         _time = new FlowTimestepEmbedding<T>(Engine, layers, o.HiddenDim);
         // E2 embeds the characters at the mel width with no text encoder.
         _text = new FlowTextEmbedding<T>(Engine, layers, o.VocabSize, o.MelChannels, 0, 2);
-        _input = new FlowInputEmbedding<T>(Engine, layers, o.HiddenDim);
+        _input = new FlowInputEmbedding<T>(Engine, layers, 3 * o.MelChannels, o.HiddenDim);
         for (int i = 0; i < o.NumLayers; i++)
         {
             bool laterHalf = i >= o.NumLayers / 2;
@@ -151,7 +151,7 @@ public partial class E2TTS<T> : FlowMatchingTtsModelBase<T>, IAcousticModel<T>
             _layers.Add((skip, attentionNorm, attention, feedForwardNorm, feedForward));
         }
         _finalNorm = FlowMatchingTts.Own(layers, new RMSNormalizationLayer<T>(o.HiddenDim));
-        _projection = FlowMatchingTts.Linear(layers, o.MelChannels);
+        _projection = FlowMatchingTts.Linear(layers, o.HiddenDim, o.MelChannels);
         AddEncoderDecoderLayers(new ILayer<T>[] { _text.Embedding }, Array.Empty<ILayer<T>>());
         ComponentLayers.AddRange(layers.Where(layer => !ReferenceEquals(layer, _text.Embedding)));
     }

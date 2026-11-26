@@ -159,6 +159,39 @@ internal sealed class MultiResolutionStftLoss<T>
             NumOps.FromDouble(1e-7)), NumOps.FromDouble(0.5));
     }
 
+    // Target energy is a replay-time constant for differentiation, computed in double even when T is narrow.
+    // Keep each waveform's reduction separate and add those energies in batch order before the one final cast.
+    internal static Tensor<T> InverseTargetNorm(IEngine engine, IReadOnlyList<Tensor<T>> targets)
+    {
+        var inputs = targets.ToArray();
+        void Compute(IEngine replayEngine, Tensor<T> output)
+        {
+            using var noGrad = new NoGradScope<T>();
+            using var noDoubleGrad = new NoGradScope<double>();
+            Tensor<double>? energy = null;
+            foreach (var target in inputs)
+            {
+                var wide = TensorCopyHelper.CastLogical<T, double>(target);
+                var term = replayEngine.ReduceSum(replayEngine.TensorMultiply(wide, wide),
+                    Enumerable.Range(0, wide.Rank).ToArray(), keepDims: false);
+                energy = energy is null ? term : replayEngine.TensorAdd(energy, term);
+            }
+            var denominator = replayEngine.TensorMax(replayEngine.TensorSqrt(energy!), 1e-12);
+            var inverse = replayEngine.TensorDivide(Tensor<double>.CreateDefault(denominator._shape, 1.0), denominator);
+            AiDotNet.Tensors.Engines.DirectGpuTensorEngine.CopyResultInto(replayEngine,
+                TensorCopyHelper.CastLogical<double, T>(inverse), output);
+        }
+        var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current;
+        if (scope is null)
+        {
+            var value = new Tensor<T>(new[] { 1 });
+            Compute(engine, value);
+            return value;
+        }
+        return scope.RecordVariadic(AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Custom,
+            "StftInverseTargetNorm", inputs, new[] { 1 }, Compute, static (_, _, _, _, _, _) => { }, Array.Empty<object>());
+    }
+
     /// <summary>The spectral convergence and log-magnitude losses of <paramref name="generated"/> against
     /// <paramref name="real"/> (each a set of equal-length waveforms <c>[samples]</c>, averaged over them), averaged over
     /// the resolutions.</summary>
@@ -171,16 +204,11 @@ internal sealed class MultiResolutionStftLoss<T>
             for (int i = 0; i < generated.Count; i++)
             {
                 var g = Magnitude(generated[i], fft, hop, cos, sin);
-                Tensor<T> r;
-                using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
-                {
-                    var m = Magnitude(real[i], fft, hop, cos, sin);
-                    r = new Tensor<T>(m._shape, m.ToVector());
-                }
+                var r = _engine.StopGradient(Magnitude(real[i], fft, hop, cos, sin));
                 var difference = _engine.TensorSubtract(r, g);
                 var numerator = _engine.TensorPow(_engine.ReduceSum(_engine.TensorMultiply(difference, difference), new[] { 0, 1 }, keepDims: false), NumOps.FromDouble(0.5));
-                double denominator = Math.Sqrt(r.ToVector().ToArray().Sum(v => NumOps.ToDouble(v) * NumOps.ToDouble(v)));
-                var scTerm = _engine.TensorMultiplyScalar(numerator, NumOps.FromDouble(1.0 / Math.Max(denominator, 1e-12)));
+                var inverseNorm = InverseTargetNorm(_engine, new[] { r });
+                var scTerm = _engine.TensorMultiply(numerator, _engine.Reshape(inverseNorm, numerator._shape));
                 var magTerm = _engine.ReduceMean(_engine.TensorAbs(_engine.TensorSubtract(_engine.TensorLog(r), _engine.TensorLog(g))), new[] { 0, 1 }, keepDims: false);
                 sc = sc is null ? scTerm : _engine.TensorAdd(sc, scTerm);
                 mag = mag is null ? magTerm : _engine.TensorAdd(mag, magTerm);
@@ -199,28 +227,24 @@ internal sealed class MultiResolutionStftLoss<T>
         foreach (var (fft, hop, cos, sin) in _resolutions)
         {
             Tensor<T>? squaredError = null, logError = null;
-            double targetEnergy = 0;
             int elements = 0;
+            var targets = new Tensor<T>[real.Count];
             for (int i = 0; i < generated.Count; i++)
             {
                 var prediction = Magnitude(generated[i], fft, hop, cos, sin);
-                Tensor<T> target;
-                using (new NoGradScope<T>())
-                {
-                    var value = Magnitude(real[i], fft, hop, cos, sin);
-                    target = new Tensor<T>(value.Shape.ToArray(), new Vector<T>(value.ToArray()));
-                }
+                var target = _engine.StopGradient(Magnitude(real[i], fft, hop, cos, sin));
+                targets[i] = target;
                 var difference = _engine.TensorSubtract(prediction, target);
                 var term = _engine.ReduceSum(_engine.TensorMultiply(difference, difference), new[] { 0, 1 }, false);
                 squaredError = squaredError is null ? term : _engine.TensorAdd(squaredError, term);
                 term = _engine.ReduceSum(_engine.TensorAbs(_engine.TensorSubtract(_engine.TensorLog(prediction),
                     _engine.TensorLog(target))), new[] { 0, 1 }, false);
                 logError = logError is null ? term : _engine.TensorAdd(logError, term);
-                targetEnergy += target.ToArray().Sum(value => NumOps.ToDouble(value) * NumOps.ToDouble(value));
                 elements += target.Length;
             }
-            var sc = _engine.TensorMultiplyScalar(_engine.TensorPow(squaredError!, NumOps.FromDouble(.5)),
-                NumOps.FromDouble(1 / Math.Max(1e-12, Math.Sqrt(targetEnergy))));
+            var numerator = _engine.TensorPow(squaredError!, NumOps.FromDouble(.5));
+            var inverseNorm = InverseTargetNorm(_engine, targets);
+            var sc = _engine.TensorMultiply(numerator, _engine.Reshape(inverseNorm, numerator._shape));
             var log = _engine.TensorMultiplyScalar(logError!, NumOps.FromDouble(1.0 / elements));
             spectral = spectral is null ? sc : _engine.TensorAdd(spectral, sc);
             logarithmic = logarithmic is null ? log : _engine.TensorAdd(logarithmic, log);
@@ -437,11 +461,10 @@ internal sealed class InverseStft<T>
         Tensor<T> framesTime;
         if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
         {
-            // IRFft supplies Hermitian expansion, normalization and the tape backward.
+            // The engine's IRFFT supplies Hermitian expansion, normalization and the backward, and it is a traced op:
+            // the static Fft.IRFft reads its input on the host, which a compiled training step cannot replay.
             var packed = _engine.Reshape(_engine.TensorStack(new[] { re, im }, 2), new[] { frames, 2 * bins });
-            var time = typeof(T) == typeof(float)
-                ? (Tensor<T>)(object)AiDotNet.Tensors.LinearAlgebra.Fft.Fft.IRFft((Tensor<float>)(object)packed, _fft)
-                : (Tensor<T>)(object)AiDotNet.Tensors.LinearAlgebra.Fft.Fft.IRFft((Tensor<double>)(object)packed, _fft);
+            var time = _engine.IRFFT(packed, _fft);
             framesTime = _engine.TensorMultiply(time, _engine.TensorBroadcastTo(_windowTensor, time.Shape.ToArray()));
         }
         else

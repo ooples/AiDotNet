@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Nonlinear;
 
@@ -26,14 +27,14 @@ public class MutualInformationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _miValues;
+    private Vector<T>? _miValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
-    public double[]? MIValues => _miValues;
+    public Vector<T>? MIValues => _miValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -70,107 +71,27 @@ public class MutualInformationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        if (n == 0)
+            throw new InvalidOperationException("Sequence contains no elements");
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        // Discretize every feature and the target into nBins equal-width bins over [min, max]
+        // (numpy.histogram bins: the maximum joins the last bin; a constant column is one bin)
+        var xBins = FeatureSelectionInformationOps.EqualWidthBinsExactRange(Tensor<T>.FromMatrix(data), _nBins);
+        var yBins = FeatureSelectionInformationOps.EqualWidthBinsExactRange(
+            Engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }), _nBins);
 
-        _miValues = new double[p];
-
-        // Discretize target
-        var yBins = Discretize(y, _nBins);
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            // Discretize feature
-            var xBins = Discretize(col, _nBins);
-
-            // Compute mutual information
-            _miValues[j] = ComputeMI(xBins, yBins, _nBins);
-        }
+        // MI = sum p(x,y) * log2(p(x,y) / (p(x) * p(y))), non-negative
+        var mi = FeatureSelectionInformationOps.MutualInformationBits<T>(xBins, _nBins, yBins, _nBins);
+        _miValues = mi.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _miValues[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(mi, numToSelect);
 
         IsFitted = true;
     }
 
-    private int[] Discretize(double[] data, int nBins)
-    {
-        int n = data.Length;
-        var result = new int[n];
-
-        double min = data.Min();
-        double max = data.Max();
-        double range = max - min;
-
-        if (range < 1e-10)
-        {
-            // Constant - all same bin
-            for (int i = 0; i < n; i++)
-                result[i] = 0;
-        }
-        else
-        {
-            for (int i = 0; i < n; i++)
-            {
-                int bin = (int)((data[i] - min) / range * (nBins - 1));
-                result[i] = Math.Min(bin, nBins - 1);
-            }
-        }
-
-        return result;
-    }
-
-    private double ComputeMI(int[] x, int[] y, int nBins)
-    {
-        int n = x.Length;
-
-        // Joint and marginal counts
-        var jointCounts = new int[nBins, nBins];
-        var xCounts = new int[nBins];
-        var yCounts = new int[nBins];
-
-        for (int i = 0; i < n; i++)
-        {
-            jointCounts[x[i], y[i]]++;
-            xCounts[x[i]]++;
-            yCounts[y[i]]++;
-        }
-
-        // Compute MI = sum p(x,y) * log(p(x,y) / (p(x) * p(y)))
-        double mi = 0;
-        for (int xi = 0; xi < nBins; xi++)
-        {
-            for (int yi = 0; yi < nBins; yi++)
-            {
-                if (jointCounts[xi, yi] > 0 && xCounts[xi] > 0 && yCounts[yi] > 0)
-                {
-                    double pxy = (double)jointCounts[xi, yi] / n;
-                    double px = (double)xCounts[xi] / n;
-                    double py = (double)yCounts[yi] / n;
-                    mi += pxy * Math.Log(pxy / (px * py)) / Math.Log(2);
-                }
-            }
-        }
-
-        return Math.Max(0, mi); // MI is always non-negative
-    }
-
     /// <inheritdoc />
+
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -183,15 +104,7 @@ public class MutualInformationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         if (_selectedIndices is null)
             throw new InvalidOperationException("MutualInformationSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

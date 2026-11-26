@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Moment;
 
@@ -25,14 +26,14 @@ public class CoefOfVariationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private readonly int _nFeaturesToSelect;
     private readonly bool _preferHighCV;
 
-    private double[]? _cvValues;
+    private Vector<T>? _cvValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public bool PreferHighCV => _preferHighCV;
-    public double[]? CVValues => _cvValues;
+    public Vector<T>? CVValues => _cvValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -58,44 +59,35 @@ public class CoefOfVariationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        if (n == 0)
+            throw new InvalidOperationException("At least one sample is required to compute the coefficient of variation.");
 
-        _cvValues = new double[p];
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
+        var mean = FilterStatisticTensorOps.ColumnMeans(x);
+        var std = FeatureSelectionTensorOps.CenteredColumnStd(FilterStatisticTensorOps.CenterColumns(x));
 
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            double mean = col.Average();
-            double std = Math.Sqrt(col.Select(v => (v - mean) * (v - mean)).Average());
-
-            // CV = std / |mean| (use absolute mean to handle negative values)
-            _cvValues[j] = Math.Abs(mean) > 1e-10 ? std / Math.Abs(mean) : 0;
-        }
+        // CV = std / |mean| (absolute mean handles negative values); 0 where |mean| <= 1e-10
+        var absMean = engine.TensorAbs(engine.Reshape(mean, new[] { p }));
+        var defined = engine.TensorGreaterThan(absMean, NumOps.FromDouble(1e-10));
+        var safeMean = engine.TensorWhere(defined, absMean, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+        var cv = engine.TensorWhere(defined, engine.TensorDivide(std, safeMean), new Tensor<T>(new[] { p }));
+        _cvValues = cv.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
 
         if (_preferHighCV)
         {
-            _selectedIndices = Enumerable.Range(0, p)
-                .OrderByDescending(j => _cvValues[j])
-                .Take(numToSelect)
-                .OrderBy(x => x)
-                .ToArray();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(cv, numToSelect);
         }
         else
         {
-            _selectedIndices = Enumerable.Range(0, p)
-                .Where(j => _cvValues[j] > 1e-10)
-                .OrderBy(j => _cvValues[j])
-                .Take(numToSelect)
-                .OrderBy(x => x)
-                .ToArray();
+            // Lowest CV among the features whose CV is above 1e-10; the others rank last and are never taken
+            var candidates = engine.TensorGreaterThan(cv, NumOps.FromDouble(1e-10));
+            int candidateCount = PreprocessingTensorOps.CountNonZero(candidates);
+            T beyond = p == 0 ? NumOps.One : NumOps.Add(engine.TensorMaxValue(cv), NumOps.One);
+            var ranked = engine.TensorWhere(candidates, cv, PreprocessingTensorOps.Filled(new[] { p }, beyond));
+            _selectedIndices = PreprocessingTensorOps.BottomKIndicesSorted(ranked, Math.Min(numToSelect, candidateCount));
         }
 
         IsFitted = true;
@@ -113,15 +105,7 @@ public class CoefOfVariationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("CoefOfVariationSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

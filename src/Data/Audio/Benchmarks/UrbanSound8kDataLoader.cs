@@ -105,7 +105,7 @@ public class UrbanSound8kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
 
         _sampleCount = totalSamples;
         var featuresData = new T[totalSamples * _maxAudioSamples];
-        var labelsData = new T[totalSamples * NumClasses];
+        var labelsData = new int[totalSamples * NumClasses];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -120,11 +120,11 @@ public class UrbanSound8kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
 
             // One-hot encode class
             if (classIndex >= 0 && classIndex < NumClasses)
-                labelsData[i * NumClasses + classIndex] = NumOps.FromDouble(1.0);
+                labelsData[i * NumClasses + classIndex] = 1;
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, _maxAudioSamples });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, NumClasses });
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

@@ -36,6 +36,19 @@ public class AlignmentMethodOptions<T> : ModelOptions
     public int TrainingIterations { get; set; } = 1000;
 
     /// <summary>
+    /// Gets or sets the gradient-ascent step size of the Bradley-Terry reward model fit.
+    /// </summary>
+    /// <value>The step size, per unit of mean gradient over the preference pairs, defaulting to 1.0.</value>
+    /// <remarks>
+    /// <para><c>RLHFAlignment</c> fits a linear reward r(y) = w . y to the preference pairs by
+    /// <see cref="TrainingIterations"/> full-batch steps w += RewardModelLearningRate * mean(D^T (1 - sigmoid(D w))),
+    /// D the preferred-minus-rejected responses. Must be positive and finite.</para>
+    /// <para><b>For Beginners:</b> How far each step of learning the reward from the preferences moves. Larger
+    /// values learn the preferences in fewer iterations; too large can overshoot.</para>
+    /// </remarks>
+    public double RewardModelLearningRate { get; set; } = 1.0;
+
+    /// <summary>
     /// Gets or sets the discount factor for reward modeling.
     /// </summary>
     /// <value>The gamma value (0-1), defaulting to 0.99.</value>
@@ -50,6 +63,10 @@ public class AlignmentMethodOptions<T> : ModelOptions
     /// </summary>
     /// <value>The KL coefficient, defaulting to 0.1.</value>
     /// <remarks>
+    /// <para>beta of the KL-regularized objective max E[r] - beta KL(pi || pi_ref). The aligned policy of
+    /// <c>RLHFAlignment</c> (and the inference fallback of <c>AdversarialPreferenceAlignment</c>) is its optimum
+    /// softmax(z + r / beta) over the base model's output classes (Rafailov et al. 2023, eq. 4): a large beta keeps the
+    /// base distribution, a small one moves all mass to the highest-reward class. Must be positive.</para>
     /// <para><b>For Beginners:</b> This prevents the model from changing too much during alignment.
     /// It's like a leash that keeps the aligned model close to the original model's behavior.</para>
     /// </remarks>
@@ -80,6 +97,7 @@ public class AlignmentMethodOptions<T> : ModelOptions
     /// </summary>
     /// <value>True to enable red teaming, false otherwise (default: true).</value>
     /// <remarks>
+    /// <para>Gates <c>IAlignmentMethod.PerformRedTeaming</c>: with false it throws instead of red teaming.</para>
     /// <para><b>For Beginners:</b> Red teaming tries to find ways to make the model misbehave,
     /// helping you discover and fix problems before deployment.</para>
     /// </remarks>
@@ -90,9 +108,29 @@ public class AlignmentMethodOptions<T> : ModelOptions
     /// </summary>
     /// <value>The number of attempts, defaulting to 100.</value>
     /// <remarks>
+    /// <para>The number of safety-benchmark prompts <c>PerformRedTeaming</c> sends to the model, drawn round-robin
+    /// from <see cref="RedTeamingCategories"/>; capped by the size of their benchmarks.</para>
     /// <para><b>For Beginners:</b> More attempts mean more thorough testing but take longer.</para>
     /// </remarks>
     public int RedTeamingAttempts { get; set; } = 100;
+
+    /// <summary>
+    /// Gets or sets the safety-benchmark categories red teaming draws its prompts from.
+    /// </summary>
+    /// <value>Every category by default.</value>
+    /// <remarks>
+    /// <para>Jailbreaking uses the jailbreak benchmark, HarmfulContent the toxicity benchmark, Misinformation the
+    /// hallucination benchmark, PrivacyViolation the PII benchmark and BiasExploration the bias benchmark: the same
+    /// pools as <c>AdversarialRobustnessOptions.RedTeamingCategories</c>.</para>
+    /// </remarks>
+    public RedTeamingCategory[] RedTeamingCategories { get; set; } = new[]
+    {
+        RedTeamingCategory.Jailbreaking,
+        RedTeamingCategory.HarmfulContent,
+        RedTeamingCategory.Misinformation,
+        RedTeamingCategory.PrivacyViolation,
+        RedTeamingCategory.BiasExploration
+    };
 
     /// <summary>
     /// Gets or sets the reward model architecture.

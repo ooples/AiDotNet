@@ -13,7 +13,7 @@ internal static class OpenJTalkRules
 {
     private static readonly Lazy<(Dictionary<string, string> Defines, Dictionary<string, string?[]> Lists)> Data = new(() =>
     {
-        using var stream = typeof(OpenJTalkRules).Assembly.GetManifestResourceStream("AiDotNet.TextToSpeech.FrontEnd.openjtalk_rules.json.gz")
+        using var stream = EmbeddedData.Open("AiDotNet.TextToSpeech.FrontEnd.openjtalk_rules.json.gz")
             ?? throw new InvalidDataException("The embedded Open JTalk rule tables are missing.");
         using var gzip = new GZipStream(stream, CompressionMode.Decompress);
         using var reader = new StreamReader(gzip, Encoding.UTF8);

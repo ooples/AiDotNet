@@ -141,12 +141,10 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
                 polynomial_term = NumOps.Add(NumOps.Subtract(x4, NumOps.Multiply(NumOps.FromDouble(6), x2)), NumOps.FromDouble(3));
                 break;
             default:
-                // For higher orders, fall back to a simple approximation
-                polynomial_term = NumOps.FromDouble(Math.Pow(-1, _order));
-                for (int i = 0; i < _order; i++)
-                {
-                    polynomial_term = NumOps.Multiply(polynomial_term, x);
-                }
+                // d^n/dx^n exp(-x^2 / 2) = (-1)^n He_n(x) exp(-x^2 / 2) with the probabilists' Hermite polynomial
+                polynomial_term = _order > 0
+                    ? NumOps.Multiply(NumOps.FromDouble(Math.Pow(-1, _order)), HermitePolynomial(x, _order))
+                    : NumOps.FromDouble(Math.Pow(-1, _order));
                 break;
         }
 
@@ -157,6 +155,34 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
         result = NumOps.Multiply(result, NumOps.FromDouble(norm_factor));
 
         return result;
+    }
+
+    /// <summary>
+    /// Evaluates the probabilists' Hermite polynomial He_n(x) = sum_m c_m x^(n - 2m) for m = 0 .. n / 2, with
+    /// c_0 = 1 and c_(m+1) = -c_m (n - 2m)(n - 2m - 1) / (2 (m + 1)).
+    /// </summary>
+    private static T HermitePolynomial(T x, int n)
+    {
+        var engine = AiDotNetEngine.Current;
+        int terms = n / 2 + 1;
+        var m = engine.TensorArange<T>(0, terms, 1);
+        var twiceM = engine.TensorMultiplyScalar(m, NumOps.FromDouble(2));
+        var exponents = engine.ScalarMinusTensor(NumOps.FromDouble(n), twiceM);
+
+        var coefficients = Tensor<T>.FromVector(new Vector<T>(new[] { NumOps.One }));
+        if (terms > 1)
+        {
+            // ratio_m = -(n - 2m)(n - 2m - 1) / (2 (m + 1)) for m = 0 .. terms - 2
+            var k = engine.TensorSlice(exponents, new[] { 0 }, new[] { terms - 1 });
+            var mHead = engine.TensorSlice(m, new[] { 0 }, new[] { terms - 1 });
+            var numerator = engine.TensorNegate(engine.TensorMultiply(k, engine.TensorSubtractScalar(k, NumOps.One)));
+            var denominator = engine.TensorMultiplyScalar(engine.TensorAddScalar(mHead, NumOps.One), NumOps.FromDouble(2));
+            var ratios = engine.TensorDivide(numerator, denominator);
+            coefficients = engine.TensorConcatenate(new[] { coefficients, engine.TensorCumProd(ratios, 0) }, 0);
+        }
+
+        var powers = engine.TensorPower(engine.TensorFullLike(exponents, x), exponents);
+        return engine.TensorSum(engine.TensorMultiply(coefficients, powers));
     }
 
     /// <summary>
@@ -238,14 +264,7 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
         var reconHigh = ConvolveReversed(upsampledDetail, waveletCoeffs);
 
         // Add the results - ensure same length
-        int outputLength = Math.Min(reconLow.Length, reconHigh.Length);
-        var reconstructed = new Vector<T>(outputLength);
-        for (int i = 0; i < outputLength; i++)
-        {
-            reconstructed[i] = NumOps.Add(reconLow[i], reconHigh[i]);
-        }
-
-        return reconstructed;
+        return WaveletEngineOps<T>.AddTruncated(reconLow, reconHigh);
     }
 
     /// <summary>
@@ -253,16 +272,7 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
     /// </summary>
     private Vector<T> Upsample(Vector<T> input, int factor)
     {
-        var result = new T[input.Length * factor];
-        for (int i = 0; i < result.Length; i++)
-        {
-            result[i] = NumOps.Zero;
-        }
-        for (int i = 0; i < input.Length; i++)
-        {
-            result[i * factor] = input[i];
-        }
-        return new Vector<T>(result);
+        return WaveletEngineOps<T>.Upsample(input, factor);
     }
 
     /// <summary>
@@ -270,13 +280,7 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
     /// </summary>
     private Vector<T> ConvolveReversed(Vector<T> input, Vector<T> filter)
     {
-        int filterLen = filter.Length;
-        var reversed = new T[filterLen];
-        for (int i = 0; i < filterLen; i++)
-        {
-            reversed[i] = filter[filterLen - 1 - i];
-        }
-        return Convolve(input, new Vector<T>(reversed));
+        return Convolve(input, WaveletEngineOps<T>.Reverse(filter));
     }
 
     /// <summary>
@@ -309,24 +313,13 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
     public override Vector<T> GetScalingCoefficients()
     {
         int length = 64;
-        var coeffs = new T[length];
-        T sum = NumOps.Zero;
+        var engine = AiDotNetEngine.Current;
+        var x = engine.TensorDivideScalar(WaveletEngineOps<T>.CenteredGrid(length), NumOps.FromDouble(length / 4));
 
-        for (int i = 0; i < length; i++)
-        {
-            T x = NumOps.Divide(NumOps.FromDouble(i - length / 2), NumOps.FromDouble(length / 4));
-            T value = NumOps.Exp(NumOps.Negate(NumOps.Multiply(x, x)));
-            coeffs[i] = value;
-            sum = NumOps.Add(sum, NumOps.Abs(value));
-        }
-
-        // Normalize
-        for (int i = 0; i < length; i++)
-        {
-            coeffs[i] = NumOps.Divide(coeffs[i], sum);
-        }
-
-        return new Vector<T>(coeffs);
+        // exp(-x^2), normalized by the sum of absolute values
+        var values = engine.TensorExp(engine.TensorNegate(engine.TensorMultiply(x, x)));
+        T sum = engine.TensorSum(engine.TensorAbs(values));
+        return engine.TensorDivideScalar(values, sum).ToVector();
     }
 
     /// <summary>
@@ -361,28 +354,16 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
     public override Vector<T> GetWaveletCoefficients()
     {
         int length = 256;
-        var coeffs = new T[length];
-        T sum = NumOps.Zero;
+        var engine = AiDotNetEngine.Current;
+        var t = engine.TensorDivideScalar(WaveletEngineOps<T>.CenteredGrid(length), NumOps.FromDouble(length / 4));
+        var t2 = engine.TensorMultiply(t, t);
 
-        for (int i = 0; i < length; i++)
-        {
-            T t = NumOps.Divide(NumOps.FromDouble(i - length / 2), NumOps.FromDouble(length / 4));
-            T t2 = NumOps.Multiply(t, t);
-            T value = NumOps.Multiply(
-                NumOps.Negate(NumOps.Multiply(NumOps.FromDouble(2), t)),
-                NumOps.Exp(NumOps.Negate(t2))
-            );
-            coeffs[i] = value;
-            sum = NumOps.Add(sum, NumOps.Abs(value));
-        }
-
-        // Normalize
-        for (int i = 0; i < length; i++)
-        {
-            coeffs[i] = NumOps.Divide(coeffs[i], sum);
-        }
-
-        return new Vector<T>(coeffs);
+        // -2t * exp(-t^2), normalized by the sum of absolute values
+        var values = engine.TensorMultiply(
+            engine.TensorNegate(engine.TensorMultiplyScalar(t, NumOps.FromDouble(2))),
+            engine.TensorExp(engine.TensorNegate(t2)));
+        T sum = engine.TensorSum(engine.TensorAbs(values));
+        return engine.TensorDivideScalar(values, sum).ToVector();
     }
 
     /// <summary>
@@ -414,23 +395,8 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Vector<T> Convolve(Vector<T> input, Vector<T> kernel)
     {
-        int resultLength = input.Length + kernel.Length - 1;
-        var result = new T[resultLength];
-
-        for (int i = 0; i < resultLength; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < kernel.Length; j++)
-            {
-                if (i - j >= 0 && i - j < input.Length)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(input[i - j], kernel[j]));
-                }
-            }
-            result[i] = sum;
-        }
-
-        return new Vector<T>(result);
+        // Full linear convolution, length n + k - 1
+        return WaveletEngineOps<T>.FullConvolve(input, kernel);
     }
 
     /// <remarks>
@@ -455,14 +421,6 @@ public class DOGWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Vector<T> Downsample(Vector<T> input, int factor)
     {
-        int newLength = input.Length / factor;
-        var result = new T[newLength];
-
-        for (int i = 0; i < newLength; i++)
-        {
-            result[i] = input[i * factor];
-        }
-
-        return new Vector<T>(result);
+        return WaveletEngineOps<T>.Decimate(input, factor, input.Length / factor);
     }
 }

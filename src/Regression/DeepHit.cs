@@ -494,7 +494,7 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
             return null;
         }
 
-        return _timeBinEdges.GetSubVector(1, _timeBinEdges.Length - 2);
+        return RegressionEngineOps2.Slice(_timeBinEdges, 1, _timeBinEdges.Length - 2);
     }
 
     /// <summary>
@@ -540,7 +540,7 @@ public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         return Engine.Divide(
-            Engine.Add(_timeBinEdges.GetSubVector(0, bins), _timeBinEdges.GetSubVector(1, bins)),
+            Engine.Add(_timeBinEdges.GetSubVector(0, bins), RegressionEngineOps2.Slice(_timeBinEdges, 1, bins)),
             NumOps.FromDouble(2));
     }
 

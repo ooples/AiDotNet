@@ -20,7 +20,7 @@ internal sealed class Cutlet
 
     private Cutlet()
     {
-        using var input = typeof(Cutlet).Assembly.GetManifestResourceStream("AiDotNet.TextToSpeech.FrontEnd.cutlet_unidic.json.gz")
+        using var input = EmbeddedData.Open("AiDotNet.TextToSpeech.FrontEnd.cutlet_unidic.json.gz")
             ?? throw new InvalidDataException("The embedded Cutlet/UniDic readings are missing.");
         using var gzip = new GZipStream(input, CompressionMode.Decompress);
         using var document = JsonDocument.Parse(gzip);

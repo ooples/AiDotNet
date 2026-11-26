@@ -633,7 +633,7 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
         // 1-norm (max column abs sum) as maxAbs * ||matrix / maxAbs||_1, so the column sums of a
         // wide low-precision matrix cannot overflow.
         double maxAbs = NumOps.ToDouble(Engine.TensorMaxValue(Engine.TensorAbs(matrix)));
-        if (maxAbs == 0.0) return identity;
+        if (maxAbs <= 0.0) return identity;
         var unit = Engine.TensorDivideScalar(matrix, NumOps.FromDouble(maxAbs));
         double norm = maxAbs * NumOps.ToDouble(
             Engine.TensorMaxValue(Engine.ReduceSum(Engine.TensorAbs(unit), new[] { 0 })));

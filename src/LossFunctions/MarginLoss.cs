@@ -83,6 +83,12 @@ public class MarginLoss<T> : LossFunctionBase<T>
         return NumOps.Divide(loss, NumOps.FromDouble(predicted.Length));
     }
 
+    internal override void ValidateIndexTargetOutsidePlan(Tensor<T> target)
+    {
+        if (target is not null)
+            ValidateTargets(target, nameof(target));
+    }
+
     /// <summary>
     /// Rejects targets outside [0, 1] (including NaN and infinities): the label weights y and 1 - y must be
     /// nonnegative, or the loss can turn negative and push training the wrong way.
@@ -94,17 +100,30 @@ public class MarginLoss<T> : LossFunctionBase<T>
             return;
         }
 
-        var invalid = Engine.TensorMax(
-            Engine.TensorMax(
-                Engine.TensorLessThan(targets, NumOps.Zero),
-                Engine.TensorGreaterThan(targets, NumOps.One)),
-            Engine.TensorNotEquals(targets, targets));
-        if (NumOps.GreaterThan(Engine.TensorMaxValue(invalid), NumOps.Zero))
+        void ValidateCore()
         {
-            int position = Engine.TensorNonzero(invalid).GetFlat(0);
-            throw new ArgumentOutOfRangeException(paramName,
-                $"Margin loss targets must be finite values in [0, 1]; position {position} is {targets.GetFlat(position)}.");
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var invalid = Engine.TensorMax(
+                Engine.TensorMax(
+                    Engine.TensorLessThan(targets, NumOps.Zero),
+                    Engine.TensorGreaterThan(targets, NumOps.One)),
+                Engine.TensorNotEquals(targets, targets));
+            if (NumOps.GreaterThan(Engine.TensorMaxValue(invalid), NumOps.Zero))
+            {
+                int position = Engine.TensorNonzero(invalid).GetFlat(0);
+                throw new ArgumentOutOfRangeException(paramName,
+                    $"Margin loss targets must be finite values in [0, 1]; position {position} is {targets.GetFlat(position)}.");
+            }
         }
+
+        if (targets.LazySource is null)
+        {
+            using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+                ValidateCore();
+            return;
+        }
+
+        ValidateCore();
     }
 
     /// <inheritdoc />

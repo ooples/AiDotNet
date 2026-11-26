@@ -1,0 +1,4 @@
+LIBRARY AiDotNet.ArrayProfiler
+EXPORTS
+    DllGetClassObject PRIVATE
+    DllCanUnloadNow PRIVATE

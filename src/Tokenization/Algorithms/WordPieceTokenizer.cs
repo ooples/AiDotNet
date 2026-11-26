@@ -102,7 +102,7 @@ namespace AiDotNet.Tokenization.Algorithms
 
         private static Dictionary<string, int> LoadVocabulary(string resource, IEnumerable<string>? additionalTokens)
         {
-            var assembly = typeof(WordPieceTokenizer).Assembly;
+            var assembly = EmbeddedData.Assembly;
             using var stream = assembly.GetManifestResourceStream(resource)
                 ?? throw new System.IO.InvalidDataException($"The embedded resource {resource} is missing.");
             using var gzip = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);

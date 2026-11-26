@@ -813,4 +813,14 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
             _ => throw new ArgumentException($"Unknown parameter: {paramName}", nameof(paramName))
         };
     }
+
+    /// <inheritdoc />
+    internal override long EstimateStructuralParameterCount(int inputChannelsOrFeatures, out int outputChannelsOrFeatures)
+    {
+        long cIn = _channels > 0 ? _channels : (_expectedInputChannels > 0 ? _expectedInputChannels : Math.Max(1, inputChannelsOrFeatures));
+        long p = Math.Max(1, _patchSize);
+        long embed = Math.Max(0, _embeddingDim);
+        outputChannelsOrFeatures = _embeddingDim > 0 ? _embeddingDim : inputChannelsOrFeatures;
+        return cIn * p * p * embed + embed;
+    }
 }

@@ -128,7 +128,36 @@ if (timeSeriesAt >= 0 && timeSeriesAt + 1 < args.Length)
         Flag("--series-length", 20_000), Flag("--seed", 42), only);
 }
 
+int hifiFingerprintAt = Array.IndexOf(args, "--hash-hifigan-initial-state");
+if (hifiFingerprintAt >= 0)
+{
+    if (hifiFingerprintAt + 1 >= args.Length) throw new ArgumentException("--hash-hifigan-initial-state requires a fresh output path.");
+    int seedAt = Array.IndexOf(args, "--seed");
+    int seed = seedAt >= 0 ? int.Parse(args[seedAt + 1], System.Globalization.CultureInfo.InvariantCulture) : 1234;
+    return HifiGanInitialStateFingerprint.Run(args[hifiFingerprintAt + 1], seed);
+}
+
+int hifiReferenceAt = Array.IndexOf(args, "--verify-hifigan");
+if (hifiReferenceAt >= 0)
+{
+    if (hifiReferenceAt + 1 >= args.Length) throw new ArgumentException("--verify-hifigan requires a reference directory.");
+    string directory = args[hifiReferenceAt + 1];
+    int outputAt = Array.IndexOf(args, "--output");
+    string output = outputAt >= 0 && outputAt + 1 < args.Length ? args[outputAt + 1]
+        : Path.Combine(directory, "aidotnet-equivalence.json");
+    int fixtureAt = Array.IndexOf(args, "--hifigan-fixture");
+    if (fixtureAt >= 0 && fixtureAt + 1 >= args.Length) throw new ArgumentException("Missing explicit shared fixture path.");
+    return HifiGanReferenceVerifier.Run(directory, output, fixtureAt >= 0 ? args[fixtureAt + 1] : null);
+}
+
+
 var benchOptions = BenchmarkOptions.Parse(args);
+if (benchOptions.LstmNumerics is not null)
+{
+    var lstm = new AiDotNetLstmModel(benchOptions.Seed);
+    lstm.AttachFixture(benchOptions).WriteNumerics(lstm);
+    return 0;
+}
 if (benchOptions.VerifyStep1Dir is { } referenceDir)
 {
     // Step-1 equivalence (pytorch/export_reference.py writes the inputs): same weights, same batch, then
@@ -152,7 +181,20 @@ if (benchOptions.VerifyStep1Dir is { } referenceDir)
     // Exit 2 when every result was diagnostic-only (AIDOTNET_PARITY_TRAIN_STEPS > 1): no verdict, so no success.
     return !anyVerdict ? 2 : allPass ? 0 : 1;
 }
+// Diagnostic: AIDOTNET_BENCH_READBACK_SITES=1 records every device-to-host copy's call site and prints the busiest.
+bool readbackSites = Environment.GetEnvironmentVariable("AIDOTNET_BENCH_READBACK_SITES") == "1";
+// GpuLaunchProbe is internal to AiDotNet.Tensors, so through reflection, and resolved only when the diagnostic is on:
+// a Tensors build without it still benchmarks.
+var probe = readbackSites
+    ? typeof(AiDotNet.Tensors.Engines.DirectGpuTensorEngine).Assembly
+        .GetType("AiDotNet.Tensors.Engines.DirectGpu.GpuLaunchProbe", throwOnError: true)!
+    : null;
+if (probe is not null) probe.GetProperty("CaptureReadbackSites")!.SetValue(null, true);
 var report = new BenchmarkRunner(benchOptions).Run();
+if (probe is not null)
+    foreach (var site in ((string[])probe.GetProperty("ReadbackSites")!.GetValue(null)!)
+                 .OrderByDescending(s => long.Parse(s.Substring(0, s.IndexOf('x')))).Take(25))
+        Console.Error.WriteLine("[readback] " + site);
 var outputPath = Path.GetFullPath(benchOptions.OutputPath);
 Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
 File.WriteAllText(outputPath, JsonSerializer.Serialize(report, JsonOptions.Default));
@@ -186,6 +228,14 @@ internal sealed record BenchmarkOptions(
     string OutputPath,
     string? VerifyStep1Dir,
     int[] InferenceBatchSizes,
+    string? HifiGanFixture,
+    bool RequireMatchedWorkload,
+    string? HifiGanWorkloadReceipt,
+    string? LstmFixture = null,
+    string? LstmWorkloadReceipt = null,
+    string? LstmNumerics = null,
+    string Precision = "fp32",
+    // Large-data mode: train whole epochs over a scale/prepare_data.py dataset instead of synthetic batches.
     string? DataDir = null)
 {
     public static BenchmarkOptions Parse(string[] args)
@@ -203,6 +253,20 @@ internal sealed record BenchmarkOptions(
 
         var models = map.GetValueOrDefault("models", "mlp,cnn,lstm,transformer")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        string? fixturePath = map.GetValueOrDefault("hifigan-fixture");
+        bool requireMatched = bool.Parse(map.GetValueOrDefault("require-matched-workload", "false"));
+        string? lstmFixture = map.GetValueOrDefault("lstm-fixture");
+        if (requireMatched && string.IsNullOrWhiteSpace(fixturePath) && string.IsNullOrWhiteSpace(lstmFixture))
+            throw new ArgumentException("Matched mode requires an explicit shared workload fixture.");
+        if (lstmFixture is not null && (fixturePath is not null || models.Length != 1 || models[0] != "lstm"))
+            throw new ArgumentException("The shared LSTM fixture requires only the LSTM row.");
+        if (lstmFixture is null && (map.ContainsKey("lstm-numerics") || map.ContainsKey("lstm-workload-receipt")))
+            throw new ArgumentException("LSTM evidence requires its explicit fixture.");
+        if (fixturePath is not null && (models.Length != 1 || models[0] != "hifigan-v1"))
+            throw new ArgumentException("The shared fixture requires the single full HiFi row.");
+        if (fixturePath is null && map.ContainsKey("hifigan-workload-receipt"))
+            throw new ArgumentException("A workload receipt requires the shared fixture.");
+
 
         return new BenchmarkOptions(
             models,
@@ -218,10 +282,22 @@ internal sealed record BenchmarkOptions(
             map.GetValueOrDefault("inference-batches", "1,8,32,128")
                 // Empty entries are rejected, not dropped, so a mistyped list fails here as it does in benchmark.py.
                 .Split(',', StringSplitOptions.TrimEntries)
-                .Select(ParsePositiveBatch).ToArray(),
-            // Large-data mode: train whole epochs over a scale/prepare_data.py dataset instead of synthetic batches.
-            map.GetValueOrDefault("data"));
+                .Select(ParsePositiveBatch).ToArray(), fixturePath, requireMatched,
+            map.GetValueOrDefault("hifigan-workload-receipt"), lstmFixture, map.GetValueOrDefault("lstm-workload-receipt"),
+            map.GetValueOrDefault("lstm-numerics"),
+            Precision: ParsePrecision(map.GetValueOrDefault("precision", "fp32")),
+            DataDir: map.GetValueOrDefault("data"));
     }
+
+    // --precision: fp32 (default) or bf16, the training step under autocast as benchmark.py's twin runs it under
+    // torch.autocast. fp16 needs loss scaling in both arms (GradScaler in the twin), which neither wires yet.
+    private static string ParsePrecision(string text) => text.Trim().ToLowerInvariant() switch
+    {
+        "fp32" => "fp32",
+        "bf16" => "bf16",
+        "fp16" => throw new ArgumentException("--precision fp16 needs loss scaling in both arms; not wired yet."),
+        _ => throw new ArgumentException($"--precision must be fp32 or bf16; got '{text}'."),
+    };
 
     private static int ParsePositiveBatch(string text)
     {
@@ -243,6 +319,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
     {
         // Create each requested model, measure its training and inference
         // phases, and collect those measurements into one framework-level report.
+        HifiBenchmarkFixture? sharedFixture = null;
         var factory = new AiDotNetTensorBackend(options.Seed);
         var results = new List<ModelReport>();
         using var dataset = options.DataDir is null ? null : new ScaleDataset(options.DataDir);
@@ -260,7 +337,15 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             }
             var modelStart = Stopwatch.StartNew();
             Console.WriteLine($"[bench] {modelName}: building network…");
-            var model = factory.Create(modelName);
+            BenchmarkPhaseTelemetry.Mark(modelName, "construction");
+            if (options.HifiGanFixture is not null)
+                sharedFixture = new HifiBenchmarkFixture(options.HifiGanFixture, options.Epochs, options.TrainBatches,
+                    options.BatchSize, options.Seed, options.InferenceBatchSizes,
+                    options.HifiGanWorkloadReceipt ?? (options.OutputPath + ".workload.json"));
+            var model = sharedFixture is null ? factory.Create(modelName)
+                : new AiDotNetTensorBackend(options.Seed, sharedFixture).Create(modelName);
+            var lstmFixture = options.LstmFixture is null ? null : ((AiDotNetLstmModel)model).AttachFixture(options);
+            BenchmarkPhaseTelemetry.Mark(modelName, "construction-complete");
             Console.WriteLine($"[bench] {modelName}: training ({options.Epochs}e × {options.TrainBatches}b × {options.BatchSize}bs, {model.ParameterCount} params)…");
             TrainingReport? training = null;
             if (model.IsInferenceOnly)
@@ -269,33 +354,37 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             }
             else
             {
-                training = BenchmarkTraining(model);
+                BenchmarkPhaseTelemetry.Mark(modelName, "training-prepare");
+                training = BenchmarkTraining(model, modelName);
+                BenchmarkPhaseTelemetry.Mark(modelName, "training-complete");
                 Console.WriteLine($"[bench] {modelName}: training done in {training.TotalSeconds:F2}s; running inference…");
             }
-            var inference = BenchmarkInference(model);
+            var inference = BenchmarkInference(model, modelName);
+            lstmFixture?.Complete();
+            BenchmarkPhaseTelemetry.Mark(modelName, "complete");
             modelStart.Stop();
             Console.WriteLine($"[bench] {modelName}: complete in {modelStart.Elapsed.TotalSeconds:F2}s");
             results.Add(new ModelReport(modelName, "AiDotNetNeuralNetwork", BenchStats.DeviceName, model.ParameterCount, training, inference));
         }
+
+        sharedFixture?.Complete();
 
         return new BenchmarkReport(
             "AiDotNet",
             Environment.Version.ToString(),
             RunEnvironmentProbe.Capture(),
             AiDotNetProbe.Describe(),
-            results);
+            results, options);
     }
 
-    private TrainingReport BenchmarkTraining(IBenchmarkModel model)
+    private TrainingReport BenchmarkTraining(IBenchmarkModel model, string modelName)
     {
         // Track per-epoch duration plus the synthetic data-loading and gradient
         // phases, while a background monitor samples process resources.
         var epochSeconds = new List<double>();
         var gradientSeconds = new List<double>();
         var dataSeconds = new List<double>();
-        var total = Stopwatch.StartNew();
         double? firstLoss = null;
-        using var monitor = ResourceMonitor.Start();
 
         // Batches are generated BEFORE the timed epochs (the PyTorch twin does the same) so epoch
         // time is pure training: our managed CPU RNG and their on-device randn cost very different
@@ -305,17 +394,40 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
         {
             var dataTimer = Stopwatch.StartNew();
             model.LoadSyntheticBatch(options.BatchSize);
+            var current = model.CurrentBatch;
+            // The twin builds every batch on its device before the timed epochs (make_batch's .to(device), randn on
+            // the device); on a GPU run ours are placed there too, so no step pays a host-to-device upload it doesn't.
+            // The upload is data time, as the twin's .to(device) and synchronize are.
+            if (BenchStats.DeviceName == "cuda")
+            {
+                current.Input.Gpu();
+                current.Label.Gpu();
+                BenchStats.SynchronizeDevice();
+            }
             dataTimer.Stop();
             dataSeconds.Add(dataTimer.Elapsed.TotalSeconds);
-            batches.Add(model.CurrentBatch);
+            batches.Add(current);
         }
 
+        // The total and the resource window start once the batch pool exists, as the twin's start_total and its
+        // ResourceMonitor (peak stats reset there) do: both cover the training phase with the pool resident.
+        var total = Stopwatch.StartNew();
+        using var monitor = ResourceMonitor.Start();
+
+        // The training steps under autocast for --precision bf16 (inference stays FP32 in both arms). Only a GPU engine
+        // narrows under AutocastScope; on the CPU this arm would run FP32 while the twin's torch.autocast runs bf16.
+        if (options.Precision == "bf16" && BenchStats.DeviceName != "cuda")
+            throw new ArgumentException("--precision bf16 needs --device cuda: the CPU engine does not run autocast.");
+        using var autocast = options.Precision == "bf16"
+            ? new AiDotNet.Tensors.Engines.Gpu.AutocastScope(AiDotNet.Tensors.Engines.Gpu.PrecisionMode.BFloat16)
+            : null;
         for (var epoch = 0; epoch < options.Epochs; epoch++)
         {
             // PROFILE_RANGE=1 brackets the LAST epoch with cuProfilerStart/Stop, so
             // `nsys profile --capture-range=cudaProfilerApi` records steady-state steps only (the twin does the same).
             var profileEpoch = BenchStats.ProfileRangeRequested && epoch == options.Epochs - 1;
             if (profileEpoch) { BenchStats.SynchronizeDevice(); BenchStats.ProfilerStart(); }
+            BenchmarkPhaseTelemetry.Mark(modelName, $"training-epoch-{epoch}");
             var epochTimer = Stopwatch.StartNew();
             for (var batch = 0; batch < options.TrainBatches; batch++)
             {
@@ -328,7 +440,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
                 gradientTimer.Stop();
                 // The first step's loss is read once, in the untimed-for-steady-state epoch 0, as proof the step trains.
                 firstLoss ??= model.LastLoss;
-                gradientSeconds.Add(gradientTimer.Elapsed.TotalSeconds);
+                if (model.ReportsGradientTime) gradientSeconds.Add(gradientTimer.Elapsed.TotalSeconds);
                 model.Step();
                 if (Environment.GetEnvironmentVariable("BENCH_MEMSTEP") == "1")
                 {
@@ -345,6 +457,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             epochTimer.Stop();
             if (profileEpoch) BenchStats.ProfilerStop();
             epochSeconds.Add(epochTimer.Elapsed.TotalSeconds);
+            BenchmarkPhaseTelemetry.Mark(modelName, $"training-epoch-{epoch}-complete");
         }
 
         total.Stop();
@@ -367,7 +480,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             model.LastLoss);
     }
 
-    private List<InferenceReport> BenchmarkInference(IBenchmarkModel model)
+    private List<InferenceReport> BenchmarkInference(IBenchmarkModel model, string modelName)
     {
         // Measure inference at multiple batch sizes so the report captures both
         // latency and throughput behavior under different request shapes.
@@ -375,7 +488,9 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
         var process = Process.GetCurrentProcess();
         foreach (var batchSize in options.InferenceBatchSizes)
         {
+            BenchmarkPhaseTelemetry.Mark(modelName, $"inference-b{batchSize}-prepare");
             model.LoadSyntheticBatch(batchSize);
+            BenchmarkPhaseTelemetry.Mark(modelName, $"inference-b{batchSize}-warmup");
 
             // Warmup iterations prime JIT compilation and tensor internals before
             // steady-state measurements are recorded. A count alone is not enough: .NET runs a method as
@@ -397,6 +512,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             // psutil rss (whole-process resident set incl. native allocs),
             // so both report the same kind of memory number.
             process.Refresh();
+            BenchmarkPhaseTelemetry.Mark(modelName, $"inference-b{batchSize}-steady");
             var peakBefore = process.WorkingSet64 / 1024d / 1024d;
             var steady = new List<double>(options.InferenceIterations);
 
@@ -420,6 +536,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
                 steady.Add(timer.Elapsed.TotalSeconds);
             }
             if (profileInference) BenchStats.ProfilerStop();
+            BenchmarkPhaseTelemetry.Mark(modelName, $"inference-b{batchSize}-complete");
             process.Refresh();
             var peak = Math.Max(peakBefore, process.WorkingSet64 / 1024d / 1024d);
             var totalSteady = steady.Sum();
@@ -457,6 +574,12 @@ internal interface IBenchmarkModel
     /// times batch replay around empty Backward/Step calls.
     /// </summary>
     bool IsInferenceOnly => false;
+    /// <summary>
+    /// False for a row whose Backward returns with device work still outstanding and whose PyTorch twin reports no
+    /// gradient breakdown: the host time of the call is then a submission time, not a gradient time, and is not
+    /// reported as one. The synchronized epoch time is unaffected.
+    /// </summary>
+    bool ReportsGradientTime => true;
     /// <summary>The loss of the most recent training step, or null for a model with no training step.</summary>
     double? LastLoss => null;
     /// <summary>The batch the next Forward/Backward consumes; settable so the training loop can replay pre-generated batches.</summary>
@@ -467,8 +590,10 @@ internal interface IBenchmarkModel
     Tensor<float> Predict(Tensor<float> input) => throw new NotSupportedException("This row has no large-data mode");
 }
 
-internal sealed class AiDotNetTensorBackend(int seed)
+internal sealed class AiDotNetTensorBackend(int seed, HifiBenchmarkFixture? hifiFixture = null)
 {
+    public AiDotNetTensorBackend(int seed) : this(seed, null) { }
+
     // Each model constructs the real AiDotNet neural-network class with
     // paper-matched layer shapes so the comparison is real-Conv2D vs
     // real-Conv2D, real-LSTM vs real-LSTM, etc. — not "PyTorch real model vs
@@ -522,6 +647,11 @@ internal sealed class AiDotNetTensorBackend(int seed)
         "vae" => new AiDotNetVaeModel(seed),
         "gat" => new AiDotNetGatModel(seed),
         "dcgan" => new AiDotNetDcganModel(seed),
+        // Audio and speech (AudioRows.cs): PANNs CNN14 on 10 s AudioSet log-mel clips [1001, 64]; wav2vec 2.0 BASE CTC
+        // fine-tuning on 2 s of raw 16 kHz audio; HiFi-GAN V1's GAN step on an 8192-sample segment (batch size 1).
+        "panns-cnn14" => new AiDotNetPannsCnn14Model(seed),
+        "wav2vec2-base" => new AiDotNetWav2Vec2BaseModel(seed),
+        "hifigan-v1" => new AiDotNetHifiGanV1Model(seed, hifiFixture),
         _ => throw new ArgumentException($"Unknown model '{model}'.")
     };
 }
@@ -851,7 +981,7 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
         var _ = Network.Predict(Input);
     }
 
-    public void Backward()
+    public virtual void Backward()
     {
         // PyTorch runs `loss = criterion(model(x), y); loss.backward()` then
         // optimizer.step(). AiDotNet's Train(input, expected) is the equivalent:
@@ -1001,7 +1131,7 @@ internal sealed class AiDotNetCnnModel : AiDotNetBenchmarkModel
     }
 }
 
-internal sealed class AiDotNetLstmModel : AiDotNetBenchmarkModel
+internal sealed partial class AiDotNetLstmModel : AiDotNetBenchmarkModel
 {
     public AiDotNetLstmModel(int seed) : base(seed) { }
     protected override int[] InputShapePerSample => new[] { 32, 32 };
@@ -1273,6 +1403,56 @@ internal sealed class AiDotNetVisionModel(int seed, VisionFamily family) : AiDot
     }
 }
 
+/// <summary>
+/// The device allocator's peaks over a window that spans peak-counter resets. <see cref="BenchmarkPhaseTelemetry"/>
+/// resets the counters at every phase marker; each reset first folds the interval's peaks in here, so a read at the
+/// end of a phase returns the largest peak of the whole phase, not only what the last interval left.
+/// </summary>
+internal static class AllocatorPeakWindow
+{
+    private static readonly object Gate = new();
+    private static readonly Dictionary<string, long> Maxima = new(StringComparer.Ordinal);
+
+    /// <summary>Starts a window: clears the accumulated maxima and the allocator's counters.</summary>
+    public static void Begin()
+    {
+        lock (Gate)
+        {
+            Maxima.Clear();
+            AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.ResetPeakStats();
+        }
+    }
+
+    /// <summary>Folds the interval that just ended into the window, then resets the allocator's counters.</summary>
+    public static void FoldAndReset()
+    {
+        lock (Gate)
+        {
+            Fold();
+            AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.ResetPeakStats();
+        }
+    }
+
+    /// <summary>The window's peak for <paramref name="key"/> (the interval still open included), or null when the allocator does not report it.</summary>
+    public static long? Peak(string key)
+    {
+        lock (Gate)
+        {
+            Fold();
+            return Maxima.TryGetValue(key, out long bytes) ? bytes : null;
+        }
+    }
+
+    private static void Fold()
+    {
+        foreach (var pair in AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.Stats())
+        {
+            if (!pair.Key.EndsWith(".peak", StringComparison.Ordinal)) continue;
+            if (!Maxima.TryGetValue(pair.Key, out long seen) || pair.Value > seen) Maxima[pair.Key] = pair.Value;
+        }
+    }
+}
+
 internal sealed class ResourceMonitor : IDisposable
 {
     private readonly Process _process = Process.GetCurrentProcess();
@@ -1281,9 +1461,22 @@ internal sealed class ResourceMonitor : IDisposable
     private readonly List<double> _gpuMemMb = [];
     private readonly Task _task;
     private readonly Task? _gpuTask;
+    private readonly bool _trackAllocator;
 
     private ResourceMonitor()
     {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        // The allocator peaks cover this phase only, as benchmark.py resets torch's at the phase's start. They are this
+        // process's own counters, which no external sampler can supply, so they are tracked before the external-monitor
+        // return below: only the background sampling is the external runner's.
+        _trackAllocator = engine is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+        if (_trackAllocator) AllocatorPeakWindow.Begin();
+        // The gate runner uses the same external sampler for both frameworks.
+        if (Environment.GetEnvironmentVariable("AIDOTNET_BENCH_EXTERNAL_MONITOR") == "1")
+        {
+            _task = Task.CompletedTask;
+            return;
+        }
         _task = Task.Run(async () =>
         {
             while (!_cts.IsCancellationRequested)
@@ -1297,7 +1490,6 @@ internal sealed class ResourceMonitor : IDisposable
         // benchmark.py's ResourceMonitor samples for torch on a CUDA device. It is device-wide, as on the torch side.
         // The sample is pinned to the engine's GPU (nvidia-smi --id); when that GPU cannot be identified, VRAM is
         // not reported rather than read from whichever GPU nvidia-smi lists first.
-        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
         string? gpuId = engine is AiDotNet.Tensors.Engines.DirectGpuTensorEngine ? NvidiaSmi.ResolveDevice(engine.Name) : null;
         if (gpuId is not null)
             _gpuTask = Task.Run(async () =>
@@ -1333,8 +1525,20 @@ internal sealed class ResourceMonitor : IDisposable
             ProcessRssMbPeak: Math.Round(_rssMb.Count == 0 ? 0 : _rssMb.Max(), 3),
             ProcessRssMbHwm: Math.Round(_process.PeakWorkingSet64 / 1024d / 1024d, 3),
             NvidiaSmiSample: null,
-            GpuMemMbPeak: GpuPeak());
+            GpuMemMbPeak: GpuPeak(),
+            GpuAllocatedMbPeak: AllocatorPeak("allocated_bytes.all.peak"),
+            GpuReservedMbPeak: AllocatorPeak("reserved_bytes.all.peak"));
     }
+
+    // This process's device allocator peaks over the phase (GpuMemoryStats, PyTorch's allocator semantics): what
+    // benchmark.py reads from torch.cuda.max_memory_allocated / max_memory_reserved. Unlike GpuMemMbPeak they exclude
+    // the CUDA context and every other process on the device.
+    // The maximum over the whole phase: the phase markers reset the allocator's peak counters at every epoch boundary,
+    // so the maxima are accumulated across those resets (AllocatorPeakWindow) rather than read from the counters.
+    private double? AllocatorPeak(string key)
+        => _trackAllocator && AllocatorPeakWindow.Peak(key) is { } bytes
+            ? Math.Round(bytes / 1024d / 1024d, 3)
+            : null;
 
     private double? GpuPeak()
     {
@@ -1526,7 +1730,7 @@ internal static class RunEnvironmentProbe
         CpuThreads: AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism);
 }
 
-internal sealed record BenchmarkReport(string Framework, string DotNetRuntime, RunEnvironment Environment, object AiDotNet, List<ModelReport> Results);
+internal sealed record BenchmarkReport(string Framework, string DotNetRuntime, RunEnvironment Environment, object AiDotNet, List<ModelReport> Results, BenchmarkOptions Protocol);
 internal sealed record ModelReport(string Model, string Backend, string Device, long Parameters, TrainingReport? Training, List<InferenceReport> Inference,
     ScaleReport? Scale = null);
 // SteadyStateEpochSecondsAvg excludes the first epoch (issue #1566 item 4): the
@@ -1538,7 +1742,7 @@ internal sealed record TrainingReport(double[] EpochSeconds, double TotalSeconds
     [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals)] double? FirstLoss,
     [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals)] double? LastLoss);
 internal sealed record ResourceReport(double ProcessRssMbPeak, double ProcessRssMbHwm, string? NvidiaSmiSample,
-    double? GpuMemMbPeak = null);
+    double? GpuMemMbPeak = null, double? GpuAllocatedMbPeak = null, double? GpuReservedMbPeak = null);
 internal sealed record InferenceReport(int BatchSize, double WarmupSecondsAvg, double SteadyStateLatencyMsAvg, double SteadyStateLatencyMsP95,
     double SteadyStateLatencyMsMedian, double SteadyStateLatencyMsP25, double SteadyStateLatencyMsP75, double ThroughputSamplesPerSecond, double MemoryMbPeak);
 

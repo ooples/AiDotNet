@@ -25,14 +25,14 @@ public class KDEBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
     private readonly int _nFeaturesToSelect;
     private readonly double _bandwidth;
 
-    private double[]? _kdeSeparationScores;
+    private Vector<T>? _kdeSeparationScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Bandwidth => _bandwidth;
-    public double[]? KDESeparationScores => _kdeSeparationScores;
+    public Vector<T>? KDESeparationScores => _kdeSeparationScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -68,96 +68,72 @@ public class KDEBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int k = classes.Length;
+
+        // Feature values per class
+        var classValues = new Tensor<T>[k];
+        for (int c = 0; c < k; c++)
+            classValues[c] = FeatureScoringTensorOps.Rows(X, FeatureScoringTensorOps.GroupMembers(classIndex, c));
+
+        // For each feature, compute the Hellinger distance between class densities, averaged over class pairs
+        var totalSeparation = new Tensor<T>(new[] { p });
+        int pairCount = 0;
+        for (int c1 = 0; c1 < k; c1++)
         {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        var classes = y.Distinct().OrderBy(c => c).ToList();
-        var classIndices = new Dictionary<int, List<int>>();
-        foreach (var c in classes)
-            classIndices[c] = Enumerable.Range(0, n).Where(i => y[i] == c).ToList();
-
-        _kdeSeparationScores = new double[p];
-
-        // For each feature, compute KDE separation between classes
-        for (int j = 0; j < p; j++)
-        {
-            // Get feature values per class
-            var classValues = new Dictionary<int, double[]>();
-            foreach (var c in classes)
-                classValues[c] = classIndices[c].Select(i => X[i, j]).ToArray();
-
-            // Compute Hellinger distance between class densities
-            double totalSeparation = 0;
-            int pairCount = 0;
-
-            for (int c1Idx = 0; c1Idx < classes.Count; c1Idx++)
+            for (int c2 = c1 + 1; c2 < k; c2++)
             {
-                for (int c2Idx = c1Idx + 1; c2Idx < classes.Count; c2Idx++)
-                {
-                    int c1 = classes[c1Idx];
-                    int c2 = classes[c2Idx];
-
-                    double hellinger = ComputeHellingerDistance(
-                        classValues[c1], classValues[c2], _bandwidth);
-                    totalSeparation += hellinger;
-                    pairCount++;
-                }
+                totalSeparation = engine.TensorAdd(totalSeparation,
+                    ComputeHellingerDistance(classValues[c1], classValues[c2], p));
+                pairCount++;
             }
-
-            _kdeSeparationScores[j] = pairCount > 0 ? totalSeparation / pairCount : 0;
         }
+
+        var scores = pairCount > 0
+            ? engine.TensorDivideScalar(totalSeparation, NumOps.FromDouble(pairCount))
+            : totalSeparation;
+        _kdeSeparationScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _kdeSeparationScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
 
-    private double ComputeHellingerDistance(double[] values1, double[] values2, double h)
+    private Tensor<T> ComputeHellingerDistance(Tensor<T> values1, Tensor<T> values2, int p)
     {
-        // Determine evaluation points
-        double min1 = values1.Min(), max1 = values1.Max();
-        double min2 = values2.Min(), max2 = values2.Max();
-        double minVal = Math.Min(min1, min2) - 3 * h;
-        double maxVal = Math.Max(max1, max2) + 3 * h;
+        // Determine evaluation points per feature: 100 points from min - 3h to max + 3h over both classes
+        var engine = Engine;
+        T h = NumOps.FromDouble(_bandwidth);
+        T margin = NumOps.FromDouble(3 * _bandwidth);
+        var minVal = engine.TensorSubtractScalar(engine.TensorMin(
+            PreprocessingTensorOps.ColumnMin(values1), PreprocessingTensorOps.ColumnMin(values2)), margin);
+        var maxVal = engine.TensorAddScalar(engine.TensorMax(
+            PreprocessingTensorOps.ColumnMax(values1), PreprocessingTensorOps.ColumnMax(values2)), margin);
 
         int nPoints = 100;
-        double step = (maxVal - minVal) / (nPoints - 1);
+        var span = engine.TensorSubtract(maxVal, minVal);
+        var step = engine.TensorDivideScalar(span, NumOps.FromDouble(nPoints - 1));
+        var grid = FeatureScoringTensorOps.EvenGrid(minVal, span, nPoints);
 
-        double hellingerSum = 0;
-        for (int i = 0; i < nPoints; i++)
-        {
-            double x = minVal + i * step;
-            double density1 = ComputeKDE(x, values1, h);
-            double density2 = ComputeKDE(x, values2, h);
-            hellingerSum += (Math.Sqrt(density1) - Math.Sqrt(density2)) *
-                           (Math.Sqrt(density1) - Math.Sqrt(density2));
-        }
+        var density1 = ComputeKDE(grid, values1, h);
+        var density2 = ComputeKDE(grid, values2, h);
+        var gap = engine.TensorSubtract(engine.TensorSqrt(density1), engine.TensorSqrt(density2));
+        var hellingerSum = engine.ReduceSum(engine.TensorSquare(gap), new[] { 0 }, false);
 
-        return Math.Sqrt(hellingerSum * step / 2);
+        return engine.TensorSqrt(engine.TensorDivideScalar(engine.TensorMultiply(hellingerSum, step), NumOps.FromDouble(2)));
     }
 
-    private double ComputeKDE(double x, double[] values, double h)
+    private Tensor<T> ComputeKDE(Tensor<T> grid, Tensor<T> values, T h)
     {
-        double sum = 0;
-        foreach (double xi in values)
-        {
-            double u = (x - xi) / h;
-            sum += Math.Exp(-0.5 * u * u) / Math.Sqrt(2 * Math.PI);
-        }
-        return sum / (values.Length * h + 1e-10);
+        var engine = Engine;
+        var sums = engine.TensorDivideScalar(
+            FeatureScoringTensorOps.GaussianKernelSums(grid, values, h), NumOps.FromDouble(Math.Sqrt(2 * Math.PI)));
+        T denominator = NumOps.Add(NumOps.Multiply(NumOps.FromDouble(values.Shape[0]), h), PreprocessingTensorOps.Tolerance<T>(1e-10));
+        return engine.TensorDivideScalar(sums, denominator);
     }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -171,15 +147,7 @@ public class KDEBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         if (_selectedIndices is null)
             throw new InvalidOperationException("KDEBasedSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

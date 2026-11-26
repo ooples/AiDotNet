@@ -172,7 +172,7 @@ public partial class SenseVoice<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         // The paper network (see the class remarks). It used to be the generic Paraformer template.
         var o = _options;
         var configuration = new SanmEncoderConfiguration(o.NumMels, o.LfrM, o.LfrN, o.EncoderDim, o.NumAttentionHeads, o.FeedForwardDim,
-            o.NumEncoderLayers, o.NumTpEncoderLayers, o.FsmnKernelSize);
+            o.NumEncoderLayers, o.NumTpEncoderLayers, o.FsmnKernelSize, SampleRate: o.SampleRate);
         var layers = new List<LayerBase<T>>();
         var random = Tensors.Helpers.RandomHelper.CreateSeededRandom(o.Seed ?? 42);
         _encoder = new SanmEncoder<T>(Engine, layers, configuration, random);
@@ -184,22 +184,7 @@ public partial class SenseVoice<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         Layers.AddRange(layers);
     }
 
-    // The recognizer reads the raw waveform, truncated to the longest window a transcription covers.
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
-    {
-        if (_encoder is null) return base.PreprocessAudio(rawAudio);
-        int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
-        var waveform = new Tensor<T>(new[] { length });
-        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
-        return waveform;
-    }
-
-    private Tensor<T> Samples(Tensor<T> waveform, int offset, int count)
-    {
-        var samples = new Tensor<T>(new[] { count });
-        waveform.Data.Span.Slice(offset, count).CopyTo(samples.Data.Span);
-        return samples;
-    }
+    private protected override int? NativeWaveformMaxAudioLengthSeconds => _encoder is null ? null : _options.MaxAudioLengthSeconds;
 
     // ctc_lo over every position [4 + frames, vocabulary]: the queries [language, emotion, event, text normalization]
     // prepended to the stacked features, then the encoder.
@@ -225,15 +210,8 @@ public partial class SenseVoice<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     }
 
     // The transcript logits [frames, vocabulary] of a waveform [S], or [batch, frames, vocabulary] for [batch, S].
-    private Tensor<T> Logits(Tensor<T> input)
-    {
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        if (_encoder is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
-        var outputs = new Tensor<T>[rows];
-        for (int r = 0; r < rows; r++) outputs[r] = TranscriptLogits(Samples(input, r * samples, samples), LanguageQuery(_options.Language));
-        return rows == 1 && input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
-    }
+    private Tensor<T> Logits(Tensor<T> input) =>
+        ForwardNativeWaveformBatch(input, _encoder, (_, wave) => TranscriptLogits(wave, LanguageQuery(_options.Language)));
 
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input); }
 
@@ -258,34 +236,8 @@ public partial class SenseVoice<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         return (tokens, tokens.Count > 0 ? total / tokens.Count : 0.0);
     }
 
-    // The labels a training target names: label ids [length], or one distribution per frame [frames, vocabulary] read
-    // as a CTC alignment (the most likely symbol per frame, repeats merged, blanks removed).
-    private int[] Labels(Tensor<T> target)
-    {
-        if (target.Rank >= 2 && target.Shape[^1] == _options.VocabSize) return GreedyCtc(target).Tokens.ToArray();
-        var labels = new int[target.Length];
-        var span = target.Data.Span;
-        for (int i = 0; i < labels.Length; i++)
-        {
-            double value = Math.Round(NumOps.ToDouble(span[i]));
-            if (value <= 0 || value >= _options.VocabSize) throw new ArgumentException($"Label {value} is the blank or outside the vocabulary.", nameof(target));
-            labels[i] = (int)value;
-        }
-        return labels;
-    }
-
-    private int[][] RowLabels(Tensor<T> input, Tensor<T> target)
-    {
-        int rows = input.Rank == 1 ? 1 : input.Shape[0], perRow = target.Length / rows;
-        var labels = new int[rows][];
-        for (int r = 0; r < rows; r++)
-        {
-            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
-                target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
-            labels[r] = Labels(row);
-        }
-        return labels;
-    }
+    private int[] Labels(Tensor<T> target) =>
+        ParseCtcOrTokenTargetLabels(target, _options.VocabSize, t => GreedyCtc(t).Tokens);
 
     /// <summary>
     /// The release's loss of one utterance: the CTC loss of the transcript over the positions after the queries, plus,
@@ -313,23 +265,9 @@ public partial class SenseVoice<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
 
     /// <inheritdoc />
     /// <remarks>The release's loss (<see cref="Loss"/>), averaged over the batch.</remarks>
-    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
-    {
-        if (_encoder is null) return false;
-        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
-        var labels = RowLabels(input, target);
-        TrainWithCustomLoss(input, _ =>
-        {
-            Tensor<T>? total = null;
-            for (int r = 0; r < rows; r++)
-            {
-                var loss = Loss(Samples(input, r * samples, samples), labels[r]);
-                total = total is null ? loss : Engine.TensorAdd(total, loss);
-            }
-            return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
-        }, _optimizer);
-        return true;
-    }
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target) =>
+        TrainNativeWaveformBatch(input, target, _encoder, _optimizer, (_, row) => Labels(row),
+            (_, wave, rowLabels) => Loss(wave, rowLabels));
 
     TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
 
@@ -337,16 +275,9 @@ public partial class SenseVoice<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
 
     /// <inheritdoc />
     /// <remarks>The objective <see cref="TryApplyLearningRule"/> minimizes, averaged over the batch.</remarks>
-    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
-    {
-        if (_encoder is null) throw new NotSupportedException("The objective is defined on the native network.");
-        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
-        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
-        var labels = RowLabels(input, target);
-        double total = 0;
-        for (int r = 0; r < rows; r++) total += NumOps.ToDouble(Engine.Reshape(Loss(Samples(input, r * samples, samples), labels[r]), new[] { 1 })[0]);
-        return NumOps.FromDouble(total / rows);
-    }
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target) =>
+        EvaluateNativeWaveformBatchObjective(input, target, _encoder, (_, row) => Labels(row),
+            (_, wave, rowLabels) => Loss(wave, rowLabels));
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

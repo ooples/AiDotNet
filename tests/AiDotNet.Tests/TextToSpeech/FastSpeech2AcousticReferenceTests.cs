@@ -24,6 +24,7 @@ public sealed class FastSpeech2AcousticReferenceTests
             "TextToSpeech", "ReferenceData", variant == 3 ? "adaspeech_acoustic_reference.json" : variant == 2 ? "fastspeech2_acoustic_reference.json" : "fastspeech_acoustic_reference.json")));
         var reference = document.RootElement;
         double[] Values(JsonElement values) => values.EnumerateArray().Select(x => x.GetDouble()).ToArray();
+        Tensor<double> Vec(double[] values) => new(new[] { values.Length }, new Vector<double>(values));
         double[] Weight(string key) => Values(reference.GetProperty("weights").GetProperty(key));
         double[] Gradient(string key) => Values(reference.GetProperty("gradients").GetProperty(key));
         var architecture = new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
@@ -55,7 +56,7 @@ public sealed class FastSpeech2AcousticReferenceTests
             Tokens = new Tensor<double>(new[] { 4 }, new Vector<double>(Values(reference.GetProperty("tokens")))),
             Mel = new Tensor<double>(new[] { 16, 5 }, new Vector<double>(Values(reference.GetProperty("target")))),
             Durations = reference.GetProperty("durations").EnumerateArray().Select(x => x.GetInt32()).ToArray(),
-            Pitch = Values(reference.GetProperty("f0")), Energy = Values(reference.GetProperty("energy")), SpeakerId = 1
+            Pitch = Vec(Values(reference.GetProperty("f0"))), Energy = Vec(Values(reference.GetProperty("energy"))), SpeakerId = 1
         };
         if (model is AdaSpeech<double> ada) ada.CurrentPhase = AdaSpeechTrainingPhase.SourceJoint;
         model.EvaluateTrainingObjective(sample);
@@ -193,9 +194,9 @@ public sealed class FastSpeech2AcousticReferenceTests
             Close(hidden, 7);
             Assert.True(Math.Abs(conditioning.AuxiliaryLoss![0] - reference.GetProperty("losses")[5].GetDouble()) < 1e-9);
         }
-        var adapted = adaptor.Adapt(hidden, new VarianceTargets
+        var adapted = adaptor.Adapt(hidden, new VarianceTargets<double>
         {
-            Durations = sample.Durations, Pitch = Values(reference.GetProperty("continuous_f0")), Energy = sample.Energy
+            Durations = sample.Durations, Pitch = Vec(Values(reference.GetProperty("continuous_f0"))), Energy = sample.Energy
         });
         Close(adapted.LogDuration, 1);
         if (variant != 1)

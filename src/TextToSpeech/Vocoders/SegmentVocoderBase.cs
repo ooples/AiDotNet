@@ -34,6 +34,11 @@ public abstract partial class SegmentVocoderBase<T> : VocoderBase<T>, ITrainingO
     private readonly int _samplingSeed;
     private readonly List<LayerBase<T>> _networkLayers = new();
 
+    // Both seeds decide the weights: the model-wide Seed as it does for every other model, and SamplingSeed (which also
+    // seeds the synthesis/training draws). A run that sets only SamplingSeed is unchanged; the multiplier keeps
+    // (Seed, SamplingSeed) pairs from colliding on neighbouring values.
+    private protected int InitializationSeed => unchecked(_samplingSeed + (Options?.Seed ?? 0) * 7919);
+
     /// <summary>Creates a native (trainable) vocoder.</summary>
     protected SegmentVocoderBase(NeuralNetworkArchitecture<T> architecture, VocoderOptions options,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer, int samplingSeed)
@@ -164,12 +169,7 @@ public abstract partial class SegmentVocoderBase<T> : VocoderBase<T>, ITrainingO
     /// constant for stability.</summary>
     protected Tensor<T> LogSoftmaxOverClasses(Tensor<T> logits)
     {
-        Tensor<T> max;
-        using (new NoGradScope<T>())
-        {
-            var m = Engine.ReduceMax(logits, new[] { 1 }, keepDims: true);
-            max = new Tensor<T>(m._shape, m.ToVector());
-        }
+        var max = Engine.StopGradient(Engine.ReduceMax(logits, new[] { 1 }, keepDims: true));
         var shifted = Engine.TensorSubtract(logits, Engine.TensorTile(max, new[] { 1, logits.Shape[1], 1 }));
         var logSum = Engine.TensorLog(Engine.ReduceSum(Engine.TensorExp(shifted), new[] { 1 }, keepDims: true));
         return Engine.TensorSubtract(shifted, Engine.TensorTile(logSum, new[] { 1, logits.Shape[1], 1 }));

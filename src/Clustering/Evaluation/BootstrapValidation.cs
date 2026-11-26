@@ -1,3 +1,4 @@
+using AiDotNet.Clustering.Base;
 using AiDotNet.Attributes;
 using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.Options;
@@ -253,10 +254,11 @@ public class BootstrapValidation<T>
                 if (kmeans.Labels is not null)
                 {
                     // Record assignments
+                    var kmeansLabelIds = ClusteringTensorOps.ToIntArray(kmeans.Labels);
                     for (int i = 0; i < n; i++)
                     {
                         int originalIdx = indices[i];
-                        int cluster = (int)_numOps.ToDouble(kmeans.Labels[i]);
+                        int cluster = kmeansLabelIds[i];
 
                         pointAppearances[originalIdx]++;
                         if (!assignmentCounts[originalIdx].ContainsKey(cluster))
@@ -321,15 +323,7 @@ public class BootstrapValidation<T>
 
     private Matrix<T> ExtractSubMatrix(Matrix<T> data, int[] indices)
     {
-        var subMatrix = new Matrix<T>(indices.Length, data.Columns);
-        for (int i = 0; i < indices.Length; i++)
-        {
-            for (int j = 0; j < data.Columns; j++)
-            {
-                subMatrix[i, j] = data[indices[i], j];
-            }
-        }
-        return subMatrix;
+        return ClusteringTensorOps.SelectRows(data, indices);
     }
 }
 

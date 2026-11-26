@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -34,7 +35,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentNullException>(() =>
-                new MultiVectorRetriever<double>(null, 3, "max"));
+                new MultiVectorRetriever<double>(null, 3, MultiVectorAggregation.Max));
         }
 
         [Fact(Timeout = 60000)]
@@ -42,22 +43,22 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
         {
             // Arrange & Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
-                new MultiVectorRetriever<double>(_documentStore, 0, "max"));
+                new MultiVectorRetriever<double>(_documentStore, 0, MultiVectorAggregation.Max));
         }
 
         [Fact(Timeout = 60000)]
-        public async Task Constructor_WithNullAggregationMethod_ThrowsArgumentNullException()
+        public async Task Constructor_WithUndefinedAggregationMethod_ThrowsArgumentOutOfRangeException()
         {
             // Arrange & Act & Assert
-            Assert.Throws<ArgumentNullException>(() =>
-                new MultiVectorRetriever<double>(_documentStore, 3, null));
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                new MultiVectorRetriever<double>(_documentStore, 3, (MultiVectorAggregation)99));
         }
 
         [Fact(Timeout = 60000)]
         public async Task Constructor_WithValidParameters_CreatesInstance()
         {
             // Arrange & Act
-            var retriever = new MultiVectorRetriever<double>(_documentStore, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(_documentStore, 3, MultiVectorAggregation.Max);
 
             // Assert
             Assert.NotNull(retriever);
@@ -67,9 +68,9 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
         public async Task Constructor_WithDifferentAggregationMethods_CreatesInstance()
         {
             // Arrange & Act
-            var maxRetriever = new MultiVectorRetriever<double>(_documentStore, 3, "max");
-            var meanRetriever = new MultiVectorRetriever<double>(_documentStore, 3, "mean");
-            var weightedRetriever = new MultiVectorRetriever<double>(_documentStore, 3, "weighted");
+            var maxRetriever = new MultiVectorRetriever<double>(_documentStore, 3, MultiVectorAggregation.Max);
+            var meanRetriever = new MultiVectorRetriever<double>(_documentStore, 3, MultiVectorAggregation.Mean);
+            var weightedRetriever = new MultiVectorRetriever<double>(_documentStore, 3, MultiVectorAggregation.Weighted);
 
             // Assert
             Assert.NotNull(maxRetriever);
@@ -81,7 +82,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
         public async Task Retrieve_WithNullQuery_ThrowsArgumentException()
         {
             // Arrange
-            var retriever = new MultiVectorRetriever<double>(_documentStore, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(_documentStore, 3, MultiVectorAggregation.Max);
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() => retriever.Retrieve(null));
@@ -91,7 +92,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
         public async Task Retrieve_WithEmptyQuery_ThrowsArgumentException()
         {
             // Arrange
-            var retriever = new MultiVectorRetriever<double>(_documentStore, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(_documentStore, 3, MultiVectorAggregation.Max);
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() => retriever.Retrieve(""));
@@ -101,7 +102,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
         public async Task Retrieve_WithZeroTopK_ThrowsArgumentOutOfRangeException()
         {
             // Arrange
-            var retriever = new MultiVectorRetriever<double>(_documentStore, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(_documentStore, 3, MultiVectorAggregation.Max);
 
             // Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() => retriever.Retrieve("test", 0));

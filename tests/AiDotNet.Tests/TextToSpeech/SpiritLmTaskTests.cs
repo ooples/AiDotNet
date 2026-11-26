@@ -124,7 +124,7 @@ public class SpiritLmTaskTests
         options.IncludeVocoderDiscriminators = true;
         // One fixed segment of four units (the release trains on segments of whole units): each step sees the same example.
         options.VocoderSegmentSize = 4 * 640;
-        var model = SpiritLmFixture.Tts<double>(options);
+        using var model = SpiritLmFixture.Tts<double>(options);
         var (units, pitch, styles) = model.SpeechUnits(SpiritLmFixture.Tones<double>(0.6));
         var full = SpiritLmFixture.Tones<double>(0.6);
         var speech = new Tensor<double>(new[] { 4 * 640 }, new Vector<double>(full.ToArray().Take(4 * 640).ToArray()));

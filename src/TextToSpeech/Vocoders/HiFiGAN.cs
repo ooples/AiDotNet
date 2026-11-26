@@ -74,13 +74,23 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
     /// <inheritdoc />
     protected override int SegmentSize => PaperOptions.SegmentSize;
 
+    // The native generator keeps only parameters, normalized-weight caches built outside every TensorScope
+    // (DerivedTensorCache) and private host workspaces (plain arrays). Its GPU route already scopes and releases each
+    // stage and returns one kept waveform, so the Predict funnel may free every other GPU result when the call ends.
+    // Custom architecture layers and ONNX execution have not made this lifetime declaration.
+    protected override bool ReleasesInferenceIntermediates => HasPaperLayers && _generator is not null;
+
     /// <inheritdoc />
     protected override IReadOnlyList<LayerBase<T>> CreateGenerator()
     {
         var o = PaperOptions;
         _generator = new HiFiGanGenerator<T>(Engine, o.MelChannels, o.UpsampleInitialChannels, o.UpsampleRates, o.UpsampleKernelSizes,
             o.ResblockKernelSizes, o.ResblockDilationSizes, o.ResblockType == 1,
-            initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7));
+            // No N(0, 0.01) redraw: the reference applies init_weights after weight_norm, so it writes only the derived
+            // `weight` tensor, which the forward pre-hook recomputes from weight_g and weight_v. Every convolution trains
+            // from PyTorch's default draw with g = ||v||. A real N(0, 0.01) shrinks each stage 3-15x and leaves an
+            // untrained generator's output to its biases, below single precision's resolution of the mel input.
+            defaultInitialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 11));
         _inputMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.MelMaxFrequency,
             singlePrecisionBasis: true);
         _lossMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.SampleRate / 2.0,
@@ -92,12 +102,20 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
     protected override IReadOnlyList<LayerBase<T>> CreateDiscriminators()
     {
         var o = PaperOptions;
-        _discriminators = new HiFiGanDiscriminators<T>(Engine, o.DiscriminatorPeriods, 3, true, o.DiscriminatorWidthDivisor);
+        _discriminators = new HiFiGanDiscriminators<T>(Engine, o.DiscriminatorPeriods, 3, true, o.DiscriminatorWidthDivisor,
+            initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 13));
         return _discriminators.Layers;
     }
 
     /// <inheritdoc />
     protected override Tensor<T> Generate(Tensor<T> mel) => _generator!.Forward(mel);
+
+    /// <inheritdoc />
+    private protected override Tensor<T> GenerateDetachedForDiscriminator(Tensor<T> mel)
+        => GetType() == typeof(HiFiGAN<T>)
+            ? Flat((_generator ?? throw new InvalidOperationException("The generator has not been built."))
+                .ForwardDetachedForDiscriminator(mel))
+            : base.GenerateDetachedForDiscriminator(mel);
 
     /// <inheritdoc />
     /// <remarks>The reference <c>mel_spectrogram</c>: reflect padding, Hann window, Slaney mel up to
@@ -146,9 +164,10 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
         using (new NoGradScope<T>()) realOut = _discriminators.Forward(real);
         var adversarialTerm = Sum(fake.Select(f => LeastSquaresGenerator(f.Score)));
         var featureMatching = Sum(Enumerable.Range(0, fake.Count).Select(k => FeatureMatching(realOut[k].Features, fake[k].Features)));
+        var lossMel = _lossMel ?? throw new InvalidOperationException("The mel loss transform has not been built.");
         Tensor<T> realMel;
-        using (new NoGradScope<T>()) realMel = Detached(_lossMel!.Forward(real));
-        var melLoss = Mean(Engine.TensorAbs(Engine.TensorSubtract(_lossMel!.Forward(generated), realMel)));
+        using (new NoGradScope<T>()) realMel = Engine.StopGradient(lossMel.Forward(real));
+        var melLoss = Mean(Engine.TensorAbs(Engine.TensorSubtract(lossMel.Forward(generated), realMel)));
         return Engine.TensorAdd(Engine.TensorAdd(adversarialTerm,
                 Engine.TensorMultiplyScalar(featureMatching, NumOps.FromDouble(PaperOptions.FeatureMatchingWeight))),
             Engine.TensorMultiplyScalar(melLoss, NumOps.FromDouble(PaperOptions.MelLossWeight)));

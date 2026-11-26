@@ -1,5 +1,6 @@
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.VisionLanguage.Unified;
 using Xunit;
@@ -199,6 +200,53 @@ public class TransfusionMixedObjectiveTests
             return false;
         }
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ParameterDiscoveryBeforeTrainingPreservesHeadShapesAndReplaysCurrentData(bool changeCaption)
+    {
+        using var reference = CreateModel();
+        using var changed = CreateModel();
+        // Parameter inspection must settle the parallel heads correctly without a preliminary
+        // objective evaluation. Otherwise their first compiled forward resizes live parameters.
+        var initial = reference.GetParameters();
+        var changedInitial = changed.GetParameters();
+        Assert.Equal(initial.Length, changedInitial.Length);
+        // Five decoder-width normalizations contribute gamma and beta before any forward.
+        // Omitting them from discovery adds 5 * 2 * 32 parameters at the first training step.
+        var normalizations = reference.Layers.OfType<LayerNormalizationLayer<float>>().ToArray();
+        Assert.Equal(5, normalizations.Length);
+        foreach (var normalization in normalizations)
+        {
+            Assert.Equal(new[] { 32 }, normalization.GetInputShape());
+            Assert.Equal(64, normalization.GetParameters().Length);
+        }
+        changed.SetParameters(initial);
+
+        var image = Image(0.6);
+        var caption = Caption(4, 9, 13, 21, 2);
+        reference.Train(image, caption);
+        changed.Train(image, caption);
+        Assert.Equal(reference.GetParameters().ToArray(), changed.GetParameters().ToArray());
+
+        reference.Train(image, caption);
+        changed.Train(changeCaption ? image : Image(0.2),
+            changeCaption ? Caption(5, 8, 12, 20, 3) : caption);
+
+        var referenceParameters = reference.GetParameters();
+        var changedParameters = changed.GetParameters();
+        Assert.Equal(initial.Length, referenceParameters.Length);
+        Assert.Equal(initial.Length, changedParameters.Length);
+        Assert.Equal(2, reference.CustomFusedStepCount);
+        Assert.Equal(2, changed.CustomFusedStepCount);
+        Assert.Equal(0, reference.CustomEagerStepCount);
+        Assert.Equal(0, changed.CustomEagerStepCount);
+        Assert.True(Enumerable.Range(0, referenceParameters.Length)
+                .Any(i => referenceParameters[i] != changedParameters[i]),
+            "The second fused step must use the current image and caption rather than the first step's data.");
+    }
+
     [Fact]
     public void ThePatchRowsDoNotAttendToTheEndOfImageMarker()
     {

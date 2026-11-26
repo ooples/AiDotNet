@@ -75,6 +75,10 @@ public partial class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMode
     private bool _disposed;
     // The paper network on the native path; null in ONNX mode or with custom layers.
     private Wav2Vec2Network<T>? _network;
+
+    /// <inheritdoc />
+    /// <remarks>True when the encoder's LayerDrop is positive: a skipped layer is not stepped that step.</remarks>
+    private protected override bool TrainingForwardSkipsLayersPerStep => _network is not null && _network.Configuration.LayerDrop > 0;
     internal Wav2Vec2Network<T>? Network => _network;
     private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
 
@@ -359,7 +363,13 @@ public partial class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMode
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         input = ToEncoderRate(input);
-        return _network is null ? base.ForwardForTraining(input) : Unbatch(input, _network.Forward(input, training: true, _random).Hidden);
+        if (_network is null) return base.ForwardForTraining(input);
+        int samples = input.Rank == 1 ? input.Shape[0]
+            : input.Rank == 2 ? input.Shape[1]
+            : input.Length / Math.Max(1, input.Shape[0]);
+        int minUnobliteratedFrames = _network.Configuration.MaskTimeLength * Math.Max(1, _network.Configuration.MaskTimeMinMasks);
+        double? maskProbability = _network.Frames(samples) > minUnobliteratedFrames ? (double?)null : 0.0;
+        return Unbatch(input, _network.Forward(input, training: true, _random, maskProbability: maskProbability).Hidden);
     }
 
     /// <inheritdoc />

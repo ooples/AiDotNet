@@ -111,7 +111,7 @@ public class TimitDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
 
         int textLen = _options.MaxTextLength;
         int audioLen = _options.MaxAudioSamples;
-        var featuresData = new T[totalSamples * textLen];
+        var featuresData = new int[totalSamples * textLen];
         var labelsData = new T[totalSamples * audioLen];
         var numOps = MathHelper.GetNumericOperations<T>();
 
@@ -121,12 +121,12 @@ public class TimitDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
             var (wav, text) = pairs[i];
             int[] tok = TextLoaderHelper.TokenizeAndEncode(text, vocabulary, textLen);
             int textOff = i * textLen;
-            for (int j = 0; j < textLen; j++) featuresData[textOff + j] = NumOps.FromDouble(tok[j]);
+            Array.Copy(tok, 0, featuresData, textOff, textLen);
             byte[] audioBytes = File.ReadAllBytes(wav);
             AudioLoaderHelper.LoadAudioSamples(audioBytes, labelsData, i * audioLen, audioLen, numOps);
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, textLen });
+        LoadedFeatures = new Tensor<int>(featuresData, new[] { totalSamples, textLen }).Cast<T>();
         LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, audioLen });
         InitializeIndices(totalSamples);
         await Task.CompletedTask;

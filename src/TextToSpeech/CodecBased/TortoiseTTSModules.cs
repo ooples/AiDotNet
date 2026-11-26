@@ -107,6 +107,11 @@ internal sealed class TortoiseTransformerLayer<T>
         Norm2 = TortoiseOps<T>.Own(owner, new LayerNormalizationLayer<T>(dim));
         FeedForwardIn = TortoiseOps<T>.Own(owner, new DenseLayer<T>(feedForward, identity));
         FeedForwardOut = TortoiseOps<T>.Own(owner, new DenseLayer<T>(dim, identity));
+        // Sized now: a first training forward that sized them would read the traced input on the host.
+        Qkv.ResolveFromShape(new[] { 1, dim });
+        AttentionOut.ResolveFromShape(new[] { 1, dim });
+        FeedForwardIn.ResolveFromShape(new[] { 1, dim });
+        FeedForwardOut.ResolveFromShape(new[] { 1, feedForward });
     }
 
     internal LayerNormalizationLayer<T> Norm1 { get; }
@@ -261,6 +266,8 @@ internal sealed class TortoiseAutoregressive<T>
         _finalNorm = TortoiseOps<T>.Own(owner, new LayerNormalizationLayer<T>(options.LLMDim, 1e-5));
         _textHead = TortoiseOps<T>.Own(owner, new DenseLayer<T>(options.VocabSize, identity));
         _speechHead = TortoiseOps<T>.Own(owner, new DenseLayer<T>(options.CodebookSize + 2, identity));
+        _textHead.ResolveFromShape(new[] { 1, options.LLMDim });
+        _speechHead.ResolveFromShape(new[] { 1, options.LLMDim });
     }
 
     internal Tensor<T> Conditioning(Tensor<T> melRows, bool training, Random random)
@@ -279,8 +286,8 @@ internal sealed class TortoiseAutoregressive<T>
             .Concat(new[] { _options.TextStopToken }).ToArray();
         var speechInput = new[] { _options.SpeechStartToken }.Concat(speech.Take(_options.MaxCodecFrames))
             .Concat(terminalSpeech ? new[] { _options.SpeechStopToken } : Array.Empty<int>()).ToArray();
-        var textHidden = _textPosition.Forward(_textEmbedding.Forward(TortoiseOps<T>.Ids(textInput)));
-        var speechHidden = _speechPosition.Forward(_speechEmbedding.Forward(TortoiseOps<T>.Ids(speechInput)));
+        var textHidden = UniAudioOps<T>.AddPositions(_engine, _textPosition, _textEmbedding.Forward(TortoiseOps<T>.Ids(textInput)));
+        var speechHidden = UniAudioOps<T>.AddPositions(_engine, _speechPosition, _speechEmbedding.Forward(TortoiseOps<T>.Ids(speechInput)));
         var sequence = _engine.TensorConcatenate(new[] { condition, textHidden, speechHidden }, 0);
         var hidden = _finalNorm.Forward(_gpt.Forward(sequence, TortoiseOps<T>.CausalMask(sequence.Shape[0]), training, random));
         int textStart = 1, speechStart = 1 + textInput.Length;

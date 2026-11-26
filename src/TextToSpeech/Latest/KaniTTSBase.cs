@@ -346,16 +346,14 @@ public abstract partial class KaniTTSBase<T> : TtsModelBase<T>, ICodecTts<T>
             double? framePosition = null;
             for (int step = 0; step < o.MaxNewTokens; step++)
             {
-                var values = logits.ToArray();
-                var scores = new double[values.Length];
-                for (int i = 0; i < scores.Length; i++) scores[i] = NumOps.ToDouble(values[i]);
+                var scores = Engine.Reshape(logits, new[] { logits.Length });
                 int next;
                 if (o.Temperature > 0)
-                    next = OuteTTSSampler.Sample(OuteTTSSampler.Process(scores, ids, o.RepetitionPenalty, ids.Count, o.Temperature, o.TopK, o.TopP, 0), random);
+                    next = OuteTTSSampler<T>.Sample(OuteTTSSampler<T>.Process(scores, ids, o.RepetitionPenalty, ids.Count, o.Temperature, o.TopK, o.TopP, 0), random);
                 else
                 {
-                    var processed = OuteTTSSampler.Process(scores, ids, o.RepetitionPenalty, ids.Count, 1.0, 0, 1.0, 0);
-                    next = Array.IndexOf(processed, processed.Max());
+                    var processed = OuteTTSSampler<T>.Process(scores, ids, o.RepetitionPenalty, ids.Count, 1.0, 0, 1.0, 0);
+                    next = OuteTTSSampler<T>.Greedy(processed);
                 }
                 ids.Add(next);
                 generated.Add(next);

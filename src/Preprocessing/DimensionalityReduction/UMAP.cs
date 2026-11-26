@@ -581,33 +581,90 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _embedding = embedding;
     }
 
-    private static (double a, double b) FindAbParams(double spread, double minDist)
+    /// <summary>
+    /// umap-learn find_ab_params: the (a, b) of 1 / (1 + a x^(2b)) that best fit, in least squares, the target
+    /// membership curve for <paramref name="spread"/> and <paramref name="minDist"/> (computed once per instance).
+    /// </summary>
+    internal static (double a, double b) FindAbParams(double spread, double minDist)
     {
-        // Find a and b parameters that give the desired spread and min_dist
-        // Using curve fitting for: 1 / (1 + a * x^(2*b))
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        const int points = 300;
 
-        double a = 1.929;
-        double b = 0.7915;
+        // umap-learn find_ab_params: x = linspace(0, 3 spread, 300),
+        // y = 1 for x < min_dist, exp(-(x - min_dist) / spread) otherwise
+        var x = engine.TensorMultiplyScalar(
+            Tensor<int>.FromVector(new Vector<int>(Enumerable.Range(0, points))).Cast<T>(),
+            ops.FromDouble(3.0 * spread / (points - 1)));
+        var decay = engine.TensorExp(engine.TensorMultiplyScalar(
+            engine.TensorSubtractScalar(x, ops.FromDouble(minDist)), ops.FromDouble(-1.0 / spread)));
+        var y = engine.TensorWhere(
+            engine.TensorLessThan(x, ops.FromDouble(minDist)), engine.TensorOnesLike(x), decay);
+        var logX = engine.TensorLog(engine.TensorClampMin(x, DimensionalityReductionOps.Tolerance<T>(1e-30)));   // u log x = 0 at x = 0
 
-        // Adjust based on spread and min_dist
-        if (Math.Abs(spread - 1.0) > 0.001 || Math.Abs(minDist - 0.1) > 0.001)
+        // Least squares fit of 1 / (1 + a x^(2b)) from (a, b) = (1, 1) by Levenberg-Marquardt
+        T a = ops.One;
+        T b = ops.One;
+        var (residual, jacobian) = AbResidual(x, logX, y, a, b);
+        T cost = engine.TensorSum(engine.TensorSquare(residual));
+        double damping = 1e-3;
+        T stepTolerance = DimensionalityReductionOps.Tolerance<T>(1e-15);
+        for (int iter = 0; iter < 200; iter++)
         {
-            // Simple approximation - for more accurate results, use optimization
-            double scale = spread;
-            a = 1.929 / (scale * scale);
-            b = 0.7915;
-
-            if (minDist < 0.001)
+            var normal = DimensionalityReductionOps.TransposeMatMul(jacobian, jacobian);
+            var damped = engine.TensorAdd(normal, engine.TensorMultiplyScalar(
+                engine.TensorDiag(engine.TensorDiagonal(normal)), DimensionalityReductionOps.Constant<T>(damping)));
+            var gradient = DimensionalityReductionOps.TransposeMatMul(jacobian, DimensionalityReductionOps.AsColumn(residual));
+            var step = engine.TensorNegate(DimensionalityReductionOps.Solve(damped, gradient));
+            T nextA = engine.TensorSum(engine.TensorAddScalar(engine.TensorNarrow(step, 0, 0, 1), a));
+            T nextB = engine.TensorSum(engine.TensorAddScalar(engine.TensorNarrow(step, 0, 1, 1), b));
+            var (nextResidual, nextJacobian) = AbResidual(x, logX, y, nextA, nextB);
+            T nextCost = engine.TensorSum(engine.TensorSquare(nextResidual));
+            if (DimensionalityReductionOps.Below(nextCost, cost))
             {
-                b = 0.9;
+                a = nextA;
+                b = nextB;
+                residual = nextResidual;
+                jacobian = nextJacobian;
+                cost = nextCost;
+                damping *= 0.1;
+                if (DimensionalityReductionOps.Below(engine.TensorSum(engine.TensorAbs(step)), stepTolerance))
+                {
+                    break;
+                }
             }
-            else if (minDist > 0.5)
+            else
             {
-                b = 0.6;
+                damping *= 10.0;
+                if (damping > 1e16)
+                {
+                    break;
+                }
             }
         }
 
-        return (a, b);
+        return (ops.ToDouble(a), ops.ToDouble(b));
+    }
+
+    /// <summary>
+    /// Residual f - y of f(x) = 1 / (1 + a x^(2b)) and its [points, 2] Jacobian
+    /// (df/da = -x^(2b) / den^2, df/db = -2 a x^(2b) log x / den^2).
+    /// </summary>
+    private static (Tensor<T> Residual, Tensor<T> Jacobian) AbResidual(Tensor<T> x, Tensor<T> logX, Tensor<T> y, T a, T b)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var power = engine.TensorWhere(
+            engine.TensorGreaterThan(x, ops.Zero),
+            engine.TensorExp(engine.TensorMultiplyScalar(logX, ops.Multiply(ops.FromDouble(2.0), b))),
+            engine.TensorZerosLike(x));
+        var denominator = engine.TensorAddScalar(engine.TensorMultiplyScalar(power, a), ops.One);
+        var residual = engine.TensorSubtract(engine.TensorReciprocal(denominator), y);
+        var common = engine.TensorNegate(engine.TensorDivide(power, engine.TensorSquare(denominator)));
+        var dB = engine.TensorMultiplyScalar(engine.TensorMultiply(common, logX), ops.Multiply(ops.FromDouble(2.0), a));
+        var jacobian = engine.TensorConcatenate(
+            new[] { DimensionalityReductionOps.AsColumn(common), DimensionalityReductionOps.AsColumn(dB) }, 1);
+        return (residual, jacobian);
     }
 
     /// <summary>

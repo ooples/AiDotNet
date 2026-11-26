@@ -74,7 +74,7 @@ public sealed class OuteTTSSpeaker
     /// <summary>The release's bundled speaker (<c>en-female-1-neutral</c>).</summary>
     public static OuteTTSSpeaker DefaultEnglishFemale()
     {
-        using var stream = typeof(OuteTTSSpeaker).Assembly.GetManifestResourceStream("AiDotNet.TextToSpeech.Latest.outetts_en_female_1_neutral.json")
+        using var stream = EmbeddedData.Open("AiDotNet.TextToSpeech.Latest.outetts_en_female_1_neutral.json")
             ?? throw new InvalidDataException("The embedded resource outetts_en_female_1_neutral.json is missing.");
         using var reader = new StreamReader(stream);
         return FromJson(reader.ReadToEnd());

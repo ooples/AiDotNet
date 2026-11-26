@@ -379,12 +379,8 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
         // Create initial read/write weights with uniform distribution
         var readWeight = new Vector<T>(_memorySize);
         var writeWeight = new Vector<T>(_memorySize);
-
-        for (int i = 0; i < _memorySize; i++)
-        {
-            readWeight[i] = uniformWeight;
-            writeWeight[i] = uniformWeight;
-        }
+        readWeight.Fill(uniformWeight);
+        writeWeight.Fill(uniformWeight);
 
         _readWeights.Add(readWeight);
         _writeWeights.Add(writeWeight);
@@ -431,15 +427,8 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
         // Snapshot _memories[0] as the canonical initial memory. Every Predict
         // call copies this back onto every batch's working memory so writes
         // don't accumulate across calls (see _initialMemoryTemplate docs).
-        _initialMemoryTemplate = new Matrix<T>(_memorySize, _memoryVectorSize);
-        _initialMemoryTensor = new Tensor<T>([_memorySize, _memoryVectorSize]);
-        for (int i = 0; i < _memorySize; i++)
-            for (int j = 0; j < _memoryVectorSize; j++)
-            {
-                T v = _memories[0][i, j];
-                _initialMemoryTemplate[i, j] = v;
-                _initialMemoryTensor[i, j] = v;
-            }
+        _initialMemoryTemplate = _memories[0].Clone();
+        _initialMemoryTensor = new Tensor<T>(_memories[0].AsSpan().ToArray(), [_memorySize, _memoryVectorSize]);
     }
 
     /// <summary>
@@ -482,15 +471,9 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
         {
             // Restore memory contents from the snapshot rather than re-randomizing —
             // re-randomizing would itself break determinism across Predict calls.
-            for (int i = 0; i < _memorySize; i++)
-                for (int j = 0; j < _memoryVectorSize; j++)
-                    _memories[b][i, j] = _initialMemoryTemplate[i, j];
-
-            for (int i = 0; i < _memorySize; i++)
-            {
-                _readWeights[b][i] = uniformWeight;
-                _writeWeights[b][i] = uniformWeight;
-            }
+            _initialMemoryTemplate.AsSpan().CopyTo(_memories[b].AsWritableSpan());
+            _readWeights[b].Fill(uniformWeight);
+            _writeWeights[b].Fill(uniformWeight);
         }
     }
 
@@ -535,38 +518,16 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
         T epsilon = NumOps.FromDouble(1e-10);  // For numerical stability
         T oneMinusEpsilon = NumOps.Subtract(NumOps.One, epsilon);
 
-        // Compute negative entropy for read weights
-        foreach (var readWeight in _readWeights)
+        // Minimize Shannon entropy, -sum(p * log p), to encourage focused read/write addressing.
+        // This preserves the scalar path's positive penalty and its preference for sharp distributions.
+        var addressing = _readWeights.Concat(_writeWeights)
+            .Where(w => w.Length > 0)
+            .Select(w => Tensor<T>.FromVector(w))
+            .ToArray();
+        if (addressing.Length > 0)
         {
-            T entropy = NumOps.Zero;
-            for (int i = 0; i < readWeight.Length; i++)
-            {
-                T p = readWeight[i];
-                // Entropy: H = -Σ(p * log(p))
-                // Clamp p to [epsilon, 1-epsilon] to avoid log(0) and log(>1)
-                T pClamped = MathHelper.Clamp(p, epsilon, oneMinusEpsilon);
-                T logP = NumOps.Log(pClamped);
-                T pLogP = NumOps.Multiply(pClamped, logP);
-                entropy = NumOps.Add(entropy, pLogP);
-            }
-            // Negative entropy (we want to minimize this, encouraging sharp peaks)
-            totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);
-        }
-
-        // Compute negative entropy for write weights
-        foreach (var writeWeight in _writeWeights)
-        {
-            T entropy = NumOps.Zero;
-            for (int i = 0; i < writeWeight.Length; i++)
-            {
-                T p = writeWeight[i];
-                // Clamp p to [epsilon, 1-epsilon] to avoid log(0) and log(>1)
-                T pClamped = MathHelper.Clamp(p, epsilon, oneMinusEpsilon);
-                T logP = NumOps.Log(pClamped);
-                T pLogP = NumOps.Multiply(pClamped, logP);
-                entropy = NumOps.Add(entropy, pLogP);
-            }
-            totalNegativeEntropy = NumOps.Subtract(totalNegativeEntropy, entropy);
+            var p = Engine.TensorClamp(Engine.TensorConcatenate(addressing, 0), epsilon, oneMinusEpsilon);
+            totalNegativeEntropy = NumOps.Negate(Engine.TensorSum(Engine.TensorMultiply(p, Engine.TensorLog(p))));
         }
 
         _lastMemoryUsageLoss = totalNegativeEntropy;
@@ -681,28 +642,16 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
             for (int i = 0; i < additionalMemories; i++)
             {
                 // Create new memory matrix
-                var newMemory = new Matrix<T>(_memorySize, _memoryVectorSize);
-
                 // Initialize with the same pattern as the first memory
-                for (int r = 0; r < _memorySize; r++)
-                {
-                    for (int c = 0; c < _memoryVectorSize; c++)
-                    {
-                        newMemory[r, c] = _memories[0][r, c];
-                    }
-                }
+                var newMemory = _memories[0].Clone();
 
                 _memories.Add(newMemory);
 
                 // Add new read/write weights
                 var readWeight = new Vector<T>(_memorySize);
                 var writeWeight = new Vector<T>(_memorySize);
-
-                for (int j = 0; j < _memorySize; j++)
-                {
-                    readWeight[j] = uniformWeight;
-                    writeWeight[j] = uniformWeight;
-                }
+                readWeight.Fill(uniformWeight);
+                writeWeight.Fill(uniformWeight);
 
                 _readWeights.Add(readWeight);
                 _writeWeights.Add(writeWeight);
@@ -1507,17 +1456,14 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
 
         // Use first quarter of controller output for read parameters
         int readParamSize = controllerOutputSize / 4;
-        var readParams = new Tensor<T>(new int[] { batchSize, readParamSize });
+        if (batchSize == 0 || readParamSize == 0)
+            return new Tensor<T>(new int[] { batchSize, readParamSize });
 
-        for (int b = 0; b < batchSize; b++)
+        // A detached copy of columns [0, readParamSize), as the old fresh tensor was.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int i = 0; i < readParamSize; i++)
-            {
-                readParams[b, i] = controllerOutput[b, i];
-            }
+            return Engine.TensorSlice(controllerOutput, new[] { 0, 0 }, new[] { batchSize, readParamSize });
         }
-
-        return readParams;
     }
 
     /// <summary>
@@ -1534,17 +1480,14 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
         int writeParamStart = controllerOutputSize / 4;
         int writeParamSize = controllerOutputSize / 4;
 
-        var writeParams = new Tensor<T>(new int[] { batchSize, writeParamSize });
+        if (batchSize == 0 || writeParamSize == 0)
+            return new Tensor<T>(new int[] { batchSize, writeParamSize });
 
-        for (int b = 0; b < batchSize; b++)
+        // A detached copy of columns [writeParamStart, writeParamStart + writeParamSize), as the old fresh tensor was.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int i = 0; i < writeParamSize; i++)
-            {
-                writeParams[b, i] = controllerOutput[b, writeParamStart + i];
-            }
+            return Engine.TensorSlice(controllerOutput, new[] { 0, writeParamStart }, new[] { batchSize, writeParamSize });
         }
-
-        return writeParams;
     }
 
     /// <summary>
@@ -1590,15 +1533,7 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
             return new Vector<T>(tensor.Shape[1]);
         }
 
-        int vectorSize = tensor.Shape[1];
-        var vector = new Vector<T>(vectorSize);
-
-        for (int i = 0; i < vectorSize; i++)
-        {
-            vector[i] = tensor[batchIndex, i];
-        }
-
-        return vector;
+        return tensor.GetRow(batchIndex);
     }
 
     /// <summary>
@@ -1625,27 +1560,12 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
             // Use whatever parameters we have as the key, return simple content-based weights
             var simpleKey = parameters.Subvector(0, Math.Min(parameterCount, _memoryVectorSize));
             // Pad with zeros if needed
-            if (simpleKey.Length < _memoryVectorSize)
-            {
-                var paddedKey = new Vector<T>(_memoryVectorSize);
-                for (int i = 0; i < simpleKey.Length; i++)
-                    paddedKey[i] = simpleKey[i];
-                simpleKey = paddedKey;
-            }
-            return ContentAddressing(memory, simpleKey, numOps.One);
+            return ContentAddressing(memory, ZeroPad(simpleKey, _memoryVectorSize), numOps.One);
         }
 
         // Extract key vector (for content addressing)
-        var keyVector = parameters.Subvector(0, keyVectorSize);
-
         // Pad key vector to match memory vector size if needed
-        if (keyVector.Length < _memoryVectorSize)
-        {
-            var paddedKey = new Vector<T>(_memoryVectorSize);
-            for (int i = 0; i < keyVector.Length; i++)
-                paddedKey[i] = keyVector[i];
-            keyVector = paddedKey;
-        }
+        var keyVector = ZeroPad(parameters.Subvector(0, keyVectorSize), _memoryVectorSize);
 
         // Extract key strength (focus sharpness parameter) - typically just one value after key vector
         // Apply softplus using activation functions instead of direct call
@@ -1686,11 +1606,7 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
         }
 
         // Extract shift weights (for location addressing) - We'll use 3 values for -1, 0, +1 shifts
-        var shifts = new Vector<T>(3);
-        for (int i = 0; i < 3; i++)
-        {
-            shifts[i] = parameters[keyVectorSize + 2 + i];
-        }
+        var shifts = parameters.Subvector(keyVectorSize + 2, 3);
 
         // Apply softmax to shifts using our content addressing activation (since it's typically softmax)
         shifts = ApplyActivation(shifts, ActivationType.ContentAddressing);
@@ -1717,14 +1633,10 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
         var contentWeights = ContentAddressing(memory, keyVector, keyStrength);
 
         // 2. Interpolation - blend between previous weights and content weights
-        var interpolatedWeights = new Vector<T>(_memorySize);
-        for (int m = 0; m < _memorySize; m++)
-        {
-            interpolatedWeights[m] = numOps.Add(
-                numOps.Multiply(numOps.Subtract(numOps.One, gate), previousWeights[m]),
-                numOps.Multiply(gate, contentWeights[m])
-            );
-        }
+        //    w = (1 - g) * w_prev + g * w_content
+        var interpolatedWeights = Engine.Add(
+            Engine.Multiply(previousWeights, numOps.Subtract(numOps.One, gate)),
+            Engine.Multiply(contentWeights, gate));
 
         // 3. Convolutional shift - apply circular shift to weights
         var shiftedWeights = ConvolutionalShift(interpolatedWeights, shifts);
@@ -1746,13 +1658,9 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
         if (activation == null)
             return vector;
 
-        var result = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            result[i] = activation.Activate(vector[i]);
-        }
-
-        return result;
+        // Element-wise scalar activation (not the vector overload, which softmax-style functions
+        // override with a whole-vector meaning).
+        return vector.Transform(activation.Activate);
     }
 
     /// <summary>
@@ -1807,27 +1715,23 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
     /// <returns>A vector of attention weights based on content similarity.</returns>
     private Vector<T> ContentAddressing(Matrix<T> memory, Vector<T> key, T keyStrength)
     {
-        var similarities = new Vector<T>(_memorySize);
+        if (key.Length != _memoryVectorSize)
+            throw new ArgumentException("Vectors must have the same length");
 
-        // Calculate cosine similarity between key and each memory row
-        for (int m = 0; m < _memorySize; m++)
-        {
-            var memoryRow = new Vector<T>(_memoryVectorSize);
-            for (int i = 0; i < _memoryVectorSize; i++)
-            {
-                memoryRow[i] = memory[m, i];
-            }
-
-            // CosineSimilarity returns NaN for zero vectors — use 0 for stability
-            var sim = StatisticsHelper<T>.CosineSimilarity(key, memoryRow);
-            similarities[m] = NumOps.IsNaN(sim) ? NumOps.Zero : sim;
-        }
+        // Cosine similarity between the key and every memory row: dot / (|row| * |key|), 0 where the
+        // denominator is 0 (a zero vector) and 0 for a NaN result, for stability.
+        var rows = Tensor<T>.FromMatrix(memory);                                             // [M, D]
+        var keyColumn = Engine.Reshape(Tensor<T>.FromVector(key), new[] { _memoryVectorSize, 1 });
+        var dots = Engine.Reshape(Engine.TensorMatMul(rows, keyColumn), new[] { _memorySize });
+        var rowNorms = Engine.Reshape(Engine.TensorNorm(rows, 1, false), new[] { _memorySize });
+        var denominator = Engine.TensorMultiplyScalar(rowNorms, Engine.TensorNorm(keyColumn).GetFlatIndexValue(0));
+        var zeros = Engine.TensorZerosLike(dots);
+        var cosine = Engine.TensorWhere(
+            Engine.TensorGreaterThan(denominator, NumOps.Zero), Engine.TensorDivide(dots, denominator), zeros);
+        cosine = Engine.TensorWhere(Engine.TensorIsNan(cosine), zeros, cosine);
 
         // Apply key strength (focus factor)
-        for (int m = 0; m < _memorySize; m++)
-        {
-            similarities[m] = NumOps.Multiply(keyStrength, similarities[m]);
-        }
+        var similarities = Engine.TensorMultiplyScalar(cosine, keyStrength).ToVector();
 
         // Apply softmax to get normalized attention weights
         return ApplyActivation(similarities, ActivationType.ContentAddressing);
@@ -1841,34 +1745,19 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
     /// <returns>The shifted weights.</returns>
     private Vector<T> ConvolutionalShift(Vector<T> weights, Vector<T> shifts)
     {
-        var result = new Vector<T>(_memorySize);
+        if (_memorySize == 0 || shifts.Length == 0)
+            return new Vector<T>(_memorySize);
 
-        // Initialize with zeros
-        for (int i = 0; i < _memorySize; i++)
-        {
-            result[i] = NumOps.Zero;
-        }
-
-        // Apply each shift with its corresponding weight
-        for (int i = 0; i < _memorySize; i++)
-        {
-            // Apply shifting with circular boundary conditions
-            for (int j = 0; j < shifts.Length; j++)
-            {
-                // Convert shift index (0,1,2) to shift offset (-1,0,1)
-                int shift = j - 1;
-
-                // Calculate source index with circular wrapping
-                int sourceIndex = (i - shift) % _memorySize;
-                if (sourceIndex < 0) sourceIndex += _memorySize;
-
-                // Add weighted contribution
-                result[i] = NumOps.Add(result[i],
-                    NumOps.Multiply(weights[sourceIndex], shifts[j]));
-            }
-        }
-
-        return result;
+        // result[i] = sum_j weights[(i - (j - 1)) mod M] * shifts[j]: shift index j is the offset j - 1
+        // (-1, 0, +1), and row j of the rolled stack is weights circularly shifted by that offset.
+        var weightTensor = Tensor<T>.FromVector(weights.Subvector(0, _memorySize));
+        var rolled = Engine.TensorStack(
+            Enumerable.Range(0, shifts.Length)
+                .Select(j => Engine.TensorRoll(weightTensor, new[] { j - 1 }, new[] { 0 }))
+                .ToArray(),
+            0);                                                                            // [S, M]
+        var shiftRow = Engine.Reshape(Tensor<T>.FromVector(shifts), new[] { 1, shifts.Length });
+        return Engine.Reshape(Engine.TensorMatMul(shiftRow, rolled), new[] { _memorySize }).ToVector();
     }
 
     /// <summary>
@@ -1902,24 +1791,14 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
         // mathematically non-negative. TensorPower(negative, fractional)
         // returns NaN on every IEEE-754 engine, so the negative value would
         // propagate even past the renormalization step.
-        T inputSum = NumOps.Zero;
-        var clamped = new T[_memorySize];
-        for (int i = 0; i < weights.Length; i++)
-        {
-            T w = weights[i];
-            if (NumOps.IsNaN(w) || NumOps.LessThan(w, NumOps.Zero))
-                w = NumOps.Zero;
-            clamped[i] = w;
-            inputSum = NumOps.Add(inputSum, w);
-        }
+        var raw = Tensor<T>.FromVector(weights);
+        var clamped = Engine.TensorClampMin(
+            Engine.TensorWhere(Engine.TensorIsNan(raw), Engine.TensorZerosLike(raw), raw), NumOps.Zero);
+        T inputSum = Engine.TensorSum(clamped);
         if (NumOps.LessThan(inputSum, eps) || NumOps.IsNaN(inputSum))
             inputSum = NumOps.FromDouble(1e-6);
 
-        var simplex = new T[_memorySize];
-        for (int i = 0; i < _memorySize; i++)
-            simplex[i] = NumOps.Add(NumOps.Divide(clamped[i], inputSum), eps);
-
-        var weightsTensor = new Tensor<T>(simplex, [_memorySize]);
+        var weightsTensor = Engine.TensorAddScalar(Engine.TensorDivideScalar(clamped, inputSum), eps);
 
         // Step 2: raise each weight to gamma.
         var powered = Engine.TensorPower(weightsTensor, gammaClamped);
@@ -1946,10 +1825,7 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
         for (int b = 0; b < batchSize; b++)
         {
             var readResult = ReadFromMemory(_memories[b], _readWeights[b]);
-            for (int v = 0; v < _memoryVectorSize; v++)
-            {
-                result[b, v] = readResult[v];
-            }
+            result.SetSlice(b * _memoryVectorSize, readResult);
         }
 
         return result;
@@ -1963,33 +1839,18 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
     /// <returns>The read result vector.</returns>
     private Vector<T> ReadFromMemory(Matrix<T> memory, Vector<T> readWeights)
     {
-        var result = new Vector<T>(_memoryVectorSize);
+        if (_memorySize == 0 || _memoryVectorSize == 0)
+            return new Vector<T>(_memoryVectorSize);
 
-        // Initialize with zeros
-        for (int v = 0; v < _memoryVectorSize; v++)
-        {
-            result[v] = NumOps.Zero;
-        }
-
-        // Perform weighted read
-        for (int m = 0; m < _memorySize; m++)
-        {
-            T weight = readWeights[m];
-
-            // Skip if weight is effectively zero (optimization)
-            if (NumOps.LessThan(weight, NumOps.FromDouble(1e-10)))
-            {
-                continue;
-            }
-
-            for (int v = 0; v < _memoryVectorSize; v++)
-            {
-                T weightedValue = NumOps.Multiply(weight, memory[m, v]);
-                result[v] = NumOps.Add(result[v], weightedValue);
-            }
-        }
-
-        return result;
+        // Weighted read r = sum_m w(m) * M(m); locations with w(m) < 1e-10 are skipped.
+        var (weightRow, skipped) = ActiveAddressing(readWeights);
+        var values = Tensor<T>.FromMatrix(memory);
+        // A skipped location is never read by the scalar loop. Mask its memory too: 0 * NaN is NaN.
+        values = Engine.TensorWhere(
+            Engine.TensorBroadcastTo(Engine.Reshape(skipped, new[] { _memorySize, 1 }), values._shape),
+            Engine.TensorZerosLike(values), values);
+        var read = Engine.TensorMatMul(Engine.Reshape(weightRow, new[] { 1, _memorySize }), values);
+        return Engine.Reshape(read, new[] { _memoryVectorSize }).ToVector();
     }
 
     /// <summary>
@@ -2007,18 +1868,11 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
             var writeVector = ExtractVector(writeParams, b);
 
             // Calculate erase and add vectors
-            var eraseVector = new Vector<T>(_memoryVectorSize);
-            var addVector = new Vector<T>(_memoryVectorSize);
-
             // Extract erase vector (first half of parameters, apply gate activation to get [0,1] range)
             int eraseSize = Math.Min(_memoryVectorSize, paramSize / 2);
 
             // Create a temporary vector for the erase parameters
-            var eraseParams = new Vector<T>(eraseSize);
-            for (int i = 0; i < eraseSize; i++)
-            {
-                eraseParams[i] = writeVector[i];
-            }
+            var eraseParams = writeVector.Subvector(0, eraseSize);
 
             // Apply activation function to the erase parameters
             Vector<T> activatedEraseParams;
@@ -2035,28 +1889,16 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
             else
             {
                 // Fallback to default sigmoid implementation
-                activatedEraseParams = new Vector<T>(eraseParams.Length);
-                for (int i = 0; i < eraseParams.Length; i++)
-                {
-                    activatedEraseParams[i] = MathHelper.Sigmoid(eraseParams[i]);
-                }
+                activatedEraseParams = Engine.TensorSigmoid(Tensor<T>.FromVector(eraseParams)).ToVector();
             }
 
-            // Map the activated values to the erase vector
-            for (int v = 0; v < _memoryVectorSize; v++)
-            {
-                int eraseIndex = v % eraseSize;
-                eraseVector[v] = activatedEraseParams[eraseIndex];
-            }
+            // Map the activated values to the erase vector: eraseVector[v] = activated[v % eraseSize]
+            var eraseVector = RepeatToLength(activatedEraseParams, _memoryVectorSize);
 
-            // Extract add vector (second half of parameters)
+            // Extract add vector (second half of parameters): addVector[v] = writeVector[addStart + v % addSize]
             int addStart = paramSize / 2;
             int addSize = Math.Min(_memoryVectorSize, paramSize - addStart);
-            for (int v = 0; v < _memoryVectorSize; v++)
-            {
-                int addIndex = addStart + (v % addSize);
-                addVector[v] = writeVector[addIndex];
-            }
+            var addVector = RepeatToLength(writeVector.Subvector(addStart, addSize), _memoryVectorSize);
 
             // Perform erase and add operations
             WriteToMemory(_memories[b], _writeWeights[b], eraseVector, addVector);
@@ -2080,36 +1922,61 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
         // individual w(i) slightly above 1 even though the vector sums to ~1,
         // and a single training step can push the product over 1 — clamping
         // (issue #1332 cluster 1.3) is what keeps retainAmount non-negative.
-        for (int m = 0; m < _memorySize; m++)
-        {
-            T weight = writeWeights[m];
+        if (_memorySize == 0 || _memoryVectorSize == 0)
+            return;
 
-            // Skip if weight is effectively zero (optimization)
-            if (NumOps.LessThan(weight, NumOps.FromDouble(1e-10)))
-            {
-                continue;
-            }
+        // Locations with w(i) < 1e-10 are skipped (left untouched).
+        var raw = Tensor<T>.FromVector(writeWeights.Subvector(0, _memorySize));
+        var skipped = Engine.Reshape(Engine.TensorLessThan(raw, NumOps.FromDouble(1e-10)), new[] { _memorySize, 1 });
+        var weightColumn = Engine.Reshape(raw, new[] { _memorySize, 1 });
+        var current = Tensor<T>.FromMatrix(memory);                                          // [M, D]
 
-            // Erase phase: clamp w*e to [0, 1] so retainAmount stays in [0, 1].
-            for (int v = 0; v < _memoryVectorSize; v++)
-            {
-                T eraseAmount = NumOps.Multiply(weight, eraseVector[v]);
-                if (NumOps.LessThan(eraseAmount, NumOps.Zero))
-                    eraseAmount = NumOps.Zero;
-                else if (NumOps.GreaterThan(eraseAmount, NumOps.One))
-                    eraseAmount = NumOps.One;
+        // Erase phase: clamp w*e to [0, 1] so retainAmount stays in [0, 1].
+        var eraseRow = Engine.Reshape(Tensor<T>.FromVector(eraseVector), new[] { 1, _memoryVectorSize });
+        var eraseAmount = Engine.TensorClamp(Engine.TensorMatMul(weightColumn, eraseRow), NumOps.Zero, NumOps.One);
+        var retained = Engine.TensorMultiply(current, Engine.ScalarMinusTensor(NumOps.One, eraseAmount));
 
-                T retainAmount = NumOps.Subtract(NumOps.One, eraseAmount);
-                memory[m, v] = NumOps.Multiply(memory[m, v], retainAmount);
-            }
+        // Add phase - memory[i] = memory[i] + weight * add[i]
+        var addRow = Engine.Reshape(Tensor<T>.FromVector(addVector), new[] { 1, _memoryVectorSize });
+        var written = Engine.TensorAdd(retained, Engine.TensorMatMul(weightColumn, addRow));
 
-            // Add phase - memory[i] = memory[i] + weight * add[i]
-            for (int v = 0; v < _memoryVectorSize; v++)
-            {
-                T addAmount = NumOps.Multiply(weight, addVector[v]);
-                memory[m, v] = NumOps.Add(memory[m, v], addAmount);
-            }
-        }
+        var updated = Engine.TensorWhere(
+            Engine.TensorBroadcastTo(skipped, new[] { _memorySize, _memoryVectorSize }), current, written);
+        updated.AsSpan().CopyTo(memory.AsWritableSpan());
+    }
+
+    /// <summary>
+    /// The addressing weights with every location below 1e-10 zeroed, as the read loop skipped them.
+    /// </summary>
+    private (Tensor<T> Weights, Tensor<T> Skipped) ActiveAddressing(Vector<T> weights)
+    {
+        var raw = Tensor<T>.FromVector(weights.Subvector(0, _memorySize));
+        var skipped = Engine.TensorLessThan(raw, NumOps.FromDouble(1e-10));
+        return (Engine.TensorWhere(skipped, Engine.TensorZerosLike(raw), raw), skipped);
+    }
+
+    /// <summary>
+    /// <paramref name="source"/> repeated cyclically to <paramref name="length"/> elements:
+    /// result[v] = source[v % source.Length].
+    /// </summary>
+    private Vector<T> RepeatToLength(Vector<T> source, int length)
+    {
+        if (length == 0)
+            return new Vector<T>(0);
+        if (source.Length == 0)
+            throw new DivideByZeroException();
+        int repeats = (length + source.Length - 1) / source.Length;
+        var tiled = Engine.TensorTile(Tensor<T>.FromVector(source), new[] { repeats });
+        return Engine.TensorSlice(tiled, new[] { 0 }, new[] { length }).ToVector();
+    }
+
+    /// <summary>The first elements of <paramref name="source"/> followed by zeros up to <paramref name="length"/>.</summary>
+    private Vector<T> ZeroPad(Vector<T> source, int length)
+    {
+        if (source.Length >= length)
+            return source;
+        return Engine.TensorConcatenate(
+            new[] { Tensor<T>.FromVector(source), new Tensor<T>(new[] { length - source.Length }) }, 0).ToVector();
     }
 
     /// <summary>

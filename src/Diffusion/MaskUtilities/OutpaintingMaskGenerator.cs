@@ -112,19 +112,13 @@ public class OutpaintingMaskGenerator<T> : IDataTransformer<T, Tensor<T>, Tensor
     public Tensor<T> Generate(int canvasHeight, int canvasWidth,
         int imageTop, int imageLeft, int imageHeight, int imageWidth)
     {
-        var mask = new Tensor<T>(new[] { canvasHeight, canvasWidth });
-        var one = NumOps.One;
-        var zero = NumOps.Zero;
+        if (imageTop < 0 || imageLeft < 0)
+            throw new ArgumentOutOfRangeException(imageTop < 0 ? nameof(imageTop) : nameof(imageLeft),
+                "The image region must start inside the canvas.");
 
-        // Start with all ones (generate everything)
-        for (int y = 0; y < canvasHeight; y++)
-            for (int x = 0; x < canvasWidth; x++)
-                mask[y, x] = one;
-
-        // Clear the original image region
-        for (int y = imageTop; y < Math.Min(imageTop + imageHeight, canvasHeight); y++)
-            for (int x = imageLeft; x < Math.Min(imageLeft + imageWidth, canvasWidth); x++)
-                mask[y, x] = zero;
+        // All ones (generate everything) except the original image region
+        var mask = AiDotNetEngine.Current.ScalarMinusTensor(NumOps.One, MaskVectorOps.Rectangle<T>(
+            canvasHeight, canvasWidth, imageTop, imageLeft, imageTop + imageHeight, imageLeft + imageWidth));
 
         // Apply feathering at the boundary
         if (_featherRadius > 0)

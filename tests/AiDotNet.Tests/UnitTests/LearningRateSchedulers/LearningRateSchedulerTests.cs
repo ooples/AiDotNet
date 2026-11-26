@@ -388,12 +388,14 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
             Assert.Equal(0, sequential.CurrentSchedulerIndex);
 
             // Warmup phase
-            for (int i = 0; i < 5; i++) sequential.Step();
+            for (int i = 0; i < 4; i++) sequential.Step();
             Assert.Equal(0, sequential.CurrentSchedulerIndex);
 
-            // After milestone, should switch
-            sequential.Step();
+            // At the milestone it switches, as PyTorch's SequentialLR, and the cosine starts at its own step 0.
+            double lr = sequential.Step();
             Assert.Equal(1, sequential.CurrentSchedulerIndex);
+            Assert.Equal(0.1, lr);
+            Assert.Equal(0.1, sequential.GetLearningRateAtStep(5));
         }
 
         #endregion

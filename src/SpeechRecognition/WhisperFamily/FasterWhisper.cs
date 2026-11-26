@@ -96,20 +96,14 @@ public partial class FasterWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
         ThrowIfDisposed();
-        var whisper = _whisper ?? throw new NotSupportedException("Transcription runs on the native Whisper network.");
-        return whisper.Transcribe(Samples(audio), language ?? _options.Language, ResolveReturnTimestamps(includeTimestamps) || _options.WordTimestamps, _options.Temperatures);
+        return TranscribeNativeWhisper(audio, _whisper, language ?? _options.Language, ResolveReturnTimestamps(includeTimestamps) || _options.WordTimestamps, _options.Temperatures);
     }
 
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
 
-    public string DetectLanguage(Tensor<T> audio) => DetectLanguageProbabilities(audio).OrderByDescending(p => NumOps.ToDouble(p.Value)).First().Key;
+    public string DetectLanguage(Tensor<T> audio) { ThrowIfDisposed(); return DetectNativeWhisperLanguage(audio, _whisper); }
 
-    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
-    {
-        ThrowIfDisposed();
-        var whisper = _whisper ?? throw new NotSupportedException("Language detection runs on the native Whisper network.");
-        return whisper.DetectLanguage(Samples(audio)).ToDictionary(p => p.Key, p => NumOps.FromDouble(p.Value));
-    }
+    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { ThrowIfDisposed(); return DetectNativeWhisperLanguageProbabilities(audio, _whisper); }
 
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("FasterWhisper does not support streaming.");
 
@@ -125,28 +119,7 @@ public partial class FasterWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         _whisper = new WhisperRecognizer<T>(Engine, layers, _options.ToDimensions(), _options.Seed ?? 42);
         Layers.AddRange(layers);
     }
-
-    private double[] Samples(Tensor<T> waveform)
-    {
-        var samples = new double[waveform.Length];
-        var span = waveform.Data.Span;
-        for (int i = 0; i < samples.Length; i++) samples[i] = NumOps.ToDouble(span[i]);
-        return samples;
-    }
-
-    // The decoder's logits over the start sequence for a waveform [S], or [batch, prompt, vocabulary] for [batch, S].
-    private Tensor<T> PromptLogits(Tensor<T> input)
-    {
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        if (_whisper is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-        string language = _options.Language ?? "en";
-        if (input.Rank == 1) return _whisper.PromptLogits(_whisper.Window(Samples(input)), language);
-        int rows = input.Shape[0], samples = input.Length / rows;
-        var outputs = new Tensor<T>[rows];
-        for (int r = 0; r < rows; r++)
-            outputs[r] = _whisper.PromptLogits(_whisper.Window(Samples(Engine.TensorSlice(input, new[] { r, 0 }, new[] { 1, samples }))), language);
-        return Engine.TensorStack(outputs, 0);
-    }
+    private Tensor<T> PromptLogits(Tensor<T> input) => ForwardNativeWhisperBatch(input, _whisper, _options.Language);
 
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
 
@@ -155,61 +128,17 @@ public partial class FasterWhisper<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => PromptLogits(input);
 
     /// <inheritdoc />
-    /// <remarks>Whisper's objective (section 2.3): the teacher-forced cross-entropy of the target transcript after the start
-    /// sequence, closed by the end-of-text token.</remarks>
-    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
-    {
-        var whisper = _whisper;
-        if (whisper is null) return false;
-        string language = _options.Language ?? "en";
-        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
-        var windows = new Tensor<T>[rows];
-        for (int r = 0; r < rows; r++)
-            windows[r] = whisper.Window(Samples(rows == 1 ? input : Engine.TensorSlice(input, new[] { r, 0 }, new[] { 1, samples })));
-        var transcripts = new int[rows][];
-        int perRow = target.Length / rows;
-        for (int r = 0; r < rows; r++)
-        {
-            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
-                target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
-            transcripts[r] = whisper.TranscriptTokens(row);
-        }
-        TrainWithCustomLoss(input, _ =>
-        {
-            Tensor<T>? total = null;
-            for (int r = 0; r < rows; r++)
-            {
-                var loss = whisper.TranscriptLoss(windows[r], transcripts[r], language);
-                total = total is null ? loss : Engine.TensorAdd(total, loss);
-            }
-            return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
-        }, _optimizer);
-        return true;
-    }
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target) =>
+        TrainNativeWhisperBatch(input, target, _whisper, _optimizer, _options.Language);
 
     TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
 
     Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
 
     /// <inheritdoc />
-    /// <remarks>The teacher-forced transcript cross-entropy <see cref="TryApplyLearningRule"/> minimizes, averaged over the
-    /// batch.</remarks>
-    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
-    {
-        var whisper = _whisper ?? throw new NotSupportedException("The objective is defined on the native Whisper network.");
-        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
-        string language = _options.Language ?? "en";
-        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows, perRow = target.Length / rows;
-        double total = 0;
-        for (int r = 0; r < rows; r++)
-        {
-            var audio = rows == 1 ? input : Engine.TensorSlice(input, new[] { r, 0 }, new[] { 1, samples });
-            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
-                target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
-            total += NumOps.ToDouble(whisper.TranscriptLoss(whisper.Window(Samples(audio)), whisper.TranscriptTokens(row), language)[0]);
-        }
-        return NumOps.FromDouble(total / rows);
-    }
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target) =>
+        EvaluateNativeWhisperBatchObjective(input, target, _whisper, _options.Language);
+
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

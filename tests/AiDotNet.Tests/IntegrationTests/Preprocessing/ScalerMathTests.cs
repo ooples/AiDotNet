@@ -341,7 +341,7 @@ public class ScalerMathTests
             double diff = m[i, col] - mean;
             sumSq += diff * diff;
         }
-        return Math.Sqrt(sumSq / (m.Rows - 1)); // Sample std
+        return Math.Sqrt(sumSq / m.Rows); // Population std (ddof=0), the estimator scikit-learn StandardScaler uses
     }
 
     #endregion

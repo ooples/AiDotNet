@@ -70,8 +70,7 @@ public partial class StyleTTS2<T>
     {
         var o = _options;
         _waveDiscriminators = new CosyVoiceHiFTDiscriminators<T>(Engine,
-            periodChannels: new[] { 32, 128, 512, 1024, 1024 }
-                .Select(width => Math.Max(1, width / o.DiscriminatorWidthDivisor)).ToArray());
+            periodChannels: o.CreateWavePeriodChannels());
         _slmDiscriminator = new StyleTts2SlmDiscriminator<T>(Engine, _slmDiscriminatorLayers, o.SlmHidden, o.SlmLayers, o.SlmDiscriminatorChannels);
         _slm = new AiDotNet.Audio.Foundations.WavLmNetwork<T>(Engine, _slmLayers, o.SlmConfiguration);
     }

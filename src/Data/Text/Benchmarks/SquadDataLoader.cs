@@ -83,8 +83,8 @@ public class SquadDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         }
         var vocabulary = TextLoaderHelper.BuildVocabulary(allTexts, allTexts.Count, _options.VocabularySize);
 
-        var featuresData = new T[totalSamples * _totalSeqLen];
-        var labelsData = new T[totalSamples * 2];
+        var featuresData = new int[totalSamples * _totalSeqLen];
+        var labelsData = new int[totalSamples * 2];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -95,21 +95,19 @@ public class SquadDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
             int[] questionTokens = TextLoaderHelper.TokenizeAndEncode(question, vocabulary, _options.MaxQuestionLength);
 
             int featureOffset = i * _totalSeqLen;
-            for (int j = 0; j < _options.MaxContextLength; j++)
-                featuresData[featureOffset + j] = NumOps.FromDouble(contextTokens[j]);
-            for (int j = 0; j < _options.MaxQuestionLength; j++)
-                featuresData[featureOffset + _options.MaxContextLength + j] = NumOps.FromDouble(questionTokens[j]);
+            Array.Copy(contextTokens, 0, featuresData, featureOffset, _options.MaxContextLength);
+            Array.Copy(questionTokens, 0, featuresData, featureOffset + _options.MaxContextLength, _options.MaxQuestionLength);
 
             // Convert character-level positions to approximate token positions
             // by counting word boundaries in the context up to the character offset
             int tokenStart = CharOffsetToTokenIndex(context, ansStart);
             int tokenEnd = CharOffsetToTokenIndex(context, ansStart + ansLen);
-            labelsData[i * 2] = NumOps.FromDouble(Math.Min(tokenStart, _options.MaxContextLength - 1));
-            labelsData[i * 2 + 1] = NumOps.FromDouble(Math.Min(tokenEnd, _options.MaxContextLength - 1));
+            labelsData[i * 2] = Math.Min(tokenStart, _options.MaxContextLength - 1);
+            labelsData[i * 2 + 1] = Math.Min(tokenEnd, _options.MaxContextLength - 1);
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, _totalSeqLen });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, 2 });
+        LoadedFeatures = new Tensor<int>(featuresData, new[] { totalSamples, _totalSeqLen }).Cast<T>();
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, 2 }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

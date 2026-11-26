@@ -59,9 +59,12 @@ internal sealed class RelationFunction<T>
         int position = offset;
         foreach (var (shape, _) in Blocks(type, width, hidden))
         {
-            var block = new Tensor<T>(shape);
-            for (int i = 0; i < block.Length; i++) block[i] = packed[position + i];
-            position += block.Length;
+            int size = 1;
+            foreach (int extent in shape) size *= extent;
+            var block = size == 0
+                ? new Tensor<T>(shape)
+                : Tensor<T>.FromVector(packed.GetSubVector(position, size), shape);
+            position += size;
             _blocks.Add(block);
         }
     }
@@ -111,9 +114,9 @@ internal sealed class RelationFunction<T>
         int position = offset;
         foreach (var block in _blocks)
         {
-            if (gradients.TryGetValue(block, out var gradient))
+            if (gradients.TryGetValue(block, out var gradient) && block.Length > 0)
             {
-                for (int i = 0; i < block.Length; i++) into[position + i] = gradient[i];
+                gradient.ToVector().AsSpan().Slice(0, block.Length).CopyTo(into.AsWritableSpan().Slice(position, block.Length));
             }
 
             position += block.Length;
@@ -292,34 +295,32 @@ internal sealed class RelationFunction<T>
     {
         var engine = AiDotNetEngine.Current;
         int m = left.Shape[1], n = right.Shape[1];
-        var placeLeft = new Tensor<T>(new[] { m, m + n });
-        for (int i = 0; i < m; i++) placeLeft[i * (m + n) + i] = Ops.One;
-        var placeRight = new Tensor<T>(new[] { n, m + n });
-        for (int i = 0; i < n; i++) placeRight[i * (m + n) + m + i] = Ops.One;
+        // The placements are the first m and last n rows of the (m + n) identity.
+        var identity = engine.TensorEye<T>(m + n);
+        var placeLeft = engine.TensorSlice(identity, new[] { 0, 0 }, new[] { m, m + n });
+        var placeRight = engine.TensorSlice(identity, new[] { m, 0 }, new[] { n, m + n });
         return engine.TensorAdd(engine.TensorMatMul(left, placeLeft), engine.TensorMatMul(right, placeRight));
     }
 
     /// <summary><c>[width, width]</c>: <c>(x S)[d] = x[d + shift]</c>, zero outside the signal.</summary>
     private static Tensor<T> Shift(int width, int shift)
     {
-        var matrix = new Tensor<T>(new[] { width, width });
-        for (int d = 0; d < width; d++)
-        {
-            int source = d + shift;
-            if (source >= 0 && source < width) matrix[source * width + d] = Ops.One;
-        }
-
-        return matrix;
+        // S[source, d] = 1 when source = d + shift: a window of the identity padded by |shift| on each side.
+        int pad = Math.Abs(shift);
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorSlice(
+            engine.TensorEye<T>(width + 2 * pad), new[] { pad, pad + shift }, new[] { width, width });
     }
 
     /// <summary><c>[width * hidden, hidden]</c>: the mean over positions of a <c>[position, channel]</c> row.</summary>
     private static Tensor<T> AveragePositions(int width, int hidden)
     {
-        var matrix = new Tensor<T>(new[] { width * hidden, hidden });
-        T share = Ops.FromDouble(1.0 / width);
-        for (int d = 0; d < width; d++)
-            for (int c = 0; c < hidden; c++) matrix[(d * hidden + c) * hidden + c] = share;
-        return matrix;
+        // width identity blocks stacked vertically, each scaled by 1 / width.
+        var engine = AiDotNetEngine.Current;
+        var stacked = engine.TensorBroadcastTo(
+            engine.Reshape(engine.TensorEye<T>(hidden), new[] { 1, hidden, hidden }), new[] { width, hidden, hidden });
+        return engine.TensorMultiplyScalar(
+            engine.Reshape(stacked, new[] { width * hidden, hidden }), Ops.FromDouble(1.0 / width));
     }
 
     private static Tensor<T> Unit(int rows, int columns, int row, int column)

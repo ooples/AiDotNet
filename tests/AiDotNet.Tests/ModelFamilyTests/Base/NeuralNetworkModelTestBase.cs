@@ -1147,14 +1147,25 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// <summary>Takes <see cref="InputSensitivityWarmUpSteps"/> training steps on a fixed pair.</summary>
     protected void WarmUpForInputSensitivity(INeuralNetworkModel<T> network)
     {
-        if (InputSensitivityWarmUpSteps <= 0 || TrainingInvariantsNotApplicable(network)) return;
+        int steps = InputSensitivityWarmUpSteps;
+        if (steps < 2 && network is AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>)
+            steps = 2;
+        if (steps <= 0 || TrainingInvariantsNotApplicable(network)) return;
         var rng = ModelTestHelpers.CreateSeededRandom(7);
         var input = CreateRandomTensor(EffectiveInputShape, rng);
         var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
         target = ResolveTrainingObjectiveTarget(network, input, target);
         PrepareForSupervisedTrainingInvariant(network, input);
-        for (int i = 0; i < InputSensitivityWarmUpSteps; i++) TrainOn(network, input, target);
+        for (int i = 0; i < steps; i++) TrainOn(network, input, target);
     }
+
+    /// <summary>
+    /// One of the two probes the different-inputs invariants compare, at <paramref name="level"/> (0.1 and 0.9).
+    /// Constant by default; a family whose models legitimately map every constant input to the same tensor
+    /// (per-image standardization sends a flat page to zeros) supplies structured probes instead, so the
+    /// invariant still compares two genuinely different legal inputs.
+    /// </summary>
+    protected virtual Tensor<T> CreateDistinctProbe(int[] shape, double level) => CreateConstantTensor(shape, level);
 
     protected virtual Tensor<T> CreateConstantTensor(int[] shape, double value)
     {
@@ -1666,8 +1677,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
         WarmUpForInputSensitivity(network);
 
-        var input1 = CreateConstantTensor(EffectiveInputShape, 0.1);
-        var input2 = CreateConstantTensor(EffectiveInputShape, 0.9);
+        var input1 = CreateDistinctProbe(EffectiveInputShape, 0.1);
+        var input2 = CreateDistinctProbe(EffectiveInputShape, 0.9);
 
         var output1 = network.Predict(input1);
         var output2 = network.Predict(input2);
@@ -1750,8 +1761,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // attributable purely to the network's input sensitivity rather
         // than to any pre-existing structural bias from random tensor
         // values shared between inputs.
-        var input1 = CreateConstantTensor(EffectiveInputShape, 0.1);
-        var input2 = CreateConstantTensor(EffectiveInputShape, 0.9);
+        var input1 = CreateDistinctProbe(EffectiveInputShape, 0.1);
+        var input2 = CreateDistinctProbe(EffectiveInputShape, 0.9);
 
         var output1 = network.Predict(input1);
         var output2 = network.Predict(input2);
@@ -3681,10 +3692,35 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // tell us nothing. Asserting finiteness and not-uniformly-zero is what the surface can support.
         if (network is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> gradientSource) return;
 
-        Vector<T> gradients;
+        long totalGradientCount = 0;
+        long gradientIndex = 0;
+        bool anyNonZero = false;
         try
         {
-            gradients = gradientSource.GetParameterGradients();
+            foreach (var (segment, length) in gradientSource.EnumerateParameterGradientSegments())
+            {
+                totalGradientCount += length;
+                if (segment is null)
+                {
+                    gradientIndex += length;
+                    continue;
+                }
+
+                for (int i = 0; i < segment.Length; i++, gradientIndex++)
+                {
+                    double g = ConvertToDouble(segment[i]);
+                    if (double.IsNaN(g) || double.IsInfinity(g))
+                    {
+                        Assert.False(double.IsNaN(g),
+                            $"Gradient[{gradientIndex}] is NaN after training — the backward pass is producing garbage, "
+                            + "which the parameter scan above cannot see when the optimizer clips or skips it.");
+                        Assert.False(double.IsInfinity(g),
+                            $"Gradient[{gradientIndex}] is Infinity after training — gradient explosion in the backward pass.");
+                    }
+
+                    if (!anyNonZero && System.Math.Abs(g) > 0.0) anyNonZero = true;
+                }
+            }
         }
         catch (System.NotSupportedException)
         {
@@ -3692,26 +3728,10 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             return;
         }
 
-        if (gradients.Length == 0) return;
-
-        bool anyNonZero = false;
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            double g = ConvertToDouble(gradients[i]);
-            if (double.IsNaN(g) || double.IsInfinity(g))
-            {
-                Assert.False(double.IsNaN(g),
-                    $"Gradient[{i}] is NaN after training — the backward pass is producing garbage, "
-                    + "which the parameter scan above cannot see when the optimizer clips or skips it.");
-                Assert.False(double.IsInfinity(g),
-                    $"Gradient[{i}] is Infinity after training — gradient explosion in the backward pass.");
-            }
-
-            if (!anyNonZero && System.Math.Abs(g) > 0.0) anyNonZero = true;
-        }
+        if (totalGradientCount == 0) return;
 
         Assert.True(anyNonZero,
-            $"Every one of the {gradients.Length} published gradients is exactly zero after training, "
+            $"Every one of the {totalGradientCount} published gradients is exactly zero after training, "
             + "yet parameters changed — so whatever moved them did not come from this loss. That is the "
             + "signature of a severed tape: a term read through Predict (which runs inside a "
             + "NoGradScope) or a tensor rebuilt element by element contributes no gradient, while an "
@@ -4516,8 +4536,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (network is not ITrainingObjectiveProvider<T> objectiveProvider)
             return proposedTarget;
 
+        // The resolved target is trained on for every later step, so it must not come from the test's step arena:
+        // a model resolving with engine ops would otherwise hand back a buffer the arena reissues mid-training
+        // (CLAP's caption ids turned into waveform samples by the third step).
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         if (objectiveProvider.TrainingObjectiveKind == TrainingObjectiveKind.HamiltonianDynamics)
             proposedTarget = CreateCanonicalHamiltonianDynamicsTarget(input);
+        else if (objectiveProvider.TrainingObjectiveKind == TrainingObjectiveKind.LagrangianDynamics)
+            proposedTarget = CreateCanonicalLagrangianDynamicsTarget(input);
 
         return objectiveProvider.ResolveTrainingTarget(input, proposedTarget);
     }
@@ -4549,6 +4575,36 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 target[offset + coordinate] = input[offset + coordinateCount + coordinate];
                 target[offset + coordinateCount + coordinate] =
                     NumOps.Negate(input[offset + coordinate]);
+            }
+        }
+
+        return target;
+    }
+
+    /// <summary>
+    /// Creates the exact accelerations of L(q,q̇)=0.5*(||q̇||^2-||q||^2), the harmonic oscillator:
+    /// q̈=-q for each state [q, q̇]. This gives LNN fixtures a valid dynamics target [batch, n].
+    /// </summary>
+    private static Tensor<T> CreateCanonicalLagrangianDynamicsTarget(Tensor<T> input)
+    {
+        if (input.Rank < 1 || input.Shape[^1] <= 0 || input.Shape[^1] % 2 != 0)
+        {
+            throw new InvalidOperationException(
+                $"Lagrangian dynamics require a positive even state feature dimension; " +
+                $"got [{string.Join(",", input.Shape)}].");
+        }
+
+        int stateDimension = input.Shape[^1];
+        int coordinateCount = stateDimension / 2;
+        int sampleCount = input.Length / stateDimension;
+        var target = new Tensor<T>(new[] { sampleCount, coordinateCount });
+
+        for (int sample = 0; sample < sampleCount; sample++)
+        {
+            for (int coordinate = 0; coordinate < coordinateCount; coordinate++)
+            {
+                target[sample * coordinateCount + coordinate] =
+                    NumOps.Negate(input[sample * stateDimension + coordinate]);
             }
         }
 
@@ -7873,6 +7929,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // control plus every candidate. Under one arena OpenSora held ~10 GB of attention tiles that gradient
         // checkpointing should have freed, and its GuidanceScale check ran out of memory on the 16 GB runner.
         var rng = ModelTestHelpers.CreateSeededRandom();
+        int steps = OptionSensitivityTrainingSteps;
         Tensor<T> input;
         Tensor<T> target;
         string controlGroup;
@@ -7880,76 +7937,81 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         {
             input = CreateRandomTensor(EffectiveInputShape, rng);
             target = CreateLossCompatibleTarget(shapeProbe, ShapeCheckedOutputShape, rng);
-            controlGroup = OptionSensitivityFixtureSetup.ControlGroup(shapeProbe, option);
+            controlGroup = OptionSensitivityFixtureSetup.ResolveEffectiveControlGroup(shapeProbe, option, steps);
         }
 
-        int steps = OptionSensitivityTrainingSteps;
-        var probe = new OptionSensitivityProbe<INeuralNetworkModel<T>>(
-            () => CreateOptionSensitivityNetwork(option),
-            network => OptionSensitivityFixtureSetup.Observe(network, input, option, ObserveNetwork),
+        OptionSensitivityProbe<INeuralNetworkModel<T>> BuildProbe(string probeOption, string group) => new(
+            () => CreateOptionSensitivityNetwork(probeOption),
+            network => OptionSensitivityFixtureSetup.Observe(network, input, probeOption, ObserveNetwork),
             network =>
             {
                 if (network is AiDotNet.TextToSpeech.MultiModal.Moshi<T> moshi)
                 {
                     network.SetTrainingMode(true);
-                    int moshiSteps = OptionSensitivityFixtureSetup.TrainingSteps(network, option, steps);
+                    int moshiSteps = OptionSensitivityFixtureSetup.TrainingSteps(network, probeOption, steps);
                     for (int i = 0; i < moshiSteps; i++)
-                        AiDotNet.Tests.TextToSpeech.MoshiOptionFixture.Train(moshi, option);
+                        AiDotNet.Tests.TextToSpeech.MoshiOptionFixture.Train(moshi, probeOption);
                     network.SetTrainingMode(false);
                     return;
                 }
                 if (network is AiDotNet.TextToSpeech.CodecBased.Vevo<T> vevo)
                 {
                     network.SetTrainingMode(true);
-                    int vevoSteps = OptionSensitivityFixtureSetup.TrainingSteps(network, option, steps);
+                    int vevoSteps = OptionSensitivityFixtureSetup.TrainingSteps(network, probeOption, steps);
                     for (int i = 0; i < vevoSteps; i++)
                         AiDotNet.Tests.TextToSpeech.VevoOptionFixture.Train(vevo);
                     network.SetTrainingMode(false);
                     return;
                 }
                 if (network is AiDotNet.TextToSpeech.CodecBased.Llasa<T> llasa
-                    && AiDotNet.Tests.TextToSpeech.LlasaOptionFixture.Handles(option))
+                    && AiDotNet.Tests.TextToSpeech.LlasaOptionFixture.Handles(probeOption))
                 {
+                    if (probeOption.Length > 0) OptionSensitivityHarness.MarkCustomObservation();
                     network.SetTrainingMode(true);
                     AiDotNet.Tests.TextToSpeech.LlasaOptionFixture.TrainSchedule(llasa,
-                        OptionSensitivityFixtureSetup.TrainingSteps(network, option, steps));
+                        OptionSensitivityFixtureSetup.TrainingSteps(network, probeOption, steps));
                     network.SetTrainingMode(false);
                     return;
                 }
                 if (network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech2<T> naturalSpeech2
-                    && AiDotNet.Tests.TextToSpeech.NaturalSpeech2OptionFixture.Handles(option))
+                    && AiDotNet.Tests.TextToSpeech.NaturalSpeech2OptionFixture.Handles(probeOption))
                 {
+                    if (probeOption.Length > 0) OptionSensitivityHarness.MarkCustomObservation();
                     network.SetTrainingMode(true);
                     AiDotNet.Tests.TextToSpeech.NaturalSpeech2OptionFixture.Train(naturalSpeech2,
-                        OptionSensitivityFixtureSetup.TrainingSteps(network, option, steps));
+                        OptionSensitivityFixtureSetup.TrainingSteps(network, probeOption, steps));
                     network.SetTrainingMode(false);
                     return;
                 }
                 if (network is AiDotNet.TextToSpeech.MultiModal.StepAudio<T> stepAudio
-                    && AiDotNet.Tests.TextToSpeech.StepAudioOptionFixture.IsPpoOption(option))
+                    && AiDotNet.Tests.TextToSpeech.StepAudioOptionFixture.IsPpoOption(probeOption))
                 {
+                    if (probeOption.Length > 0) OptionSensitivityHarness.MarkCustomObservation();
                     network.SetTrainingMode(true);
                     AiDotNet.Tests.TextToSpeech.StepAudioOptionFixture.TrainPpo(stepAudio, steps);
                     network.SetTrainingMode(false);
                     return;
                 }
-                if (network is AiDotNet.TextToSpeech.CodecBased.VALLE<T> vallE && option == "PromptSeconds")
+                if (network is AiDotNet.TextToSpeech.CodecBased.VALLE<T> vallE && probeOption == "PromptSeconds")
                 {
+                    OptionSensitivityHarness.MarkCustomObservation();
                     network.SetTrainingMode(true);
                     AiDotNet.Tests.TextToSpeech.VallEOptionFixture.TrainWithPrompt(vallE, steps);
                     network.SetTrainingMode(false);
                     return;
                 }
-                if (network is AiDotNet.TextToSpeech.CodecBased.VALLE<T> vallEEnd && option == "StopOnMostLikelyEndToken")
+                if (network is AiDotNet.TextToSpeech.CodecBased.VALLE<T> vallEEnd && probeOption == "StopOnMostLikelyEndToken")
                 {
+                    OptionSensitivityHarness.MarkCustomObservation();
                     network.SetTrainingMode(true);
                     AiDotNet.Tests.TextToSpeech.VallEOptionFixture.TrainEndCondition(vallEEnd);
                     network.SetTrainingMode(false);
                     return;
                 }
                 if (network is AiDotNet.TextToSpeech.Classic.NonAttentiveTacotron<T> nonAttentive
-                    && AiDotNet.Tests.TextToSpeech.NonAttentiveTacotronOptionFixture.UsesTraining(option))
+                    && AiDotNet.Tests.TextToSpeech.NonAttentiveTacotronOptionFixture.UsesTraining(probeOption))
                 {
+                    if (probeOption.Length > 0) OptionSensitivityHarness.MarkCustomObservation();
                     network.SetTrainingMode(true);
                     AiDotNet.Tests.TextToSpeech.NonAttentiveTacotronOptionFixture.Train(nonAttentive, steps);
                     network.SetTrainingMode(false);
@@ -7957,12 +8019,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 }
                 if (network is AiDotNet.TextToSpeech.TtsModelBase<T> megaSpeech
                     && megaSpeech is AiDotNet.TextToSpeech.Latest.MegaTTS<T> or AiDotNet.TextToSpeech.Latest.MegaTTS2<T>
-                    && (AiDotNet.Tests.TextToSpeech.MegaTtsOptionFixture.HandlesAcoustic(option)
-                        || AiDotNet.Tests.TextToSpeech.MegaTtsOptionFixture.HandlesLanguageModels(option)))
+                    && (AiDotNet.Tests.TextToSpeech.MegaTtsOptionFixture.HandlesAcoustic(probeOption)
+                        || AiDotNet.Tests.TextToSpeech.MegaTtsOptionFixture.HandlesLanguageModels(probeOption)))
                 {
+                    if (probeOption.Length > 0) OptionSensitivityHarness.MarkCustomObservation();
                     network.SetTrainingMode(true);
                     AiDotNet.Tests.TextToSpeech.MegaTtsOptionFixture.Train(megaSpeech,
-                        AiDotNet.Tests.TextToSpeech.MegaTtsOptionFixture.HandlesLanguageModels(option), steps);
+                        AiDotNet.Tests.TextToSpeech.MegaTtsOptionFixture.HandlesLanguageModels(probeOption), steps);
                     network.SetTrainingMode(false);
                     return;
                 }
@@ -7973,32 +8036,36 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 }
                 // A detection backbone trains inside its detector, so the invariants skip it; its own clip threshold
                 // only acts when it is trained, so that one probe trains it directly.
-                bool backboneClip = network is AiDotNet.Interfaces.IDetectionBackbone<T> && option == "MaxGradNorm"
+                bool backboneClip = network is AiDotNet.Interfaces.IDetectionBackbone<T> && probeOption == "MaxGradNorm"
                     && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> { SupportsTraining: true };
+                if (backboneClip) OptionSensitivityHarness.MarkCustomObservation();
                 if (TrainingInvariantsNotApplicable(network) && !backboneClip) return;
                 network.SetTrainingMode(true);
                 PrepareForSupervisedTrainingInvariant(network, input);
                 var objectiveTarget = ResolveTrainingObjectiveTarget(network, input, target);
-                OptionSensitivityFixtureSetup.PrepareOptionTraining(network, option);
-                int optionSteps = OptionSensitivityFixtureSetup.TrainingSteps(network, option, steps);
+                OptionSensitivityFixtureSetup.PrepareOptionTraining(network, probeOption);
+                int optionSteps = OptionSensitivityFixtureSetup.TrainingSteps(network, probeOption, steps);
                 for (int i = 0; i < optionSteps; i++)
-                    if (!OptionSensitivityFixtureSetup.TryTrainOption(network, input, option))
+                    if (!OptionSensitivityFixtureSetup.TryTrainOption(network, input, probeOption))
                         TrainOn(network, input, objectiveTarget);
                 network.SetTrainingMode(false);
             },
-            prepareOptions: options => OptionSensitivityFixtureSetup.PrepareOptions(options, option),
+            prepareOptions: options => OptionSensitivityFixtureSetup.PrepareOptions(options, probeOption),
             describe: network => network is AiDotNet.TextToSpeech.EndToEnd.Kokoro<T> kokoro
-                ? AiDotNet.Tests.TextToSpeech.KokoroOptionFixture.Describe(kokoro, option) : DescribeNetwork(network, input),
+                ? AiDotNet.Tests.TextToSpeech.KokoroOptionFixture.Describe(kokoro, probeOption) : DescribeNetwork(network, input),
             prepareModel: PrepareRebuiltNetwork,
             parameterCount: OptionSensitivityFixtureSetup.ParameterCountBeforeFitting,
             parameterShapes: network => OptionSensitivityFixtureSetup.UsesFittedAssets(network)
                 ? EnumerateParameterChunks(network).Select(chunk => chunk.Shape.ToArray()).ToArray()
                 : Array.Empty<int[]>(),
-            controlGroup: controlGroup,
-            observedParts: controlGroup.StartsWith("kokoro-", StringComparison.Ordinal)
+            controlGroup: group,
+            observedParts: group.StartsWith("kokoro-", StringComparison.Ordinal)
                 ? network => AiDotNet.Tests.TextToSpeech.KokoroOptionFixture.Describe(
-                    (AiDotNet.TextToSpeech.EndToEnd.Kokoro<T>)network, option) : null);
-        OptionSensitivityHarness.AssertChangesObservableBehaviour(GetType(), option, probe);
+                    (AiDotNet.TextToSpeech.EndToEnd.Kokoro<T>)network, probeOption) : null);
+
+        var probe = BuildProbe(option, controlGroup);
+        var controlProbe = controlGroup.Length == 0 ? BuildProbe(string.Empty, string.Empty) : null;
+        OptionSensitivityHarness.AssertChangesObservableBehaviour(GetType(), option, probe, controlProbe);
     }
 
     private INeuralNetworkModel<T> CreateOptionSensitivityNetwork(string option)

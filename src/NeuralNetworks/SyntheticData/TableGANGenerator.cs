@@ -625,7 +625,7 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
             // class range; a NaN value maps to class 0. An empty label block is class 0.
             var classValue = labelTransform.IsContinuous
                 ? engine.TensorClamp(
-                    engine.TensorRound(engine.TensorNanToNum(
+                    engine.TensorRound(AiDotNet.Helpers.NanToNumHelper.Apply(engine, 
                         engine.TensorSlice(realBatch, [0, labelTransform.StartOffset], [batch, 1]), 0.0,
                         double.PositiveInfinity, double.NegativeInfinity)),
                     NumOps.Zero, NumOps.FromDouble(classCount - 1))
@@ -639,7 +639,7 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
         {
             // Categorical label: the first largest entry of the label block. NaN never wins (it compares false),
             // so it is ranked below every number; an all-NaN block is class 0.
-            var block = engine.TensorNanToNum(
+            var block = AiDotNet.Helpers.NanToNumHelper.Apply(engine, 
                 engine.TensorSlice(realBatch, [0, labelTransform.StartOffset], [batch, labelWidth]),
                 double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
             var rowMax = engine.ReduceMax(block, [1], keepDims: true);

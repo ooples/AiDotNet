@@ -213,6 +213,42 @@ public class ARIMAStabilityTests
         }
     }
 
+    /// <summary>
+    /// A flat series differences to all zeros, so the seasonal lag matrix is rank deficient. Since #2465 the QR solve
+    /// throws MatrixFactorizationException for that instead of dividing by the zero pivot; the non-seasonal AR fit
+    /// falls back to the minimum-norm least-squares solution, and the seasonal AR fit has to as well, or SARIMA with
+    /// its default seasonal order cannot be trained on a flat series at all.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task SARIMA_FlatSeries_TrainsAndForecastsTheLevel()
+    {
+        await Task.Yield();
+        const int n = 60;
+        var x = new Matrix<double>(n, 1);
+        var y = new Vector<double>(n);
+        for (int i = 0; i < n; i++)
+        {
+            x[i, 0] = i;
+            y[i] = 50.0;
+        }
+        var model = new SARIMAModel<double>(new SARIMAOptions<double>
+        {
+            P = 1, D = 1, Q = 1,
+            SeasonalP = 1, SeasonalD = 0, SeasonalQ = 0,
+            SeasonalPeriod = 12
+        });
+
+        model.Train(x, y);
+
+        var testX = new Matrix<double>(6, 1);
+        for (int i = 0; i < 6; i++) testX[i, 0] = n + i;
+        var predictions = model.Predict(testX);
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            Assert.Equal(50.0, predictions[i], 6);
+        }
+    }
+
     #endregion
 
     #region Evaluation Metric Finiteness Tests

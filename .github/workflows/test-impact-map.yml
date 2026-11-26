@@ -588,6 +588,43 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      # ROLLING MAP (tools/TestImpact/RollingShardMap.ps1), behind repository variable
+      # TEST_IMPACT_ROLLING_MAP (shadow or on; unset or off skips both steps). The map this run just
+      # certified is the anchor; the newest valid digest per shard from the scheduled nightlies since is
+      # laid over it, replayed against the newest complete nightly, and certified only on a clean reducing
+      # replay. It is uploaded by THIS run on purpose: selection fetches it from whichever run the
+      # certified-map resolver returns, so the anchor's revocation rules cover the rolling map too.
+      # The certified map is already uploaded and nothing here can change it.
+      - name: Build the rolling map
+        id: rolling
+        if: ${{ steps.audit.outputs.certified == 'true' && (vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on') }}
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The audit step left the source run's tree checked out; this needs the tooling of this commit.
+          & git checkout --quiet $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'could not return to the workflow commit' }
+          ./tools/TestImpact/New-RollingShardMap.ps1 -Repository $env:GITHUB_REPOSITORY `
+              -AnchorMapFile certified-map/shard-map.json -AnchorCertificateFile certified-map/certification.json `
+              -AnchorRunId ([long] $env:GITHUB_RUN_ID) -OutDirectory rolling-map `
+              -WorkDirectory (Join-Path $env:RUNNER_TEMP 'rolling-map-work')
+          if ($LASTEXITCODE -ne 0) { throw "New-RollingShardMap exited $LASTEXITCODE" }
+          $decision = Get-Content rolling-map/rolling-decision.json -Raw | ConvertFrom-Json
+          "### Rolling map`n`n- $($decision.disposition): $($decision.reason)`n- $(@($decision.sources).Count) nightly source run(s); $(@($decision.rejected).Count) digest(s) not used" |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Upload rolling map
+        if: ${{ always() && (vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on') && hashFiles('rolling-map/rolling-decision.json') != '' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: rolling-shard-map
+          path: rolling-map/
+          if-no-files-found: ignore
+          retention-days: 14
+
   coverage-run:
     name: Dispatch next coverage-everywhere run
     needs: build-map

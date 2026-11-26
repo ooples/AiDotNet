@@ -129,6 +129,13 @@ public partial class DINO<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
 
         var plan = ContrastiveDenoising<T>.Plan(targets, _trainingClassCount, _dino.DenoisingQueries,
             _dino.LabelNoiseRatio, _dino.BoxNoiseScale, _denoisingRandom);
+        DetrPass<T> preStepPass;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            SetTrainingMode(true);
+            preStepPass = _transformer.Forward(BackboneLevels(input), plan);
+        }
+
         DetrPass<T>? pass = null;
         TrainWithTargets(input, targets,
             x =>
@@ -139,10 +146,9 @@ public partial class DINO<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
             (heads, batch) =>
             {
                 var current = pass ?? throw new InvalidOperationException("DINO's training forward did not run.");
-                var loss = Objective(current, batch);
-                LastTrainingRecord = DetrTrainingRecord<T>.Capture(current, NumOps.ToDouble(loss.ToArray()[0]));
-                return loss;
+                return Objective(current, batch);
             });
+        LastTrainingRecord = DetrTrainingRecord<T>.Capture(preStepPass, NumOps.ToDouble(GetLastLoss()));
     }
 
     /// <inheritdoc/>

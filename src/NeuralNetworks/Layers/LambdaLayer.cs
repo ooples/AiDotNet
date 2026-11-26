@@ -226,7 +226,7 @@ public partial class LambdaLayer<T> : LayerBase<T>, IShapeContract
                        IActivationFunction<T>? activationFunction = null)
         : base(inputShape, outputShape, activationFunction ?? new ReLUActivation<T>())
     {
-        _forwardFunction = forwardFunction;
+        _forwardFunction = forwardFunction ?? throw new ArgumentNullException(nameof(forwardFunction));
         _backwardFunction = backwardFunction;
     }
 
@@ -261,7 +261,7 @@ public partial class LambdaLayer<T> : LayerBase<T>, IShapeContract
                        IVectorActivationFunction<T>? vectorActivationFunction = null)
         : base(inputShape, outputShape, vectorActivationFunction ?? new ReLUActivation<T>())
     {
-        _forwardFunction = forwardFunction;
+        _forwardFunction = forwardFunction ?? throw new ArgumentNullException(nameof(forwardFunction));
         _backwardFunction = backwardFunction;
     }
 

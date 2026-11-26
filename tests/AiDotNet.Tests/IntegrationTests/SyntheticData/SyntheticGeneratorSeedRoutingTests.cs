@@ -43,10 +43,13 @@ public class SyntheticGeneratorSeedRoutingTests
         var adjacency = new Matrix<double>(3, 3);
         adjacency[0, 1] = .3; adjacency[1, 0] = .7;
         adjacency[1, 2] = .2; adjacency[2, 0] = .4;
-        type.GetField("_adjacency", flags)!.SetValue(model, adjacency);
-        type.GetField("_dataWidth", flags)!.SetValue(model, 3);
-        var method = type.GetMethod("ComputeNOTEARSConstraintAndGradient", flags)!;
-        (double, double[,]) Evaluate() => ((double, double[,]))method.Invoke(model, null)!;
+        // h(W) and its gradient are computed in double on the weighted adjacency (CausalGANGenerator.Acyclicity).
+        var method = type.GetMethod("Acyclicity", flags)
+            ?? throw new System.InvalidOperationException("CausalGANGenerator.Acyclicity was not found.");
+        (double, Tensor<double>) Evaluate() => method.Invoke(model, new object[] { Tensor<double>.FromMatrix(adjacency) })
+            is System.ValueTuple<double, Tensor<double>> result
+            ? result
+            : throw new System.InvalidOperationException("Acyclicity returned no (double, Tensor<double>) pair.");
         var (_, gradient) = Evaluate();
         const double epsilon = 1e-5;
         for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++)

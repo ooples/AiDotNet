@@ -23,11 +23,12 @@ public sealed class FedAdamServerOptimizer<T> : FederatedServerOptimizerBase<T>
     private readonly double _beta2;
     private readonly double _epsilon;
 
-    private double[]? _m;
-    private double[]? _v;
-    private int _t;
+    private Vector<T>? _m;
+    private Vector<T>? _v;
+    private Vector<float>? _mWide;
+    private Vector<float>? _vWide;
 
-    public FedAdamServerOptimizer(double learningRate = 1.0, double beta1 = 0.9, double beta2 = 0.999, double epsilon = 1e-8)
+    public FedAdamServerOptimizer(double learningRate = 1.0, double beta1 = 0.9, double beta2 = 0.99, double epsilon = 1e-3)
     {
         if (learningRate <= 0.0)
         {
@@ -61,31 +62,45 @@ public sealed class FedAdamServerOptimizer<T> : FederatedServerOptimizerBase<T>
         ValidateVectors(currentGlobalParameters, aggregatedTargetParameters);
 
         int n = currentGlobalParameters.Length;
-        _m ??= new double[n];
-        _v ??= new double[n];
-        _t++;
 
-        double bias1 = 1.0 - Math.Pow(_beta1, _t);
-        double bias2 = 1.0 - Math.Pow(_beta2, _t);
-
-        var updated = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
+        // Half / BFloat16 keep their optimizer state in float (as the previous double state did): the squared
+        // deltas and the accumulated moments pass Half's 65504 long before the parameters do.
+        if (AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.IsNarrowFloat<T>())
         {
-            double current = NumOps.ToDouble(currentGlobalParameters[i]);
-            double target = NumOps.ToDouble(aggregatedTargetParameters[i]);
-            double g = target - current;
-
-            _m[i] = (_beta1 * _m[i]) + ((1.0 - _beta1) * g);
-            _v[i] = (_beta2 * _v[i]) + ((1.0 - _beta2) * g * g);
-
-            double mHat = _m[i] / bias1;
-            double vHat = _v[i] / bias2;
-
-            double step = _learningRate * mHat / (Math.Sqrt(vHat) + _epsilon);
-            updated[i] = NumOps.FromDouble(current + step);
+            var mWide = _mWide ?? new Vector<float>(n);
+            var vWide = _vWide ?? new Vector<float>(n);
+            var updatedWide = StepCore(Widen(currentGlobalParameters), Widen(aggregatedTargetParameters), ref mWide, ref vWide);
+            _mWide = mWide;
+            _vWide = vWide;
+            return updatedWide.AsTensor().Cast<T>().ToVector();
         }
 
+        var m = _m ?? new Vector<T>(n);
+        var v = _v ?? new Vector<T>(n);
+        var updated = StepCore(currentGlobalParameters, aggregatedTargetParameters, ref m, ref v);
+        _m = m;
+        _v = v;
         return updated;
+    }
+
+    private static Vector<float> Widen(Vector<T> v) => v.AsTensor().Cast<float>().ToVector();
+
+    /// <summary>
+    /// Reddi et al. 2021, Algorithm 2 (FedAdam), no bias correction: m = b1 m + (1 - b1) d,
+    /// v = b2 v + (1 - b2) d^2, x = x + lr m / (sqrt(v) + tau).
+    /// </summary>
+    private Vector<TV> StepCore<TV>(Vector<TV> x, Vector<TV> target, ref Vector<TV> m, ref Vector<TV> v)
+    {
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<TV>();
+        var g = Engine.Subtract(target, x);
+        m = Engine.Add(Engine.Multiply(m, ops.FromDouble(_beta1)), Engine.Multiply(g, ops.FromDouble(1.0 - _beta1)));
+        v = Engine.Add(
+            Engine.Multiply(v, ops.FromDouble(_beta2)),
+            Engine.Multiply(Engine.Multiply(g, g), ops.FromDouble(1.0 - _beta2)));
+
+        var denominator = Engine.TensorAddScalar(Engine.Sqrt(v).AsTensor(), ops.FromDouble(_epsilon)).ToVector();
+        var step = Engine.Multiply(Engine.Divide(m, denominator), ops.FromDouble(_learningRate));
+        return Engine.Add(x, step);
     }
 
     /// <inheritdoc />

@@ -81,19 +81,14 @@ public class RefinerStage<T>
     /// <returns>Noised latent ready for refinement denoising.</returns>
     public Vector<T> AddNoiseForRefinement(Vector<T> cleanLatent, Vector<T> noise)
     {
+        var engine = AiDotNetEngine.Current;
         var strengthT = NumOps.FromDouble(_strength);
         var oneMinusStrength = NumOps.Subtract(NumOps.One, strengthT);
-        var result = new Vector<T>(cleanLatent.Length);
 
-        for (int i = 0; i < cleanLatent.Length; i++)
-        {
-            var signal = NumOps.Multiply(oneMinusStrength, cleanLatent[i]);
-            var noiseComponent = NumOps.Multiply(strengthT,
-                i < noise.Length ? noise[i] : NumOps.Zero);
-            result[i] = NumOps.Add(signal, noiseComponent);
-        }
-
-        return result;
+        // (1 - strength) * clean + strength * noise (noise zero-padded to the latent length)
+        var signal = engine.Multiply(cleanLatent, oneMinusStrength);
+        var noiseComponent = engine.Multiply(DiffusionVectorOps.Fit(noise, cleanLatent.Length), strengthT);
+        return engine.Add(signal, noiseComponent);
     }
 
     /// <summary>
@@ -114,13 +109,8 @@ public class RefinerStage<T>
     /// <returns>L2 distance indicating amount of change (lower = less change).</returns>
     public T ComputeRefinementDelta(Vector<T> beforeRefinement, Vector<T> afterRefinement)
     {
-        var sum = NumOps.Zero;
         int len = Math.Min(beforeRefinement.Length, afterRefinement.Length);
-        for (int i = 0; i < len; i++)
-        {
-            var diff = NumOps.Subtract(beforeRefinement[i], afterRefinement[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
+        var sum = DiffusionVectorOps.SquaredDistance(beforeRefinement, afterRefinement);
         return NumOps.Sqrt(NumOps.Divide(sum, NumOps.FromDouble(len)));
     }
 }

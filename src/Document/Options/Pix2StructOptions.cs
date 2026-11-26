@@ -53,6 +53,10 @@ public class Pix2StructOptions : DocumentNeuralNetworkOptions
         // cannot require this: 15 of the 29 document models work from text and layout
         // coordinates and have no image at all.
         Require(ImageSize, nameof(ImageSize));
+        // The patch budget is computed from both: a zero patch size yields zero output extents, and a zero budget is
+        // clamped to a single patch, silently ignoring the configured value.
+        Require(PatchSize, nameof(PatchSize));
+        Require(MaxPatches, nameof(MaxPatches));
         ValidateCore();
     }
 }

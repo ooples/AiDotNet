@@ -2,12 +2,12 @@
 
 This branch (`fix/website-critical-issues`) ships the code-level fixes for
 the payment/license flow, but **two non-code changes must be made in the
-Vercel + Supabase dashboards** before customers can pay successfully. Until
+GitHub repository secrets and the Supabase dashboard** before customers can pay successfully. Until
 both are done, the symptoms the user reported (payment freezes, "critical
 error", no license issued, just-created key returns "License key not
 found") will continue to occur.
 
-## 1. Vercel environment variables — switch Stripe Payment Links from TEST to LIVE mode
+## 1. GitHub repository secrets — switch Stripe Payment Links from TEST to LIVE mode
 
 The production bundle at `https://www.aidotnet.dev/_astro/pricing.astro_...js`
 currently hard-codes:
@@ -28,17 +28,15 @@ These come from build-time `import.meta.env` reads of:
 | `PUBLIC_STRIPE_ENTERPRISE_MONTHLY_LINK`  | `https://buy.stripe.com/<LIVE-mode link>`  |
 | `PUBLIC_STRIPE_ENTERPRISE_YEARLY_LINK`   | `https://buy.stripe.com/<LIVE-mode link>`  |
 
-**Action:** in Vercel → Project Settings → Environment Variables, set all
-four to the **LIVE-mode** Payment Link URLs from
+**Action:** in GitHub → repository Settings → Secrets and variables → Actions,
+set all four to the **LIVE-mode** Payment Link URLs from
 [Stripe Dashboard → Payment Links](https://dashboard.stripe.com/payment-links).
 Make sure the dashboard is in LIVE mode (toggle top-right) when you copy
 the URL. LIVE-mode links do NOT start with `buy.stripe.com/test_`.
 
-When you save each one, choose **Production**, **Preview**, and **Development**
-scopes (or at minimum **Production**). The values are inlined into the
-client JS at build time, so a new deploy is required after the change.
-
-Then trigger a redeploy: Vercel → Deployments → latest → "..." → "Redeploy".
+The values are inlined into the client JS at build time by
+`.github/workflows/deploy-website.yml`, so a new deploy is required after the
+change: GitHub → Actions → "Deploy Marketing Website" → "Run workflow".
 
 **Verify:** after the redeploy completes, fetch the page that references
 the hashed asset, extract the real bundle filename, and confirm the

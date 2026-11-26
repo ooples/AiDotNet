@@ -377,4 +377,39 @@ public class GanAdversarialStepTests
         var trained = Snapshot(viaTrain.Generator);
         for (int i = 0; i < stepped.Length; i++)
             Assert.True(Math.Abs(stepped[i] - trained[i]) <= 1e-12, $"generator weight {i}: TrainStep {stepped[i]}, Train {trained[i]}");
-    }}
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GenerativeAdversarialNetwork_DiscriminatorLossDiagnostic_IsTheGanIterationsLoss()
+    {
+        // The discriminator's loss stays unread after a GAN iteration and is read when the diagnostics ask for it. A
+        // discriminator update made outside the GAN in between must not be reported as the iteration's loss.
+        await Task.Yield();
+        GenerativeAdversarialNetwork<double> Build() => new(
+            Dense(NeuralNetworkTaskType.Generative, 8, 16, 4, new TanhActivation<double>()),
+            Dense(NeuralNetworkTaskType.BinaryClassification, 4, 16, 1, new IdentityActivation<double>()),
+            InputType.OneDimensional);
+        var control = Build();
+        var interrupted = Build();
+        ((NeuralNetworkBase<double>)interrupted.Generator).SetParameters(Snapshot(control.Generator));
+        ((NeuralNetworkBase<double>)interrupted.Discriminator).SetParameters(Snapshot(control.Discriminator));
+
+        var real = Random(4, 4, 51);
+        var noise = Random(4, 8, 52);
+        control.Train(noise, real);
+        interrupted.Train(noise, real);
+        string expected = control.GetAuxiliaryLossDiagnostics()["DiscriminatorLoss"];
+
+        // A standalone update on other data, with labels that give a very different loss.
+        var labels = new Tensor<double>(new[] { 4, 1 });
+        for (int i = 0; i < 4; i++) labels[i] = 25.0;
+        interrupted.Discriminator.Train(Random(4, 4, 53), labels);
+        string standalone = interrupted.Discriminator.GetLastLoss().ToString();
+
+        string reported = interrupted.GetAuxiliaryLossDiagnostics()["DiscriminatorLoss"];
+        Assert.NotEqual(expected, standalone);
+        Assert.Equal(expected, reported);
+        // And it stays that value on a second read.
+        Assert.Equal(expected, interrupted.GetAuxiliaryLossDiagnostics()["DiscriminatorLoss"]);
+    }
+}

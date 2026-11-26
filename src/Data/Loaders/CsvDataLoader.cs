@@ -189,14 +189,8 @@ public class CsvDataLoader<T> : InputOutputDataLoaderBase<T, Matrix<T>, Vector<T
             throw new InvalidOperationException("Data has not been loaded. Call LoadAsync() first.");
         }
 
-        var batchFeatures = new Matrix<T>(indices.Length, _featureCount);
-        var batchLabels = new Vector<T>(indices.Length);
-
-        for (int i = 0; i < indices.Length; i++)
-        {
-            batchLabels[i] = LoadedLabels[indices[i]];
-            batchFeatures.SetRow(i, LoadedFeatures.GetRow(indices[i]));
-        }
+        var batchFeatures = BatchGather.Rows(LoadedFeatures, indices);
+        var batchLabels = BatchGather.Elements(LoadedLabels, indices);
 
         return (batchFeatures, batchLabels);
     }
@@ -300,14 +294,8 @@ public class CsvDataLoader<T> : InputOutputDataLoaderBase<T, Matrix<T>, Vector<T
             throw new InvalidOperationException("Data has not been loaded. Call LoadAsync() first.");
         }
 
-        var subsetFeatures = new Matrix<T>(indices.Length, _featureCount);
-        var subsetLabels = new Vector<T>(indices.Length);
-
-        for (int i = 0; i < indices.Length; i++)
-        {
-            subsetLabels[i] = LoadedLabels[indices[i]];
-            subsetFeatures.SetRow(i, LoadedFeatures.GetRow(indices[i]));
-        }
+        var subsetFeatures = BatchGather.Rows(LoadedFeatures, indices);
+        var subsetLabels = BatchGather.Elements(LoadedLabels, indices);
 
         return new InMemoryDataLoader<T, Matrix<T>, Vector<T>>(subsetFeatures, subsetLabels);
     }

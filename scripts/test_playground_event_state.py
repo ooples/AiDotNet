@@ -191,7 +191,10 @@ if __name__ == "__main__":
                         "--env", "POSTGRES_PASSWORD=local-regression-only", "postgres:17-alpine"],
                        check=True, capture_output=True, text=True)
         for attempt in range(30):
-            if subprocess.run(["docker", "exec", CONTAINER, "pg_isready", "-U", "postgres"], capture_output=True).returncode == 0:
+            # Over TCP: the image's initialization server answers on the socket only and then shuts down, so a socket
+            # probe succeeds moments before "the database system is shutting down".
+            if subprocess.run(["docker", "exec", CONTAINER, "pg_isready", "-h", "127.0.0.1", "-U", "postgres"],
+                              capture_output=True).returncode == 0:
                 break
             time.sleep(1)
         else:

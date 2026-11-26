@@ -143,7 +143,7 @@ public class HellaswagDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
         var vocabulary = TextLoaderHelper.BuildVocabulary(allTexts, allTexts.Count, _options.VocabularySize);
 
         int seqLen = _options.MaxSequenceLength;
-        var featuresData = new T[totalSamples * 4 * seqLen];
+        var featuresData = new int[totalSamples * 4 * seqLen];
         var labelsData = new T[totalSamples * 4];
 
         T uniformPrior = NumOps.FromDouble(0.25);
@@ -154,7 +154,7 @@ public class HellaswagDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
             {
                 int[] tok = TextLoaderHelper.TokenizeAndEncode(contexts[i] + " " + endings[i][e], vocabulary, seqLen);
                 int offset = (i * 4 + e) * seqLen;
-                for (int j = 0; j < seqLen; j++) featuresData[offset + j] = NumOps.FromDouble(tok[j]);
+                Array.Copy(tok, 0, featuresData, offset, seqLen);
             }
             if (isTestSplit)
             {
@@ -169,7 +169,7 @@ public class HellaswagDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
             }
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, 4, seqLen });
+        LoadedFeatures = new Tensor<int>(featuresData, new[] { totalSamples, 4, seqLen }).Cast<T>();
         LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, 4 });
         InitializeIndices(totalSamples);
     }

@@ -110,8 +110,7 @@ public partial class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearne
         for (int tIdx = 0; tIdx < tasks.Length; tIdx++)
         {
             var task = tasks[tIdx];
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+            var adaptedParams = initParams.Clone();
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
@@ -139,8 +138,7 @@ public partial class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearne
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         var initParams = ParamModel.GetParameters();
-        var adaptedParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+        var adaptedParams = initParams.Clone();
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
@@ -203,52 +201,50 @@ public partial class MetaCollaborativeAlgorithm<T, TInput, TOutput> : MetaLearne
         {
             int k = assignments[t];
             counts[k]++;
-            for (int d = 0; d < _paramDim; d++)
-                sums[k][d] = NumOps.Add(sums[k][d], taskGrads[t][d]);
+            sums[k] = Engine.Add(sums[k], Fit(taskGrads[t]));
         }
 
+        // buffer_k = beta * buffer_k + (1 - beta) * mean of the slot's task gradients, written in place
         for (int k = 0; k < _algoOptions.NumDomainSlots; k++)
         {
             if (counts[k] > 0)
             {
-                for (int d = 0; d < _paramDim; d++)
-                    _domainBuffers[k][d] = NumOps.FromDouble(
-                        beta * NumOps.ToDouble(_domainBuffers[k][d]) + (1 - beta) * NumOps.ToDouble(sums[k][d]) / counts[k]);
+                var updated = Engine.Add(
+                    Engine.Multiply(_domainBuffers[k], NumOps.FromDouble(beta)),
+                    Engine.Multiply(sums[k], NumOps.FromDouble((1 - beta) / counts[k])));
+                updated.CopyTo(_domainBuffers[k].AsWritableSpan());
             }
         }
     }
+
+    /// <summary>The first paramDim entries of a vector.</summary>
+    private Vector<T> Fit(Vector<T> vector)
+        => vector.Length == _paramDim ? vector : vector.GetSubVector(0, _paramDim);
 
     /// <summary>
     /// Computes collaborative gradient: adds aligned domain signals, projects out conflicting ones.
     /// </summary>
     private Vector<T> ComputeCollaborativeGradient(Vector<T> taskGrad, int _taskIdx)
     {
-        var result = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) result[d] = taskGrad[d];
+        var result = Fit(taskGrad).Clone();
 
         for (int k = 0; k < _algoOptions.NumDomainSlots; k++)
         {
-            double sim = CosineSimilarity(taskGrad, _domainBuffers[k]);
+            var buffer = _domainBuffers[k];
+            double sim = CosineSimilarity(taskGrad, buffer);
             if (sim > 0)
             {
                 // Positive alignment: add domain buffer signal
-                for (int d = 0; d < _paramDim; d++)
-                    result[d] = NumOps.Add(result[d],
-                        NumOps.FromDouble(_algoOptions.AlignmentWeight * sim * NumOps.ToDouble(_domainBuffers[k][d])));
+                result = Engine.Add(result, Engine.Multiply(buffer, NumOps.FromDouble(_algoOptions.AlignmentWeight * sim)));
             }
             else if (sim < -0.1)
             {
                 // PCGrad: project out conflicting component
-                double dot = 0;
-                double bufNorm = L2NormSquared(_domainBuffers[k]);
-                for (int d = 0; d < _paramDim; d++)
-                    dot += NumOps.ToDouble(result[d]) * NumOps.ToDouble(_domainBuffers[k][d]);
+                double bufNorm = L2NormSquared(buffer);
                 if (bufNorm > 1e-10)
                 {
-                    double proj = dot / bufNorm;
-                    for (int d = 0; d < _paramDim; d++)
-                        result[d] = NumOps.Subtract(result[d],
-                            NumOps.FromDouble(proj * NumOps.ToDouble(_domainBuffers[k][d])));
+                    T proj = NumOps.Divide(Engine.DotProduct(result, buffer), Engine.DotProduct(buffer, buffer));
+                    result = Engine.Subtract(result, Engine.Multiply(buffer, proj));
                 }
             }
         }

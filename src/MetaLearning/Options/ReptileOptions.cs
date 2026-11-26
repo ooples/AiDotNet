@@ -98,6 +98,25 @@ public class ReptileOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
     public double OuterLearningRate { get; set; } = 1.0;
 
     /// <summary>
+    /// Gets or sets the outer step size that <see cref="OuterLearningRate"/> anneals to over training.
+    /// </summary>
+    /// <value>Default: 0.0, the paper's schedule; null keeps the step size fixed.</value>
+    /// <remarks>
+    /// <para>
+    /// Nichol et al. (2018, Appendix A) anneal the outer step size epsilon linearly from 1 to 0 over the
+    /// meta-iterations. At meta-iteration t the step size is
+    /// (1 - t / NumMetaIterations) * OuterLearningRate + (t / NumMetaIterations) * FinalOuterLearningRate,
+    /// held at FinalOuterLearningRate after NumMetaIterations. The iteration count advances with each
+    /// MetaTrainStep, so calling MetaTrain directly keeps the starting step size.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Reptile takes big steps toward the adapted parameters early on and smaller
+    /// ones later, so the learned starting point settles down instead of jumping around.
+    /// </para>
+    /// </remarks>
+    public double? FinalOuterLearningRate { get; set; } = 0.0;
+
+    /// <summary>
     /// Gets or sets the number of gradient steps to take during inner loop adaptation.
     /// </summary>
     /// <value>Default: 5.</value>
@@ -252,6 +271,7 @@ public class ReptileOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
         return MetaModel != null &&
                InnerLearningRate > 0 &&
                OuterLearningRate > 0 &&
+               (!FinalOuterLearningRate.HasValue || FinalOuterLearningRate.Value >= 0) &&
                AdaptationSteps > 0 &&
                MetaBatchSize > 0 &&
                NumMetaIterations > 0 &&
@@ -274,6 +294,7 @@ public class ReptileOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
             DataLoader = DataLoader,
             InnerLearningRate = InnerLearningRate,
             OuterLearningRate = OuterLearningRate,
+            FinalOuterLearningRate = FinalOuterLearningRate,
             AdaptationSteps = AdaptationSteps,
             MetaBatchSize = MetaBatchSize,
             NumMetaIterations = NumMetaIterations,

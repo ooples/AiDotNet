@@ -682,7 +682,7 @@ internal sealed class FireRedTtsTokenizer
 
     private static Dictionary<byte[], int> LoadRanks()
     {
-        using var stream = typeof(FireRedTtsTokenizer).Assembly.GetManifestResourceStream(Resource)
+        using var stream = EmbeddedData.Open(Resource)
             ?? throw new System.IO.InvalidDataException($"The embedded resource {Resource} is missing.");
         using var gzip = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
         using var reader = new System.IO.StreamReader(gzip, System.Text.Encoding.ASCII);

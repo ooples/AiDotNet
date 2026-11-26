@@ -421,7 +421,7 @@ public partial class SpiralNet<T> : GraphModelLayoutBase<T>
     /// <param name="learningRate">Learning rate for optimization.</param>
     /// <returns>Training loss history.</returns>
     /// <exception cref="ArgumentException">Thrown when input lists have mismatched lengths.</exception>
-    public List<double> Train(
+    public List<T> Train(
         List<Tensor<T>> meshFeatures,
         List<int[,]> spiralIndices,
         List<int> labels,
@@ -433,11 +433,13 @@ public partial class SpiralNet<T> : GraphModelLayoutBase<T>
             throw new ArgumentException("Input lists must have the same length.");
         }
 
-        var lossHistory = new List<double>();
+        var lossHistory = new List<T>();
+        // An empty training set averages to 0/0 = NaN, as the double average did.
+        T emptyEpochLoss = meshFeatures.Count == 0 ? NumOps.Divide(NumOps.Zero, NumOps.Zero) : NumOps.Zero;
 
         for (int epoch = 0; epoch < epochs; epoch++)
         {
-            double epochLoss = 0.0;
+            var sampleLosses = new T[meshFeatures.Count];
 
             for (int i = 0; i < meshFeatures.Count; i++)
             {
@@ -447,12 +449,15 @@ public partial class SpiralNet<T> : GraphModelLayoutBase<T>
 
                 var target = CreateOneHotTarget(labels[i], NumClasses);
                 var loss = _lossFunction.CalculateLoss(output.ToVector(), target);
-                epochLoss += NumOps.ToDouble(loss);
+                sampleLosses[i] = loss;
 
                 UpdateParameters(learningRate);
             }
 
-            lossHistory.Add(epochLoss / meshFeatures.Count);
+            // Mean sample loss of the epoch (0/0 = NaN for an empty set, as before).
+            lossHistory.Add(sampleLosses.Length == 0
+                ? emptyEpochLoss
+                : Engine.TensorMean(new Tensor<T>(sampleLosses, new[] { sampleLosses.Length })));
         }
 
         return lossHistory;
@@ -488,20 +493,9 @@ public partial class SpiralNet<T> : GraphModelLayoutBase<T>
         // outputs at inference time (same bug the Predict override already fixes).
         var output = Predict(meshFeatures);
 
-        var outputArray = output.ToArray();
-        int predictedClass = 0;
-        T maxValue = outputArray[0];
-
-        for (int i = 1; i < outputArray.Length; i++)
-        {
-            if (NumOps.GreaterThan(outputArray[i], maxValue))
-            {
-                maxValue = outputArray[i];
-                predictedClass = i;
-            }
-        }
-
-        return predictedClass;
+        // First maximum wins, as before (TensorArgMax keeps the earliest index on ties).
+        var flat = Engine.Reshape(output, new[] { output.Length });
+        return Engine.TensorArgMax(flat, 0)[0];
     }
 
     /// <summary>

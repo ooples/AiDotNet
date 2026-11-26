@@ -520,7 +520,7 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
 
                 if (i > 0)
                 {
-                    delta = BackpropagateActivation(_weights[i].Transpose().Multiply(delta), zs[i - 1], false);
+                    delta = BackpropagateThroughActivation(_weights[i].Transpose().Multiply(delta), zs[i - 1], false);
                 }
             }
         }
@@ -720,13 +720,18 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
     }
 
     /// <summary>
-    /// Propagates a gradient backward through a layer's activation.
+    /// Carries a gradient with respect to an activation's output back to its input.
     /// </summary>
-    /// <param name="outputGradient">The gradient with respect to the activation's output.</param>
-    /// <param name="input">The pre-activation vector from the forward pass.</param>
-    /// <param name="isOutputLayer">Whether the activation is the output layer's.</param>
-    /// <returns>The gradient with respect to the pre-activation vector.</returns>
-    private Vector<T> BackpropagateActivation(Vector<T> outputGradient, Vector<T> input, bool isOutputLayer)
+    /// <param name="upstream">The gradient with respect to the activation's output.</param>
+    /// <param name="input">The input vector before activation.</param>
+    /// <param name="isOutputLayer">Whether the input is for the output layer.</param>
+    /// <returns>The gradient with respect to the activation's input.</returns>
+    /// <remarks>
+    /// A vector activation's derivative is its n-by-n Jacobian J (diagonal for element-wise functions such as ReLU, full
+    /// for coupled ones such as softmax), so the input gradient is J transposed times the upstream gradient. Flattening J
+    /// and multiplying element-wise read its first row: only unit 0 got its derivative, every other hidden unit a zero.
+    /// </remarks>
+    private Vector<T> BackpropagateThroughActivation(Vector<T> upstream, Vector<T> input, bool isOutputLayer)
     {
         // A vector activation's Derivative(Vector) is its n x n Jacobian. Flattening that (ToVector) and
         // multiplying it element-wise with an n-long gradient threw "Vector lengths must match. Got 10 and
@@ -735,12 +740,17 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
         var vectorActivation = isOutputLayer ? _options.OutputVectorActivation : _options.HiddenVectorActivation;
         if (vectorActivation != null)
         {
-            return vectorActivation.Backward(Tensor<T>.FromVector(input), Tensor<T>.FromVector(outputGradient)).ToVector();
+            return vectorActivation.Backward(Tensor<T>.FromVector(input), Tensor<T>.FromVector(upstream)).ToVector();
         }
 
-        // Fall back to the scalar activation, identity when none is specified
-        var activation = (isOutputLayer ? _options.OutputActivation : _options.HiddenActivation) ?? new IdentityActivation<T>();
-        return Engine.Multiply(outputGradient, input.Transform(x => activation.Derivative(x)));
+        // Fall back to scalar activation
+        var activation = isOutputLayer ? _options.OutputActivation : _options.HiddenActivation;
+
+        // Use the existing IdentityActivation if no activation is specified
+        activation ??= new IdentityActivation<T>();
+
+        // A scalar activation's Jacobian is diagonal: scale each component by its derivative
+        return Engine.Multiply(upstream, input.Transform(x => activation.Derivative(x)));
     }
 
     /// <summary>
@@ -817,7 +827,7 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
             error = predictions.Subtract(targets);
         }
 
-        return BackpropagateActivation(error, outputLayerZ, true);
+        return BackpropagateThroughActivation(error, outputLayerZ, true);
     }
 
     /// <summary>

@@ -150,7 +150,7 @@ internal sealed class Phi4AudioNetwork<T>
 
     private static ByteLevelBpeTokenizer LoadTokenizer()
     {
-        using var stream = typeof(Phi4AudioNetwork<T>).Assembly.GetManifestResourceStream(TokenizerResource)
+        using var stream = EmbeddedData.Open(TokenizerResource)
             ?? throw new InvalidDataException($"The embedded resource {TokenizerResource} is missing.");
         using var gzip = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
         using var reader = new StreamReader(gzip, System.Text.Encoding.UTF8);
@@ -247,13 +247,21 @@ internal sealed class Phi4AudioNetwork<T>
     /// normalization, the subsampling convolutions, then the conformer blocks over chunks of at most 500 frames (the
     /// release's unfolding for its absolute-position limit) with full attention within each.
     /// </summary>
-    public Tensor<T> Encode(double[,] features)
+    public Tensor<T> NormalizedMel(double[,] features)
+    {
+        int frames = features.GetLength(0), mels = features.GetLength(1);
+        var values = new double[frames * mels];
+        for (int f = 0; f < frames; f++)
+            for (int m = 0; m < mels; m++)
+                values[f * mels + m] = (features[f, m] - GlobalMean[m]) * GlobalInverseStd[m];
+        return new Tensor<double>(values, new[] { 1, 1, frames, mels }).Cast<T>();
+    }
+
+    public Tensor<T> Encode(double[,] features) => Encode(NormalizedMel(features));
+
+    public Tensor<T> Encode(Tensor<T> mel)
     {
         var c = Configuration;
-        int frames = features.GetLength(0), mels = features.GetLength(1);
-        var mel = new Tensor<T>(new[] { 1, 1, frames, mels });
-        for (int f = 0; f < frames; f++)
-            for (int m = 0; m < mels; m++) mel[0, 0, f, m] = NumOps.FromDouble((features[f, m] - GlobalMean[m]) * GlobalInverseStd[m]);
         var x = _engine.ReLU(FirstConv.Forward(mel));
         foreach (var stage in DepthwiseStages) x = stage.Forward(x);
         int length = x.Shape[2];

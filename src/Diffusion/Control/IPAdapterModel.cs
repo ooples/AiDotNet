@@ -690,19 +690,11 @@ public class ImageEncoder<T> : IParameterSource<T>
 
     private Tensor<T> ApplyGelu(Tensor<T> x)
     {
-        var result = new Tensor<T>(x._shape);
-        var span = x.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
-        for (int i = 0; i < span.Length; i++)
+        // GELU tanh approximation 0.5 x (1 + tanh(sqrt(2 / pi) (x + 0.044715 x^3))), as a fresh tensor off the tape
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            var val = NumOps.ToDouble(span[i]);
-            // GELU approximation
-            var gelu = 0.5 * val * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (val + 0.044715 * val * val * val)));
-            resultSpan[i] = NumOps.FromDouble(gelu);
+            return AiDotNetEngine.Current.TensorGELU(x);
         }
-
-        return result;
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
@@ -715,24 +707,10 @@ public class ImageEncoder<T> : IParameterSource<T>
     /// </summary>
     public Vector<T> GetParameters()
     {
-        var allParams = new List<T>();
-
-        var p = _patchEmbed.GetParameters();
-        for (int i = 0; i < p.Length; i++)
-        {
-            allParams.Add(p[i]);
-        }
-
+        var parts = new List<Vector<T>> { _patchEmbed.GetParameters() };
         foreach (var layer in _transformerLayers)
-        {
-            p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++)
-            {
-                allParams.Add(p[i]);
-            }
-        }
-
-        return new Vector<T>(allParams.ToArray());
+            parts.Add(layer.GetParameters());
+        return Vector<T>.Concatenate(parts);
     }
 
     /// <summary>
@@ -741,24 +719,14 @@ public class ImageEncoder<T> : IParameterSource<T>
     public void SetParameters(Vector<T> parameters)
     {
         var offset = 0;
-
         int count = checked((int)_patchEmbed.ParameterCount);
-        var p = new T[count];
-        for (int i = 0; i < count; i++)
-        {
-            p[i] = parameters[offset++];
-        }
-        _patchEmbed.SetParameters(new Vector<T>(p));
-
+        _patchEmbed.SetParameters(parameters.GetSubVector(offset, count));
+        offset += count;
         foreach (var layer in _transformerLayers)
         {
             count = checked((int)layer.ParameterCount);
-            p = new T[count];
-            for (int i = 0; i < count; i++)
-            {
-                p[i] = parameters[offset++];
-            }
-            layer.SetParameters(new Vector<T>(p));
+            layer.SetParameters(parameters.GetSubVector(offset, count));
+            offset += count;
         }
     }
 }
@@ -827,21 +795,7 @@ public class ImageProjector<T> : IParameterSource<T>
     /// </summary>
     public Vector<T> GetParameters()
     {
-        var allParams = new List<T>();
-
-        var p = _projection.GetParameters();
-        for (int i = 0; i < p.Length; i++)
-        {
-            allParams.Add(p[i]);
-        }
-
-        p = _tokenExpansion.GetParameters();
-        for (int i = 0; i < p.Length; i++)
-        {
-            allParams.Add(p[i]);
-        }
-
-        return new Vector<T>(allParams.ToArray());
+        return Vector<T>.Concatenate(_projection.GetParameters(), _tokenExpansion.GetParameters());
     }
 
     /// <summary>
@@ -850,21 +804,10 @@ public class ImageProjector<T> : IParameterSource<T>
     public void SetParameters(Vector<T> parameters)
     {
         var offset = 0;
-
         int count = checked((int)_projection.ParameterCount);
-        var p = new T[count];
-        for (int i = 0; i < count; i++)
-        {
-            p[i] = parameters[offset++];
-        }
-        _projection.SetParameters(new Vector<T>(p));
-
+        _projection.SetParameters(parameters.GetSubVector(offset, count));
+        offset += count;
         count = checked((int)_tokenExpansion.ParameterCount);
-        p = new T[count];
-        for (int i = 0; i < count; i++)
-        {
-            p[i] = parameters[offset++];
-        }
-        _tokenExpansion.SetParameters(new Vector<T>(p));
+        _tokenExpansion.SetParameters(parameters.GetSubVector(offset, count));
     }
 }

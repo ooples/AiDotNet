@@ -16,14 +16,14 @@ public sealed class CosyVoiceDiffROTrainingTests
     [Fact]
     public void PublicDiffRO_UpdatesOnlyPolicyLm_AndRestoresStageAndFrozenModes()
     {
-        using var policy = Policy();
+        var optimizer = Optimizer();
+        using var policy = Policy(optimizer);
         using var reference = Policy();
         var reward = new CosyVoiceToken2TextReward<double>(5, 151936, 4, 8, 1, 1, 1);
         reference.SetTrainingMode(true);
         foreach (var layer in reward.Layers) layer.SetTrainingMode(true);
         policy.CurrentStage = CosyVoiceTrainingStage.Flow;
         var policyParameters = Parameters(policy.LanguageModelLayers);
-        var before = Snapshot(policyParameters);
         var fixedParameters = Parameters(reference.LanguageModelLayers)
             .Concat(reward.Parameters).Concat(Parameters(policy.FlowLayers))
             .Concat(Parameters(policy.VocoderLayers)).ToArray();
@@ -33,17 +33,25 @@ public sealed class CosyVoiceDiffROTrainingTests
             Assert.False(reference.IsTrainingMode);
             Assert.All(reward.Layers, layer => Assert.False(layer.InTrainingMode));
         });
+        Assert.Equal(0, optimizer.CurrentStep);
         for (int i = 0; i < 2; i++)
         {
+            var beforeStep = Snapshot(policyParameters);
+            int rewardCallsBefore = checkedReward.Calls;
             double loss = policy.TrainDifferentiableReward(Sample(), reference, checkedReward, random: new Fixed(.37));
             Assert.False(double.IsNaN(loss) || double.IsInfinity(loss));
+            Assert.True(checkedReward.Calls > rewardCallsBefore, "Each requested policy update must evaluate its reward.");
+            // Reward evaluation also runs during lazy-shape warm-up and compiled tracing. Count completed
+            // optimizer batches instead, and independently require the policy weights to move on each batch.
+            Assert.Equal(i + 1, optimizer.CurrentStep);
+            Assert.Contains(Enumerable.Range(0, beforeStep.Length),
+                p => !beforeStep[p].SequenceEqual(policyParameters[p].ToArray()));
+            for (int p = 0; p < fixedParameters.Length; p++) Assert.Equal(frozenBefore[p], fixedParameters[p].ToArray());
+            Assert.Equal(CosyVoiceTrainingStage.Flow, policy.CurrentStage);
+            Assert.True(reference.IsTrainingMode);
+            Assert.All(reward.Layers, layer => Assert.True(layer.InTrainingMode));
         }
-        Assert.Equal(2, checkedReward.Calls);
-        Assert.Contains(Enumerable.Range(0, before.Length), i => !before[i].SequenceEqual(policyParameters[i].ToArray()));
-        for (int i = 0; i < fixedParameters.Length; i++) Assert.Equal(frozenBefore[i], fixedParameters[i].ToArray());
-        Assert.Equal(CosyVoiceTrainingStage.Flow, policy.CurrentStage);
-        Assert.True(reference.IsTrainingMode);
-        Assert.All(reward.Layers, layer => Assert.True(layer.InTrainingMode));
+        Assert.Equal(2, optimizer.CurrentStep);
     }
 
     [Fact]
@@ -90,7 +98,8 @@ public sealed class CosyVoiceDiffROTrainingTests
             new AliasedReward(policy.LanguageModelLayers)));
     }
 
-    private static CosyVoice3<double> Policy() => new(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+    private static CosyVoice3<double> Policy(GradientDescentOptimizer<double, Tensor<double>, Tensor<double>>? optimizer = null)
+        => new(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
         NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), new CosyVoice3Options
         {
             CodebookSize = 5, ReservedSpeechTokens = 4, LLMDim = 4, NumLLMLayers = 1, NumHeads = 1,
@@ -102,9 +111,11 @@ public sealed class CosyVoiceDiffROTrainingTests
             HiftBaseChannels = 8, HiftHarmonics = 1, HiftUpsampleRates = new[] { 2 },
             HiftUpsampleKernels = new[] { 4 }, HiftSourceKernels = new[] { 3 }, DropoutRate = 0,
             IncludeDiscriminators = false
-        }, new GradientDescentOptimizer<double, Tensor<double>, Tensor<double>>(null,
+        }, optimizer ?? Optimizer());
+
+    private static GradientDescentOptimizer<double, Tensor<double>, Tensor<double>> Optimizer() => new(null,
             new GradientDescentOptimizerOptions<double, Tensor<double>, Tensor<double>>
-            { InitialLearningRate = .001, UseAdaptiveLearningRate = false, InitialMomentum = 0 }));
+            { InitialLearningRate = .001, UseAdaptiveLearningRate = false, InitialMomentum = 0 });
 
     private static TtsTrainingSample<double> Sample() => new()
     {

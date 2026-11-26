@@ -5,6 +5,7 @@ using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using AiDotNet.Tests.Helpers;
 
 namespace AiDotNet.Tests.UnitTests.Training;
 
@@ -16,9 +17,15 @@ namespace AiDotNet.Tests.UnitTests.Training;
 [Collection("FoundationScaleSerial")]
 public class FusedTrainingSessionStreamedWeightTests
 {
+    // The streaming registry is process-wide and single-tenant: a model another test left streaming (an
+    // undisposed foundation-scale model) makes auto-detect decline here. This collection runs alone, so
+    // starting each test from a clean registry is safe and makes the test independent of run order.
+    public FusedTrainingSessionStreamedWeightTests() => NeuralNetworkBase<float>.ResetWeightStreamingForTests();
+
     [Fact]
     public void TrainingAStreamedModel_ProbesItsPagedOutWeights()
     {
+        NeuralNetworkBase<float>.ResetWeightStreamingForTests();
         var architecture = new NeuralNetworkArchitecture<float>(
             InputType.ThreeDimensional, NeuralNetworkTaskType.Regression, NetworkComplexity.Deep, 0, 32, 32, 3, 0);
         try
@@ -87,7 +94,7 @@ public class FusedTrainingSessionStreamedWeightTests
     }
 
     private static OpenVocabSAM<float> CreateSmall(NeuralNetworkArchitecture<float> architecture)
-        => new(architecture, options: new OpenVocabSAMOptions
+        => new(architecture, new DeterministicTextEncoder<float>(), options: new OpenVocabSAMOptions
         {
             NumClasses = 5,
             ChannelDimensions = [32, 64, 128, 256],

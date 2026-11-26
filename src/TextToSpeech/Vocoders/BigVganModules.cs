@@ -125,7 +125,7 @@ internal sealed class AntiAliasedSnake<T>
 /// generator with every leaky ReLU replaced by the anti-aliased Snake. A 7-wide convolution to h channels; per upsampling
 /// stage a transposed convolution halving the channels and the average of AMP blocks (per kernel, per dilation:
 /// activation, dilated convolution, activation, convolution, residual); a final anti-aliased Snake, a 7-wide convolution
-/// to one channel and tanh. Weight-normalized throughout; the upsampling, AMP and output convolutions draw N(0, 0.01).
+/// to one channel and tanh. Weight-normalized throughout, every convolution from PyTorch's default draw (see the constructor).
 /// </summary>
 internal sealed class BigVganGenerator<T>
 {
@@ -156,19 +156,16 @@ internal sealed class BigVganGenerator<T>
         AntiAliasedSnake<T> Activation(int channels) => snakeBeta
             ? new AntiAliasedSnake<T>(engine, _layers, new AiDotNet.Audio.Codecs.XCodec2SnakeBetaLayer<T>(channels))
             : new AntiAliasedSnake<T>(engine, _layers, channels);
-        Func<double> normal = () =>
-        {
-            double u1 = 1.0 - initialization.NextDouble(), u2 = initialization.NextDouble();
-            return 0.01 * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
-        };
-        _pre = Add(new NormedConv1DLayer<T>(melChannels, initialChannels, 7, 1, 1, 1, 3, false, ConvolutionNormalization.Weight));
+        // No N(0, 0.01) redraw: the reference applies init_weights after weight_norm, so it writes only the derived
+        // `weight` tensor, which the forward pre-hook recomputes from weight_g and weight_v. Every convolution trains from
+        // PyTorch's default draw with g = ||v||, here seeded from the initialization stream.
+        _pre = Add(new NormedConv1DLayer<T>(melChannels, initialChannels, 7, 1, 1, 1, 3, false, ConvolutionNormalization.Weight, 0, true, initialization));
         int channels = initialChannels;
         for (int i = 0; i < upsampleRates.Length; i++)
         {
             int next = initialChannels >> (i + 1);
             var up = Add(new NormedConv1DLayer<T>(channels, next, upsampleKernels[i], upsampleRates[i], 1, 1,
-                (upsampleKernels[i] - upsampleRates[i]) / 2, true, ConvolutionNormalization.Weight));
-            up.Reinitialize(normal, keepBias: true);
+                (upsampleKernels[i] - upsampleRates[i]) / 2, true, ConvolutionNormalization.Weight, 0, true, initialization));
             _ups.Add(up);
             channels = next;
             var stage = new List<List<(AntiAliasedSnake<T>, NormedConv1DLayer<T>, AntiAliasedSnake<T>, NormedConv1DLayer<T>)>>();
@@ -179,11 +176,9 @@ internal sealed class BigVganGenerator<T>
                 foreach (int d in resblockDilations[j])
                 {
                     var a1 = Activation(channels);
-                    var c1 = Add(new NormedConv1DLayer<T>(channels, channels, k, 1, d, 1, (k * d - d) / 2, false, ConvolutionNormalization.Weight));
+                    var c1 = Add(new NormedConv1DLayer<T>(channels, channels, k, 1, d, 1, (k * d - d) / 2, false, ConvolutionNormalization.Weight, 0, true, initialization));
                     var a2 = Activation(channels);
-                    var c2 = Add(new NormedConv1DLayer<T>(channels, channels, k, 1, 1, 1, (k - 1) / 2, false, ConvolutionNormalization.Weight));
-                    c1.Reinitialize(normal, keepBias: true);
-                    c2.Reinitialize(normal, keepBias: true);
+                    var c2 = Add(new NormedConv1DLayer<T>(channels, channels, k, 1, 1, 1, (k - 1) / 2, false, ConvolutionNormalization.Weight, 0, true, initialization));
                     block.Add((a1, c1, a2, c2));
                 }
                 stage.Add(block);
@@ -191,8 +186,7 @@ internal sealed class BigVganGenerator<T>
             _blocks.Add(stage);
         }
         _postActivation = Activation(channels);
-        _post = Add(new NormedConv1DLayer<T>(channels, 1, 7, 1, 1, 1, 3, false, ConvolutionNormalization.Weight, biasAtFinal));
-        _post.Reinitialize(normal, keepBias: true);
+        _post = Add(new NormedConv1DLayer<T>(channels, 1, 7, 1, 1, 1, 3, false, ConvolutionNormalization.Weight, 0, biasAtFinal, initialization));
         if (speakerChannels > 0)
         {
             // Plain nn.Conv1d: PyTorch's default U(±1/√fan_in) for weights and biases.

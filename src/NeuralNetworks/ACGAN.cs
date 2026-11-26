@@ -462,17 +462,9 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
                 $"Class index must be between 0 and {_numClasses - 1} (inclusive).");
         }
 
-        var labels = new Tensor<T>(new int[] { batchSize, _numClasses });
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < _numClasses; c++)
-            {
-                labels[b, c] = c == classIndex ? NumOps.One : NumOps.Zero;
-            }
-        }
-
-        return labels;
+        var classIndices = new Tensor<int>(new[] { batchSize });
+        classIndices.Fill(classIndex);
+        return Engine.TensorOneHot<T>(classIndices, _numClasses);
     }
 
     /// <summary>
@@ -591,20 +583,8 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// <summary>One-hot labels naming each row's largest entry.</summary>
     private Tensor<T> OneHotOfLargest(Tensor<T> scores)
     {
-        int batchSize = scores.Shape[0];
-        var indices = new int[batchSize];
-        for (int b = 0; b < batchSize; b++)
-        {
-            int best = 0;
-            for (int c = 1; c < _numClasses; c++)
-            {
-                if (NumOps.GreaterThan(scores[b, c], scores[b, best])) best = c;
-            }
-
-            indices[b] = best;
-        }
-
-        return CreateOneHotLabelsFromIndices(batchSize, indices);
+        // ArgMax keeps the first of tied entries and never moves to a NaN, as the strict comparison did.
+        return Engine.TensorOneHot<T>(Engine.TensorArgMax(scores, 1), _numClasses);
     }
 
     /// <summary>
@@ -634,19 +614,8 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// <returns>A tensor of shape [batchSize, numClasses] with one-hot encoded labels.</returns>
     private Tensor<T> CreateOneHotLabelsFromIndices(int batchSize, int[] classIndices)
     {
-        var labels = new Tensor<T>(new int[] { batchSize, _numClasses });
-        for (int i = 0; i < batchSize; i++)
-        {
-            int classIndex = classIndices[i];
-            for (int c = 0; c < _numClasses; c++)
-            {
-                labels[i, c] = (classIndex >= 0 && classIndex < _numClasses && c == classIndex)
-                    ? NumOps.One
-                    : NumOps.Zero;
-            }
-        }
-
-        return labels;
+        // TensorOneHot leaves the row of an out-of-range index all zero, as before.
+        return Engine.TensorOneHot<T>(new Tensor<int>(classIndices, new[] { batchSize }), _numClasses);
     }
 
     /// <inheritdoc />

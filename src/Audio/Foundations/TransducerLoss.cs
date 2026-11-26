@@ -31,9 +31,48 @@ internal static class TransducerLoss
         foreach (int label in labels)
             if (label < 0 || label >= vocabulary || label == blank)
                 throw new ArgumentException($"Label {label} is outside the vocabulary or is the blank.", nameof(labels));
+        var labelsArr = labels as int[] ?? labels.ToArray();
+        if (AiDotNet.Tensors.Engines.Compilation.GraphMode.Current is { } scope)
+        {
+            scope.BindEngineIfUnset(engine);
+            var capturedInputs = new[] { logProbs };
+            return scope.RecordVariadic(
+                AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Custom,
+                "TransducerLoss",
+                capturedInputs,
+                new[] { 1 },
+                (_, output) =>
+                {
+                    var (lossVal, _) = EvaluateCore(capturedInputs[0], labelsArr, blank, fastEmitLambda);
+                    output.AsWritableSpan()[0] = lossVal;
+                },
+                (gradOutput, inputs, _, _, eng, grads) =>
+                {
+                    var (_, unitGrad) = EvaluateCore(inputs[0], labelsArr, blank, fastEmitLambda);
+                    var scaled = eng.TensorMultiplyScalar(unitGrad, gradOutput.Data.Span[0]);
+                    DifferentiableOps.AccumulateGrad(grads, inputs[0], scaled, eng);
+                });
+        }
+
+        var (eagerLossVal, eagerUnitGrad) = EvaluateCore(logProbs, labelsArr, blank, fastEmitLambda);
+        var loss = new Tensor<T>(new[] { 1 });
+        loss[0] = eagerLossVal;
+
+        DifferentiableOps.RecordUnary("TransducerLoss", loss, logProbs, (gradOutput, inputs, _, _, eng, grads) =>
+        {
+            var grad = eng.TensorMultiplyScalar(eagerUnitGrad, gradOutput.Data.Span[0]);
+            DifferentiableOps.AccumulateGrad(grads, inputs[0], grad, eng);
+        });
+        return loss;
+    }
+
+    private static (T Loss, Tensor<T> UnitGrad) EvaluateCore<T>(Tensor<T> logProbs, int[] labels, int blank, double fastEmitLambda)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        int frames = logProbs.Shape[0], width = logProbs.Shape[1], vocabulary = logProbs.Shape[2], length = labels.Length;
         var values = logProbs.ToArray();
         double P(int t, int u, int k) => ops.ToDouble(values[(t * width + u) * vocabulary + k]);
-        double Add(double a, double b)
+        static double Add(double a, double b)
         {
             if (double.IsNegativeInfinity(a)) return b;
             if (double.IsNegativeInfinity(b)) return a;
@@ -41,7 +80,6 @@ internal static class TransducerLoss
             return m + Math.Log(Math.Exp(a - m) + Math.Exp(b - m));
         }
 
-        // alpha(t, u): log-probability of reaching node (t, u), having emitted the first u labels before frame t ends.
         var alpha = new double[frames, width];
         for (int t = 0; t < frames; t++)
             for (int u = 0; u < width; u++)
@@ -51,7 +89,7 @@ internal static class TransducerLoss
                 double fromLabel = u > 0 ? alpha[t, u - 1] + P(t, u - 1, labels[u - 1]) : double.NegativeInfinity;
                 alpha[t, u] = Add(fromBlank, fromLabel);
             }
-        // beta(t, u): log-probability of completing the sequence from node (t, u), closed by the final blank.
+
         var beta = new double[frames, width];
         for (int t = frames - 1; t >= 0; t--)
             for (int u = length; u >= 0; u--)
@@ -61,28 +99,27 @@ internal static class TransducerLoss
                 double viaLabel = u < length ? beta[t, u + 1] + P(t, u, labels[u]) : double.NegativeInfinity;
                 beta[t, u] = Add(viaBlank, viaLabel);
             }
-        double logLikelihood = beta[0, 0];
-        var loss = new Tensor<T>(new[] { 1 });
-        loss[0] = ops.FromDouble(-logLikelihood);
 
-        DifferentiableOps.RecordUnary("TransducerLoss", loss, logProbs, (gradOutput, inputs, _, _, eng, grads) =>
+        double logLikelihood = beta[0, 0];
+        var unitGradArr = new double[frames * width * vocabulary];
+        for (int t = 0; t < frames; t++)
+            for (int u = 0; u < width; u++)
+            {
+                int rowBase = (t * width + u) * vocabulary;
+                double blankNext = t < frames - 1 ? beta[t + 1, u] : (u == length ? 0.0 : double.NegativeInfinity);
+                if (!double.IsNegativeInfinity(blankNext))
+                    unitGradArr[rowBase + blank] = -Math.Exp(alpha[t, u] + P(t, u, blank) + blankNext - logLikelihood);
+                if (u < length)
+                    unitGradArr[rowBase + labels[u]] = -(1.0 + fastEmitLambda)
+                        * Math.Exp(alpha[t, u] + P(t, u, labels[u]) + beta[t, u + 1] - logLikelihood);
+            }
+
+        Tensor<T> unitGrad;
+        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
         {
-            double scale = ops.ToDouble(gradOutput.Data.Span[0]);
-            var grad = new Tensor<T>(new[] { frames, width, vocabulary });
-            for (int t = 0; t < frames; t++)
-                for (int u = 0; u < width; u++)
-                {
-                    // d(-log P)/d log Pr(k | t, u) = -exp(alpha(t, u) + log Pr(k | t, u) + beta(next) - log P).
-                    double blankNext = t < frames - 1 ? beta[t + 1, u] : (u == length ? 0.0 : double.NegativeInfinity);
-                    if (!double.IsNegativeInfinity(blankNext))
-                        grad[t, u, blank] = ops.FromDouble(-scale * Math.Exp(alpha[t, u] + P(t, u, blank) + blankNext - logLikelihood));
-                    if (u < length)
-                        grad[t, u, labels[u]] = ops.FromDouble(-scale * (1.0 + fastEmitLambda)
-                            * Math.Exp(alpha[t, u] + P(t, u, labels[u]) + beta[t, u + 1] - logLikelihood));
-                }
-            DifferentiableOps.AccumulateGrad(grads, inputs[0], grad, eng);
-        });
-        return loss;
+            unitGrad = new Tensor<double>(unitGradArr, new[] { frames, width, vocabulary }).Cast<T>();
+        }
+        return (ops.FromDouble(-logLikelihood), unitGrad);
     }
 
     /// <summary>
@@ -104,13 +141,73 @@ internal static class TransducerLoss
         IReadOnlyList<int> labels, int blank)
     {
         var ops = MathHelper.GetNumericOperations<T>();
+        if (logProbs.Rank != 3) throw new ArgumentException("The lattice must be [frames, labels + 1, tokens + durations].", nameof(logProbs));
         int frames = logProbs.Shape[0], width = logProbs.Shape[1], channels = logProbs.Shape[2], length = labels.Count;
+        if (frames <= 0) throw new ArgumentException("The lattice has no frames.", nameof(logProbs));
+        if (vocabulary <= 0) throw new ArgumentOutOfRangeException(nameof(vocabulary), vocabulary, "The vocabulary must be positive.");
+        if (durations.Count == 0) throw new ArgumentException("At least one duration is required.", nameof(durations));
+        bool canReachEnd = false;
+        foreach (int duration in durations)
+        {
+            if (duration < 0)
+                throw new ArgumentException($"Duration {duration} is negative.", nameof(durations));
+            if (duration > 0 && duration <= frames)
+                canReachEnd = true;
+        }
+        if (!canReachEnd)
+            throw new ArgumentException($"No positive duration in [{string.Join(", ", durations)}] fits within {frames} frame(s).", nameof(durations));
+        if (blank < 0 || blank >= vocabulary)
+            throw new ArgumentOutOfRangeException(nameof(blank), blank, $"The blank must be a token in [0, {vocabulary}).");
+        foreach (int label in labels)
+            if (label < 0 || label >= vocabulary || label == blank)
+                throw new ArgumentException($"Label {label} is outside the vocabulary or is the blank.", nameof(labels));
         if (channels != vocabulary + durations.Count) throw new ArgumentException("The last axis must hold the tokens then the durations.", nameof(logProbs));
         if (width != length + 1) throw new ArgumentException($"The lattice has {width} label positions for {length} labels.", nameof(logProbs));
+        var durationsArr = durations as int[] ?? durations.ToArray();
+        var labelsArr = labels as int[] ?? labels.ToArray();
+        if (AiDotNet.Tensors.Engines.Compilation.GraphMode.Current is { } scope)
+        {
+            scope.BindEngineIfUnset(engine);
+            var capturedInputs = new[] { logProbs };
+            return scope.RecordVariadic(
+                AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Custom,
+                "TokenAndDurationTransducerLoss",
+                capturedInputs,
+                new[] { 1 },
+                (_, output) =>
+                {
+                    var (lossVal, _) = EvaluateTokenAndDurationCore(capturedInputs[0], vocabulary, durationsArr, labelsArr, blank);
+                    output.AsWritableSpan()[0] = lossVal;
+                },
+                (gradOutput, inputs, _, _, eng, grads) =>
+                {
+                    var (_, unitGrad) = EvaluateTokenAndDurationCore(inputs[0], vocabulary, durationsArr, labelsArr, blank);
+                    var scaled = eng.TensorMultiplyScalar(unitGrad, gradOutput.Data.Span[0]);
+                    DifferentiableOps.AccumulateGrad(grads, inputs[0], scaled, eng);
+                });
+        }
+
+        var (tdLossVal, tdUnitGrad) = EvaluateTokenAndDurationCore(logProbs, vocabulary, durationsArr, labelsArr, blank);
+        var loss = new Tensor<T>(new[] { 1 });
+        loss[0] = tdLossVal;
+
+        DifferentiableOps.RecordUnary("TokenAndDurationTransducerLoss", loss, logProbs, (gradOutput, inputs, _, _, eng, grads) =>
+        {
+            var tensor = eng.TensorMultiplyScalar(tdUnitGrad, gradOutput.Data.Span[0]);
+            DifferentiableOps.AccumulateGrad(grads, inputs[0], tensor, eng);
+        });
+        return loss;
+    }
+
+    private static (T Loss, Tensor<T> UnitGrad) EvaluateTokenAndDurationCore<T>(
+        Tensor<T> logProbs, int vocabulary, int[] durations, int[] labels, int blank)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        int frames = logProbs.Shape[0], width = logProbs.Shape[1], channels = logProbs.Shape[2], length = labels.Length;
         var values = logProbs.ToArray();
         double Token(int t, int u, int k) => ops.ToDouble(values[(t * width + u) * channels + k]);
         double Duration(int t, int u, int i) => ops.ToDouble(values[(t * width + u) * channels + vocabulary + i]);
-        double Add(double a, double b)
+        static double Add(double a, double b)
         {
             if (double.IsNegativeInfinity(a)) return b;
             if (double.IsNegativeInfinity(b)) return a;
@@ -118,14 +215,13 @@ internal static class TransducerLoss
             return m + Math.Log(Math.Exp(a - m) + Math.Exp(b - m));
         }
 
-        // alpha(t, u) for t < T: log-probability of reaching node (t, u).
         var alpha = new double[frames, width];
         for (int t = 0; t < frames; t++)
             for (int u = 0; u < width; u++)
             {
                 if (t == 0 && u == 0) continue;
                 double total = double.NegativeInfinity;
-                for (int i = 0; i < durations.Count; i++)
+                for (int i = 0; i < durations.Length; i++)
                 {
                     int d = durations[i], from = t - d;
                     if (from < 0) continue;
@@ -135,55 +231,57 @@ internal static class TransducerLoss
                 }
                 alpha[t, u] = total;
             }
-        // beta(t, u): log-probability of completing from node (t, u).
+
         var beta = new double[frames, width];
         for (int t = frames - 1; t >= 0; t--)
             for (int u = length; u >= 0; u--)
             {
                 double total = double.NegativeInfinity;
-                for (int i = 0; i < durations.Count; i++)
+                for (int i = 0; i < durations.Length; i++)
                 {
-                    int d = durations[i], to = t + d;
+                    // A duration past the remaining frames has no transition here; checked before the sum, which
+                    // overflows for a duration near int.MaxValue and would pass "to < frames" as a negative index.
+                    int d = durations[i];
+                    if (d > frames - t) continue;
+                    int to = t + d;
                     if (d > 0 && u == length && to == frames) total = Add(total, Token(t, u, blank) + Duration(t, u, i));
                     if (d > 0 && to < frames) total = Add(total, beta[to, u] + Token(t, u, blank) + Duration(t, u, i));
                     if (u < length && to < frames) total = Add(total, beta[to, u + 1] + Token(t, u, labels[u]) + Duration(t, u, i));
                 }
                 beta[t, u] = total;
             }
-        double logLikelihood = beta[0, 0];
-        var loss = new Tensor<T>(new[] { 1 });
-        loss[0] = ops.FromDouble(-logLikelihood);
 
-        DifferentiableOps.RecordUnary("TokenAndDurationTransducerLoss", loss, logProbs, (gradOutput, inputs, _, _, eng, grads) =>
-        {
-            double scale = ops.ToDouble(gradOutput.Data.Span[0]);
-            var grad = new double[values.Length];
-            for (int t = 0; t < frames; t++)
-                for (int u = 0; u < width; u++)
-                    for (int i = 0; i < durations.Count; i++)
+        double logLikelihood = beta[0, 0];
+        var grad = new double[values.Length];
+        for (int t = 0; t < frames; t++)
+            for (int u = 0; u < width; u++)
+                for (int i = 0; i < durations.Length; i++)
+                {
+                    int d = durations[i];
+                    if (d > frames - t) continue;   // as in the backward pass: no transition, and no overflow
+                    int to = t + d, at = (t * width + u) * channels;
+                    double blankNext = d == 0 ? double.NegativeInfinity
+                        : to == frames ? (u == length ? 0.0 : double.NegativeInfinity)
+                        : to < frames ? beta[to, u] : double.NegativeInfinity;
+                    if (!double.IsNegativeInfinity(blankNext))
                     {
-                        int d = durations[i], to = t + d, at = (t * width + u) * channels;
-                        double blankNext = d == 0 ? double.NegativeInfinity
-                            : to == frames ? (u == length ? 0.0 : double.NegativeInfinity)
-                            : to < frames ? beta[to, u] : double.NegativeInfinity;
-                        if (!double.IsNegativeInfinity(blankNext))
-                        {
-                            double g = scale * Math.Exp(alpha[t, u] + Token(t, u, blank) + Duration(t, u, i) + blankNext - logLikelihood);
-                            grad[at + blank] -= g;
-                            grad[at + vocabulary + i] -= g;
-                        }
-                        if (u < length && to < frames)
-                        {
-                            double g = scale * Math.Exp(alpha[t, u] + Token(t, u, labels[u]) + Duration(t, u, i) + beta[to, u + 1] - logLikelihood);
-                            grad[at + labels[u]] -= g;
-                            grad[at + vocabulary + i] -= g;
-                        }
+                        double g = Math.Exp(alpha[t, u] + Token(t, u, blank) + Duration(t, u, i) + blankNext - logLikelihood);
+                        grad[at + blank] -= g;
+                        grad[at + vocabulary + i] -= g;
                     }
-            var tensor = new Tensor<T>(new[] { frames, width, channels });
-            var span = tensor.Data.Span;
-            for (int n = 0; n < grad.Length; n++) span[n] = ops.FromDouble(grad[n]);
-            DifferentiableOps.AccumulateGrad(grads, inputs[0], tensor, eng);
-        });
-        return loss;
+                    if (u < length && to < frames)
+                    {
+                        double g = Math.Exp(alpha[t, u] + Token(t, u, labels[u]) + Duration(t, u, i) + beta[to, u + 1] - logLikelihood);
+                        grad[at + labels[u]] -= g;
+                        grad[at + vocabulary + i] -= g;
+                    }
+                }
+
+        Tensor<T> unitGrad;
+        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+        {
+            unitGrad = new Tensor<double>(grad, new[] { frames, width, channels }).Cast<T>();
+        }
+        return (ops.FromDouble(-logLikelihood), unitGrad);
     }
 }

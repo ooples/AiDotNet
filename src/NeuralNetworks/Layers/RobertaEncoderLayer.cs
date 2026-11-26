@@ -252,12 +252,12 @@ public partial class RobertaEncoderLayer<T> : LayerBase<T>, IShapeContract
     // after the row maximum is subtracted gives the same probabilities, and -1e9 does so in float and double.
     private Tensor<T> PaddingBias(Tensor<T> ids, int batch, int length)
     {
-        var bias = new Tensor<T>(new[] { batch, 1, 1, length });
-        T blocked = NumOps.FromDouble(-1e9);
-        for (int b = 0; b < batch; b++)
-            for (int s = 0; s < length; s++)
-                if ((int)Math.Round(NumOps.ToDouble(ids[b, s])) == _paddingTokenId) bias[b, 0, 0, s] = blocked;
-        return bias;
+        int[] biasShape = new[] { batch, 1, 1, length };
+        var isPadding = Engine.TensorEquals(
+            Engine.TensorRound(Engine.Reshape(ids, biasShape)), NumOps.FromDouble(_paddingTokenId));
+        var blocked = new Tensor<T>(biasShape);
+        blocked.Fill(NumOps.FromDouble(-1e9));
+        return Engine.TensorWhere(isPadding, blocked, new Tensor<T>(biasShape));
     }
 
     /// <inheritdoc/>

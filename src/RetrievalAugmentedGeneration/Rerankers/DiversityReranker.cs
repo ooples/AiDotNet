@@ -112,113 +112,46 @@ public class DiversityReranker<T> : RerankerBase<T>
             return docList;
         }
 
-        var rerankedDocs = new List<Document<T>>();
-        var remainingDocs = new List<Document<T>>(docList);
-
-        // Start with the most relevant document
-        var firstDoc = remainingDocs.OrderByDescending(d => d.RelevanceScore,
-            Comparer<T>.Create((a, b) =>
-            {
-                if (NumOps.GreaterThan(a, b)) return 1;
-                if (NumOps.LessThan(a, b)) return -1;
-                return 0;
-            })).First();
-        rerankedDocs.Add(firstDoc);
-        remainingDocs.Remove(firstDoc);
-
         // Greedily select documents that maximize: lambda * relevance - (1 - lambda) * max_similarity
-        while (remainingDocs.Count > 0)
-        {
-            Document<T>? bestDoc = null;
-            var bestScore = NumOps.MinValue;
+        var relevance = new Tensor<T>(docList.Select(d => d.RelevanceScore).ToArray(), [docList.Count]);
+        var order = MarginalRelevanceOrder(relevance, JaccardSimilarityMatrix(docList), _lambda);
+        var rerankedDocs = order.Select(i => docList[i]).ToList();
 
-            foreach (var doc in remainingDocs)
-            {
-                // Calculate maximum similarity to already-selected documents
-                var maxSimilarity = NumOps.Zero;
-                foreach (var selectedDoc in rerankedDocs)
-                {
-                    var similarity = CalculateTextSimilarity(doc.Content, selectedDoc.Content);
-                    if (NumOps.GreaterThan(similarity, maxSimilarity))
-                    {
-                        maxSimilarity = similarity;
-                    }
-                }
-
-                // Calculate diversity-aware score: lambda * relevance - (1 - lambda) * max_similarity
-                var relevancePart = NumOps.Multiply(_lambda, doc.RelevanceScore);
-                var oneMinusLambda = NumOps.Subtract(NumOps.One, _lambda);
-                var diversityPenalty = NumOps.Multiply(oneMinusLambda, maxSimilarity);
-                var score = NumOps.Subtract(relevancePart, diversityPenalty);
-
-                if (bestScore == null || NumOps.GreaterThan(score, bestScore))
-                {
-                    bestDoc = doc;
-                    bestScore = score;
-                }
-            }
-
-            if (bestDoc != null)
-            {
-                rerankedDocs.Add(bestDoc);
-                remainingDocs.Remove(bestDoc);
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        // Update relevance scores based on final ranking
-        for (int i = 0; i < rerankedDocs.Count; i++)
-        {
-            var rank = NumOps.FromDouble(i + 1);
-            var totalDocs = NumOps.FromDouble(rerankedDocs.Count);
-            // Score decreases with rank: (totalDocs - rank + 1) / totalDocs
-            var numerator = NumOps.Add(NumOps.Subtract(totalDocs, rank), NumOps.One);
-            var newScore = NumOps.Divide(numerator, totalDocs);
-
-            rerankedDocs[i].RelevanceScore = newScore;
-            rerankedDocs[i].HasRelevanceScore = true;
-        }
-
+        // Update relevance scores based on final ranking: (totalDocs - rank + 1) / totalDocs
+        AssignRankScores(rerankedDocs);
         return rerankedDocs;
     }
 
     /// <summary>
-    /// Calculates text similarity based on word overlap (Jaccard similarity of word sets).
+    /// Jaccard similarity |A ∩ B| / |A ∪ B| of every pair of documents' lower-cased word sets
+    /// (0 when either document has no words).
     /// </summary>
-    /// <param name="text1">First text.</param>
-    /// <param name="text2">Second text.</param>
-    /// <returns>Similarity score between 0 and 1.</returns>
-    private T CalculateTextSimilarity(string text1, string text2)
+    private static Tensor<T> JaccardSimilarityMatrix(List<Document<T>> documents)
     {
-        if (string.IsNullOrWhiteSpace(text1) || string.IsNullOrWhiteSpace(text2))
+        var separators = new[] { ' ', '\t', '\n', '\r', '.', ',', ';', ':', '!', '?' };
+        var wordSets = documents
+            .Select(d => string.IsNullOrWhiteSpace(d.Content)
+                ? new HashSet<string>()
+                : new HashSet<string>(d.Content.ToLowerInvariant().Split(separators, StringSplitOptions.RemoveEmptyEntries)))
+            .ToList();
+
+        int n = wordSets.Count;
+        var intersections = new int[n * n];
+        var unions = new int[n * n];
+        for (int i = 0; i < n; i++)
         {
-            return NumOps.Zero;
+            for (int j = 0; j < n; j++)
+            {
+                int shared = wordSets[i].Count(wordSets[j].Contains);
+                intersections[i * n + j] = shared;
+
+                // An empty union only happens for two empty sets, whose intersection is 0 as well.
+                unions[i * n + j] = Math.Max(wordSets[i].Count + wordSets[j].Count - shared, 1);
+            }
         }
 
-        // Tokenize and create word sets
-        var words1 = new HashSet<string>(
-            text1.ToLowerInvariant()
-                .Split(new[] { ' ', '\t', '\n', '\r', '.', ',', ';', ':', '!', '?' },
-                    StringSplitOptions.RemoveEmptyEntries));
-
-        var words2 = new HashSet<string>(
-            text2.ToLowerInvariant()
-                .Split(new[] { ' ', '\t', '\n', '\r', '.', ',', ';', ':', '!', '?' },
-                    StringSplitOptions.RemoveEmptyEntries));
-
-        // Calculate Jaccard similarity: |intersection| / |union|
-        var intersection = words1.Intersect(words2).Count();
-        var union = words1.Union(words2).Count();
-
-        if (union == 0)
-        {
-            return NumOps.Zero;
-        }
-
-        var similarity = (double)intersection / union;
-        return NumOps.FromDouble(similarity);
+        return Engine.TensorDivide(
+            new Tensor<int>(intersections, [n, n]).Cast<T>(),
+            new Tensor<int>(unions, [n, n]).Cast<T>());
     }
 }

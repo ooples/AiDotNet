@@ -105,7 +105,7 @@ internal static class UniAudioReleasedTokenizer
 
     private static StreamReader Read(string name)
     {
-        var stream = typeof(UniAudioReleasedTokenizer).Assembly.GetManifestResourceStream("AiDotNet.TextToSpeech.FrontEnd." + name)
+        var stream = EmbeddedData.Open("AiDotNet.TextToSpeech.FrontEnd." + name)
             ?? throw new InvalidOperationException("Missing UniAudio frontend resource: " + name);
         return new StreamReader(new GZipStream(stream, CompressionMode.Decompress));
     }

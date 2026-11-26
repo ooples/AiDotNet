@@ -30,7 +30,7 @@ internal sealed class FunAsrNanoNetwork<T>
         if (o.VocabSize < 2) throw new ArgumentException("The vocabulary needs a text token and the end token.", nameof(options));
         if (o.CtcVocabSize < 2) throw new ArgumentException("The CTC vocabulary needs a token and the blank.", nameof(options));
         Encoder = new SanmEncoder<T>(engine, EncoderLayers, new SanmEncoderConfiguration(o.NumMels, o.LfrM, o.LfrN, o.EncoderDim,
-            o.NumAttentionHeads, o.EncoderFeedForwardDim, o.NumEncoderLayers, o.NumTpEncoderLayers, o.FsmnKernelSize), random);
+            o.NumAttentionHeads, o.EncoderFeedForwardDim, o.NumEncoderLayers, o.NumTpEncoderLayers, o.FsmnKernelSize, SampleRate: o.SampleRate), random);
         Adaptor = new MinMoInputProjector<T>(engine, AdaptorLayers, o.EncoderDim, o.AdaptorDownsampleRate, o.AdaptorFeedForwardDim,
             o.LlmHiddenDim, o.NumAdaptorLayers, o.AdaptorHeads, random);
         Llm = new LlamaNetwork<T>(engine, LlmLayers, new LlamaConfiguration
@@ -167,7 +167,7 @@ internal sealed class FunAsrNanoNetwork<T>
     /// so its loss never reaches the encoder.</summary>
     public Tensor<T> CtcLogProbabilities(Tensor<T> encoded)
     {
-        var detached = new Tensor<T>(encoded.Shape.ToArray(), encoded.ToVector());
+        var detached = _engine.StopGradient(encoded);
         return _engine.TensorLogSoftmax(CtcOutput.Forward(CtcDecoder.Forward(detached)), axis: -1);
     }
 

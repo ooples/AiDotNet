@@ -242,7 +242,7 @@ public partial class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
         {
             using (new NoGradScope<T>())
             {
-                var rnd = new Random(0);
+                var rnd = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0);
                 var x = Encode(new[] { 1, 2 }, 0, new Tensor<T>(new[] { 1, o.StyleBert.Hidden }), new Tensor<T>(new[] { 1, o.StyleBert.Hidden }), false, rnd);
                 _duration!.Forward(x, false, rnd);
                 _pitch!.Forward(x, false, rnd);
@@ -292,9 +292,7 @@ public partial class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
 
     private Tensor<T> Ids(IReadOnlyList<int> ids)
     {
-        var t = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) t[i] = NumOps.FromDouble(ids[i]);
-        return t;
+        return IdTensor(ids);
     }
 
     /// <summary>
@@ -332,9 +330,9 @@ public partial class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// <summary>The inference durations: <c>clamp(round(exp(log d) − 1), 0)</c>, all 1 when they sum to 0.</summary>
     internal int[] FramesOf(Tensor<T> logDurations)
     {
-        var frames = new int[logDurations.Length];
+        var frames = RoundedIds(Engine.TensorAddScalar(Engine.TensorExp(logDurations), NumOps.FromDouble(-1.0)));
         for (int i = 0; i < frames.Length; i++)
-            frames[i] = Math.Max(0, (int)Math.Round(Math.Exp(NumOps.ToDouble(logDurations[i])) - 1.0, MidpointRounding.ToEven));
+            frames[i] = Math.Max(0, frames[i]);
         if (frames.Sum() == 0) for (int i = 0; i < frames.Length; i++) frames[i] = 1;
         return frames;
     }
@@ -405,15 +403,13 @@ public partial class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
     // ---------------------------------------------------------------- synthesis entry points
 
     private Tensor<T> VoiceStyle(TtsVoice<T> voice) =>
-        StyleEmbedding((voice.Description ?? throw new InvalidOperationException("An EmotiVoice voice needs its emotion prompt.")).ToVector()
-            .Select(v => (int)Math.Round(NumOps.ToDouble(v))).ToArray());
+        StyleEmbedding(RoundedIds(voice.Description ?? throw new InvalidOperationException("An EmotiVoice voice needs its emotion prompt.")));
 
     private int[] ToIds(Tensor<T> tensor, string name)
     {
-        var ids = new int[tensor.Length];
+        var ids = RoundedIds(tensor);
         for (int i = 0; i < ids.Length; i++)
         {
-            ids[i] = (int)Math.Round(NumOps.ToDouble(tensor[i]));
             if (ids[i] < 0 || ids[i] >= _options.VocabSize)
                 throw new ArgumentOutOfRangeException(name, $"{GetType().Name}'s phoneme ids lie in [0, {_options.VocabSize}).");
         }

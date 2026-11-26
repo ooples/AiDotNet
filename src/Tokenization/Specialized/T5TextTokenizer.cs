@@ -17,7 +17,7 @@ public sealed class T5TextTokenizer
     private static readonly Lazy<SentencePieceModel> T5Base = new(() =>
     {
         const string name = "AiDotNet.Tokenization.t5_spiece.model.gz";
-        using var stream = typeof(T5TextTokenizer).Assembly.GetManifestResourceStream(name)
+        using var stream = EmbeddedData.Open(name)
             ?? throw new InvalidDataException($"The embedded resource {name} is missing.");
         return SentencePieceModel.FromGzip(stream);
     });

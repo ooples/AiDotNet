@@ -55,7 +55,7 @@ public class LLMIntegratedSpeechGPTPaperTests
         await Task.Yield();
         var options = SpeechGptFixture.Options();
         options.IncludeVocoderDiscriminators = true;
-        var model = SpeechGptFixture.Tts<double>(options);
+        using var model = SpeechGptFixture.Tts<double>(options);
         var speech = SpeechGptFixture.Tones<double>(0.5);
         double first = Convert.ToDouble(model.TrainVocoder(speech, speaker: 2)), last = first;
         for (int i = 0; i < 6; i++) last = Convert.ToDouble(model.TrainVocoder(speech, speaker: 2));

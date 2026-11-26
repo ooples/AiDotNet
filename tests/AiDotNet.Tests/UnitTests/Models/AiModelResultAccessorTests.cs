@@ -79,7 +79,7 @@ public class AiModelResultAccessorTests
     /// </summary>
     private static (Matrix<double> Covariates, Vector<int> Treatment, Vector<double> Outcome) CausalSample()
     {
-        double[,] covariateValues = { { 45, 1 }, { 52, 0 }, { 38, 1 }, { 61, 0 }, { 47, 1 }, { 55, 0 } };
+        double[,] covariateValues = { { 45, 1 }, { 48, 1 }, { 38, 0 }, { 52, 0 }, { 50, 0 }, { 44, 1 } };
         int[] treatmentValues = { 0, 1, 0, 1, 0, 1 };
         double[] outcomeValues = { 3.1, 7.2, 2.8, 8.0, 3.4, 7.6 };
 

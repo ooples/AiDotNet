@@ -145,12 +145,17 @@ public sealed class MgieConditioningContractTests
         public override Tensor<float> PredictNoise(Tensor<float> noisySample, int timestep,
             Tensor<float>? conditioning = null)
         {
+            bool canReadHost = !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive;
             Shapes.Add(noisySample.Shape.ToArray());
-            Inputs.Add(noisySample.ToArray());
-            Contexts.Add(conditioning?.ToArray());
+            if (canReadHost)
+            {
+                Inputs.Add(noisySample.ToArray());
+                Contexts.Add(conditioning?.ToArray());
+            }
             Timesteps.Add(timestep);
             var prediction = base.PredictNoise(noisySample, timestep, conditioning);
-            Predictions.Add(prediction.ToArray());
+            if (canReadHost)
+                Predictions.Add(prediction.ToArray());
             return prediction;
         }
     }

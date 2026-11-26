@@ -78,29 +78,18 @@ public class BohmanWindow<T> : IWindowFunction<T>
     /// </remarks>
     public Vector<T> Create(int windowSize)
     {
-        Vector<T> window = new Vector<T>(windowSize);
-
-        // Handle edge case: window of size 1 has a single element with value 1.0
-        if (windowSize == 1)
+        if (WindowFunctionHelper.TryCreateDegenerate(windowSize, out Vector<T> degenerate))
         {
-            window[0] = _numOps.One;
-            return window;
+            return degenerate;
         }
 
-        for (int n = 0; n < windowSize; n++)
-        {
-            // Bohman formula: w(n) = (1 - |x|) * cos(π|x|) + (1/π) * sin(π|x|)
-            // where x = 2n/(N-1) - 1, so |x| ranges from 0 at center to 1 at edges
-            double x = (2.0 * n / (windowSize - 1)) - 1.0;
-            double absX = Math.Abs(x);
-            double piAbsX = Math.PI * absX;
-
-            // w(n) = (1 - |x|) * cos(π|x|) + (1/π) * sin(π|x|)
-            double value = (1.0 - absX) * Math.Cos(piAbsX) + (1.0 / Math.PI) * Math.Sin(piAbsX);
-            window[n] = _numOps.FromDouble(value);
-        }
-
-        return window;
+        // Bohman formula: w(n) = (1 - |x|) * cos(pi|x|) + (1/pi) * sin(pi|x|), x = 2n/(N-1) - 1
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> absX = engine.TensorAbs(WindowFunctionHelper.SymmetricCoordinate<T>(windowSize));
+        Tensor<T> piAbsX = engine.TensorMultiplyScalar(absX, _numOps.FromDouble(Math.PI));
+        Tensor<T> first = engine.TensorMultiply(engine.ScalarMinusTensor(_numOps.One, absX), engine.TensorCos(piAbsX));
+        Tensor<T> second = engine.TensorMultiplyScalar(engine.TensorSin(piAbsX), _numOps.FromDouble(1.0 / Math.PI));
+        return engine.TensorAdd(first, second).ToVector();
     }
 
     /// <summary>

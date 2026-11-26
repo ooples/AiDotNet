@@ -61,6 +61,17 @@ public class FederatedGraphOptions
     public int NumGnnLayers { get; set; } = 2;
 
     /// <summary>
+    /// Gets or sets the learning rate of each client's local GNN gradient-descent steps. Default is 0.01, the
+    /// GCN learning rate of Kipf &amp; Welling (2017).
+    /// </summary>
+    public double LocalLearningRate { get; set; } = 0.01;
+
+    /// <summary>
+    /// Gets or sets the number of full-batch local GNN training steps per client per round. Default is 1.
+    /// </summary>
+    public int LocalEpochs { get; set; } = 1;
+
+    /// <summary>
     /// Gets or sets whether to use prototype-based learning instead of full model sharing.
     /// Default is false.
     /// </summary>

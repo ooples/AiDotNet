@@ -24,7 +24,7 @@ internal sealed class AveragedPerceptronTagger
 
     private AveragedPerceptronTagger()
     {
-        using var stream = typeof(AveragedPerceptronTagger).Assembly.GetManifestResourceStream(ResourceName)
+        using var stream = EmbeddedData.Open(ResourceName)
             ?? throw new InvalidDataException($"The embedded resource {ResourceName} is missing.");
         using var gzip = new GZipStream(stream, CompressionMode.Decompress);
         using var document = JsonDocument.Parse(gzip);
@@ -130,7 +130,7 @@ internal sealed class G2pEn
     public static G2pEn Default => Shared.Value;
 
     private static Stream Resource(string name) =>
-        new GZipStream(typeof(G2pEn).Assembly.GetManifestResourceStream("AiDotNet.TextToSpeech.FrontEnd." + name)
+        new GZipStream(EmbeddedData.Open("AiDotNet.TextToSpeech.FrontEnd." + name)
             ?? throw new InvalidDataException($"The embedded resource {name} is missing."), CompressionMode.Decompress);
 
     private G2pEn()

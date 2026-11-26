@@ -31,7 +31,7 @@ public class MCP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
     private readonly int _maxIterations;
     private readonly double _tolerance;
 
-    private double[]? _coefficients;
+    private Vector<T>? _coefficients;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -39,7 +39,7 @@ public class MCP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Lambda => _lambda;
     public double Gamma => _gamma;
-    public double[]? Coefficients => _coefficients;
+    public Vector<T>? Coefficients => _coefficients;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -85,161 +85,39 @@ public class MCP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
         int n = data.Rows;
         int p = data.Columns;
 
-        // Standardize data
-        var means = new double[p];
-        var stds = new double[p];
-        var X = new double[n, p];
+        var engine = Engine;
 
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                means[j] += NumOps.ToDouble(data[i, j]);
-            means[j] /= n;
+        // Standardize data (population std; a near-zero std is replaced by 1) and center the target
+        var X = FeatureScoringTensorOps.Standardize(Tensor<T>.FromMatrix(data), out _);
+        var y = FeatureScoringTensorOps.Center(Tensor<T>.FromVector(target));
 
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - means[j];
-                stds[j] += diff * diff;
-            }
-            stds[j] = Math.Sqrt(stds[j] / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
+        // Coordinate descent with MCP penalty on the partial residual correlation rho = x_j . r_j / n
+        T count = NumOps.FromDouble(n);
+        var coefficients = FeatureScoringTensorOps.CoordinateDescent(X, y, _maxIterations, _tolerance,
+            (rho, j) => FeatureScoringTensorOps.McpThreshold(engine.TensorDivideScalar(rho, count), _lambda, _gamma), out _);
+        _coefficients = coefficients.ToVector();
 
-            for (int i = 0; i < n; i++)
-                X[i, j] = (NumOps.ToDouble(data[i, j]) - means[j]) / stds[j];
-        }
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-            y[i] = NumOps.ToDouble(target[i]) - yMean;
-
-        // Initialize coefficients
-        _coefficients = new double[p];
-
-        // Coordinate descent with MCP penalty
-        for (int iter = 0; iter < _maxIterations; iter++)
-        {
-            double maxChange = 0;
-
-            for (int j = 0; j < p; j++)
-            {
-                // Compute partial residual
-                double rho = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double residual = y[i];
-                    for (int k = 0; k < p; k++)
-                    {
-                        if (k != j)
-                            residual -= X[i, k] * _coefficients[k];
-                    }
-                    rho += X[i, j] * residual;
-                }
-                rho /= n;
-
-                // MCP threshold
-                double newCoef = MCPThreshold(rho, _lambda, _gamma);
-
-                double change = Math.Abs(newCoef - _coefficients[j]);
-                if (change > maxChange) maxChange = change;
-
-                _coefficients[j] = newCoef;
-            }
-
-            if (maxChange < _tolerance)
-                break;
-        }
-
-        // Select features with non-zero coefficients
-        var nonZero = new List<(int Index, double AbsCoef)>();
-        for (int j = 0; j < p; j++)
-        {
-            if (Math.Abs(_coefficients[j]) > 1e-10)
-                nonZero.Add((j, Math.Abs(_coefficients[j])));
-        }
-
+        // Select features with non-zero coefficients (largest first); fall back to the top correlations
+        var magnitude = engine.TensorAbs(coefficients);
+        var nonZero = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
+            engine.TensorGreaterThan(magnitude, PreprocessingTensorOps.Tolerance<T>(1e-10))));
         if (nonZero.Count == 0)
         {
-            // Fallback: select top by correlation
-            _selectedIndices = SelectByCorrelation(data, target, p);
+            var correlations = engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(
+                Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target)));
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(correlations, Math.Min(_nFeaturesToSelect, p));
         }
         else
         {
-            _selectedIndices = nonZero
-                .OrderByDescending(x => x.AbsCoef)
+            _selectedIndices = PreprocessingTensorOps.StableOrder(magnitude, descending: true)
+                .Where(j => nonZero.Contains(j))
                 .Take(_nFeaturesToSelect)
-                .Select(x => x.Index)
                 .OrderBy(x => x)
                 .ToArray();
         }
 
         IsFitted = true;
     }
-
-    private double MCPThreshold(double z, double lambda, double gamma)
-    {
-        double absZ = Math.Abs(z);
-
-        if (absZ <= lambda)
-        {
-            // Soft threshold region
-            return 0;
-        }
-        else if (absZ <= gamma * lambda)
-        {
-            // MCP region with partial shrinkage
-            return Math.Sign(z) * (absZ - lambda) / (1 - 1 / gamma);
-        }
-        else
-        {
-            // No shrinkage for large values
-            return z;
-        }
-    }
-
-    private int[] SelectByCorrelation(Matrix<T> data, Vector<T> target, int p)
-    {
-        int n = data.Rows;
-        var scores = new double[p];
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            scores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-        }
-
-        return scores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(Math.Min(_nFeaturesToSelect, p))
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
-    }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -253,15 +131,7 @@ public class MCP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
         if (_selectedIndices is null)
             throw new InvalidOperationException("MCP has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

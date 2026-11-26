@@ -2,7 +2,7 @@
 import base64, io, json, os, pathlib, re, sys, zipfile
 
 secret_names = ['SUPABASE_SERVICE_ROLE_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET',
-                'VERCEL_AUTOMATION_BYPASS_SECRET', 'PLAYWRIGHT_USER_PASSWORD', 'PLAYWRIGHT_ADMIN_PASSWORD']
+                'PREVIEW_BYPASS_SECRET', 'PLAYWRIGHT_USER_PASSWORD', 'PLAYWRIGHT_ADMIN_PASSWORD']
 values = [os.environ[k] for k in secret_names if os.environ.get(k)]
 state_dir = os.environ.get('AIDOTNET_AUTH_RUN_DIR')
 if state_dir:
@@ -16,7 +16,7 @@ values = sorted({v for v in values if len(v) > 3}, key=len, reverse=True)
 def redact(text):
     for value in values:
         text = text.replace(value, '[redacted]').replace(json.dumps(value)[1:-1], '[redacted]')
-    text = re.sub(r'(?im)(authorization|apikey|cookie|x-vercel-protection-bypass)\s*:[^\r\n]*', r'\1: [redacted]', text)
+    text = re.sub(r'(?im)(authorization|apikey|cookie|x-aidotnet-preview-bypass)\s*:[^\r\n]*', r'\1: [redacted]', text)
     text = re.sub(r'''(?i)([?&#](?:access_token|refresh_token|token_hash|token|code|secret|client_secret)=)[^&\s"'<>]+''', r'\1[redacted]', text)
     text = re.sub(r'''(?i)(https?://billing\.stripe\.com/p/session/)[^/?#\s"'<>]+''', r'\1[redacted]', text)
     text = re.sub(r'eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+', '[redacted token]', text)

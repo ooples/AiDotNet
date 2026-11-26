@@ -29,14 +29,14 @@ public class SymmetricUncertainty<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _suScores;
+    private Vector<T>? _suScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
-    public double[]? SUScores => _suScores;
+    public Vector<T>? SUScores => _suScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -71,108 +71,12 @@ public class SymmetricUncertainty<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
-
-        // Compute target entropy H(Y)
-        var classCount = new Dictionary<int, int>();
-        for (int i = 0; i < n; i++)
-        {
-            int c = (int)Math.Round(NumOps.ToDouble(target[i]));
-            if (!classCount.ContainsKey(c))
-                classCount[c] = 0;
-            classCount[c]++;
-        }
-
-        double targetEntropy = 0;
-        foreach (var count in classCount.Values)
-        {
-            double p_c = (double)count / n;
-            if (p_c > 0)
-                targetEntropy -= p_c * Math.Log(p_c);
-        }
-
-        _suScores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Discretize feature
-            var values = new double[n];
-            double min = double.MaxValue, max = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                values[i] = NumOps.ToDouble(data[i, j]);
-                min = Math.Min(min, values[i]);
-                max = Math.Max(max, values[i]);
-            }
-
-            double binWidth = (max - min) / _nBins;
-            if (binWidth < 1e-10) binWidth = 1;
-
-            // Count frequencies
-            var binClassCount = new Dictionary<int, Dictionary<int, int>>();
-            var binCount = new Dictionary<int, int>();
-
-            for (int i = 0; i < n; i++)
-            {
-                int bin = Math.Min((int)((values[i] - min) / binWidth), _nBins - 1);
-                int c = (int)Math.Round(NumOps.ToDouble(target[i]));
-
-                if (!binClassCount.ContainsKey(bin))
-                    binClassCount[bin] = new Dictionary<int, int>();
-                if (!binClassCount[bin].ContainsKey(c))
-                    binClassCount[bin][c] = 0;
-                binClassCount[bin][c]++;
-
-                if (!binCount.ContainsKey(bin))
-                    binCount[bin] = 0;
-                binCount[bin]++;
-            }
-
-            // Feature entropy H(X)
-            double featureEntropy = 0;
-            foreach (var count in binCount.Values)
-            {
-                double p_bin = (double)count / n;
-                if (p_bin > 0)
-                    featureEntropy -= p_bin * Math.Log(p_bin);
-            }
-
-            // Conditional entropy H(Y|X)
-            double conditionalEntropy = 0;
-            foreach (var bin in binClassCount.Keys)
-            {
-                double binProb = (double)binCount[bin] / n;
-                double binEntropy = 0;
-
-                foreach (var count in binClassCount[bin].Values)
-                {
-                    double p_c_bin = (double)count / binCount[bin];
-                    if (p_c_bin > 0)
-                        binEntropy -= p_c_bin * Math.Log(p_c_bin);
-                }
-
-                conditionalEntropy += binProb * binEntropy;
-            }
-
-            // Mutual Information I(X;Y) = H(Y) - H(Y|X)
-            double mi = targetEntropy - conditionalEntropy;
-
-            // Symmetric Uncertainty = 2 * I(X;Y) / (H(X) + H(Y))
-            double denominator = featureEntropy + targetEntropy;
-            _suScores[j] = denominator > 1e-10 ? 2.0 * mi / denominator : 0;
-        }
-
-        // Select top features
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _suScores
-            .Select((su, idx) => (SU: su, Index: idx))
-            .OrderByDescending(x => x.SU)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
-
+        var info = DiscreteInformation<T>.ForTarget(
+            FeatureScoringTensorOps.EqualWidthBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
+        var scores = info.SymmetricUncertainty();
+        _suScores = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
@@ -189,15 +93,7 @@ public class SymmetricUncertainty<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         if (_selectedIndices is null)
             throw new InvalidOperationException("SymmetricUncertainty has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

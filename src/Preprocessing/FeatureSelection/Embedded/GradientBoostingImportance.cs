@@ -31,7 +31,7 @@ public class GradientBoostingImportance<T> : TransformerBase<T, Matrix<T>, Matri
     private readonly double _learningRate;
     private readonly int? _randomState;
 
-    private double[]? _importances;
+    private Vector<T>? _importances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -39,7 +39,7 @@ public class GradientBoostingImportance<T> : TransformerBase<T, Matrix<T>, Matri
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NEstimators => _nEstimators;
     public double LearningRate => _learningRate;
-    public double[]? Importances => _importances;
+    public Vector<T>? Importances => _importances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -85,89 +85,82 @@ public class GradientBoostingImportance<T> : TransformerBase<T, Matrix<T>, Matri
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
+        T learningRate = NumOps.FromDouble(_learningRate);
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
+
         // Initialize importances
-        _importances = new double[p];
+        var importances = new Tensor<T>(new[] { p });
 
         // Initialize predictions with mean
-        var predictions = new double[n];
-        double mean = 0;
-        for (int i = 0; i < n; i++)
-            mean += NumOps.ToDouble(target[i]);
-        mean /= n;
-        for (int i = 0; i < n; i++)
-            predictions[i] = mean;
+        var predictions = PreprocessingTensorOps.Filled(new[] { n }, engine.TensorMean(y));
 
         // Boosting rounds
         for (int round = 0; round < _nEstimators; round++)
         {
             // Compute residuals (negative gradient for squared loss)
-            var residuals = new double[n];
-            for (int i = 0; i < n; i++)
-                residuals[i] = NumOps.ToDouble(target[i]) - predictions[i];
+            var residuals = engine.TensorSubtract(y, predictions);
 
             // Fit tree to residuals and collect importance
-            var treeImportance = new double[p];
-            var treePredictions = BuildRegressionTree(data, residuals, n, p, treeImportance, random);
+            var treePredictions = BuildRegressionTree(X, residuals, n, p, random, out var treeImportance);
 
             // Update predictions
-            for (int i = 0; i < n; i++)
-                predictions[i] += _learningRate * treePredictions[i];
+            predictions = engine.TensorAdd(predictions, engine.TensorMultiplyScalar(treePredictions, learningRate));
 
             // Accumulate importance
-            double totalImp = treeImportance.Sum();
-            if (totalImp > 1e-10)
-            {
-                for (int j = 0; j < p; j++)
-                    _importances[j] += treeImportance[j] / totalImp;
-            }
+            T totalImp = engine.TensorSum(treeImportance);
+            if (PreprocessingTensorOps.IsAbove(totalImp, floor))
+                importances = engine.TensorAdd(importances, engine.TensorDivideScalar(treeImportance, totalImp));
         }
 
         // Normalize final importances
-        double total = _importances.Sum();
-        if (total > 1e-10)
-        {
-            for (int j = 0; j < p; j++)
-                _importances[j] /= total;
-        }
+        T total = engine.TensorSum(importances);
+        if (PreprocessingTensorOps.IsAbove(total, floor))
+            importances = engine.TensorDivideScalar(importances, total);
+        _importances = importances.ToVector();
 
         // Select top features
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _importances
-            .Select((imp, idx) => (Importance: imp, Index: idx))
-            .OrderByDescending(x => x.Importance)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(importances, numToSelect);
 
         IsFitted = true;
     }
 
-    private double[] BuildRegressionTree(Matrix<T> data, double[] residuals, int n, int p,
-        double[] importance, Random random)
+    private Tensor<T> BuildRegressionTree(Tensor<T> data, Tensor<T> residuals, int n, int p,
+        Random random, out Tensor<T> importance)
     {
-        var predictions = new double[n];
-        var indices = Enumerable.Range(0, n).ToArray();
+        var leafOf = new int[n];
+        var leafMeans = new List<Tensor<T>>();
+        var splitFeatures = new List<int>();
+        var splitGains = new List<Tensor<T>>();
 
-        BuildNode(data, residuals, indices, predictions, importance, 0, random);
+        BuildNode(data, residuals, Enumerable.Range(0, n).ToArray(), leafOf, leafMeans, splitFeatures, splitGains, 0, random);
 
-        return predictions;
+        importance = FeatureScoringTensorOps.ScatterAdd(splitFeatures, splitGains, p);
+        if (leafMeans.Count == 0)
+            return new Tensor<T>(new[] { n });
+
+        // Every row predicts the mean residual of its leaf
+        return Engine.TensorIndexSelect(Engine.TensorConcatenate(leafMeans.ToArray(), 0), new Tensor<int>(leafOf, new[] { n }), 0);
     }
 
-    private void BuildNode(Matrix<T> data, double[] residuals, int[] indices,
-        double[] predictions, double[] importance, int depth, Random random)
+    private void BuildNode(Tensor<T> data, Tensor<T> residuals, int[] indices, int[] leafOf, List<Tensor<T>> leafMeans,
+        List<int> splitFeatures, List<Tensor<T>> splitGains, int depth, Random random)
     {
+        var engine = Engine;
+        var rows = new Tensor<int>(indices, new[] { indices.Length });
+        var nodeResiduals = engine.TensorIndexSelect(residuals, rows, 0);
+
         if (depth >= _maxDepth || indices.Length < 4)
         {
             // Leaf: predict mean residual
-            double meanResidual = indices.Select(i => residuals[i]).Average();
-            foreach (int i in indices)
-                predictions[i] = meanResidual;
+            AddLeaf(nodeResiduals, indices, leafOf, leafMeans);
             return;
         }
 
-        int n = indices.Length;
-        int p = data.Columns;
+        int p = data.Shape[1];
 
         // Random feature subset
         int nFeaturesToTry = Math.Max(1, (int)Math.Sqrt(p));
@@ -176,67 +169,36 @@ public class GradientBoostingImportance<T> : TransformerBase<T, Matrix<T>, Matri
             .Take(nFeaturesToTry)
             .ToArray();
 
-        // Find best split
-        double bestGain = 0;
-        int bestFeature = -1;
-        double bestThreshold = 0;
-
-        double parentMean = indices.Select(i => residuals[i]).Average();
-        double parentVar = indices.Select(i => (residuals[i] - parentMean) * (residuals[i] - parentMean)).Sum();
-
-        foreach (int feature in featureSubset)
+        // Find best split (variance reduction, at least 2 rows per side)
+        var nodeX = engine.TensorIndexSelect(engine.TensorIndexSelect(data, rows, 0),
+            new Tensor<int>(featureSubset, new[] { featureSubset.Length }), 1);
+        T parentVar = FeatureScoringTensorOps.SumSquaredDeviations(nodeResiduals);
+        if (!FeatureScoringTensorOps.TryBestSplit(nodeX, nodeResiduals, SplitCriterion.SumOfSquares, parentVar, 2,
+            out int bestColumn, out T bestThreshold, out var bestGain))
         {
-            var values = indices.Select(i => NumOps.ToDouble(data[i, feature]))
-                .Distinct()
-                .OrderBy(v => v)
-                .ToArray();
-
-            for (int i = 0; i < values.Length - 1; i++)
-            {
-                double threshold = (values[i] + values[i + 1]) / 2;
-
-                var leftIndices = indices.Where(idx => NumOps.ToDouble(data[idx, feature]) <= threshold).ToArray();
-                var rightIndices = indices.Where(idx => NumOps.ToDouble(data[idx, feature]) > threshold).ToArray();
-
-                if (leftIndices.Length < 2 || rightIndices.Length < 2)
-                    continue;
-
-                double leftMean = leftIndices.Select(idx => residuals[idx]).Average();
-                double rightMean = rightIndices.Select(idx => residuals[idx]).Average();
-
-                double leftVar = leftIndices.Select(idx => (residuals[idx] - leftMean) * (residuals[idx] - leftMean)).Sum();
-                double rightVar = rightIndices.Select(idx => (residuals[idx] - rightMean) * (residuals[idx] - rightMean)).Sum();
-
-                double gain = parentVar - leftVar - rightVar;
-
-                if (gain > bestGain)
-                {
-                    bestGain = gain;
-                    bestFeature = feature;
-                    bestThreshold = threshold;
-                }
-            }
-        }
-
-        if (bestFeature < 0)
-        {
-            double meanResidual = indices.Select(i => residuals[i]).Average();
-            foreach (int i in indices)
-                predictions[i] = meanResidual;
+            AddLeaf(nodeResiduals, indices, leafOf, leafMeans);
             return;
         }
 
         // Record importance
-        importance[bestFeature] += bestGain;
+        splitFeatures.Add(featureSubset[bestColumn]);
+        splitGains.Add(bestGain);
 
         // Split and recurse
-        var left = indices.Where(idx => NumOps.ToDouble(data[idx, bestFeature]) <= bestThreshold).ToArray();
-        var right = indices.Where(idx => NumOps.ToDouble(data[idx, bestFeature]) > bestThreshold).ToArray();
+        FeatureScoringTensorOps.PartitionRows(PreprocessingTensorOps.ColumnVector(nodeX, bestColumn), bestThreshold,
+            indices, out var left, out var right);
 
-        BuildNode(data, residuals, left, predictions, importance, depth + 1, random);
-        BuildNode(data, residuals, right, predictions, importance, depth + 1, random);
+        BuildNode(data, residuals, left, leafOf, leafMeans, splitFeatures, splitGains, depth + 1, random);
+        BuildNode(data, residuals, right, leafOf, leafMeans, splitFeatures, splitGains, depth + 1, random);
     }
 
+    private void AddLeaf(Tensor<T> nodeResiduals, int[] indices, int[] leafOf, List<Tensor<T>> leafMeans)
+    {
+        int leaf = leafMeans.Count;
+        leafMeans.Add(Engine.ReduceMean(nodeResiduals, new[] { 0 }, true));
+        foreach (int i in indices)
+            leafOf[i] = leaf;
+    }
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -250,15 +212,7 @@ public class GradientBoostingImportance<T> : TransformerBase<T, Matrix<T>, Matri
         if (_selectedIndices is null)
             throw new InvalidOperationException("GradientBoostingImportance has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

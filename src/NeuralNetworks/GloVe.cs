@@ -432,12 +432,13 @@ namespace AiDotNet.NeuralNetworks
 
             var meanVector = new Vector<T>(_embeddingDimension);
             T invSeqLen = NumOps.Divide(NumOps.One, NumOps.FromDouble(tokenIds.Count));
-            for (int s = 0; s < tokenIds.Count; s++)
+            if (_embeddingDimension > 0)
             {
-                for (int d = 0; d < _embeddingDimension; d++)
-                {
-                    meanVector[d] = NumOps.Add(meanVector[d], NumOps.Multiply(perToken[s, d], invSeqLen));
-                }
+                // Sum over the sequence of each token's vector scaled by 1 / seqLen.
+                Engine.ReduceSum(
+                    Engine.TensorMultiplyScalar(
+                        Engine.TensorSlice(perToken, [0, 0], [tokenIds.Count, _embeddingDimension]), invSeqLen),
+                    new[] { 0 }, keepDims: false).CopyTo(meanVector.AsWritableSpan());
             }
 
             return meanVector.SafeNormalize();
@@ -462,13 +463,11 @@ namespace AiDotNet.NeuralNetworks
             var textList = texts.ToList();
             var matrix = new Matrix<T>(textList.Count, _embeddingDimension);
 
+            var destination = matrix.AsWritableSpan();
             for (int i = 0; i < textList.Count; i++)
             {
                 var embedding = Embed(textList[i]);
-                for (int j = 0; j < _embeddingDimension; j++)
-                {
-                    matrix[i, j] = embedding[j];
-                }
+                embedding.AsSpan().Slice(0, _embeddingDimension).CopyTo(destination.Slice(i * _embeddingDimension, _embeddingDimension));
             }
 
             return matrix;

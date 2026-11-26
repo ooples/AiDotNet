@@ -26,13 +26,13 @@ public class PointBiserialSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _correlationScores;
+    private Vector<T>? _correlationScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? CorrelationScores => _correlationScores;
+    public Vector<T>? CorrelationScores => _correlationScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -66,60 +66,27 @@ public class PointBiserialSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            double yVal = NumOps.ToDouble(target[i]);
-            y[i] = yVal > 0.5 ? 1 : 0; // Binarize
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var x = Tensor<T>.FromMatrix(data);
+        var positive = Engine.TensorGreaterThan(Tensor<T>.FromVector(target), NumOps.FromDouble(0.5)); // Binarize
 
         // Count groups
-        int n1 = y.Count(yi => yi == 1);
+        int n1 = PreprocessingTensorOps.CountNonZero(positive);
         int n0 = n - n1;
 
         if (n0 == 0 || n1 == 0)
             throw new InvalidOperationException("Target must have both classes present.");
 
-        _correlationScores = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            // Mean for each group
-            double mean1 = 0, mean0 = 0;
-            for (int i = 0; i < n; i++)
-            {
-                if (y[i] == 1)
-                    mean1 += X[i, j];
-                else
-                    mean0 += X[i, j];
-            }
-            mean1 /= n1;
-            mean0 /= n0;
-
-            // Overall standard deviation
-            double overall_mean = 0;
-            for (int i = 0; i < n; i++)
-                overall_mean += X[i, j];
-            overall_mean /= n;
-
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-                variance += (X[i, j] - overall_mean) * (X[i, j] - overall_mean);
-            variance /= n;
-            double std = Math.Sqrt(variance) + 1e-10;
-
-            // Point-biserial correlation
-            _correlationScores[j] = Math.Abs((mean1 - mean0) / std * Math.Sqrt((double)n0 * n1 / ((double)n * n)));
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _correlationScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        // Group means, population standard deviation and r_pb = (M1 - M0) / s * sqrt(n0 n1 / n^2)
+        var membership = Engine.TensorStack(new[] { PreprocessingTensorOps.OneMinus(positive), positive }, 1);
+        var groupMeans = SelectorTensorOps.GroupMeans(membership, x, out _);
+        var meanDifference = Engine.TensorSubtract(
+            PreprocessingTensorOps.RowVector(groupMeans, 1), PreprocessingTensorOps.RowVector(groupMeans, 0));
+        var std = Engine.TensorAddScalar(
+            Engine.TensorSqrt(SelectorTensorOps.ColumnVariance(x)), PreprocessingTensorOps.Tolerance<T>(1e-10));
+        T share = NumOps.FromDouble(Math.Sqrt((double)n0 * n1 / ((double)n * n)));
+        var scores = Engine.TensorAbs(Engine.TensorMultiplyScalar(Engine.TensorDivide(meanDifference, std), share));
+        _correlationScores = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -137,15 +104,7 @@ public class PointBiserialSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (_selectedIndices is null)
             throw new InvalidOperationException("PointBiserialSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

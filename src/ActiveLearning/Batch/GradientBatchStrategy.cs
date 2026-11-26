@@ -122,20 +122,22 @@ public class GradientBatchStrategy<T, TInput, TOutput> : IGradientBatchStrategy<
         // Get embedding dimension from model
         int embeddingDim = EstimateEmbeddingDimension(model, samples);
 
-        var embeddings = new T[n, embeddingDim];
+        var embeddings = new Matrix<T>(n, embeddingDim);
 
         for (int i = 0; i < n; i++)
         {
             var input = samples.GetInput(i);
             var embedding = ComputeGradientEmbedding(model, input);
 
-            for (int d = 0; d < Math.Min(embeddingDim, embedding.Length); d++)
-            {
-                embeddings[i, d] = embedding[d];
-            }
+            // Copy the first embeddingDim values; shorter embeddings are zero-padded
+            int copied = Math.Min(embeddingDim, embedding.Length);
+            var row = copied == embeddingDim
+                ? embedding.GetSubVector(0, embeddingDim)
+                : Vector<T>.Concatenate(new[] { embedding.GetSubVector(0, copied), new Vector<T>(embeddingDim - copied) });
+            embeddings.SetRow(i, row);
         }
 
-        _cachedEmbeddings = new Matrix<T>(embeddings);
+        _cachedEmbeddings = embeddings;
         return _cachedEmbeddings;
     }
 
@@ -156,69 +158,60 @@ public class GradientBatchStrategy<T, TInput, TOutput> : IGradientBatchStrategy<
         int firstIdx = random.Next(n);
         selected.Add(firstIdx);
 
+        var engine = AiDotNetEngine.Current;
+        // k-means++ is invariant to a global rescale, which keeps the squared distances finite in Half
+        var rows = ActiveLearningEngineOps.UnitScale(Tensor<T>.FromMatrix(embeddings));
+        int dim = embeddings.Columns;
+        var isSelected = new bool[n];
+        isSelected[firstIdx] = true;
+
+        // Minimum squared distance from every sample to the selected centers
+        var minDist = new Tensor<T>(new[] { n });
+        minDist.Fill(NumOps.MaxValue);
+
         // Subsequent centers: k-means++ initialization
         for (int k = 1; k < effectiveBatchSize; k++)
         {
-            var distances = new T[n];
-            T totalDistance = NumOps.Zero;
+            var newest = engine.TensorSlice(rows, new[] { selected[selected.Count - 1], 0 }, new[] { 1, dim });
+            minDist = engine.TensorMin(minDist, ActiveLearningEngineOps.SquaredDistances(rows, newest).Reshape(new[] { n }));
 
-            for (int i = 0; i < n; i++)
-            {
-                if (selected.Contains(i))
-                {
-                    distances[i] = NumOps.Zero;
-                    continue;
-                }
-
-                // Minimum squared distance to selected centers
-                T minDist = NumOps.MaxValue;
-                foreach (var center in selected)
-                {
-                    var dist = ComputeSquaredRowDistance(embeddings, i, center);
-                    if (NumOps.Compare(dist, minDist) < 0)
-                    {
-                        minDist = dist;
-                    }
-                }
-
-                distances[i] = minDist;
-                totalDistance = NumOps.Add(totalDistance, minDist);
-            }
+            // Selected samples contribute nothing to the sampling mass
+            var distances = engine.TensorMaskedFill(minDist, isSelected, NumOps.Zero);
+            var cumulative = engine.TensorCumSum(distances, 0);
+            var totalDistance = engine.TensorSlice(cumulative, new[] { n - 1 }, new[] { 1 });
 
             // Sample proportional to distance squared
-            if (NumOps.Compare(totalDistance, NumOps.Zero) <= 0)
+            if (engine.TensorCountNonzero(engine.TensorGreaterThan(totalDistance, NumOps.Zero)) == 0)
             {
                 // All remaining points are equidistant, pick randomly
                 var remaining = Enumerable.Range(0, n).Where(i => !selected.Contains(i)).ToList();
                 if (remaining.Count > 0)
                 {
-                    selected.Add(remaining[random.Next(remaining.Count)]);
+                    var pick = remaining[random.Next(remaining.Count)];
+                    selected.Add(pick);
+                    isSelected[pick] = true;
                 }
             }
             else
             {
-                T threshold = NumOps.Multiply(NumOps.FromDouble(random.NextDouble()), totalDistance);
-                T cumulative = NumOps.Zero;
-                int selectedIdx = -1;
-
-                for (int i = 0; i < n; i++)
+                // First unselected sample whose cumulative distance reaches the threshold. Selected
+                // samples add zero mass, so the next unselected sample after a selected hit is the answer.
+                var threshold = engine.TensorMultiplyScalar(totalDistance, NumOps.FromDouble(random.NextDouble()));
+                int selectedIdx = engine.TensorSearchSorted(cumulative, threshold).GetFlat(0);
+                while (selectedIdx < n && isSelected[selectedIdx])
                 {
-                    if (selected.Contains(i))
-                    {
-                        continue;
-                    }
+                    selectedIdx++;
+                }
 
-                    cumulative = NumOps.Add(cumulative, distances[i]);
-                    if (NumOps.Compare(cumulative, threshold) >= 0)
-                    {
-                        selectedIdx = i;
-                        break;
-                    }
+                if (selectedIdx >= n)
+                {
+                    selectedIdx = -1;
                 }
 
                 if (selectedIdx >= 0)
                 {
                     selected.Add(selectedIdx);
+                    isSelected[selectedIdx] = true;
                 }
                 else
                 {
@@ -227,6 +220,7 @@ public class GradientBatchStrategy<T, TInput, TOutput> : IGradientBatchStrategy<
                     if (remaining.Count > 0)
                     {
                         selected.Add(remaining[^1]);
+                        isSelected[remaining[^1]] = true;
                     }
                 }
             }
@@ -396,19 +390,8 @@ public class GradientBatchStrategy<T, TInput, TOutput> : IGradientBatchStrategy<
             return 0;
         }
 
-        int maxIdx = 0;
-        T maxVal = vec[0];
-
-        for (int i = 1; i < vec.Length; i++)
-        {
-            if (NumOps.Compare(vec[i], maxVal) > 0)
-            {
-                maxVal = vec[i];
-                maxIdx = i;
-            }
-        }
-
-        return maxIdx;
+        // First maximum wins, as in a left-to-right scan
+        return AiDotNetEngine.Current.TensorArgMax(Tensor<T>.FromVector(vec).Reshape(new[] { 1, vec.Length }), 1).GetFlat(0);
     }
 
     private Vector<T> CreateOneHot(int index, int length)
@@ -419,17 +402,6 @@ public class GradientBatchStrategy<T, TInput, TOutput> : IGradientBatchStrategy<
             arr[i] = i == index ? NumOps.One : NumOps.Zero;
         }
         return new Vector<T>(arr);
-    }
-
-    private T ComputeSquaredRowDistance(Matrix<T> matrix, int row1, int row2)
-    {
-        T sum = NumOps.Zero;
-        for (int d = 0; d < matrix.Columns; d++)
-        {
-            var diff = NumOps.Subtract(matrix[row1, d], matrix[row2, d]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
-        return sum;
     }
 
     private T ComputeDistance(Vector<T> a, Vector<T> b)

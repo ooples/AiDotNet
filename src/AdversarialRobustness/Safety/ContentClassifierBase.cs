@@ -250,29 +250,21 @@ public abstract partial class ContentClassifierBase<T> : IContentClassifier<T>, 
             return vector;
         }
 
-        // Count character frequencies using LINQ for clarity
-        // Group characters by their index position and count occurrences
-        var charCounts = text
-            .Select(c => Math.Min((int)c, VectorSize - 1))
-            .GroupBy(index => index)
-            .ToDictionary(g => g.Key, g => g.Count());
-
-        foreach (var kvp in charCounts)
+        // Character frequencies; every character lands in one bin, so the counts sum to the text length. They
+        // are divided in double before the cast: a count above 2048, or a length above 65504, is not exact (or
+        // is infinite) in Half.
+        var frequencies = new double[VectorSize];
+        foreach (char c in text)
         {
-            vector[kvp.Key] = NumOps.FromDouble(kvp.Value);
+            frequencies[Math.Min((int)c, VectorSize - 1)] += 1.0;
         }
 
-        // Normalize
-        T sum = NumOps.Zero;
         for (int i = 0; i < VectorSize; i++)
         {
-            sum = NumOps.Add(sum, vector[i]);
+            frequencies[i] /= text.Length;
         }
 
-        if (!NumOps.Equals(sum, NumOps.Zero))
-        {
-            vector = (Vector<T>)Engine.Divide(vector, sum);
-        }
+        vector = new Tensor<double>(frequencies, new[] { VectorSize }).Cast<T>().ToVector();
 
         return vector;
     }
@@ -290,22 +282,24 @@ public abstract partial class ContentClassifierBase<T> : IContentClassifier<T>, 
         };
 
         // Find primary category and detected categories
+        // Find primary category (the first largest positive score) and detected categories.
         string primaryCategory = string.Empty;
         T maxScore = NumOps.Zero;
         var detectedCategories = new List<string>();
-
-        foreach (var kvp in categoryScores)
+        if (categoryScores.Count > 0)
         {
-            if (NumOps.GreaterThan(kvp.Value, maxScore))
+            var names = categoryScores.Keys.ToArray();
+            var scores = new Vector<T>(categoryScores.Values.ToArray()).AsTensor();
+            int best = Engine.TensorArgMax(scores, 0).GetFlat(0);
+            T bestScore = scores.GetFlat(best);
+            if (NumOps.GreaterThan(bestScore, maxScore))
             {
-                maxScore = kvp.Value;
-                primaryCategory = kvp.Key;
+                maxScore = bestScore;
+                primaryCategory = names[best];
             }
 
-            if (NumOps.GreaterThan(kvp.Value, DetectionThreshold))
-            {
-                detectedCategories.Add(kvp.Key);
-            }
+            var detected = Engine.TensorGreaterThan(scores, DetectionThreshold).ToVector();
+            detectedCategories = SelectFlagged(names, detected);
         }
 
         result.PrimaryCategory = primaryCategory;
@@ -329,6 +323,23 @@ public abstract partial class ContentClassifierBase<T> : IContentClassifier<T>, 
         }
 
         return result;
+    }
+
+    /// <summary>The names whose 0/1 mask entry is set.</summary>
+    private static List<string> SelectFlagged(string[] names, Vector<T> mask)
+    {
+        var flags = mask.AsSpan();
+        var selected = new List<string>();
+        T zero = NumOps.Zero;
+        for (int i = 0; i < names.Length; i++)
+        {
+            if (flags[i] is { } flag && !flag.Equals(zero))
+            {
+                selected.Add(names[i]);
+            }
+        }
+
+        return selected;
     }
 
     /// <summary>

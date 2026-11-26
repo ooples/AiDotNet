@@ -162,18 +162,8 @@ public partial class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             // Per paper: EMD-based similarity drives classification, so it must affect training loss
             if (supportFeatures != null && queryFeatures != null)
             {
-                double emdScore = ComputeEMDScore(supportFeatures, queryFeatures);
-
-                // EMD-derived modulation: low EMD (similar) → modulation near 1.0,
-                // high EMD (dissimilar) → modulation < 1.0 (shrink features)
-                double modFactor = 1.0 / (1.0 + emdScore * _deepEmdOptions.Temperature);
-                modFactor = Math.Max(MinModulationFactor, Math.Min(MaxModulationFactor, MinModulationFactor + modFactor));
-
-                var currentParams = ParamModel.GetParameters();
-                var modulatedParams = new Vector<T>(currentParams.Length);
-                for (int i = 0; i < currentParams.Length; i++)
-                    modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(modFactor));
-                ParamModel.SetParameters(modulatedParams);
+                var factor = EmdModulationFactor(ComputeEMDScore(supportFeatures, queryFeatures));
+                ParamModel.SetParameters(ParameterModulation.Apply(Engine, ParamModel.GetParameters(), factor));
             }
 
             var queryPred2 = MetaModel.Predict(task.QueryInput);
@@ -210,22 +200,46 @@ public partial class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         var supportFeatures = ConvertToVector(supportPred);
 
         // Compute modulation from temperature-scaled support features
-        double[]? modulationFactors = null;
+        Vector<T>? modulationFactors = null;
         if (supportFeatures != null && supportFeatures.Length > 0)
         {
-            double sumAbs = 0;
-            for (int i = 0; i < supportFeatures.Length; i++)
-                sumAbs += Math.Abs(NumOps.ToDouble(supportFeatures[i]));
-            double meanAbs = sumAbs / supportFeatures.Length;
-            double tempScale = 1.0 / Math.Max(_deepEmdOptions.Temperature, NumericalEpsilon);
-            modulationFactors = [Math.Max(MinModulationFactor, Math.Min(MaxModulationFactor,
-                MinModulationFactor + MinModulationFactor * tempScale * meanAbs / (1.0 + meanAbs)))];
+            modulationFactors = SupportModulation(supportFeatures);
         }
 
         return new DeepEMDModel<T, TInput, TOutput>(
             MetaModel, currentParams, supportFeatures,
             _deepEmdOptions.Temperature, _deepEmdOptions.SinkhornIterations,
             _deepEmdOptions.SinkhornRegularization, modulationFactors);
+    }
+
+    /// <summary>
+    /// The adapted model's one-element modulation from temperature-scaled support magnitudes:
+    /// clamp(min + min * (1 / temperature) * m / (1 + m), min, max) with m = mean|support|. The mean accumulates in
+    /// double, as the scalar loop did: a Half running sum over the support features stops growing past 2048.
+    /// </summary>
+    private Vector<T> SupportModulation(Vector<T> supportFeatures)
+    {
+        T meanAbs = NumOps.FromDouble(WideReduction.Mean(Engine, Engine.Abs(supportFeatures)));
+        T tempScale = NumOps.FromDouble(1.0 / Math.Max(_deepEmdOptions.Temperature, NumericalEpsilon));
+        T minModulation = NumOps.FromDouble(MinModulationFactor);
+        T unclamped = NumOps.Add(minModulation, NumOps.Divide(
+            NumOps.Multiply(NumOps.Multiply(minModulation, tempScale), meanAbs),
+            NumOps.Add(NumOps.One, meanAbs)));
+        return Engine.Clamp(
+            new Vector<T>(new[] { unclamped }), minModulation, NumOps.FromDouble(MaxModulationFactor));
+    }
+
+    /// <summary>
+    /// EMD-derived modulation as a one-element factor: low EMD (similar) gives a factor near 1.0, high EMD
+    /// (dissimilar) a smaller one; clamp(min + 1 / (1 + emd * temperature), min, max).
+    /// </summary>
+    private Vector<T> EmdModulationFactor(T emdScore)
+    {
+        T modFactor = NumOps.Divide(NumOps.One,
+            NumOps.Add(NumOps.One, NumOps.Multiply(emdScore, NumOps.FromDouble(_deepEmdOptions.Temperature))));
+        return Engine.Clamp(
+            new Vector<T>(new[] { NumOps.Add(NumOps.FromDouble(MinModulationFactor), modFactor) }),
+            NumOps.FromDouble(MinModulationFactor), NumOps.FromDouble(MaxModulationFactor));
     }
 
     /// <summary>
@@ -252,7 +266,7 @@ public partial class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     /// alternating row and column normalization of a "soft" matching matrix.
     /// </para>
     /// </remarks>
-    private double ComputeEMDScore(Vector<T> features1, Vector<T> features2)
+    private T ComputeEMDScore(Vector<T> features1, Vector<T> features2)
     {
         int numNodes = _deepEmdOptions.NumNodes;
 
@@ -263,91 +277,81 @@ public partial class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         int featureDim1 = Math.Max(features1.Length / Math.Max(n1, 1), 1);
         int featureDim2 = Math.Max(features2.Length / Math.Max(n2, 1), 1);
         int featureDim = Math.Min(featureDim1, featureDim2);
-
-        // Compute cost matrix using squared Euclidean distance between node feature vectors
-        var costMatrix = new double[n1, n2];
-
-        for (int i = 0; i < n1; i++)
+        if (n1 == 0 || n2 == 0)
         {
-            for (int j = 0; j < n2; j++)
-            {
-                double sqDist = 0;
-                for (int d = 0; d < featureDim; d++)
-                {
-                    int idx1 = i * featureDim1 + d;
-                    int idx2 = j * featureDim2 + d;
-                    if (idx1 < features1.Length && idx2 < features2.Length)
-                    {
-                        double diff = NumOps.ToDouble(features1[idx1]) - NumOps.ToDouble(features2[idx2]);
-                        sqDist += diff * diff;
-                    }
-                }
-                costMatrix[i, j] = sqDist;
-            }
+            return NumOps.Zero;
         }
 
-        // Sinkhorn iterations
-        double epsilon = _deepEmdOptions.SinkhornRegularization;
-        var K = new double[n1, n2];
+        // Node i of each set is the first featureDim entries of its featureDimK-wide block (always in range,
+        // since nK * featureDimK <= length).
+        var nodes1 = NodeRows(features1, n1, featureDim1, featureDim);
+        var nodes2 = NodeRows(features2, n2, featureDim2, featureDim);
+        // Assemble squared distances in bounded pair and feature blocks. The transport matrix remains quadratic,
+        // but feature workspaces contain at most 32 * 32 * 256 double values.
+        var costMatrix = PairwiseCosts(nodes1.Cast<double>(), nodes2.Cast<double>(), n1, n2, featureDim);
+        // log K = -C / epsilon
+        double epsilon = Math.Max(_deepEmdOptions.SinkhornRegularization, SinkhornStabilityEpsilon);
+        var logK = Engine.TensorMultiplyScalar(costMatrix, -1.0 / epsilon);
+        var shape = new[] { n1, n2 };
 
-        // K = exp(-C / epsilon)
-        for (int i = 0; i < n1; i++)
-        {
-            for (int j = 0; j < n2; j++)
-            {
-                K[i, j] = Math.Exp(-costMatrix[i, j] / Math.Max(epsilon, SinkhornStabilityEpsilon));
-            }
-        }
+        // Uniform marginals a = 1/n1, b = 1/n2 and unit initial scalings (log u = log v = 0).
+        double logA = -Math.Log(n1);
+        double logB = -Math.Log(n2);
+        var logU = new Tensor<double>(new[] { n1 });
+        var logV = new Tensor<double>(new[] { n2 });
 
-        // Uniform marginals
-        var u = new double[n1];
-        var v = new double[n2];
-        for (int i = 0; i < n1; i++) u[i] = 1.0 / n1;
-        for (int j = 0; j < n2; j++) v[j] = 1.0 / n2;
-
-        // Sinkhorn iterations
-        var scalingU = new double[n1];
-        var scalingV = new double[n2];
-        for (int i = 0; i < n1; i++) scalingU[i] = 1.0;
-        for (int j = 0; j < n2; j++) scalingV[j] = 1.0;
-
+        // Sinkhorn iterations u = a / (K v), then v = b / (K^T u), run in the log domain (POT's sinkhorn_log):
+        // log(K v)_i = logsumexp_j(log K_ij + log v_j). Where every kernel entry underflows (a cost far above
+        // epsilon) the plain iteration divides by a vanishing sum; the log form still meets the marginals, so a
+        // one-node pair at squared distance 25 transports its whole mass and scores 25.
         for (int iter = 0; iter < _deepEmdOptions.SinkhornIterations; iter++)
         {
-            // Update u: u = a / (K * v)
-            for (int i = 0; i < n1; i++)
-            {
-                double sum = 0;
-                for (int j = 0; j < n2; j++)
-                {
-                    sum += K[i, j] * scalingV[j];
-                }
-                scalingU[i] = sum > SinkhornStabilityEpsilon ? u[i] / sum : u[i];
-            }
-
-            // Update v: v = b / (K^T * u)
-            for (int j = 0; j < n2; j++)
-            {
-                double sum = 0;
-                for (int i = 0; i < n1; i++)
-                {
-                    sum += K[i, j] * scalingU[i];
-                }
-                scalingV[j] = sum > SinkhornStabilityEpsilon ? v[j] / sum : v[j];
-            }
+            var withV = Engine.TensorAdd(logK, Engine.TensorBroadcastTo(Engine.Reshape(logV, new[] { 1, n2 }), shape));
+            logU = Engine.ScalarMinusTensor(logA, Engine.TensorLogSumExp(withV, 1, false));
+            var withU = Engine.TensorAdd(logK, Engine.TensorBroadcastTo(Engine.Reshape(logU, new[] { n1, 1 }), shape));
+            logV = Engine.ScalarMinusTensor(logB, Engine.TensorLogSumExp(withU, 0, false));
         }
 
-        // Compute EMD = sum(T .* C) where T = diag(u) * K * diag(v)
-        double emd = 0;
-        for (int i = 0; i < n1; i++)
+        // EMD = sum(T .* C) where T = diag(u) * K * diag(v) = exp(log u_i + log K_ij + log v_j)
+        var logTransport = Engine.TensorAdd(
+            Engine.TensorAdd(logK, Engine.TensorBroadcastTo(Engine.Reshape(logU, new[] { n1, 1 }), shape)),
+            Engine.TensorBroadcastTo(Engine.Reshape(logV, new[] { 1, n2 }), shape));
+        var transport = Engine.TensorExp(logTransport);
+        return NumOps.FromDouble(Engine.TensorSum(Engine.TensorMultiply(transport, costMatrix)));
+    }
+
+    private Tensor<double> PairwiseCosts(Tensor<double> first, Tensor<double> second, int n1, int n2, int dimensions)
+    {
+        var costs = new double[checked(n1 * n2)];
+        for (int row = 0; row < n1; row += 32)
+        for (int column = 0; column < n2; column += 32)
         {
-            for (int j = 0; j < n2; j++)
+            int rows = Math.Min(32, n1 - row);
+            int columns = Math.Min(32, n2 - column);
+            var block = new Tensor<double>(new[] { rows, columns });
+            for (int feature = 0; feature < dimensions; feature += 256)
             {
-                double transport = scalingU[i] * K[i, j] * scalingV[j];
-                emd += transport * costMatrix[i, j];
+                int width = Math.Min(256, dimensions - feature);
+                var left = Engine.TensorSlice(first, new[] { row, feature }, new[] { rows, width });
+                var right = Engine.TensorSlice(second, new[] { column, feature }, new[] { columns, width });
+                var shape = new[] { rows, columns, width };
+                var difference = Engine.TensorSubtract(
+                    Engine.TensorBroadcastTo(Engine.Reshape(left, new[] { rows, 1, width }), shape),
+                    Engine.TensorBroadcastTo(Engine.Reshape(right, new[] { 1, columns, width }), shape));
+                block = Engine.TensorAdd(block, Engine.ReduceSum(Engine.TensorSquare(difference), new[] { 2 }, false));
             }
+            var values = block.AsSpan();
+            for (int r = 0; r < rows; r++)
+                values.Slice(r * columns, columns).CopyTo(costs.AsSpan((row + r) * n2 + column, columns));
         }
+        return new Tensor<double>(costs, new[] { n1, n2 });
+    }
 
-        return emd;
+    /// <summary>The [count, width] node rows: row i is features[i * stride .. i * stride + width).</summary>
+    private Tensor<T> NodeRows(Vector<T> features, int count, int stride, int width)
+    {
+        var blocks = Engine.Reshape(Tensor<T>.FromVector(features.GetSubVector(0, count * stride)), new[] { count, stride });
+        return width == stride ? blocks : Engine.TensorSlice(blocks, new[] { 0, 0 }, new[] { count, width });
     }
 
 }
@@ -363,20 +367,21 @@ public partial class DeepEMDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
 /// </remarks>
 internal class DeepEMDModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _supportFeatures;
     private readonly double _temperature;
     private readonly int _sinkhornIterations;
     private readonly double _sinkhornRegularization;
-    private readonly double[]? _modulationFactors;
+    // Not readonly: a readonly Vector<T> field is not persisted by the generated model state, and these
+    // factors belong in the adapted model's checkpoint as the double[] they replace did.
+    private Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public Vector<T>? AdaptedSupportFeatures => _supportFeatures;
 
     /// <inheritdoc/>
-    public double[]? ParameterModulationFactors => _modulationFactors;
+    public Vector<T>? ParameterModulationFactors => _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
@@ -388,7 +393,7 @@ internal class DeepEMDModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelM
         double temperature,
         int sinkhornIterations,
         double sinkhornRegularization,
-        double[]? modulationFactors)
+        Vector<T>? modulationFactors)
     {
         // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
         // MetaModel would let every prediction overwrite the meta-model.
@@ -406,10 +411,7 @@ internal class DeepEMDModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelM
     {
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
-            var modulated = new Vector<T>(_backboneParams.Length);
-            for (int i = 0; i < _backboneParams.Length; i++)
-                modulated[i] = NumOps.Multiply(_backboneParams[i],
-                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+            var modulated = ParameterModulation.Apply(AiDotNetEngine.Current, _backboneParams, _modulationFactors);
             InterfaceGuard.Parameterizable(_model).SetParameters(modulated);
         }
         else

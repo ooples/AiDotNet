@@ -48,17 +48,16 @@ public class ShufflePreprocessor<T> : DiffusionPreprocessorBase<T>
     /// <inheritdoc />
     public override Tensor<T> Transform(Tensor<T> data)
     {
+        var engine = AiDotNetEngine.Current;
         var shape = data._shape;
         int batch = shape[0];
-        int channels = Math.Min(shape[1], 3);
-        int height = shape[2];
-        int width = shape[3];
-        var result = new Tensor<T>(new[] { batch, 3, height, width });
+        var rgb = PreprocessorFilters.ToRgb(data);
+        var images = new Tensor<T>[batch];
 
         for (int b = 0; b < batch; b++)
         {
-            int patchRows = height / _patchSize;
-            int patchCols = width / _patchSize;
+            int patchRows = shape[2] / _patchSize;
+            int patchCols = shape[3] / _patchSize;
             int totalPatches = patchRows * patchCols;
 
             // Create shuffled indices
@@ -72,35 +71,9 @@ public class ShufflePreprocessor<T> : DiffusionPreprocessorBase<T>
             }
 
             // Copy shuffled patches
-            for (int p = 0; p < totalPatches; p++)
-            {
-                int srcRow = indices[p] / patchCols;
-                int srcCol = indices[p] % patchCols;
-                int dstRow = p / patchCols;
-                int dstCol = p % patchCols;
-
-                for (int c = 0; c < 3; c++)
-                {
-                    int srcC = Math.Min(c, channels - 1);
-                    for (int ph = 0; ph < _patchSize && dstRow * _patchSize + ph < height; ph++)
-                    {
-                        for (int pw = 0; pw < _patchSize && dstCol * _patchSize + pw < width; pw++)
-                        {
-                            int sh = srcRow * _patchSize + ph;
-                            int sw = srcCol * _patchSize + pw;
-                            int dh = dstRow * _patchSize + ph;
-                            int dw = dstCol * _patchSize + pw;
-
-                            if (sh < height && sw < width)
-                            {
-                                result[b, c, dh, dw] = data[b, srcC, sh, sw];
-                            }
-                        }
-                    }
-                }
-            }
+            images[b] = PreprocessorFilters.PermutePatches(engine.TensorNarrow(rgb, 0, b, 1), _patchSize, indices);
         }
 
-        return result;
+        return engine.TensorConcatenate(images, 0);
     }
 }

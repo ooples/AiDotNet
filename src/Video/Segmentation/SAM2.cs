@@ -204,9 +204,10 @@ public partial class SAM2<T> : NeuralNetworkBase<T>, ITrainingObjectiveProvider<
         var frame = Sam2Runtime<T>.Frame(image, nameof(image));
         bool multimask = (prompt.Labels?.Shape[1] ?? 0) <= 1;
         var (masks, iou, score) = Runtime.DecodeImage(Runtime.EncodeImage(frame), prompt.Points, prompt.Labels, lowResLogits, multimask);
-        int best = 0;
-        for (int k = 1; k < iou.Shape[1]; k++)
-            if (NumOps.ToDouble(iou[0, k]) > NumOps.ToDouble(iou[0, best])) best = k;
+        // The first mask with the highest predicted IoU
+        var scores = Engine.Reshape(Engine.TensorNarrow(iou, 0, 0, 1), new[] { iou.Shape[1] });
+        var atMax = Engine.TensorNonzero(Engine.TensorEquals(scores, Engine.TensorMaxValue(scores)));
+        int best = atMax.Length > 0 ? atMax[0, 0] : 0;
         int side = masks.Shape[2];
         return (Engine.TensorSlice(masks, new[] { 0, best, 0, 0 }, new[] { 1, 1, side, side }), score);
     }
@@ -262,6 +263,7 @@ public partial class SAM2<T> : NeuralNetworkBase<T>, ITrainingObjectiveProvider<
 
     private Tensor<T> Forward(Tensor<T> input)
     {
+        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         if (input.Rank == 5)
         {
             var videos = new Tensor<T>[input.Shape[0]];
@@ -316,6 +318,7 @@ public partial class SAM2<T> : NeuralNetworkBase<T>, ITrainingObjectiveProvider<
     /// masks <c>[B, F, H, W]</c>.</summary>
     private IReadOnlyList<(Tensor<T> Input, Tensor<T> Target)> Videos(Tensor<T> input, Tensor<T> target)
     {
+        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         if (input.Rank != 5) return new[] { (input, target) };
         int b = input.Shape[0], f = input.Shape[1], c = input.Shape[2], h = input.Shape[3], w = input.Shape[4];
         if (target.Length != b * f * h * w) throw new ArgumentException($"The target is one {h}x{w} mask per frame.", nameof(target));

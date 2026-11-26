@@ -51,6 +51,9 @@ public class GaussianWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private readonly T _sigma;
 
+    // A subclass that overrides the scalar Calculate must shape every filter, as the element loops did.
+    private readonly bool _overridesScalarCalculate;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="GaussianWavelet{T}"/> class with the specified sigma.
     /// </summary>
@@ -76,6 +79,7 @@ public class GaussianWavelet<T> : WaveletFunctionBase<T>
     public GaussianWavelet(double sigma = 1.0)
     {
         _sigma = NumOps.FromDouble(sigma);
+        _overridesScalarCalculate = OverridesScalarCalculateBelow(typeof(GaussianWavelet<T>));
     }
 
     /// <summary>
@@ -133,17 +137,18 @@ public class GaussianWavelet<T> : WaveletFunctionBase<T>
     public override (Vector<T> approximation, Vector<T> detail) Decompose(Vector<T> input)
     {
         int size = input.Length;
-        var approximation = new Vector<T>(size);
-        var detail = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
+        if (size == 0)
         {
-            T x = NumOps.FromDouble(i - size / 2);
-            T waveletValue = Calculate(x);
-            T derivativeValue = CalculateDerivative(x);
-            approximation[i] = NumOps.Multiply(waveletValue, input[i]);
-            detail[i] = NumOps.Multiply(derivativeValue, input[i]);
+            return (new Vector<T>(0), new Vector<T>(0));
         }
 
+        var engine = AiDotNetEngine.Current;
+        var x = WaveletEngineOps<T>.CenteredGrid(size);
+        var waveletValue = Calculate(x);
+        var derivativeValue = CalculateDerivativeValues(x, waveletValue);
+        var signal = Tensor<T>.FromVector(input);
+        var approximation = engine.TensorMultiply(waveletValue, signal).ToVector();
+        var detail = engine.TensorMultiply(derivativeValue, signal).ToVector();
         return (approximation, detail);
     }
 
@@ -171,14 +176,7 @@ public class GaussianWavelet<T> : WaveletFunctionBase<T>
     public override Vector<T> GetScalingCoefficients()
     {
         int size = 101; // Odd number to have a center point
-        var coefficients = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
-        {
-            T x = NumOps.FromDouble(i - size / 2);
-            coefficients[i] = Calculate(x);
-        }
-
-        return coefficients;
+        return Calculate(WaveletEngineOps<T>.CenteredGrid(size)).ToVector();
     }
 
     /// <summary>
@@ -206,14 +204,8 @@ public class GaussianWavelet<T> : WaveletFunctionBase<T>
     public override Vector<T> GetWaveletCoefficients()
     {
         int size = 101; // Odd number to have a center point
-        var coefficients = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
-        {
-            T x = NumOps.FromDouble(i - size / 2);
-            coefficients[i] = CalculateDerivative(x);
-        }
-
-        return coefficients;
+        var x = WaveletEngineOps<T>.CenteredGrid(size);
+        return CalculateDerivativeValues(x, Calculate(x)).ToVector();
     }
 
     /// <summary>
@@ -270,34 +262,49 @@ public class GaussianWavelet<T> : WaveletFunctionBase<T>
     public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
     {
         int size = approximation.Length;
-        var reconstructed = new Vector<T>(size);
-
-        for (int i = 0; i < size; i++)
+        if (size == 0)
         {
-            T x = NumOps.FromDouble(i - size / 2);
-            T waveletValue = Calculate(x);
-            T derivativeValue = CalculateDerivative(x);
-
-            // Use weighted least-squares approach to recover original
-            T waveletSq = NumOps.Square(waveletValue);
-            T derivativeSq = NumOps.Square(derivativeValue);
-            T denominator = NumOps.Add(waveletSq, derivativeSq);
-
-            if (NumOps.GreaterThan(NumOps.Abs(denominator), NumOps.FromDouble(1e-10)))
-            {
-                T numerator = NumOps.Add(
-                    NumOps.Multiply(approximation[i], waveletValue),
-                    NumOps.Multiply(detail[i], derivativeValue)
-                );
-                reconstructed[i] = NumOps.Divide(numerator, denominator);
-            }
-            else
-            {
-                // When both wavelet and derivative are near zero, use sum of coefficients
-                reconstructed[i] = NumOps.Add(approximation[i], detail[i]);
-            }
+            return new Vector<T>(0);
         }
 
-        return reconstructed;
+        var x = WaveletEngineOps<T>.CenteredGrid(size);
+        var waveletValue = Calculate(x);
+        var derivativeValue = CalculateDerivativeValues(x, waveletValue);
+
+        // Least-squares inverse of the two pointwise products: (a * w + d * w') / (w^2 + w'^2), falling back to
+        // a + d where the denominator is numerically zero.
+        return WaveletEngineOps<T>.PointwiseReconstruct(approximation, detail, waveletValue, derivativeValue);
+    }
+
+    /// <summary>
+    /// Evaluates <see cref="Calculate(T)"/> at every entry of <paramref name="x"/>.
+    /// </summary>
+    /// <inheritdoc />
+    /// <remarks>
+    /// Evaluated as whole-tensor engine operations, identical to <see cref="Calculate(T)"/> element by element;
+    /// when a subclass overrides the scalar <see cref="Calculate(T)"/>, its override is used for every element.
+    /// </remarks>
+    public override Tensor<T> Calculate(Tensor<T> x)
+    {
+        return _overridesScalarCalculate ? base.Calculate(x) : EvaluateCalculate(x);
+    }
+
+    private Tensor<T> EvaluateCalculate(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        T denominator = NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Multiply(_sigma, _sigma));
+        var exponent = engine.TensorDivideScalar(engine.TensorMultiply(x, x), denominator);
+        return engine.TensorExp(engine.TensorNegate(exponent));
+    }
+
+    /// <summary>
+    /// Evaluates <see cref="CalculateDerivative(T)"/> at every entry of <paramref name="x"/>, given the Gaussian
+    /// values there.
+    /// </summary>
+    private Tensor<T> CalculateDerivativeValues(Tensor<T> x, Tensor<T> gaussianValue)
+    {
+        var engine = AiDotNetEngine.Current;
+        var factor = engine.TensorDivideScalar(x, NumOps.Multiply(_sigma, _sigma));
+        return engine.TensorMultiply(engine.TensorNegate(factor), gaussianValue);
     }
 }

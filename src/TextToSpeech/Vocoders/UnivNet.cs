@@ -81,6 +81,9 @@ public partial class UnivNet<T> : GanVocoderBase<T>
     protected override bool DiscriminatorStepFirst => false;
 
     /// <inheritdoc />
+    protected override bool RequiresRetainedGeneration => true;
+
+    /// <inheritdoc />
     protected override IReadOnlyList<LayerBase<T>> CreateGenerator()
     {
         var o = PaperOptions;
@@ -104,10 +107,12 @@ public partial class UnivNet<T> : GanVocoderBase<T>
     protected override IReadOnlyList<LayerBase<T>> CreateDiscriminators()
     {
         var o = PaperOptions;
-        _resolutions = new MultiResolutionSpectrogramDiscriminators<T>(Engine, o.StftFftSizes, o.StftHopSizes, o.StftWindowSizes,
-            o.ResolutionDiscriminatorChannels, o.LeakyReluSlope);
+        _resolutions = MultiResolutionSpectrogramDiscriminators<T>.CreateSeeded(Engine, o.StftFftSizes, o.StftHopSizes, o.StftWindowSizes,
+            o.ResolutionDiscriminatorChannels, o.LeakyReluSlope, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 17));
+        // Seeded from the vocoder's seeds like the generator, each group on a stream of its own.
         _periods = new HiFiGanDiscriminators<T>(Engine, o.DiscriminatorPeriods, 0, useScaleDiscriminator: false,
-            widthDivisor: o.DiscriminatorWidthDivisor, periodChannels: o.PeriodDiscriminatorChannels, slope: o.LeakyReluSlope);
+            widthDivisor: o.DiscriminatorWidthDivisor, periodChannels: o.PeriodDiscriminatorChannels, slope: o.LeakyReluSlope,
+            initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(InitializationSeed + 13));
         return _resolutions.Layers.Concat(_periods.Layers).ToList();
     }
 

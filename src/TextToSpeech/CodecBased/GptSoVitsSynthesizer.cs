@@ -154,37 +154,24 @@ internal sealed class GptSoVitsQuantizer<T>
     public (Tensor<T> Quantized, int[] Codes, Tensor<T> Commitment) Forward(Tensor<T> x, bool training, Random random)
     {
         int t = x.Shape[2];
-        if (training && !Initialized) KMeansInitialize(x, random);
-        var codes = Encode(x);
-        var quantized = Decode(codes);
-        if (!training) return (quantized, codes, new Tensor<T>(new[] { 1 }));
-        // EMA update.
-        var counts = new double[_bins];
-        var sums = new double[_bins * _dim];
-        for (int i = 0; i < t; i++)
+        if (!training && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
         {
-            counts[codes[i]]++;
-            for (int d = 0; d < _dim; d++) sums[codes[i] * _dim + d] += NumOps.ToDouble(x[0, d, i]);
+            var evalCodes = Encode(x);
+            return (Decode(evalCodes), evalCodes, new Tensor<T>(new[] { 1 }));
         }
-        double n = 0;
-        for (int b = 0; b < _bins; b++)
+
+        _activeRandom = random;
+        var quantized = AiDotNet.Training.CompiledStepHostValue<T>.ComputeStateful(
+            "GptSoVitsVqQuantized",
+            this,
+            stateTag: training ? 1 : 0,
+            new[] { x },
+            x._shape,
+            static (self, tag, inputs, dst) => self.ExecuteQuantize(tag == 1, inputs[0], dst));
+        var codes = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive ? new int[t] : _lastCodes;
+        if (!training)
         {
-            ClusterSize[b] = ClusterSize[b] * Decay + counts[b] * (1 - Decay);
-            n += ClusterSize[b];
-        }
-        for (int i = 0; i < EmbedAverage.Length; i++) EmbedAverage[i] = EmbedAverage[i] * Decay + sums[i] * (1 - Decay);
-        for (int b = 0; b < _bins; b++)
-        {
-            double size = (ClusterSize[b] + Epsilon) / (n + _bins * Epsilon) * n;
-            for (int d = 0; d < _dim; d++) Embed[b * _dim + d] = EmbedAverage[b * _dim + d] / size;
-        }
-        // expire_codes_: codes whose EMA size fell below the threshold take random frames of this batch.
-        var expired = Enumerable.Range(0, _bins).Where(b => ClusterSize[b] < DeadCodeThreshold).ToList();
-        if (expired.Count > 0)
-        {
-            var picks = SampleVectors(t, expired.Count, random);
-            for (int k = 0; k < expired.Count; k++)
-                for (int d = 0; d < _dim; d++) Embed[expired[k] * _dim + d] = NumOps.ToDouble(x[0, d, picks[k]]);
+            return (quantized, codes, new Tensor<T>(new[] { 1 }));
         }
         // quantize = x + (quantize - x).detach(); commit = mse(quantize.detach(), x)
         var straight = _engine.TensorAdd(x, MeloOps.Detach(_engine.TensorSubtract(quantized, x)));
@@ -192,6 +179,51 @@ internal sealed class GptSoVitsQuantizer<T>
         var commitment = _engine.TensorMultiplyScalar(_engine.ReduceSum(_engine.TensorMultiply(difference, difference), null),
             NumOps.FromDouble(1.0 / ((double)t * _dim)));
         return (straight, codes, commitment);
+    }
+
+    private int[] _lastCodes = Array.Empty<int>();
+    private Random? _activeRandom;
+
+    private void ExecuteQuantize(bool updateCodebook, Tensor<T> currentX, Tensor<T> dst)
+    {
+        int t = currentX.Shape[2];
+        bool advanceState = updateCodebook && !AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward;
+        var rng = _activeRandom ?? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0);
+        if (advanceState && !Initialized) KMeansInitialize(currentX, rng);
+        var stepCodes = Encode(currentX);
+        _lastCodes = stepCodes;
+        var stepQuantized = Decode(stepCodes);
+        if (advanceState)
+        {
+            var xVals = currentX.Cast<double>().ToArray();
+            var counts = new double[_bins];
+            var sums = new double[_bins * _dim];
+            for (int i = 0; i < t; i++)
+            {
+                counts[stepCodes[i]]++;
+                for (int d = 0; d < _dim; d++) sums[stepCodes[i] * _dim + d] += xVals[d * t + i];
+            }
+            double n = 0;
+            for (int b = 0; b < _bins; b++)
+            {
+                ClusterSize[b] = ClusterSize[b] * Decay + counts[b] * (1 - Decay);
+                n += ClusterSize[b];
+            }
+            for (int i = 0; i < EmbedAverage.Length; i++) EmbedAverage[i] = EmbedAverage[i] * Decay + sums[i] * (1 - Decay);
+            for (int b = 0; b < _bins; b++)
+            {
+                double size = (ClusterSize[b] + Epsilon) / (n + _bins * Epsilon) * n;
+                for (int d = 0; d < _dim; d++) Embed[b * _dim + d] = EmbedAverage[b * _dim + d] / size;
+            }
+            var expired = Enumerable.Range(0, _bins).Where(b => ClusterSize[b] < DeadCodeThreshold).ToList();
+            if (expired.Count > 0)
+            {
+                var picks = SampleVectors(t, expired.Count, rng);
+                for (int k = 0; k < expired.Count; k++)
+                    for (int d = 0; d < _dim; d++) Embed[expired[k] * _dim + d] = xVals[d * t + picks[k]];
+            }
+        }
+        stepQuantized.AsSpan().CopyTo(dst.AsWritableSpan());
     }
 
     // sample_vectors: a permutation's first picks when there are enough frames, else picks with replacement.
@@ -439,8 +471,12 @@ internal sealed class GptSoVitsSynthesizer<T>
             post.LoadTorchWeights(new double[half * h], null, new double[half]);
             _couplings.Add((pre, net, post));
         }
+        // No N(0, 0.01) redraw: the reference (GPT-SoVITS module/models.py Generator) applies init_weights after weight_norm,
+        // so it writes only the derived `weight` tensor, which the forward pre-hook recomputes from weight_g and
+        // weight_v. Every convolution trains from PyTorch's default draw with g = ||v||. A real N(0, 0.01) shrinks
+        // each stage 3-15x and leaves an untrained generator's output to its biases.
         Generator = new HiFiGanGenerator<T>(engine, c.InterChannels, c.UpsampleInitialChannels, c.UpsampleRates, c.UpsampleKernels,
-            c.ResblockKernels, c.ResblockDilations, resblockType1: true, conditionChannels: c.Gin, plainEnds: true, initialization: random);
+            c.ResblockKernels, c.ResblockDilations, resblockType1: true, conditionChannels: c.Gin, plainEnds: true, defaultInitialization: random);
         layers.AddRange(Generator.Layers);
         Posterior = new MeloPosteriorEncoder<T>(engine, layers, c.SpecChannels, c.InterChannels, h, c.Gin);
         ReferenceEncoder = new GptSoVitsMelStyleEncoder<T>(engine, layers, random, c.ReferenceChannels, c.Gin, c.StyleHidden, c.Dropout > 0 ? 0.1 : 0.0);

@@ -43,6 +43,7 @@
     <Compile Include="../AiDotNet.Tests/UnitTests/Training/TeacherParameterTransferTests.cs" Link="TeacherParameterTransferTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/Training/CloneAndQuantizationResidencyTests.cs" Link="CloneAndQuantizationResidencyTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/Training/HostStateCheckpointTests.cs" Link="HostStateCheckpointTests.cs" />
+    <Compile Include="../AiDotNet.Tests/UnitTests/Optimizers/AdamHalfStateTests.cs" Link="AdamHalfStateTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/AiDotNet.CodeAnalysis.TreeSitter/AiDotNet.CodeAnalysis.TreeSitter.csproj" />
