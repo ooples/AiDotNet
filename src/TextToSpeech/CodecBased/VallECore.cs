@@ -136,12 +136,7 @@ internal sealed class VallECore<T>
     }
 
     private static Tensor<T> Ids(IReadOnlyList<int> ids)
-    {
-        var ops = MathHelper.GetNumericOperations<T>();
-        var tensor = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) tensor[i] = ops.FromDouble(ids[i]);
-        return tensor;
-    }
+        => TtsIdTensors.From<T>(ids);
 
     /// <summary>PyTorch's defaults, which the reference keeps: embeddings from N(0, 1), bias-free heads uniform in
     /// ±1/√fan-in, the Transformers as <see cref="VallETransformer{T}.InitializeLikePyTorch"/>, α at 1.</summary>

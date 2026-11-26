@@ -232,11 +232,7 @@ internal sealed class ParlerCore<T>
     }
 
     private static Tensor<T> Ids(IReadOnlyList<int> ids)
-    {
-        var tensor = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) tensor[i] = NumOps.FromDouble(ids[i]);
-        return tensor;
-    }
+        => TtsIdTensors.From<T>(ids);
 
     /// <summary>
     /// The reference's sinusoidal table (tensor2tensor's, <c>ParlerTTSSinusoidalPositionalEmbedding</c>): cosines in the
