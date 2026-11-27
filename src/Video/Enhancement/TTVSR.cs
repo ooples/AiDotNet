@@ -43,14 +43,16 @@ namespace AiDotNet.Video.Enhancement;
 /// </remarks>
 /// <example>
 /// <code>
-/// var lowResClip = Tensor&lt;float&gt;.CreateRandom(10, 3, 64, 64);     // [frames, 3, H, W], pixel values 0-255
-/// var highResClip = Tensor&lt;float&gt;.CreateRandom(10, 3, 256, 256);  // the same frames at 4x
+/// // 8 clips of 10 consecutive frames. The builder splits and shuffles whole clips (the first axis), so the
+/// // frames of a clip stay together and in order for the recurrent propagation.
+/// var lowResClips = Tensor&lt;float&gt;.CreateRandom(8, 10, 3, 64, 64).Multiply(255f);    // [clips, frames, 3, H, W], 0-255
+/// var highResClips = Tensor&lt;float&gt;.CreateRandom(8, 10, 3, 256, 256).Multiply(255f); // placeholder: real training needs the same footage at 4x
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputType: InputType.FourDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression, inputFrames: 10, inputHeight: 64, inputWidth: 64, inputDepth: 3);
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
 ///     .ConfigureModel(new TTVSR&lt;float&gt;(arch, new TTVSROptions()))
-///     .Build(lowResClip, highResClip);
-/// var upscaled = result.Predict(lowResClip);   // [10, 3, 256, 256]
+///     .Build(lowResClips, highResClips);
+/// var upscaled = result.Predict(lowResClips);   // TTVSR.Upscale on each clip: [8, 10, 3, 256, 256]
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

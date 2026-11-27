@@ -35,13 +35,10 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///     inputSize: 512, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new MinMo&lt;double&gt;(architecture, "minmo.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new MinMo&lt;double&gt;(architecture, new MinMoOptions());
+/// var model = new MinMo&lt;double&gt;(architecture, new MinMoOptions());
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

@@ -28,9 +28,13 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// </remarks>
 /// <example>
 /// <code>
+/// // The builder splits and shuffles along the first axis, so it must be recordings:
+/// // waveforms [recordings, 1, samples] at 16 kHz, transcripts [recordings, tokens]. Noise stands in for the audio.
+/// var waveforms = Tensor&lt;float&gt;.CreateRandom(new[] { 8, 1, 16000 });
+/// var transcriptIds = new Tensor&lt;float&gt;(new[] { 8, 4 },   // Gemma token ids
+///     new Vector&lt;float&gt;(Enumerable.Repeat(new float[] { 651, 4320, 2185, 1 }, 8).SelectMany(ids =&gt; ids).ToArray()));
 /// var recordings = new List&lt;Tensor&lt;float&gt;&gt; { Tensor&lt;float&gt;.CreateRandom(1, 16000), Tensor&lt;float&gt;.CreateRandom(1, 16000) };
 /// var recording = recordings[0];
-/// var transcriptIds = new Tensor&lt;float&gt;(new[] { 4 }, new Vector&lt;float&gt;(new float[] { 651, 4320, 2185, 1 }));   // Gemma token ids
 /// var options = AudioPaLMOptions.Gemma2B();
 /// var model = new AudioPaLM&lt;float&gt;(new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional,
 ///     NeuralNetworkTaskType.SpeechRecognition, inputSize: 1, outputSize: 1), options);
@@ -38,8 +42,8 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// model.FitSpeechTokenizer(recordings);   // the audio tokens' k-means codebook
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
 ///     .ConfigureModel(model)
-///     .Build(recording, transcriptIds);
-/// var logits = result.Predict(recording);
+///     .Build(waveforms, transcriptIds);
+/// var transcription = model.Transcribe(recording, "en");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

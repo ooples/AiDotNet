@@ -186,7 +186,7 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
     private protected Matrix<T> ElementwiseJacobian(Vector<T> input)
     {
         int n = input.Length;
-        if (UseScalarJacobian(n))
+        if (UseScalarJacobian(n) || !TensorDerivativeHonorsScalarDerivative())
         {
             return ScalarDiagonalJacobian(input);
         }
@@ -195,6 +195,25 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
         WriteDiagonal(jacobian, Derivative(Tensor<T>.FromVector(input)));
         return jacobian;
     }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, bool> TensorDerivativeHonorsScalar = new();
+
+    /// <summary>
+    /// Whether this runtime type's tensor derivative computes the same function as its scalar derivative: false when
+    /// a subclass overrides <see cref="Derivative(T)"/> below the class that implements
+    /// <see cref="Derivative(Tensor{T})"/>. Such a subclass (an ELU with its own scalar formula, say) inherits a
+    /// tensor derivative that ignores its override, so its vector Jacobian must come from the scalar derivative to
+    /// agree with its vector forward pass, which applies the scalar <see cref="Activate(T)"/>.
+    /// </summary>
+    private bool TensorDerivativeHonorsScalarDerivative()
+        => TensorDerivativeHonorsScalar.GetOrAdd(GetType(), static type =>
+        {
+            var scalar = type.GetMethod(nameof(Derivative), new[] { typeof(T) });
+            var tensor = type.GetMethod(nameof(Derivative), new[] { typeof(Tensor<T>) });
+            return scalar?.DeclaringType is { } scalarOwner
+                && tensor?.DeclaringType is { } tensorOwner
+                && !scalarOwner.IsSubclassOf(tensorOwner);
+        });
 
     /// <summary>
     /// The longest vector whose diagonal Jacobian is filled with scalar derivatives on the CPU engine: measured

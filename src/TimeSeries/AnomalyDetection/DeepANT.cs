@@ -42,11 +42,12 @@ namespace AiDotNet.TimeSeries.AnomalyDetection;
 /// var series = new Vector&lt;double&gt;(values);
 /// var timeIndex = new Matrix&lt;double&gt;(values.Length, 1);
 /// for (int i = 0; i &lt; values.Length; i++) timeIndex[i, 0] = i;
+/// var model = new DeepANT&lt;double&gt;(new DeepANTOptions&lt;double&gt; { WindowSize = 45 });
 /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-///     .ConfigureModel(new DeepANT&lt;double&gt;(new DeepANTOptions&lt;double&gt; { WindowSize = 45 }))
+///     .ConfigureModel(model)
 ///     .Build(timeIndex, series);
-/// // DeepANT flags a point as anomalous when it is far from this prediction
-/// Vector&lt;double&gt; predicted = result.Predict(timeIndex);
+/// // One flag per value from index WindowSize on: true where the value is far from the one-step prediction.
+/// bool[] anomalies = model.DetectAnomalies(series);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

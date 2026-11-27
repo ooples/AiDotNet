@@ -115,7 +115,8 @@ public class TaylorSoftmaxActivation<T> : ActivationFunctionBase<T>
 
         var result = TaylorPolynomial(input, _order);
         var sum = Engine.ReduceSum(result, new[] { lastAxis }, keepDims: true);
-        return Engine.TensorDivide(result, sum);
+        // The [..., 1] sum is broadcast to the polynomial's shape explicitly rather than left to the divide.
+        return Engine.TensorDivide(result, Engine.TensorBroadcastTo(sum, result.Shape.ToArray()));
     }
 
     /// <summary>
@@ -177,21 +178,21 @@ public class TaylorSoftmaxActivation<T> : ActivationFunctionBase<T>
             return result;
         }
 
-        // 1/2!, 1/3!, ... in the numeric type, converted once
+        // The n-th term is the previous one times x / n, so x^n / n! is never formed from a raw power: x^n alone
+        // overflowed for large logits (|x|^order past the type's range) although the scaled term is representable.
+        // 1/2, 1/3, ... in the numeric type, converted once
         var reciprocals = new double[order - 1];
-        double factorial = 1.0;
         for (int n = 2; n <= order; n++)
         {
-            factorial *= n;
-            reciprocals[n - 2] = 1.0 / factorial;
+            reciprocals[n - 2] = 1.0 / n;
         }
 
         var scales = new Tensor<double>(reciprocals, new[] { reciprocals.Length }).Cast<T>().AsSpan();
-        Tensor<T> power = input;
+        Tensor<T> term = input;                                       // x^1 / 1!
         for (int n = 2; n <= order; n++)
         {
-            power = Engine.TensorMultiply(power, input);              // x^n
-            result = Engine.TensorAdd(result, Engine.TensorMultiplyScalar(power, scales[n - 2]));
+            term = Engine.TensorMultiply(term, Engine.TensorMultiplyScalar(input, scales[n - 2]));
+            result = Engine.TensorAdd(result, term);
         }
 
         return result;

@@ -112,7 +112,12 @@ public class LogSoftminActivation<T> : ActivationFunctionBase<T>
             return new Matrix<T>(0, 0);
         }
 
-        Vector<T> softmin = Activate(input).Transform(NumOps.Exp);
+        // Normalized from the shifted exponentials, not exp(Activate(input)): the log-domain value is rounded at
+        // the scale of the log-sum-exp, so for large inputs exp of it lost the probabilities' small differences.
+        T minInput = input.Min();
+        Vector<T> shiftedExp = input.Transform(x => NumOps.Exp(NumOps.Subtract(minInput, x)));
+        T sumExp = shiftedExp.Sum();
+        Vector<T> softmin = shiftedExp.Transform(x => NumOps.Divide(x, sumExp));
         // J[i, i] = s[i] - 1; J[i, j] = s[j], so every off-diagonal row is the softmin
         var engine = Engine;
         if (UseScalarJacobian(input.Length))

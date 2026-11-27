@@ -151,6 +151,335 @@ public class SharedTrainingStepTests
     }
 
     /// <summary>
+    /// A plan whose traced step already computes something other than the eager forward. The agreement check used to
+    /// look only at the first replay, so the traced step's update went into the weights before anything was compared
+    /// (CLAP's first compiled step gathered through indices the trace had not computed yet, and its replays were
+    /// right, so nothing was ever caught). With the traced step checked, that step is undone and runs eagerly, and
+    /// nothing of it is left behind: the forward has step state (a batch norm's running statistics, which the traced
+    /// step advanced and the eager step would advance a second time) and the optimizer has a position (Adam's step and
+    /// a per-batch schedule), and after every step all of it equals a twin that only ever ran eager.
+    /// </summary>
+    [Fact]
+    public void TracedStepDisagreementIsUndoneBeforeItTrains()
+    {
+        var model = NormTwin.Create();
+        var twin = model.Copy();
+        var stepper = new TapeTrainingStepper<float>(new object());
+        var optimizer = ScheduledAdam();
+        var twinOptimizer = ScheduledAdam();
+        var data = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
+        var engine = AiDotNetEngine.Current;
+
+        Tensor<float> WrongWhenTraced(Tensor<float> x)
+        {
+            var output = model.Forward(x);
+            return AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsTrainingTrace
+                ? engine.TensorMultiplyScalar(output, 3f)
+                : output;
+        }
+
+        for (int step = 0; step < 3; step++)
+        {
+            var input = RandomTensor(data, Batch, Features);
+            var target = RandomTensor(data, Batch, Outputs);
+            float loss = stepper.Step(new FusedTrainingStepRequest<float>
+            {
+                Layers = model.Layers,
+                Input = input,
+                Target = target,
+                Forward = WrongWhenTraced,
+                ComputeLoss = MeanSquaredError,
+                Optimizer = optimizer,
+                VerifyReplayAgreement = true,
+            });
+
+            Assert.False(stepper.LastStepFused);
+            Assert.True(stepper.Session.IsDisabled);
+            if (step == 0) Assert.Contains("traced step", stepper.Session.LastMissReason ?? string.Empty);
+
+            float eagerLoss = TapeTrainingStepper<float>.EagerStep(new FusedTrainingStepRequest<float>
+            {
+                Layers = twin.Layers,
+                Input = input,
+                Target = target,
+                Forward = twin.Forward,
+                ComputeLoss = MeanSquaredError,
+                Optimizer = twinOptimizer,
+            });
+            Assert.Equal(eagerLoss, loss);
+            AssertSameState(twin, twinOptimizer, model, optimizer, step);
+        }
+    }
+
+    /// <summary>
+    /// The other undo: the traced step agrees and trains, the first replay on new data does not (the forward read its
+    /// input on the host). The session then puts the model back before the traced step, redoes that step on the eager
+    /// tape and leaves the replay's batch to the caller's eager step. The traced step and the replay both advanced the
+    /// running statistics and the optimizer's position; after the undo, and on the steps after it, everything equals a
+    /// twin that only ever ran eager.
+    /// </summary>
+    [Fact]
+    public void FirstReplayDisagreementLeavesNoStepStateBehind()
+    {
+        var model = NormTwin.Create();
+        var twin = model.Copy();
+        var stepper = new TapeTrainingStepper<float>(new object());
+        var optimizer = ScheduledAdam();
+        var twinOptimizer = ScheduledAdam();
+        var data = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
+        var engine = AiDotNetEngine.Current;
+
+        Func<Tensor<float>, Tensor<float>> HostScaled(NormTwin of) => x =>
+        {
+            float scale = 1f + 10f * Math.Abs(x[0]);
+            return engine.TensorMultiplyScalar(of.Forward(x), scale);
+        };
+
+        for (int step = 0; step < 4; step++)
+        {
+            var input = RandomTensor(data, Batch, Features);
+            input[0] = step == 0 ? 0.25f : 3f + step;
+            var target = RandomTensor(data, Batch, Outputs);
+            stepper.Step(new FusedTrainingStepRequest<float>
+            {
+                Layers = model.Layers,
+                Input = input,
+                Target = target,
+                Forward = HostScaled(model),
+                ComputeLoss = MeanSquaredError,
+                Optimizer = optimizer,
+                VerifyReplayAgreement = true,
+            });
+            if (step == 0)
+                Assert.True(stepper.LastStepFused, $"the traced step did not run fused ({stepper.Session.LastMissReason}).");
+            else
+                Assert.False(stepper.LastStepFused);
+            if (step == 1) Assert.Contains("disagrees", stepper.Session.LastMissReason ?? string.Empty);
+
+            TapeTrainingStepper<float>.EagerStep(new FusedTrainingStepRequest<float>
+            {
+                Layers = twin.Layers,
+                Input = input,
+                Target = target,
+                Forward = HostScaled(twin),
+                ComputeLoss = MeanSquaredError,
+                Optimizer = twinOptimizer,
+            });
+            // After the traced step the model is ahead by the plan's own rounding only; from the undo on it is the
+            // eager twin exactly.
+            if (step > 0) AssertSameState(twin, twinOptimizer, model, optimizer, step);
+        }
+    }
+
+    /// <summary>
+    /// A declined plan's steps drew from the forward's generator. The eager steps that take their place reuse those
+    /// draws, so the generator ends where an eager-only twin's does and the weights are that twin's: on the traced-step
+    /// decline (the noise is in the loss, which the check's draw-free forward cannot reproduce) and on the first-replay
+    /// undo (the noise is drawn but does not reach the loss; the host-read scale makes the replay disagree).
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void UndoneStepsDoNotConsumeTheGeneratorTwice(bool declineOnTrace)
+    {
+        var (layer, eagerLayer) = TwinLayers();
+        var stepper = new TapeTrainingStepper<float>(new object());
+        var optimizer = Sgd();
+        var twinOptimizer = Sgd();
+        var data = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(23);
+        var twinRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(23);
+        var engine = AiDotNetEngine.Current;
+
+        Func<Tensor<float>, Tensor<float>> Noisy(DenseLayer<float> of, Random generator) => x =>
+        {
+            var output = of.Forward(x);
+            var noise = CompiledStepRandom<float>.StandardNormal(output._shape, generator);
+            if (declineOnTrace) return engine.TensorAdd(output, noise);
+            float scale = 1f + 10f * Math.Abs(x[0]);
+            return engine.TensorAdd(engine.TensorMultiplyScalar(output, scale), engine.TensorMultiplyScalar(noise, 0f));
+        };
+
+        for (int step = 0; step < 3; step++)
+        {
+            var input = RandomTensor(data, Batch, Features);
+            input[0] = step == 0 ? 0.25f : 3f + step;
+            var target = RandomTensor(data, Batch, Outputs);
+            float loss = stepper.Step(new FusedTrainingStepRequest<float>
+            {
+                Layers = new ITrainableLayer<float>[] { layer },
+                Input = input,
+                Target = target,
+                Forward = Noisy(layer, random),
+                ComputeLoss = MeanSquaredError,
+                Optimizer = optimizer,
+                VerifyReplayAgreement = true,
+            });
+            Assert.Equal(!declineOnTrace && step == 0, stepper.LastStepFused);
+
+            float eagerLoss = TapeTrainingStepper<float>.EagerStep(new FusedTrainingStepRequest<float>
+            {
+                Layers = new ITrainableLayer<float>[] { eagerLayer },
+                Input = input,
+                Target = target,
+                Forward = Noisy(eagerLayer, twinRandom),
+                ComputeLoss = MeanSquaredError,
+                Optimizer = twinOptimizer,
+            });
+            if (declineOnTrace || step > 0)
+            {
+                Assert.Equal(eagerLoss, loss);
+                Assert.Equal(eagerLayer.GetParameters().ToArray(), layer.GetParameters().ToArray());
+            }
+        }
+
+        Assert.True(stepper.Session.IsDisabled);
+        Assert.Equal(twinRandom.NextDouble(), random.NextDouble());
+    }
+
+    /// <summary>
+    /// A vector quantizer's EMA codebooks are step state too: a training forward moves them, with no optimizer
+    /// involved. A traced step that is declined moved them once, and the eager step of the same batch would move them
+    /// again from there. After the undo every codebook buffer equals an eager-only twin's.
+    /// </summary>
+    [Fact]
+    public void TracedStepDisagreementRestoresAnEmaCodebook()
+    {
+        const int dim = Outputs, frames = Batch;
+        var (dense, twinDense) = TwinLayers();
+        var quantizer = new AiDotNet.Audio.Codecs.ResidualVectorQuantizerLayer<float>(dim, quantizers: 2, bins: 4,
+            kmeansIterations: 0, deadCodeThreshold: 0);
+        var twinQuantizer = new AiDotNet.Audio.Codecs.ResidualVectorQuantizerLayer<float>(dim, quantizers: 2, bins: 4,
+            kmeansIterations: 0, deadCodeThreshold: 0);
+        CopyBuffers(quantizer, twinQuantizer);
+        quantizer.SetTrainingMode(true);
+        twinQuantizer.SetTrainingMode(true);
+        var stepper = new TapeTrainingStepper<float>(new object());
+        var optimizer = Sgd();
+        var twinOptimizer = Sgd();
+        var data = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
+        var engine = AiDotNetEngine.Current;
+
+        Func<Tensor<float>, Tensor<float>> Quantized(DenseLayer<float> of,
+            AiDotNet.Audio.Codecs.ResidualVectorQuantizerLayer<float> codebooks, bool wrongWhenTraced) => x =>
+        {
+            var rows = engine.Reshape(engine.TensorTranspose(of.Forward(x)), new[] { 1, dim, frames });
+            var output = codebooks.Forward(rows);
+            return wrongWhenTraced && AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsTrainingTrace
+                ? engine.TensorMultiplyScalar(output, 3f)
+                : output;
+        };
+
+        var before = Buffers(quantizer);
+        for (int step = 0; step < 2; step++)
+        {
+            var input = RandomTensor(data, frames, Features);
+            var target = new Tensor<float>(new[] { 1, dim, frames });
+            for (int i = 0; i < target.Length; i++) target[i] = (float)(data.NextDouble() * 2.0 - 1.0);
+            float loss = stepper.Step(new FusedTrainingStepRequest<float>
+            {
+                Layers = new ITrainableLayer<float>[] { dense, quantizer },
+                Input = input,
+                Target = target,
+                Forward = Quantized(dense, quantizer, wrongWhenTraced: true),
+                ComputeLoss = MeanSquaredError,
+                Optimizer = optimizer,
+                VerifyReplayAgreement = true,
+            });
+            Assert.False(stepper.LastStepFused);
+            if (step == 0) Assert.Contains("traced step", stepper.Session.LastMissReason ?? string.Empty);
+
+            float eagerLoss = TapeTrainingStepper<float>.EagerStep(new FusedTrainingStepRequest<float>
+            {
+                Layers = new ITrainableLayer<float>[] { twinDense, twinQuantizer },
+                Input = input,
+                Target = target,
+                Forward = Quantized(twinDense, twinQuantizer, wrongWhenTraced: false),
+                ComputeLoss = MeanSquaredError,
+                Optimizer = twinOptimizer,
+            });
+            Assert.Equal(eagerLoss, loss);
+            Assert.Equal(Buffers(twinQuantizer), Buffers(quantizer));
+            Assert.Equal(twinDense.GetParameters().ToArray(), dense.GetParameters().ToArray());
+        }
+
+        Assert.NotEqual(before, Buffers(quantizer));
+    }
+
+    private static float[] Buffers(LayerBase<float> layer)
+        => layer.GetRegisteredBuffers().SelectMany(buffer => buffer.Tensor.ToArray()).ToArray();
+
+    private static void CopyBuffers(LayerBase<float> from, LayerBase<float> to)
+    {
+        var source = from.GetRegisteredBuffers();
+        var destination = to.GetRegisteredBuffers();
+        Assert.Equal(source.Count, destination.Count);
+        for (int i = 0; i < source.Count; i++)
+            source[i].Tensor.AsSpan().CopyTo(destination[i].Tensor.AsWritableSpan());
+    }
+
+    private static void AssertSameState(NormTwin expected, AdamOptimizer<float, Tensor<float>, Tensor<float>> expectedOptimizer,
+        NormTwin actual, AdamOptimizer<float, Tensor<float>, Tensor<float>> actualOptimizer, int step)
+    {
+        Assert.Equal(expected.Norm.GetRunningMean().ToArray(), actual.Norm.GetRunningMean().ToArray());
+        Assert.Equal(expected.Norm.GetRunningVariance().ToArray(), actual.Norm.GetRunningVariance().ToArray());
+        Assert.Equal(expected.Norm.GetParameters().ToArray(), actual.Norm.GetParameters().ToArray());
+        Assert.Equal(expected.Dense.GetParameters().ToArray(), actual.Dense.GetParameters().ToArray());
+        Assert.True(expectedOptimizer.CurrentStep == actualOptimizer.CurrentStep,
+            $"step {step}: the optimizer is at step {actualOptimizer.CurrentStep}, the eager twin at {expectedOptimizer.CurrentStep}.");
+        Assert.Equal(step + 1, actualOptimizer.CurrentStep);
+        Assert.Equal(expectedOptimizer.GetCurrentLearningRate(), actualOptimizer.GetCurrentLearningRate());
+    }
+
+    // A batch norm into a dense layer: trained weights plus running statistics that every training forward advances.
+    private sealed class NormTwin
+    {
+        private NormTwin(BatchNormalizationLayer<float> norm, DenseLayer<float> dense)
+        {
+            Norm = norm;
+            Dense = dense;
+            Layers = new ITrainableLayer<float>[] { norm, dense };
+        }
+
+        public BatchNormalizationLayer<float> Norm { get; }
+
+        public DenseLayer<float> Dense { get; }
+
+        public ITrainableLayer<float>[] Layers { get; }
+
+        public Tensor<float> Forward(Tensor<float> x) => Dense.Forward(Norm.Forward(x));
+
+        public static NormTwin Create()
+        {
+            var twin = new NormTwin(new BatchNormalizationLayer<float>(), new DenseLayer<float>(Outputs));
+            twin.Norm.SetTrainingMode(false);
+            twin.Forward(new Tensor<float>(new[] { Batch, Features }));
+            twin.Norm.SetTrainingMode(true);
+            return twin;
+        }
+
+        public NormTwin Copy()
+        {
+            var copy = Create();
+            copy.Norm.SetParameters(Norm.GetParameters());
+            copy.Dense.SetParameters(Dense.GetParameters());
+            CopyBuffers(Norm, copy.Norm);
+            return copy;
+        }
+    }
+
+    // Adam with a per-batch schedule: an optimizer whose position (step count, learning rate) a step advances.
+    private static AdamOptimizer<float, Tensor<float>, Tensor<float>> ScheduledAdam()
+        => new(model: null, options: new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+        {
+            InitialLearningRate = 0.01,
+            UseAdaptiveLearningRate = false,
+            UseAdaptiveBetas = false,
+            LearningRateScheduler = new AiDotNet.LearningRateSchedulers.ExponentialLRScheduler(0.01, gamma: 0.5),
+            SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+        });
+
+    /// <summary>
     /// A GAN steps two parameter groups (critic, generator) with two optimizers through one owner. Each group must keep
     /// its own fused plan and optimizer moments: Adam trajectories on the fused path equal two eager Adam trajectories.
     /// With one plan per owner, every switch of optimizer dropped the other group's plan and restarted its moments.

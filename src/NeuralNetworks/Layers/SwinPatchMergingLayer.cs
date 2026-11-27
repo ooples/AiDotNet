@@ -182,20 +182,14 @@ public partial class SwinPatchMergingLayer<T> : LayerBase<T>, IShapeContract
         // [x0, x2, x1, x3], which trains identically from a random start but scrambles the reduction
         // weights of any published Swin / HTS-AT checkpoint: its column blocks 1 and 2 would read the
         // wrong neighbours.
-        // topLeft[i * newW + j] = (2i) * w + 2j; the other three corners are offsets +1, +w and +w+1.
-        var evenRowStarts = Engine.Reshape(Engine.TensorArange<int>(0, 2 * w * newH, 2 * w), [newH, 1]);
-        var evenColumns = Engine.Reshape(Engine.TensorArange<int>(0, 2 * newW, 2), [1, newW]);
-        var topLeft = Engine.Reshape(Engine.TensorAdd(evenRowStarts, evenColumns), [newSeqLen]);
-        var topRight = Engine.TensorAddScalar(topLeft, 1);
-        var bottomLeft = Engine.TensorAddScalar(topLeft, w);
-        var bottomRight = Engine.TensorAddScalar(topLeft, w + 1);
+        var corners = CornerIndices(h, w);
 
         var merged = Engine.TensorConcatenate(
             [
-                Engine.TensorGather(input, topLeft, axis: 1),
-                Engine.TensorGather(input, bottomLeft, axis: 1),
-                Engine.TensorGather(input, topRight, axis: 1),
-                Engine.TensorGather(input, bottomRight, axis: 1)
+                Engine.TensorGather(input, corners.TopLeft, axis: 1),
+                Engine.TensorGather(input, corners.BottomLeft, axis: 1),
+                Engine.TensorGather(input, corners.TopRight, axis: 1),
+                Engine.TensorGather(input, corners.BottomRight, axis: 1)
             ],
             axis: 2);
 
@@ -209,6 +203,75 @@ public partial class SwinPatchMergingLayer<T> : LayerBase<T>, IShapeContract
         var output = Engine.Reshape(flatOut, [batch, newSeqLen, _outputDim]);
 
         return output;
+    }
+
+    // The gather indices of the last grid size. They depend only on the grid, so they are host tensors built once.
+    private readonly object _cornerLock = new object();
+    private CornerIndexSet? _corners;
+
+    private sealed class CornerIndexSet
+    {
+        public CornerIndexSet(int height, int width, Tensor<int> topLeft, Tensor<int> topRight, Tensor<int> bottomLeft,
+            Tensor<int> bottomRight)
+        {
+            Height = height;
+            Width = width;
+            TopLeft = topLeft;
+            TopRight = topRight;
+            BottomLeft = bottomLeft;
+            BottomRight = bottomRight;
+        }
+
+        public int Height { get; }
+        public int Width { get; }
+        public Tensor<int> TopLeft { get; }
+        public Tensor<int> TopRight { get; }
+        public Tensor<int> BottomLeft { get; }
+        public Tensor<int> BottomRight { get; }
+    }
+
+    /// <summary>
+    /// The token positions of the four corners of every 2 x 2 patch: <c>topLeft[i * newW + j] = (2i) * w + 2j</c>, and
+    /// the other three at offsets +1, +w and +w+1.
+    /// </summary>
+    /// <remarks>
+    /// Host tensors, not engine arithmetic on <c>Tensor&lt;int&gt;</c> inside the forward. A compiled training trace
+    /// records such arithmetic as integer nodes that the gather does not depend on, so the plan's first step gathered
+    /// through indices that had not been computed yet (all zero: every merged token was token 0) and only its replays
+    /// read the right ones. AiDotNet.Tensors' capture contract is that gather indices are computed before the graph
+    /// is recorded (<c>TensorIndexSelect</c> refuses indices "produced inside the same graph"); the Swin block's
+    /// window gathers already follow it.
+    /// </remarks>
+    private CornerIndexSet CornerIndices(int h, int w)
+    {
+        lock (_cornerLock)
+        {
+            if (_corners is { } cached && cached.Height == h && cached.Width == w)
+                return cached;
+
+            int newH = h / 2, newW = w / 2;
+            var topLeft = new int[newH * newW];
+            var topRight = new int[topLeft.Length];
+            var bottomLeft = new int[topLeft.Length];
+            var bottomRight = new int[topLeft.Length];
+            for (int i = 0; i < newH; i++)
+            {
+                for (int j = 0; j < newW; j++)
+                {
+                    int at = i * newW + j, corner = 2 * i * w + 2 * j;
+                    topLeft[at] = corner;
+                    topRight[at] = corner + 1;
+                    bottomLeft[at] = corner + w;
+                    bottomRight[at] = corner + w + 1;
+                }
+            }
+
+            var shape = new[] { topLeft.Length };
+            var built = new CornerIndexSet(h, w, new Tensor<int>(topLeft, shape), new Tensor<int>(topRight, shape),
+                new Tensor<int>(bottomLeft, shape), new Tensor<int>(bottomRight, shape));
+            _corners = built;
+            return built;
+        }
     }
 
     private static void FindSpatialDimensions(int seqLen, out int h, out int w)

@@ -38,18 +38,24 @@ public static class CompiledStepRandom<T>
 
         // onDevice: fill writes the tensor through an engine op, so its device copy becomes the value; bumping the
         // version as a host fill needs would mark that copy stale and re-upload the old host values.
-        internal static RecordedDraw Create<TData>(Tensor<TData> tensor, Action<Tensor<TData>> fill, bool onDevice = false)
+        // isDraw: the tensor came from DrawData, so a capture of this replay keeps it for an eager step of the same
+        // batch (a mask a layer registers itself is not a draw the eager forward asks this type for).
+        internal static RecordedDraw Create<TData>(Tensor<TData> tensor, Action<Tensor<TData>> fill, bool onDevice = false,
+            bool isDraw = false)
             => new(engine =>
             {
                 if (onDevice)
                 {
-                    using var suspension = AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording();
-                    fill(tensor);
-                    return;
+                    using (AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording())
+                        fill(tensor);
                 }
-                fill(tensor);
-                tensor.IncrementVersion();
-                engine.InvalidatePersistentTensor(tensor);
+                else
+                {
+                    fill(tensor);
+                    tensor.IncrementVersion();
+                    engine.InvalidatePersistentTensor(tensor);
+                }
+                if (isDraw) t_captured?.Add(tensor);
             });
 
         internal void Redraw(IEngine engine) => _redraw(engine);
@@ -106,8 +112,8 @@ public static class CompiledStepRandom<T>
     public static Tensor<T> Draw(int[] shape, Action<Tensor<T>> fill) => DrawData<T>(shape, fill);
 
     /// <summary>Records a typed data draw in this model's recorder without narrowing it to the model's element type.</summary>
-    /// <remarks>With <paramref name="onDevice"/>, <paramref name="fill"/> writes through an engine op (see
-    /// <see cref="RecordedDraw.Create{TData}"/>) and runs outside any graph recording.</remarks>
+    /// <remarks><paramref name="fill"/> always runs outside any graph recording. With <paramref name="onDevice"/> it
+    /// writes the tensor through an engine op (see <see cref="RecordedDraw.Create{TData}"/>).</remarks>
     internal static Tensor<TData> DrawData<TData>(int[] shape, Action<Tensor<TData>> fill, bool onDevice = false)
     {
         Guard.NotNull(shape);
@@ -120,17 +126,38 @@ public static class CompiledStepRandom<T>
         {
             previous.AsSpan().CopyTo(tensor.AsWritableSpan());
             t_replayIndex++;
+            DisarmWhenUsedUp(replay);
         }
-        else if (onDevice)
+        else
         {
+            // Draws left for this step by a declined plan that do not fit it (another forward got here first): draw
+            // normally from here on.
+            if (t_armedBy is { } armedBy && t_replay is { } unused && t_replayIndex < unused.Draws.Count)
+                DisarmReplay(armedBy);
+            // The fill computes this step's values, on the host or through engine ops; none of it belongs to the
+            // graph being traced. Left recording, a fill that builds its values with engine ops and copies them in
+            // (SpecAugment's stripe mask) put those ops in the plan and read their result back on the host inside
+            // the trace, which a closure objective's plan refuses as an unreplayable host read.
             using var suspension = AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording();
             fill(tensor);
         }
-        else
-            fill(tensor);
-        t_captured?.Draws.Add(tensor);
-        t_recording?.Add(RecordedDraw.Create(tensor, fill, onDevice));
+        t_captured?.Add(tensor);
+        t_recording?.Add(RecordedDraw.Create(tensor, fill, onDevice, isDraw: true));
         return tensor;
+    }
+
+    /// <summary>
+    /// Registers a tensor of any element type that <paramref name="fill"/> derives from this step's draws (indices
+    /// computed from a drawn offset), so every compiled replay refills it after the draws it reads. It consumes no
+    /// generator and is not itself a draw.
+    /// </summary>
+    internal static void RecordDerived<TData>(Tensor<TData> tensor, Action<Tensor<TData>> fill)
+    {
+        if (t_recording is null)
+            return;
+        Guard.NotNull(tensor);
+        Guard.NotNull(fill);
+        t_recording.Add(RecordedDraw.Create(tensor, fill));
     }
 
     /// <summary>
@@ -212,7 +239,11 @@ public static class CompiledStepRandom<T>
     {
         Guard.NotNull(advance);
         if (t_replay is { } replay && t_replayCounterIndex < replay.Counters.Count)
-            return replay.Counters[t_replayCounterIndex++];
+        {
+            ulong replayed = replay.Counters[t_replayCounterIndex++];
+            DisarmWhenUsedUp(replay);
+            return replayed;
+        }
         ulong value = advance();
         t_captured?.Counters.Add(value);
         return value;
@@ -247,6 +278,47 @@ public static class CompiledStepRandom<T>
     [ThreadStatic]
     private static int t_replayCounterIndex;
 
+    // Who left t_replay armed without a scope (ArmReplay); null when a ReplayScope owns it or nothing replays.
+    [ThreadStatic]
+    private static object? t_armedBy;
+
+    /// <summary>
+    /// Leaves <paramref name="captured"/> for the next training forward on this thread: the fused session's undo of a
+    /// declined step, whose batch the caller then steps on the eager tape. That step reuses the declined step's draws
+    /// and seed counters in order, so the generators are consumed once for the batch, as on a run that was eager from
+    /// the start. Disarmed when every entry has been used, when a draw does not fit, or by
+    /// <see cref="DisarmReplay"/>.
+    /// </summary>
+    internal static void ArmReplay(CaptureScope captured, object armedBy)
+    {
+        Guard.NotNull(captured);
+        Guard.NotNull(armedBy);
+        if (captured.Draws.Count == 0 && captured.Counters.Count == 0)
+            return;
+        t_replay = captured;
+        t_replayIndex = 0;
+        t_replayCounterIndex = 0;
+        t_armedBy = armedBy;
+    }
+
+    /// <summary>Drops what <see cref="ArmReplay"/> left, if <paramref name="armedBy"/> armed it.</summary>
+    internal static void DisarmReplay(object armedBy)
+    {
+        if (t_armedBy is null || !ReferenceEquals(t_armedBy, armedBy))
+            return;
+        t_armedBy = null;
+        t_replay = null;
+        t_replayIndex = 0;
+        t_replayCounterIndex = 0;
+    }
+
+    private static void DisarmWhenUsedUp(CaptureScope replay)
+    {
+        if (t_armedBy is not null && ReferenceEquals(t_replay, replay)
+            && t_replayIndex >= replay.Draws.Count && t_replayCounterIndex >= replay.Counters.Count)
+            DisarmReplay(t_armedBy);
+    }
+
     private static bool SameShape<TData>(Tensor<TData> tensor, int[] shape)
     {
         var own = tensor._shape;
@@ -277,15 +349,53 @@ public static class CompiledStepRandom<T>
         private readonly CaptureScope? _previous;
         private bool _disposed;
 
+        // One copier per draw, since Draws holds tensors of any element type.
+        private readonly List<Func<object>> _copiers = new List<Func<object>>();
+
         internal CaptureScope()
         {
             _previous = t_captured;
             t_captured = this;
         }
 
+        // A copy that captures nothing: see Detached.
+        private CaptureScope(bool detached)
+        {
+            _disposed = detached;
+        }
+
         internal List<object> Draws { get; } = new List<object>();
 
         internal List<ulong> Counters { get; } = new List<ulong>();
+
+        internal void Add<TData>(Tensor<TData> tensor)
+        {
+            Draws.Add(tensor);
+            _copiers.Add(() =>
+            {
+                var copy = new Tensor<TData>(tensor._shape);
+                tensor.AsSpan().CopyTo(copy.AsWritableSpan());
+                return copy;
+            });
+        }
+
+        /// <summary>
+        /// The values captured so far, copied: a plan refills its draws in place on the next replay, and a replay of
+        /// this capture must still hand back what this step took.
+        /// </summary>
+        internal CaptureScope Detached()
+        {
+            var copy = new CaptureScope(detached: true);
+            for (int i = 0; i < Draws.Count; i++)
+            {
+                var index = i;
+                var value = _copiers[i]();
+                copy.Draws.Add(value);
+                copy._copiers.Add(() => copy.Draws[index]);
+            }
+            copy.Counters.AddRange(Counters);
+            return copy;
+        }
 
         public void Dispose()
         {
@@ -306,6 +416,8 @@ public static class CompiledStepRandom<T>
         internal ReplayScope(CaptureScope captured)
         {
             Guard.NotNull(captured);
+            // Draws a declined step left armed are for a plain eager step; a scoped replay takes over from them.
+            if (t_armedBy is { } armedBy) DisarmReplay(armedBy);
             _previous = t_replay;
             _previousIndex = t_replayIndex;
             _previousCounterIndex = t_replayCounterIndex;

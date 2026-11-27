@@ -106,6 +106,8 @@ public class ActivationEngineParityTests
     [MemberData(nameof(ElementwiseActivations))]
     public async Task ElementwiseActivation_VectorJacobian_IsDiagonalOfScalarDerivative(ActivationFunctionBase<double> activation)
     {
+        await Task.Yield();
+
         var jacobian = activation.Derivative(new Vector<double>(Probe));
 
         var expected = new double[Probe.Length, Probe.Length];
@@ -121,6 +123,8 @@ public class ActivationEngineParityTests
     [MemberData(nameof(ElementwiseActivations))]
     public async Task ElementwiseActivation_TensorDerivative_MatchesScalarDerivative(ActivationFunctionBase<double> activation)
     {
+        await Task.Yield();
+
         var input = new Tensor<double>(new[] { 2, 7 }, new Vector<double>(Probe));
 
         var derivative = activation.Derivative(input);
@@ -132,6 +136,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task SignActivation_VectorAndTensor_MatchScalarBranches()
     {
+        await Task.Yield();
+
         var sign = new SignActivation<double>();
         var values = new[] { -2.5, -0.0, 0.0, 1e-300, 4.0, double.NaN, double.NegativeInfinity, double.PositiveInfinity };
         var expected = new[] { -1.0, 0.0, 0.0, 1.0, 1.0, 0.0, -1.0, 1.0 };
@@ -143,6 +149,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task SignActivation_Derivatives_AreZero()
     {
+        await Task.Yield();
+
         var sign = new SignActivation<double>();
 
         var jacobian = sign.Derivative(new Vector<double>(new[] { -1.0, 0.0, 2.0 }));
@@ -156,6 +164,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task BinarySpikingActivation_Vector_FiresAtAndAboveThreshold()
     {
+        await Task.Yield();
+
         var spiking = new BinarySpikingActivation<double>(1.0, 2.0, 0.5);
         var values = new[] { -1.0, 0.999999, 1.0, 1.000001, 3.0, double.NaN };
 
@@ -167,6 +177,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task BinarySpikingActivation_Tensor_ForwardIsBinaryAndGradientIsSigmoidSurrogate()
     {
+        await Task.Yield();
+
         const double threshold = 1.0;
         const double slope = 2.0;
         var spiking = new BinarySpikingActivation<double>(threshold, slope, 0.5);
@@ -251,6 +263,8 @@ public class ActivationEngineParityTests
     [InlineData("gumbel-2")]
     public async Task VectorJacobian_MatchesCentralFiniteDifferences(string key)
     {
+        await Task.Yield();
+
         var numerical = NumericalJacobian(x => Create(key).Activate(new Vector<double>(x)).ToArray(), SmoothPoint);
 
         var jacobian = Create(key).Derivative(new Vector<double>(SmoothPoint));
@@ -286,6 +300,8 @@ public class ActivationEngineParityTests
     [InlineData("gumbel-2")]
     public async Task VectorJacobian_AboveTheScalarLimit_MatchesCentralFiniteDifferences(string key)
     {
+        await Task.Yield();
+
         Assert.True(LongSmoothPoint.Min(Math.Abs) > 1e-3, "the point must stay clear of the kinks at zero");
         var numerical = NumericalJacobian(x => Create(key).Activate(new Vector<double>(x)).ToArray(), LongSmoothPoint);
 
@@ -297,6 +313,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task SoftminActivation_Jacobian_HasTheSignOfSoftmaxOfTheNegatedInput()
     {
+        await Task.Yield();
+
         // softmin(x) = softmax(-x): raising x[i] lowers its own share and raises every other one
         var input = new Vector<double>(new[] { 0.3, -1.1, 2.0, 0.0, 0.7 });
         var softmin = new SoftminActivation<double>();
@@ -320,6 +338,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task SoftmaxActivation_Jacobian_MatchesSoftmaxForm()
     {
+        await Task.Yield();
+
         var input = new Vector<double>(new[] { 0.3, -1.1, 2.0, 0.0, 0.7 });
         var softmax = new SoftmaxActivation<double>();
 
@@ -334,6 +354,8 @@ public class ActivationEngineParityTests
     [InlineData(6)]
     public async Task TaylorSoftmaxActivation_Jacobian_DifferentiatesThePolynomial(int order)
     {
+        await Task.Yield();
+
         // y[i] = f(x[i]) / Z, f = sum_{k<=order} x^k / k!, so dy[i]/dx[j] = (delta_ij - y[i]) f'(x[j]) / Z with
         // f' = sum_{k<order} x^k / k!
         double[] x = { 0.3, -1.1, 2.0, 0.5 };
@@ -367,6 +389,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task LogSoftmaxAndLogSoftmin_Jacobians_MatchDefinition()
     {
+        await Task.Yield();
+
         var values = new[] { 0.3, -1.1, 2.0, 0.0, 0.7 };
         var input = new Vector<double>(values);
         int n = values.Length;
@@ -406,6 +430,8 @@ public class ActivationEngineParityTests
     [InlineData(new[] { 1.5 })]
     public async Task SparsemaxActivation_Vector_MatchesSortedThresholdAlgorithm(double[] values)
     {
+        await Task.Yield();
+
         var sparsemax = new SparsemaxActivation<double>();
 
         // Martins & Astudillo (2016), Algorithm 1
@@ -433,6 +459,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task SparsemaxActivation_Jacobian_IsDiagOfSupportMinusSharedThreshold()
     {
+        await Task.Yield();
+
         // Martins and Astudillo (2016), eq. 11: J = diag(s) - s s^T / |S|, s the indicator of the support.
         // The Jacobian used to put -(output[j] / output[i]) off the diagonal and 1 on it, which is not the
         // derivative of max(0, z - tau(z)) (it is not even symmetric, and its rows do not sum to zero).
@@ -471,6 +499,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task SparsemaxActivation_Jacobian_OfASingleWinner_IsZero()
     {
+        await Task.Yield();
+
         // One coordinate far above the rest takes all the mass: the output is the constant one-hot vector
         // in a neighbourhood, so every derivative is 0 (the support has one member and 1 - 1/1 = 0)
         var sparsemax = new SparsemaxActivation<double>();
@@ -483,6 +513,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task SphericalSoftmaxActivation_Jacobian_IsTheChainRuleThroughTheNormalization()
     {
+        await Task.Yield();
+
         var spherical = new SphericalSoftmaxActivation<double>();
         var values = new[] { 0.3, -1.1, 2.0, 0.5 };
         var input = new Vector<double>(values);
@@ -552,9 +584,36 @@ public class ActivationEngineParityTests
         return jacobian;
     }
 
+    // The tensor overload runs Engine.TensorSquash, y = x r^2 / ((1 + r^2)(r + eps)) with eps = 1e-8, so its
+    // Jacobian is A I + B x x^T with A = r^2 / ((1 + r^2)(r + eps)) and
+    // B = (r + 2 eps - r^3) / ((1 + r^2)^2 (r + eps)^2), the derivative of that forward element by element.
+    private static double[,] StabilizedSquashJacobian(IReadOnlyList<double> x)
+    {
+        const double eps = 1e-8;
+        int n = x.Count;
+        double normSquared = x.Sum(v => v * v);
+        double norm = Math.Sqrt(normSquared);
+        double onePlus = 1.0 + normSquared;
+        double a = normSquared / (onePlus * (norm + eps));
+        double b = (norm + 2 * eps - normSquared * norm) / (onePlus * onePlus * (norm + eps) * (norm + eps));
+
+        var jacobian = new double[n, n];
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                jacobian[i, j] = (i == j ? a : 0.0) + b * x[i] * x[j];
+            }
+        }
+
+        return jacobian;
+    }
+
     [Fact(Timeout = 120000)]
     public async Task SquashActivation_VectorJacobian_MatchesElementDefinition()
     {
+        await Task.Yield();
+
         var squash = new SquashActivation<double>();
         var values = new[] { 0.3, -1.1, 2.0 };
 
@@ -564,6 +623,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task SquashActivation_TensorDerivative_StacksPerVectorJacobians()
     {
+        await Task.Yield();
+
         var squash = new SquashActivation<double>();
         var rows = new[]
         {
@@ -580,7 +641,7 @@ public class ActivationEngineParityTests
         var actual = derivative.ToArray();
         for (int r = 0; r < rows.Length; r++)
         {
-            var expected = SquashJacobian(rows[r]);
+            var expected = StabilizedSquashJacobian(rows[r]);
             for (int i = 0; i < 3; i++)
             {
                 for (int j = 0; j < 3; j++)
@@ -596,6 +657,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task MaxoutActivation_VectorAndJacobian_PickFirstLargestPiece()
     {
+        await Task.Yield();
+
         var maxout = new MaxoutActivation<double>(3);
         // group 0: unique maximum in the middle; group 1: tie between pieces 0 and 2; group 2: all equal
         var input = new Vector<double>(new[] { 0.1, 0.9, -0.4, 2.0, -1.0, 2.0, 0.5, 0.5, 0.5 });
@@ -616,6 +679,8 @@ public class ActivationEngineParityTests
     [InlineData(5)]
     public async Task TaylorSoftmaxActivation_Vector_MatchesTruncatedSeries(int order)
     {
+        await Task.Yield();
+
         var taylor = new TaylorSoftmaxActivation<double>(order);
         var values = new[] { 0.3, -0.4, 1.2, 0.0 };
 
@@ -648,6 +713,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task GumbelSoftmaxActivation_Vector_ConsumesTheGeneratorInElementOrder()
     {
+        await Task.Yield();
+
         const double temperature = 0.7;
         const int seed = 1234;
         var values = new[] { 0.3, -1.1, 2.0, 0.0, 0.7 };
@@ -668,6 +735,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task GumbelSoftmaxActivation_Tensor_ConsumesTheGeneratorInRowMajorOrder()
     {
+        await Task.Yield();
+
         const double temperature = 0.7;
         const int seed = 99;
         var rows = new[] { new[] { 0.3, -1.1, 2.0 }, new[] { 0.0, 0.7, -0.2 } };
@@ -694,6 +763,8 @@ public class ActivationEngineParityTests
     [InlineData(3.0)]
     public async Task GumbelSoftmaxActivation_VectorAndTensorOverloads_DrawTheSameSample(double temperature)
     {
+        await Task.Yield();
+
         const int seed = 23;
         var values = new[] { 0.3, -1.1, 2.0, 0.0, 0.9 };
 
@@ -707,6 +778,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task GumbelSoftmaxActivation_Jacobian_IsSoftmaxFormScaledByInverseTemperature()
     {
+        await Task.Yield();
+
         const double temperature = 0.5;
         const int seed = 7;
         var input = new Vector<double>(new[] { 0.3, -1.1, 2.0, 0.0 });
@@ -728,6 +801,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task SphericalSoftmaxActivation_Jacobian_AtTheZeroVector_IsFiniteAndUsesTheStabilisedNorm()
     {
+        await Task.Yield();
+
         // The norm is sqrt(||x||^2 + 1e-12), as in the forward pass, so at x = 0 it is 1e-6 and u = 0:
         // J = S (I - u u^T) / norm = S / 1e-6, with S the softmax Jacobian of the uniform output
         const int n = 4;
@@ -749,6 +824,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task GumbelSoftmaxActivation_Jacobian_BelongsToTheForwardPassBeforeIt()
     {
+        await Task.Yield();
+
         // Mutation: call Activate(input) inside Derivative again: it draws a second sample and the Jacobian no
         // longer matches the output that was returned.
         const double temperature = 0.5;
@@ -772,6 +849,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task GumbelSoftmaxActivation_RankZeroTensor_IsOneDrawAndDoesNotThrow()
     {
+        await Task.Yield();
+
         var scalar = new Tensor<double>(new[] { 0.7 }, Array.Empty<int>());
 
         var output = new GumbelSoftmaxActivation<double>(1.0, 5).Activate(scalar);
@@ -785,6 +864,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task SparsemaxActivation_Vector_AtLargeMagnitudes_StaysOnTheSimplex()
     {
+        await Task.Yield();
+
         // Mutation: drop the shift by the maximum: 1 + k z_(k) loses its 1 and the raw inputs come back.
         Assert.Equal(new[] { 1f, 0f, 0f },
             new SparsemaxActivation<float>().Activate(new Vector<float>(new[] { 2e7f, 1f, 0f })).ToArray());
@@ -797,6 +878,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task SparsemaxActivation_Vector_OrdinaryInput_IsUnchangedByTheShift()
     {
+        await Task.Yield();
+
         // [0.5, 1.5, 0.1]: sorted 1.5, 0.5, 0.1; support {1.5, 0.5}, tau = (2.0 - 1) / 2 = 0.5 -> [0, 1, 0]
         AssertValues(new[] { 0.0, 1.0, 0.0 },
             new SparsemaxActivation<double>().Activate(new Vector<double>(new[] { 0.5, 1.5, 0.1 })).ToArray(), Tolerance, "sparsemax");
@@ -809,6 +892,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task SparsemaxActivation_Vector_NaNInput_StaysNaN()
     {
+        await Task.Yield();
+
         // Mutation: drop NaNOrZero: the engine projection turns the NaN into 0.
         Assert.True(double.IsNaN(
             new SparsemaxActivation<double>().Activate(new Vector<double>(new[] { double.NaN, 1.0, 0.0 }))[0]));
@@ -819,6 +904,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task MaxoutActivation_Vector_PropagatesANaNInAnyPieceOfAGroup()
     {
+        await Task.Yield();
+
         // Mutation: return Activate(tensor).ToVector(): ReduceMax skips a NaN that is not the first piece.
         var later = new MaxoutActivation<double>(2).Activate(new Vector<double>(new[] { 1.0, double.NaN, 3.0, 2.0 }));
         Assert.True(double.IsNaN(later[0]));
@@ -841,6 +928,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task SphericalSoftmaxActivation_VectorForward_IsTheTensorForward_AndUniformAtZero()
     {
+        await Task.Yield();
+
         // Mutation: divide by the bare norm in Activate(Vector): the zero vector gives NaN while the Jacobian
         // above is the finite Jacobian of the stabilised function.
         var spherical = new SphericalSoftmaxActivation<double>();
@@ -865,6 +954,8 @@ public class ActivationEngineParityTests
     [MemberData(nameof(EveryVectorJacobianKey))]
     public async Task VectorJacobian_OfAnEmptyVector_IsAnEmptyMatrix(string key)
     {
+        await Task.Yield();
+
         // Mutation: remove an empty guard: TensorEye(0) / TensorTile throw.
         var jacobian = Create(key).Derivative(new Vector<double>(0));
 
@@ -911,6 +1002,8 @@ public class ActivationEngineParityTests
     public async Task ElementwiseActivation_TensorDerivative_AtNonFiniteAndTinyValues_MatchesScalarDerivative(
         ActivationFunctionBase<double> activation)
     {
+        await Task.Yield();
+
         // The same NaN / infinity pattern as the scalar definition, and the finite values within 1e-14.
         var derivative = activation.Derivative(new Tensor<double>(EdgeProbe, new[] { EdgeProbe.Length })).ToArray();
 
@@ -941,6 +1034,8 @@ public class ActivationEngineParityTests
     public async Task ElementwiseActivation_Float_TensorDerivativeAndJacobian_MatchScalarDerivativeWithinTheStatedBound(
         ActivationFunctionBase<float> activation)
     {
+        await Task.Yield();
+
         string name = activation.GetType().Name;
         var derivative = activation.Derivative(new Tensor<float>(FloatProbe, new[] { FloatProbe.Length })).ToArray();
         var jacobian = activation.Derivative(new Vector<float>(FloatProbe));
@@ -963,6 +1058,8 @@ public class ActivationEngineParityTests
     public async Task ElementwiseActivation_VectorJacobian_AboveTheScalarLimit_IsDiagonalOfScalarDerivative(
         ActivationFunctionBase<double> activation)
     {
+        await Task.Yield();
+
         var values = Enumerable.Range(0, 5).SelectMany(_ => Probe).ToArray();
         Assert.True(values.Length > 64);
 
@@ -982,6 +1079,8 @@ public class ActivationEngineParityTests
     public async Task ElementwiseActivation_Float_VectorJacobian_AboveTheScalarLimit_MatchesScalarDerivativeWithinTheStatedBound(
         ActivationFunctionBase<float> activation)
     {
+        await Task.Yield();
+
         var values = Enumerable.Range(0, 3).SelectMany(_ => FloatProbe).ToArray();
         Assert.True(values.Length > 64);
 
@@ -998,6 +1097,8 @@ public class ActivationEngineParityTests
     [Fact(Timeout = 120000)]
     public async Task SignActivation_Float_VectorAndTensor_MatchScalarBranches()
     {
+        await Task.Yield();
+
         var sign = new SignActivation<float>();
         float[] values = { -2f, -0.0f, 0f, 3f, float.NaN, float.PositiveInfinity, float.NegativeInfinity, float.Epsilon };
 

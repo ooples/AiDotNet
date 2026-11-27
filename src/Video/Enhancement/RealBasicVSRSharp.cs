@@ -44,14 +44,16 @@ namespace AiDotNet.Video.Enhancement;
 /// </remarks>
 /// <example>
 /// <code>
-/// var degradedClip = Tensor&lt;float&gt;.CreateRandom(15, 3, 64, 64);     // [frames, 3, H, W], pixel values 0-255
-/// var cleanClip = Tensor&lt;float&gt;.CreateRandom(15, 3, 256, 256);  // the same frames at 4x
+/// // 8 clips of 15 consecutive frames. The builder splits and shuffles whole clips (the first axis), so the
+/// // frames of a clip stay together and in order for the recurrent propagation.
+/// var degradedClips = Tensor&lt;float&gt;.CreateRandom(8, 15, 3, 64, 64).Multiply(255f);    // [clips, frames, 3, H, W], 0-255
+/// var cleanClips = Tensor&lt;float&gt;.CreateRandom(8, 15, 3, 256, 256).Multiply(255f); // placeholder: real training needs the same footage at 4x
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputType: InputType.FourDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression, inputFrames: 15, inputHeight: 64, inputWidth: 64, inputDepth: 3);
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
 ///     .ConfigureModel(new RealBasicVSRSharp&lt;float&gt;(arch, new RealBasicVSRSharpOptions()))
-///     .Build(degradedClip, cleanClip);
-/// var upscaled = result.Predict(degradedClip);   // [15, 3, 256, 256]
+///     .Build(degradedClips, cleanClips);
+/// var upscaled = result.Predict(degradedClips);   // RealBasicVSRSharp.Upscale on each clip: [8, 15, 3, 256, 256]
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

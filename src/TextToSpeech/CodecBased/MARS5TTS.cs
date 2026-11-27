@@ -34,7 +34,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 /// <example>
 /// <code>
-/// var referenceAudio = Tensor&lt;float&gt;.CreateRandom(1, 16000);
+/// var referenceAudio = Tensor&lt;float&gt;.CreateRandom(1, 3 * 24000);   // 3 s at 24 kHz
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var model = new MARS5TTS&lt;float&gt;(architecture, MARS5TTSOptions.FromCheckpoint("mars5_ar.safetensors"));
 /// model.LoadReferenceWeights(new Mars5Checkpoints { Autoregressive = "mars5_ar.safetensors", NonAutoregressive = "mars5_nar.safetensors",

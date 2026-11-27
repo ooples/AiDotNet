@@ -238,15 +238,7 @@ public partial class SeedVR<T> : VideoSuperResolutionBase<T>, ITrainingObjective
     private Random InferenceRandom() => RandomHelper.CreateSeededRandom(_options.Seed ?? 666);
 
     private Tensor<T> Gaussian(int[] shape, Random random)
-    {
-        var t = new Tensor<T>(shape);
-        for (int i = 0; i < t.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            t[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
-        }
-        return t;
-    }
+        => AiDotNet.Helpers.SeededNoiseTensors.StandardNormal<T>(shape, random);
 
     private Tensor<T> ToSigned(Tensor<T> x) => Engine.TensorAddScalar(Engine.TensorMultiplyScalar(x, NumOps.FromDouble(2.0)), NumOps.FromDouble(-1.0));
 

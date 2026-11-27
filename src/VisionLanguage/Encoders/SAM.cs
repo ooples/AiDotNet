@@ -40,11 +40,9 @@ namespace AiDotNet.VisionLanguage.Encoders;
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 256);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new SAM&lt;double&gt;(architecture, "sam.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new SAM&lt;double&gt;(architecture, new SAMOptions());
+/// var model = new SAM&lt;double&gt;(architecture, new SAMOptions());
+/// var image = Tensor&lt;double&gt;.CreateRandom(3, 1024, 1024);   // [3, H, W] RGB, the architecture's input size
+/// Tensor&lt;double&gt; embedding = model.EncodeImage(image);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

@@ -354,11 +354,7 @@ public partial class VocosGeneratorLayer<T> : LayerBase<T>, IShapeContract
             var squaredWindow = Engine.TensorMultiply(_window, _window);
             var frameSquares = Engine.Reshape(
                 Engine.TensorTile(Engine.Reshape(squaredWindow, [1, _nFft]), [frames, 1]), [frames * _nFft]);
-            var samplePositions = Engine.Reshape(
-                Engine.TensorAdd(
-                    Engine.Reshape(Engine.TensorArange<int>(0, frames * _hopLength, _hopLength), [frames, 1]),
-                    Engine.Reshape(Engine.TensorArange<int>(0, _nFft, 1), [1, _nFft])),
-                [frames * _nFft]);
+            var samplePositions = OverlapAddPositions(frames);
             var envelope = Engine.TensorScatterAdd(new Tensor<T>([paddedLength]), samplePositions, frameSquares, 0);
             var covered = Engine.TensorGreaterThan(envelope, NumOps.FromDouble(1e-8));
             inverseEnvelope = Engine.Reshape(
@@ -374,6 +370,52 @@ public partial class VocosGeneratorLayer<T> : LayerBase<T>, IShapeContract
             new[] { 0, 0, 0, samePadding },
             new[] { batch, 1, 1, waveformLength });
         return Engine.Reshape(trimmed, new[] { batch, waveformLength });
+    }
+
+    private readonly object _overlapAddLock = new object();
+    private OverlapAddIndex? _overlapAdd;
+
+    private sealed class OverlapAddIndex
+    {
+        public OverlapAddIndex(int frames, Tensor<int> positions)
+        {
+            Frames = frames;
+            Positions = positions;
+        }
+
+        public int Frames { get; }
+
+        public Tensor<int> Positions { get; }
+    }
+
+    /// <summary>
+    /// The sample each element of the <c>[frames, nFft]</c> window grid adds to, flattened: frame <c>f</c> covers
+    /// samples <c>f * hop .. f * hop + nFft - 1</c>. Built on the host, once per frame count.
+    /// </summary>
+    /// <remarks>
+    /// These were computed in the forward with engine arithmetic on <c>Tensor&lt;int&gt;</c>. A compiled training
+    /// trace records that arithmetic as integer nodes, and the recorded <c>TensorScatterAdd</c> captures its index
+    /// tensor without depending on them: on the plan's first step it scattered through indices that had not been
+    /// computed yet (all zero, so the whole squared window landed on sample 0 and the envelope normalized nothing
+    /// else), while every replay was right. AiDotNet.Tensors' capture contract is that such indices exist before the
+    /// graph is recorded.
+    /// </remarks>
+    private Tensor<int> OverlapAddPositions(int frames)
+    {
+        lock (_overlapAddLock)
+        {
+            if (_overlapAdd is { } cached && cached.Frames == frames)
+                return cached.Positions;
+            var positions = new int[frames * _nFft];
+            for (int frame = 0; frame < frames; frame++)
+            {
+                int first = frame * _hopLength, at = frame * _nFft;
+                for (int k = 0; k < _nFft; k++) positions[at + k] = first + k;
+            }
+            var built = new Tensor<int>(positions, new[] { frames * _nFft });
+            _overlapAdd = new OverlapAddIndex(frames, built);
+            return built;
+        }
     }
 
     /// <summary>

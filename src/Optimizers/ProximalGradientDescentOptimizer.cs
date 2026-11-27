@@ -830,8 +830,16 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
         float l1Strength = gpuL1 ? (float)_regularization.GetOptions().Strength : 0f;
 
         double learningRateValue = NumOps.ToDouble(CurrentLearningRate);
+        // One whole-parameter-list GPU step for every eligible parameter; the loop below skips the ones it
+        // updated and runs every other parameter (and all of them, when the list step declines) as before.
+        var gpuListUpdated = gpuL1
+            ? GpuListOptimizerStep<T>.TryApply(context, Engine, "TryProximalL1StepMultiTensor", 0,
+                p => Array.Empty<Tensor<T>>(),
+                (float)learningRateValue, l1Strength)
+            : null;
         foreach (var param in context.Parameters)
         {
+            if (gpuListUpdated is not null && gpuListUpdated.Contains(param)) continue;
             // True sparse scatter Proximal-L1: SGD step + L1 soft-threshold at touched
             // indices. Only used when the regularizer is L1 (otherwise the proximal
             // operator may need to inspect every element).

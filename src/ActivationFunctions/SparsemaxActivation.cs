@@ -101,8 +101,29 @@ public class SparsemaxActivation<T> : ActivationFunctionBase<T>
     /// records the op. The vector-level implementation is correct for inference but
     /// bypasses the tape entirely.
     /// </summary>
-    public override Tensor<T> Activate(Tensor<T> input) =>
-        Engine.Sparsemax(input, axis: -1);
+    /// <remarks>
+    /// Each slice is shifted by its own maximum first, as the vector overload does: sparsemax(z) = sparsemax(z - c),
+    /// and without the shift the support test 1 + k z_(k) &gt; sum z_(j) loses its 1 at large magnitudes (2e7 in
+    /// float), so no element entered the support and the raw logits came back. The maximum is taken off the tape:
+    /// every row of the sparsemax Jacobian sums to zero, so a shift common to a slice has no gradient, and the
+    /// engine's own Sparsemax backward stays the recorded operation.
+    /// </remarks>
+    public override Tensor<T> Activate(Tensor<T> input)
+    {
+        var engine = Engine;
+        if (input.Rank == 0 || input.Length == 0)
+        {
+            return engine.Sparsemax(input, axis: -1);
+        }
+
+        Tensor<T> maximum;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            maximum = engine.TensorBroadcastTo(engine.ReduceMax(input, new[] { -1 }, true), input.Shape.ToArray());
+        }
+
+        return engine.Sparsemax(engine.TensorSubtract(input, maximum), axis: -1);
+    }
 
     /// <summary>
     /// Calculates the Jacobian matrix of the Sparsemax function for a given input vector.

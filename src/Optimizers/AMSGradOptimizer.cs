@@ -389,8 +389,22 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         double learningRateValue = NumOps.ToDouble(CurrentLearningRate);
+        // One whole-parameter-list GPU step for every eligible parameter; the loop below skips the ones it
+        // updated and runs every other parameter (and all of them, when the list step declines) as before.
+        var (listLr, listEps) = KernelLearningRateAndEpsilon(learningRateValue, _tapeStep);
+        var gpuListUpdated = gpuAdam
+            ? GpuListOptimizerStep<T>.TryApply(context, Engine, "TryAmsgradStepMultiTensor", 3,
+                p => new[]
+                {
+                    GpuListOptimizerStep<T>.GetOrAddState(_tapeM, p, q => CreateOptimizerStateTensor(q._shape, gpuAdam)),
+                    GpuListOptimizerStep<T>.GetOrAddState(_tapeV, p, q => CreateOptimizerStateTensor(q._shape, gpuAdam)),
+                    GpuListOptimizerStep<T>.GetOrAddState(_tapeVHat, p, q => CreateOptimizerStateTensor(q._shape, gpuAdam))
+                },
+                listLr, (float)_options.Beta1, (float)_options.Beta2, listEps, 0f, _tapeStep)
+            : null;
         foreach (var param in context.Parameters)
         {
+            if (gpuListUpdated is not null && gpuListUpdated.Contains(param)) continue;
             // True sparse scatter AMSGrad: m + v + vMax + param at touched indices.
             // vMax updates only at touched (untouched vMax stays at previous max — consistent
             // with the sparse-history semantics for state buffers).

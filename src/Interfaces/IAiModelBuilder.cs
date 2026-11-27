@@ -1565,6 +1565,12 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureMemoryManagement(Training.Memory.TrainingMemoryConfig? configuration = null);
 
     /// <summary>
+    /// Configures activation gradient checkpointing using strongly-typed <see cref="GradientCheckpointingOptions"/>.
+    /// </summary>
+    /// <param name="options">Gradient checkpointing options; when <c>null</c>, enables checkpointing with automatic <c>sqrt(L)</c> segment sizing.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureGradientCheckpointing(GradientCheckpointingOptions? options = null);
+    /// <summary>
     /// Configures Float16/Int8 weight streaming so very large models can run without holding all weights in
     /// memory at once.
     /// </summary>
