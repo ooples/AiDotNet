@@ -132,6 +132,7 @@ public class SeededNoiseTensorsParityTests
     [InlineData((int)BoxMullerGuard.Complement, 0.25, 0.75)]
     [InlineData((int)BoxMullerGuard.FlooredComplement, 0.25, 0.75)]
     [InlineData((int)BoxMullerGuard.Floored, 0.25, 0.25)]
+    [InlineData((int)BoxMullerGuard.FlooredAtEpsilon, 0.25, 0.25)]
     public void Guard_DerivesTheFirstUniformAsNamed(int guardValue, double first, double expectedU1)
     {
         var guard = (BoxMullerGuard)guardValue;
@@ -152,6 +153,30 @@ public class SeededNoiseTensorsParityTests
         Assert.Equal(Math.Sqrt(-2.0 * Math.Log(1e-10)), draw);
     }
 
+    // TRPOAgent's floor: only an exact zero moves, and it moves to double.Epsilon, not to 1e-10, so the tail is kept.
+    [Fact]
+    public void FlooredAtEpsilon_KeepsAZeroUniformFinite_AtTheEpsilonTail()
+    {
+        double draw = SeededNoiseTensors.NextStandardNormal(new ScriptedRandom(0.0, 0.0), BoxMullerGuard.FlooredAtEpsilon);
+
+        Assert.Equal(Math.Sqrt(-2.0 * Math.Log(double.Epsilon)), draw);
+        Assert.True(draw > 38.0);
+    }
+
+    // The converted TRPO draw is the loop it replaced, value for value.
+    [Fact]
+    public void FlooredAtEpsilon_MatchesTheTrpoLoop()
+    {
+        var loopRandom = RandomHelper.CreateSeededRandom(Seed);
+        var helperRandom = RandomHelper.CreateSeededRandom(Seed);
+        for (int i = 0; i < 17; i++)
+        {
+            double loop = Math.Sqrt(-2.0 * Math.Log(Math.Max(loopRandom.NextDouble(), double.Epsilon)))
+                * Math.Cos(2.0 * Math.PI * loopRandom.NextDouble());
+            Assert.Equal(loop, SeededNoiseTensors.NextStandardNormal(helperRandom, BoxMullerGuard.FlooredAtEpsilon));
+        }
+    }
+
     [Fact]
     public void Complement_AtUniformZero_IsZero()
     {
@@ -163,6 +188,7 @@ public class SeededNoiseTensorsParityTests
     [InlineData((int)BoxMullerGuard.Complement)]
     [InlineData((int)BoxMullerGuard.FlooredComplement)]
     [InlineData((int)BoxMullerGuard.Floored)]
+    [InlineData((int)BoxMullerGuard.FlooredAtEpsilon)]
     public void Span_Vector_Tensor_And_Scalar_DrawTheSameSequence(int guardValue)
     {
         var guard = (BoxMullerGuard)guardValue;

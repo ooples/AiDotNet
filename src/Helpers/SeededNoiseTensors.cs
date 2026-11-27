@@ -6,7 +6,7 @@ namespace AiDotNet.Helpers;
 /// <remarks>
 /// <para><b>For Beginners:</b> the Box-Muller method turns two random numbers between 0 and 1 into a bell-curve
 /// random number, and it takes the logarithm of the first one. The logarithm of 0 is not a number, so the first
-/// value has to be nudged away from 0. Models do this in three slightly different ways; this setting names which
+/// value has to be nudged away from 0. Models do this in four slightly different ways; this setting names which
 /// one, so that a seeded model keeps producing exactly the same numbers.</para>
 /// </remarks>
 internal enum BoxMullerGuard
@@ -19,6 +19,10 @@ internal enum BoxMullerGuard
 
     /// <summary>Use <c>max(1e-10, u)</c>.</summary>
     Floored,
+
+    /// <summary>Use <c>max(u, double.Epsilon)</c>: only an exact zero moves, so the tail reaches about 38.6 sigma
+    /// instead of the 6.8 sigma a 1e-10 floor allows.</summary>
+    FlooredAtEpsilon,
 }
 
 /// <summary>
@@ -62,6 +66,7 @@ internal static class SeededNoiseTensors
             {
                 BoxMullerGuard.Complement => 1.0 - first,
                 BoxMullerGuard.FlooredComplement => Math.Max(1.0 - first, 1e-10),
+                BoxMullerGuard.FlooredAtEpsilon => Math.Max(first, double.Epsilon),
                 _ => Math.Max(1e-10, first),
             };
             double value = scale * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
@@ -84,6 +89,7 @@ internal static class SeededNoiseTensors
         {
             BoxMullerGuard.Complement => 1.0 - first,
             BoxMullerGuard.FlooredComplement => Math.Max(1.0 - first, 1e-10),
+            BoxMullerGuard.FlooredAtEpsilon => Math.Max(first, double.Epsilon),
             _ => Math.Max(1e-10, first),
         };
         return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
