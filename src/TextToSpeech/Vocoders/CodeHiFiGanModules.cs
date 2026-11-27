@@ -152,13 +152,9 @@ internal sealed class CodeHiFiGan<T>
 
     private static Tensor<T> Lookup(TiedEmbeddingLayer<T> table, IReadOnlyList<int> ids, int count, string name)
     {
-        var tensor = new Tensor<T>(new[] { ids.Count });
         for (int i = 0; i < ids.Count; i++)
-        {
             if (ids[i] < 0 || ids[i] >= count) throw new ArgumentOutOfRangeException(name, $"Ids lie in [0, {count}).");
-            tensor[i] = NumOps.FromDouble(ids[i]);
-        }
-        return table.Forward(tensor);                                                                             // [L, E]
+        return table.Forward(TtsIdTensors.From<T>(ids));                                                                             // [L, E]
     }
 
     /// <summary>

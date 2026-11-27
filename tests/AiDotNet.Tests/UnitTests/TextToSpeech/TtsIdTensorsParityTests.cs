@@ -72,4 +72,46 @@ public class TtsIdTensorsParityTests
         array[0] = 77;
         Assert.Equal(new[] { 5.0, 9.0, 2.0 }, tensor.ToArray());
     }
+
+    [Fact]
+    public void From_WithShape_FillsRowMajor_AndRejectsAMismatchedShape()
+    {
+        var ids = new[] { 4, 0, 16777217, -3, 9, 1 };
+
+        var row = TtsIdTensors.From<float>(ids, new[] { 1, 6 });
+        Assert.Equal(new[] { 1, 6 }, row.Shape.ToArray());
+        Assert.Equal(Reference<float>(ids).ToArray(), row.ToArray());
+
+        var grid = TtsIdTensors.From<double>(ids, new[] { 2, 3, 1 });
+        Assert.Equal(new[] { 2, 3, 1 }, grid.Shape.ToArray());
+        Assert.Equal(-3.0, grid[1, 0, 0]);
+
+        Assert.Equal(new[] { 1, 0 }, TtsIdTensors.From<double>(Array.Empty<int>(), new[] { 1, 0 }).Shape.ToArray());
+        Assert.Throws<ArgumentException>(() => TtsIdTensors.From<double>(ids, new[] { 4, 2 }));
+        Assert.Throws<ArgumentOutOfRangeException>(() => TtsIdTensors.From<double>(ids, new[] { -6, -1 }));
+    }
+
+    [Fact]
+    public void FromGrid_KeepsOrTransposesTheLayout_LikeTheElementLoops()
+    {
+        var codes = new[,] { { 1, 2, 3 }, { 40, 50, 16777219 } };   // [codebooks 2, frames 3]
+
+        var same = TtsIdTensors.FromGrid<float>(codes);
+        Assert.Equal(new[] { 2, 3 }, same.Shape.ToArray());
+        var transposed = TtsIdTensors.FromGrid<float>(codes, transpose: true);
+        Assert.Equal(new[] { 3, 2 }, transposed.Shape.ToArray());
+
+        var ops = MathHelper.GetNumericOperations<float>();
+        for (int r = 0; r < 2; r++)
+            for (int c = 0; c < 3; c++)
+            {
+                Assert.Equal(ops.FromDouble(codes[r, c]), same[r, c]);
+                Assert.Equal(ops.FromDouble(codes[r, c]), transposed[c, r]);
+            }
+
+        var row = TtsIdTensors.FromGridRow<double>(codes, 1);
+        Assert.Equal(new[] { 3 }, row.Shape.ToArray());
+        Assert.Equal(new[] { 40.0, 50.0, 16777219.0 }, row.ToArray());
+        Assert.Throws<ArgumentOutOfRangeException>(() => TtsIdTensors.FromGridRow<double>(codes, 2));
+    }
 }

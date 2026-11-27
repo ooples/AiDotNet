@@ -946,7 +946,7 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
     #region Random Sampling Utilities
 
     private void FillStandardNormal(Tensor<T> tensor)
-        => SyntheticTensorOps<T>.FillStandardNormal(tensor, _random);
+        => SeededNoiseTensors.FillStandardNormal(tensor, _random);
 
     private T SampleStandardNormal()
     {
@@ -957,7 +957,7 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
     }
 
     private Vector<T> CreateStandardNormalVector(int length)
-        => SyntheticTensorOps<T>.StandardNormalVector(length, _random);
+        => SeededNoiseTensors.StandardNormalVector<T>(length, _random);
 
     #endregion
 

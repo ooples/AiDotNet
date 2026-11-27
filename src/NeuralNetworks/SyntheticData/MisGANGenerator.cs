@@ -964,7 +964,7 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     /// Creates a standard normal random vector of the given size.
     /// </summary>
     private Vector<T> CreateStandardNormalVector(int size)
-        => SyntheticTensorOps<T>.StandardNormalVector(size, _random, BoxMullerGuard.Floored);
+        => SeededNoiseTensors.StandardNormalVector<T>(size, _random, guard: BoxMullerGuard.Floored);
 
     /// <summary>
     /// Creates a random binary mask vector where each element is 1 (observed) with probability (1 - missingRate).

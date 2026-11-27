@@ -17,11 +17,7 @@ public partial class Dia<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
-        var codes = FramesFirst(Codec.Encode(audio ?? throw new ArgumentNullException(nameof(audio))));
-        var tokens = new Tensor<T>(new[] { codes.GetLength(0), codes.GetLength(1) });
-        for (int f = 0; f < codes.GetLength(0); f++)
-            for (int k = 0; k < codes.GetLength(1); k++) tokens[f, k] = Ops.FromDouble(codes[f, k]);
-        return tokens;
+        return TtsIdTensors.FromGrid<T>(FramesFirst(Codec.Encode(audio ?? throw new ArgumentNullException(nameof(audio)))));
     }
 
     /// <inheritdoc />
