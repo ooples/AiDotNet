@@ -94,10 +94,13 @@ public class TaylorSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Vector<T> Activate(Vector<T> input)
     {
-        Vector<T> expValues = input.Transform(x => TaylorExp(x, _order));
-        T sum = expValues.Sum();
+        if (input.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
 
-        return expValues.Transform(x => NumOps.Divide(x, sum));
+        // Same Taylor polynomial and normalization as the tensor overload
+        return Activate(Tensor<T>.FromVector(input)).ToVector();
     }
 
     /// <summary>
@@ -110,22 +113,88 @@ public class TaylorSoftmaxActivation<T> : ActivationFunctionBase<T>
     {
         int lastAxis = input.Shape.Length - 1;
 
-        // Build 1 + x + x^2/2! + ... + x^order/order! iteratively, running a
-        // power tensor x^n and accumulating the factorial-weighted terms.
-        var result = Engine.TensorAddScalar(input, NumOps.One);       // 1 + x
-        Tensor<T> power = input;
-        double factorial = 1.0;
-        for (int n = 2; n <= _order; n++)
-        {
-            power = Engine.TensorMultiply(power, input);              // x^n
-            factorial *= n;
-            var term = Engine.TensorMultiplyScalar(power, NumOps.FromDouble(1.0 / factorial));
-            result = Engine.TensorAdd(result, term);
-        }
-
-        // Normalize along the last axis so outputs sum to 1.
+        var result = TaylorPolynomial(input, _order);
         var sum = Engine.ReduceSum(result, new[] { lastAxis }, keepDims: true);
         return Engine.TensorDivide(result, sum);
+    }
+
+    /// <summary>
+    /// The Taylor polynomial of the exponential, 1 + x + x^2/2! + ... + x^order/order!, element by element as
+    /// whole-tensor operations: each power is the previous one times x, scaled by 1/n!.
+    /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("host vector in, host matrix out: below the measured break-even length, and on a device engine at any "
+        + "length, the fixed cost of the engine operations exceeds the scalar arithmetic")]
+    private Matrix<T> ScalarJacobian(Vector<T> input)
+    {
+        int n = input.Length;
+        var x = input.AsSpan();
+        var value = new T[n];
+        var slope = new T[n];
+        T z = NumOps.Zero;
+        for (int i = 0; i < n; i++)
+        {
+            // f = sum_{k<=order} x^k / k!, f' = sum_{k<order} x^k / k!
+            T term = NumOps.One;
+            T f = NumOps.One;
+            T df = NumOps.Zero;
+            for (int k = 1; k <= _order; k++)
+            {
+                df = NumOps.Add(df, term);
+                term = NumOps.Divide(NumOps.Multiply(term, x[i]), NumOps.FromDouble(k));
+                f = NumOps.Add(f, term);
+            }
+
+            value[i] = f;
+            slope[i] = df;
+            z = NumOps.Add(z, f);
+        }
+
+        var jacobian = new Matrix<T>(n, n);
+        var cells = jacobian.AsWritableSpan();
+        for (int i = 0; i < n; i++)
+        {
+            T y = NumOps.Divide(value[i], z);
+            int row = i * n;
+            for (int j = 0; j < n; j++)
+            {
+                cells[row + j] = NumOps.Negate(NumOps.Multiply(y, NumOps.Divide(slope[j], z)));
+            }
+
+            T g = NumOps.Divide(slope[i], z);
+            cells[row + i] = NumOps.Subtract(g, NumOps.Multiply(y, g));
+        }
+
+        return jacobian;
+    }
+
+    private Tensor<T> TaylorPolynomial(Tensor<T> input, int order)
+    {
+        var result = order >= 1
+            ? Engine.TensorAddScalar(input, NumOps.One)               // 1 + x
+            : Engine.TensorOnesLike(input);                           // 1
+        if (order < 2)
+        {
+            return result;
+        }
+
+        // 1/2!, 1/3!, ... in the numeric type, converted once
+        var reciprocals = new double[order - 1];
+        double factorial = 1.0;
+        for (int n = 2; n <= order; n++)
+        {
+            factorial *= n;
+            reciprocals[n - 2] = 1.0 / factorial;
+        }
+
+        var scales = new Tensor<double>(reciprocals, new[] { reciprocals.Length }).Cast<T>().AsSpan();
+        Tensor<T> power = input;
+        for (int n = 2; n <= order; n++)
+        {
+            power = Engine.TensorMultiply(power, input);              // x^n
+            result = Engine.TensorAdd(result, Engine.TensorMultiplyScalar(power, scales[n - 2]));
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -152,62 +221,27 @@ public class TaylorSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
     {
-        Vector<T> output = Activate(input);
-        int d = input.Length;
-        Matrix<T> jacobian = new Matrix<T>(d, d);
-
-        for (int i = 0; i < d; i++)
+        if (input.Length == 0)
         {
-            for (int j = 0; j < d; j++)
-            {
-                if (i == j)
-                {
-                    jacobian[i, j] = NumOps.Multiply(output[i], NumOps.Subtract(NumOps.One, output[i]));
-                }
-                else
-                {
-                    jacobian[i, j] = NumOps.Multiply(NumOps.Negate(output[i]), output[j]);
-                }
-            }
+            return new Matrix<T>(0, 0);
         }
 
-        return jacobian;
-    }
-
-    /// <summary>
-    /// Approximates the exponential function e^x using a Taylor series expansion.
-    /// </summary>
-    /// <param name="x">The input value.</param>
-    /// <param name="order">The order of the Taylor series approximation.</param>
-    /// <returns>An approximation of e^x.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method approximates the exponential function (e^x) using a mathematical
-    /// technique called a Taylor series. Instead of calculating the exact value of e^x, which can be
-    /// computationally expensive, it uses a sum of simpler terms to get close to the right answer.
-    /// 
-    /// The formula used is: e^x ˜ 1 + x + x²/2! + x³/3! + ... + xn/n!
-    /// 
-    /// Where:
-    /// - x is the input value
-    /// - n is the order of approximation
-    /// - n! (factorial) means n × (n-1) × (n-2) × ... × 1
-    /// 
-    /// Higher orders give more accurate results but require more computation.
-    /// </para>
-    /// </remarks>
-    private T TaylorExp(T x, int order)
-    {
-        T result = NumOps.One;
-        T term = NumOps.One;
-
-        for (int n = 1; n <= order; n++)
+        // y[i] = f(x[i]) / Z with f the order-n polynomial and Z = sum f(x[k]), so
+        // dy[i]/dx[j] = (delta_ij - y[i]) * g[j] with g = f'(x) / Z and f' the order-(n-1) polynomial:
+        // J = diag(g) - y g^T. (The softmax form y[i] * (delta_ij - y[j]) needs f' = f, true only for exp.)
+        if (UseScalarJacobian(input.Length))
         {
-            term = NumOps.Divide(NumOps.Multiply(term, x), NumOps.FromDouble(n));
-            result = NumOps.Add(result, term);
+            return ScalarJacobian(input);
         }
 
-        return result;
+        var engine = Engine;
+        var x = Tensor<T>.FromVector(input);
+        var numerator = TaylorPolynomial(x, _order);
+        var slope = _order >= 1 ? TaylorPolynomial(x, _order - 1) : engine.TensorZerosLike(x);
+        T z = engine.TensorSum(numerator);
+        var y = engine.TensorDivideScalar(numerator, z);
+        var g = engine.TensorDivideScalar(slope, z);
+        return OuterWithDiagonal(engine.TensorNegate(y), g, engine.TensorSubtract(g, engine.TensorMultiply(y, g)));
     }
 
 }

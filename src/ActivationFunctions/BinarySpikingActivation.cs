@@ -141,12 +141,21 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Vector<T> Activate(Vector<T> input)
     {
-        Vector<T> output = new Vector<T>(input.Length);
-        for (int i = 0; i < input.Length; i++)
+        if (input.Length == 0)
         {
-            output[i] = Activate(input[i]);
+            return new Vector<T>(0);
         }
-        return output;
+
+        return Spikes(Tensor<T>.FromVector(input)).ToVector();
+    }
+
+    /// <summary>
+    /// The binary spike of every element: 1 where the element is at or above the threshold, 0 elsewhere.
+    /// </summary>
+    private Tensor<T> Spikes(Tensor<T> input)
+    {
+        var engine = Engine;
+        return engine.TensorGreaterEqual(input, engine.TensorFullLike(input, _threshold));
     }
 
     /// <summary>
@@ -204,18 +213,9 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
     {
-        // For element-wise functions, the Jacobian is diagonal
-        Matrix<T> jacobian = new Matrix<T>(input.Length, input.Length);
-
-        for (int i = 0; i < input.Length; i++)
-        {
-            // Set the diagonal elements to the derivative values
-            jacobian[i, i] = Derivative(input[i]);
-
-            // Off-diagonal elements remain zero as there's no cross-dependency
-        }
-
-        return jacobian;
+        // For element-wise functions, the Jacobian is diagonal; off-diagonal elements are zero as
+        // there's no cross-dependency
+        return ElementwiseJacobian(input);
     }
 
     /// <summary>
@@ -237,6 +237,12 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Activate(Tensor<T> input)
     {
+        if (input.Length == 0)
+        {
+            // Nothing to compute, and a zero-length device buffer cannot be created on the GPU engine.
+            return new Tensor<T>(input._shape);
+        }
+
         // Straight-through estimator (STE) per Neftci et al. 2019,
         // "Surrogate Gradient Learning in Spiking Neural Networks":
         //   * Forward value = Heaviside(input - threshold) — true binary spike.
@@ -260,24 +266,19 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
         var scaled = Engine.TensorMultiplyScalar(shifted, _derivativeSlope);
         var sigmoidValue = Engine.Sigmoid(scaled);  // tape-tracked
 
-        // Heaviside snapshot — detached from tape, plain Tensor<T>.
-        var heaviside = new Tensor<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-            heaviside[i] = NumOps.GreaterThanOrEquals(input[i], _threshold) ? NumOps.One : NumOps.Zero;
+        // correction = heaviside - sigmoidDetached, computed off the tape so neither the Heaviside
+        // snapshot nor the sigmoid snapshot carries a GradFn link back to `scaled` / `input`.
+        Tensor<T> correction;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var heaviside = Spikes(input);
+            var sigmoidDetached = Engine.StopGradient(sigmoidValue);
+            correction = Engine.TensorSubtract(heaviside, sigmoidDetached);
+        }
 
-        // Detached snapshot of sigmoidValue — copy the values out so the resulting
-        // tensor has no GradFn link back to `scaled` / `input`. The cheapest way to
-        // do this without engine support is to materialize a fresh Tensor<T> from
-        // the value buffer.
-        var sigmoidDetached = new Tensor<T>(input._shape);
-        for (int i = 0; i < sigmoidValue.Length; i++)
-            sigmoidDetached[i] = sigmoidValue[i];
-
-        // correction = heaviside - sigmoidDetached  (both detached → result detached)
         // output = sigmoidValue + correction        (sigmoidValue is tape-tracked)
         // Forward value collapses to: sigmoid + heaviside - sigmoid = heaviside  ✓
         // Backward gradient: only sigmoidValue contributes               → sigmoid' ✓
-        var correction = Engine.TensorSubtract(heaviside, sigmoidDetached);
         return Engine.TensorAdd(sigmoidValue, correction);
     }
 
@@ -300,15 +301,21 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
-        Tensor<T> derivatives = new Tensor<T>(input._shape);
-
-        // Calculate the derivative for each element in the tensor
-        for (int i = 0; i < input.Length; i++)
+        if (input.Length == 0)
         {
-            derivatives.SetFlatIndex(i, Derivative(input.GetFlatIndexValue(i)));
+            // Nothing to compute, and a zero-length device buffer cannot be created on the GPU engine.
+            return new Tensor<T>(input._shape);
         }
 
-        return derivatives;
+        // Triangular pulse around the threshold: slope * (1 - |x - threshold| / width) where
+        // |x - threshold| < width, 0 elsewhere.
+        var engine = Engine;
+        var distance = engine.TensorAbs(engine.TensorSubtractScalar(input, _threshold));
+        var normalizedDistance = engine.TensorDivideScalar(distance, _derivativeWidth);
+        var pulse = engine.TensorMultiplyScalar(
+            engine.TensorAddScalar(engine.TensorNegate(normalizedDistance), NumOps.One), _derivativeSlope);
+        return engine.TensorWhere(
+            engine.TensorLessThan(distance, _derivativeWidth), pulse, engine.TensorZerosLike(input));
     }
 
     /// <summary>
