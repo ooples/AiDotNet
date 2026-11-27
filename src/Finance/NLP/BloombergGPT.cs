@@ -261,7 +261,6 @@ public partial class BloombergGPT<T> : FinancialNLPModelBase<T>
     /// </remarks>
     protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
     {
-        SetTrainingMode(false);
         // FinancialModelBase dispatches prediction through ForecastNative rather than
         // NeuralNetworkBase.PredictCore, so BloombergGPT must enter the canonical eager
         // executor explicitly. Besides preserving the ordinary sequential loop, this

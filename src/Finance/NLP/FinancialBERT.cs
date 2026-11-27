@@ -225,7 +225,6 @@ public partial class FinancialBERT<T> : FinancialNLPModelBase<T>
     /// </remarks>
     protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
     {
-        SetTrainingMode(false);
         var current = input;
         foreach (var layer in Layers) current = layer.Forward(current);
         return current;

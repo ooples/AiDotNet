@@ -26764,3 +26764,6 @@ AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.CurrentTrueLabelBatch.
 AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.Strategy.get -> AiDotNet.Interfaces.IDistillationStrategy<T>!
 AiDotNet.Interfaces.LarsGpuConfig.Epsilon.get -> float
 AiDotNet.Interfaces.LarsGpuConfig.Epsilon.init -> void
+*REMOVED*override AiDotNet.Finance.NLP.FinBERT<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Finance.Base.FinancialModelBase<T>.ForecastChecked(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, double[]? quantiles) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Finance.NLP.FinBERT<T>.ForwardNativeForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
