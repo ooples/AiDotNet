@@ -46,6 +46,8 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 1, outputSize: 1);
 /// var model = new StyleTTS2&lt;double&gt;(architecture, new StyleTTS2Options());
+/// var reference = Tensor&lt;double&gt;.CreateRandom(1, 3 * model.SampleRate);   // stands in for 3 s of the target speaker
+/// model.Voice = model.CreateVoice(reference);
 /// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
 /// // Untrained native layers; the StyleTTS2(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>

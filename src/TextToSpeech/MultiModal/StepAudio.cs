@@ -34,9 +34,12 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 ///     inputSize: 512,
 ///     outputSize: 16000);
 ///
-/// var model = new StepAudio&lt;float&gt;(architecture, new StepAudioOptions());
+/// // Text-to-speech only: ChatLayers = 0 leaves out the 130B chat model, which Synthesize does not use.
+/// var model = new StepAudio&lt;float&gt;(architecture, new StepAudioOptions { ChatLayers = 0 });
 /// // Untrained native layers; the StepAudio(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 ///
+/// var prompt = Tensor&lt;float&gt;.CreateRandom(1, 3 * 16000);   // stands in for 3 s of the voice to speak in, 16 kHz
+/// model.SpeakerVoice = model.CreateSpeaker(prompt, 16000, "what the prompt says");
 /// // Synthesize speech with streaming support
 /// Tensor&lt;float&gt; audio = model.Synthesize("Hello from Step-Audio!");
 /// </code>
