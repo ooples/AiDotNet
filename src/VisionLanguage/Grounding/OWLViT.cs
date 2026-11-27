@@ -41,11 +41,9 @@ namespace AiDotNet.VisionLanguage.Grounding;
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new OWLViT&lt;double&gt;(architecture, "owlvit.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new OWLViT&lt;double&gt;(architecture, new OWLViTOptions());
+/// var model = new OWLViT&lt;double&gt;(architecture, new OWLViTOptions());
+/// var image = Tensor&lt;double&gt;.CreateRandom(3, 224, 224);   // [3, H, W] RGB, the architecture's input size
+/// Tensor&lt;double&gt; boxes = model.GroundText(image, "the dog on the left");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

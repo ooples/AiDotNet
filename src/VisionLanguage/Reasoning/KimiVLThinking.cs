@@ -38,11 +38,9 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new KimiVLThinking&lt;double&gt;(architecture, "kimivlthinking.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new KimiVLThinking&lt;double&gt;(architecture, new KimiVLThinkingOptions());
+/// var model = new KimiVLThinking&lt;double&gt;(architecture, new KimiVLThinkingOptions());
+/// var image = Tensor&lt;double&gt;.CreateRandom(3, 224, 224);   // [3, H, W] RGB, the architecture's input size
+/// Tensor&lt;double&gt; answer = model.ReasonWithChainOfThought(image, "How many apples are left if two are eaten?");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -82,6 +80,7 @@ public partial class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningV
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -106,6 +105,7 @@ public partial class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningV
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -159,12 +159,12 @@ public partial class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningV
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
 
-        // Fuse visual features with prompt tokens via ConcatenateTensors
+        // Embed the prompt tokens and append them to the visual token sequence
         Tensor<T> fusedInput;
         if (prompt is not null)
         {
             var promptTokens = TokenizeText(prompt);
-            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
+            fusedInput = FusePromptTokens(visualFeatures, promptTokens);
         }
         else
         {

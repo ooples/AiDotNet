@@ -37,11 +37,9 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new KimiVL&lt;double&gt;(architecture, "kimivl.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new KimiVL&lt;double&gt;(architecture, new KimiVLOptions());
+/// var model = new KimiVL&lt;double&gt;(architecture, new KimiVLOptions());
+/// var image = Tensor&lt;double&gt;.CreateRandom(3, 224, 224);   // [3, H, W] RGB, the architecture's input size
+/// Tensor&lt;double&gt; answer = model.ReasonWithChainOfThought(image, "How many apples are left if two are eaten?");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -81,6 +79,7 @@ public partial class KimiVL<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -111,6 +110,7 @@ public partial class KimiVL<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -163,12 +163,12 @@ public partial class KimiVL<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
 
-        // Fuse visual features with prompt tokens via ConcatenateTensors
+        // Embed the prompt tokens and append them to the visual token sequence
         Tensor<T> fusedInput;
         if (prompt is not null)
         {
             var promptTokens = TokenizeText(prompt);
-            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
+            fusedInput = FusePromptTokens(visualFeatures, promptTokens);
         }
         else
         {
@@ -301,8 +301,9 @@ public partial class KimiVL<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
                     Pick(stepDecay, step)));
         }
 
-        // Step 4: Final answer from reasoning chain
-        var chainInput = reasoningState;
+        // Step 4: the decoder reads one sequence: the visual tokens, the embedded question and the reasoning state as
+        // the final token (the decoder's attention needs a [tokens, DecoderDim] sequence, not a bare state vector).
+        var chainInput = AppendSequenceTokens(FusePromptTokens(visualFeatures, questionTokens), reasoningState);
 
         var output = chainInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)

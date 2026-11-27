@@ -191,6 +191,7 @@ public partial class SmartEdit<T> : LatentDiffusionModelBase<T>, IImageEditingVL
     /// <inheritdoc />
     protected override void RegisterComponents()
     {
+        base.RegisterComponents();
         RegisterParameterComponent(_unet);
         RegisterParameterComponent(_vae);
         foreach (var block in _bim)
