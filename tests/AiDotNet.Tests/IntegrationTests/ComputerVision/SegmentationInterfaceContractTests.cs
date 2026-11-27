@@ -216,6 +216,24 @@ public class SegmentationInterfaceContractTests : IDisposable
     }
 
     [Fact(Timeout = 120000)]
+    public async Task EfficientSAM_And_EdgeSAM_PromptsWithoutAnImage_Throw()
+    {
+        // No SetImage: a prompt has no image to segment, and must say so rather than segment a blank one.
+        var promptables = new IPromptableSegmentation<float>[]
+        {
+            new EfficientSAM<float>(Arch(), options: new EfficientSAMOptions { NumClasses = 1 }),
+            new EdgeSAM<float>(Arch(), options: new EdgeSAMOptions { NumClasses = 1 }),
+        };
+        foreach (var promptable in promptables)
+        {
+            Assert.Throws<InvalidOperationException>(() => promptable.SegmentFromPoints(Rand(1, 2), Rand(1)));
+            Assert.Throws<InvalidOperationException>(() => promptable.SegmentFromBox(Rand(4)));
+            Assert.Throws<InvalidOperationException>(() => promptable.SegmentFromMask(Rand(32, 32)));
+            Assert.Throws<InvalidOperationException>(() => promptable.SegmentEverything());
+        }
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task SegGPT_PromptableInterface_SetImageAndSegmentFromPoints()
     {
         var model = new SegGPT<float>(Arch(), options: new SegGPTOptions { NumClasses = 5, ModelSize = SegGPTModelSize.ViTLarge });

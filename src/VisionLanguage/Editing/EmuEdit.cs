@@ -195,6 +195,7 @@ public partial class EmuEdit<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<
     /// <inheritdoc />
     protected override void RegisterComponents()
     {
+        base.RegisterComponents();
         RegisterParameterComponent(_unet);
         RegisterParameterComponent(_vae);
         foreach (var block in _editHead)

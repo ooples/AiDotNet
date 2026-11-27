@@ -2062,7 +2062,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// attached <see cref="QkvTransform"/> may keep a projection it was handed for a later call, and a derived layer may
     /// keep more; only this exact type without those has been checked.
     /// </summary>
-    internal override bool KeepsResultsBetweenCalls =>
+    protected internal override bool KeepsResultsBetweenCalls =>
         GetType() != typeof(MultiHeadAttentionLayer<T>) || UseAuxiliaryLoss || _alibiLayer is not null || _ropeLayer is not null
         || QkvTransform is not null;
 

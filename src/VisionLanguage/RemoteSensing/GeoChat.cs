@@ -39,11 +39,9 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new GeoChat&lt;double&gt;(architecture, "geochat.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new GeoChat&lt;double&gt;(architecture, new GeoChatOptions());
+/// var model = new GeoChat&lt;double&gt;(architecture, new GeoChatOptions());
+/// var tile = Tensor&lt;double&gt;.CreateRandom(3, 224, 224);   // [3, H, W] RGB, the architecture's input size
+/// Tensor&lt;double&gt; answer = model.AnswerRemoteSensingQuestion(tile, "How many buildings are in this tile?");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -90,6 +88,7 @@ public partial class GeoChat<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -115,6 +114,7 @@ public partial class GeoChat<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -167,12 +167,12 @@ public partial class GeoChat<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
 
-        // Fuse visual features with prompt tokens via ConcatenateTensors
+        // Embed the prompt tokens and append them to the visual token sequence
         Tensor<T> fusedInput;
         if (prompt is not null)
         {
             var promptTokens = TokenizeText(prompt);
-            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
+            fusedInput = FusePromptTokens(visualFeatures, promptTokens);
         }
         else
         {
@@ -219,7 +219,8 @@ public partial class GeoChat<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<
     private void ComputeEncoderDecoderBoundary()
     {
         int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 3;
+        // PatchEmbedding + LayerNorm, the vision blocks, then the connector (Dense, Dense, LayerNorm).
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb + 3;
     }
 
     private Tensor<T> TokenizeText(string text)

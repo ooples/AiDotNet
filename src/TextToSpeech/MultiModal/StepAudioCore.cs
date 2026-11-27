@@ -346,9 +346,7 @@ internal sealed class StepAudioCore<T>
         var tokens = Codes(output);
         var promptTokens = Codes(speaker.PromptCode);
         int frames = speaker.PromptMel.Shape[0] + decoder.Flow.MelFrames(tokens.Length);
-        var noise = new Tensor<T>(new[] { 1, o.MelChannelCount, frames });
-        for (int i = 0; i < noise.Length; i++)
-            noise.SetFlat(i, Ops.FromDouble(Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble())));
+        var noise = SeededNoiseTensors.StandardNormal<T>(new[] { 1, o.MelChannelCount, frames }, random);
         var mel = decoder.Flow.Inference(tokens, promptTokens, speaker.PromptMel, speaker.Embedding, noise);
         var audio = decoder.Hift.Forward(mel, random);
         return _engine.Reshape(audio, new[] { audio.Length });

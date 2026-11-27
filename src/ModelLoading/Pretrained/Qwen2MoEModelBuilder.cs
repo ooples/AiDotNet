@@ -59,7 +59,9 @@ public static class Qwen2MoEModelBuilder<T>
                 headDimension: explicitHeadDim ? headDim : null, useProjectionBias: true, useCausalMask: true); // Qwen2 q/k/v biases
             attention.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, config.RopeTheta, maxPos);
 
-            var moe = new MoEFeedForwardLayer<T>(hidden, routedFfn, numExperts, topK, new SiLUActivation<T>(), sharedFfnDim: sharedFfn);
+            var moe = new MoEFeedForwardLayer<T>(hidden, routedFfn, numExperts, topK, new SiLUActivation<T>(), sharedFfnDim: sharedFfn,
+                // Qwen2MoeConfig's norm_topk_prob defaults to false (Qwen1.5-MoE-A2.7B, Qwen2-57B-A14B ship false).
+                normalizeTopK: config.NormTopKProb ?? false);
             var block = new MoEDecoderBlock<T>(hidden, attention, moe, config.RmsNormEps);
             blocks[i] = block;
             layers.Add(block);
@@ -73,7 +75,7 @@ public static class Qwen2MoEModelBuilder<T>
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.TextGeneration,
             complexity: NetworkComplexity.Simple, inputSize: 1, outputSize: vocab, layers: layers);
-        var network = new NeuralNetwork<T>(architecture);
+        var network = LlamaModelBuilder<T>.CreateImportNetwork(architecture);
 
         var warmup = new Tensor<T>(new[] { 1, warmupSequenceLength });
         for (int p = 0; p < warmupSequenceLength; p++) warmup[0, p] = NumOps.Zero;

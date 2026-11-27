@@ -217,13 +217,7 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
         // Position embeddings (computed from latent spatial size and patch size)
         var posEmbData = new T[_maxPatches * _hiddenSize];
-        for (int i = 0; i < posEmbData.Length; i++)
-        {
-            double u1 = 1.0 - RandomGenerator.NextDouble();
-            double u2 = RandomGenerator.NextDouble();
-            double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            posEmbData[i] = NumOps.FromDouble(normal * 0.02);
-        }
+        SeededNoiseTensors.WriteStandardNormal<T>(posEmbData, RandomGenerator, 0.02);
         _posEmbed = new Tensor<T>(new[] { 1, _maxPatches, _hiddenSize }, new Vector<T>(posEmbData));
     }
 

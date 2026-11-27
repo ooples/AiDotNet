@@ -225,16 +225,7 @@ public partial class NBEATSDetector<T> : AnomalyDetectorBase<T>
     {
         double scale = Math.Sqrt(2.0 / (rows + cols));
         var matrix = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                double u1 = 1.0 - _random.NextDouble();
-                double u2 = 1.0 - _random.NextDouble();
-                double val = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * scale;
-                matrix[i, j] = NumOps.FromDouble(val);
-            }
-        }
+        SeededNoiseTensors.WriteStandardNormal(matrix.AsWritableSpan(), _random, scale);
         return matrix;
     }
 

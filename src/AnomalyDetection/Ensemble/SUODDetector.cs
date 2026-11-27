@@ -210,17 +210,7 @@ public partial class SUODDetector<T> : AnomalyDetectorBase<T>
         var matrix = new Matrix<T>(originalDimensions, _nProjectedFeatures);
         double scale = 1.0 / Math.Sqrt(_nProjectedFeatures);
 
-        for (int i = 0; i < originalDimensions; i++)
-        {
-            for (int j = 0; j < _nProjectedFeatures; j++)
-            {
-                // Box-Muller transform for Gaussian random numbers
-                double u1 = 1.0 - _random.NextDouble();
-                double u2 = 1.0 - _random.NextDouble();
-                double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                matrix[i, j] = NumOps.FromDouble(z * scale);
-            }
-        }
+        SeededNoiseTensors.WriteStandardNormal(matrix.AsWritableSpan(), _random, scale);
 
         return matrix;
     }

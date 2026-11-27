@@ -22,11 +22,7 @@ internal static class EmaInit
     internal static LazyWeight<T> Normal<T>(int[] shape, double std) => new(shape, (tensor, random) =>
     {
         var ops = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            tensor[i] = ops.FromDouble(std * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
-        }
+        SeededNoiseTensors.FillStandardNormal(tensor, random, std);
     });
 }
 

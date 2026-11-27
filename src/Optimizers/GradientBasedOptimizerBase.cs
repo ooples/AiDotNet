@@ -110,6 +110,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     private const string TapeStateExtensionMarker = "AiDotNet.GradientTapeOptimizerState.v1";
     private const string SchedulerStateExtensionMarker = "AiDotNet.LearningRateSchedulerState.v1";
     private const string FusedPlanStateExtensionMarker = "AiDotNet.FusedPlanOptimizerState.v1";
+    private const string CounterStateExtensionMarker = "AiDotNet.OptimizerCounters.v1";
 
     /// <summary>
     /// The compiled training plan currently running this optimizer's update, when training takes the fused path.
@@ -159,7 +160,19 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// Records that the pending fused-plan state is now installed in a plan. Called only after the import
     /// succeeded, so a failed import leaves the state pending and the eager-path guard still refuses to restart.
     /// </summary>
-    internal void MarkPendingFusedOptimizerStateInstalled() => _pendingFusedPlanState = null;
+    internal void MarkPendingFusedOptimizerStateInstalled()
+    {
+        _pendingFusedPlanState = null;
+        if (!_eagerStateInstalledInPlan)
+            return;
+        // The plan now owns the moments it was given: drop the eager copy (and its step count), so the state has one
+        // owner and a later checkpoint carries it once.
+        _eagerStateInstalledInPlan = false;
+        ClearSerializedTapeState();
+        EnumerateOptimizerFields()
+            .FirstOrDefault(candidate => candidate.Name == "_tapeStep" && candidate.FieldType == typeof(int))
+            ?.SetValue(this, 0);
+    }
 
     /// <summary>
     /// Throws when this optimizer holds eager-path moments from a checkpoint that a fused plan would discard.
@@ -292,6 +305,15 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     private protected virtual bool ClipsGradientsInStepCore => false;
 
     /// <summary>
+    /// Called whenever the eager tape moment state is cleared or replaced (a checkpoint restore, a fused-to-eager
+    /// handoff, a reset), so an optimizer that caches the moment arrays for its steady-state fast path drops them
+    /// and the next step reads the new state.
+    /// </summary>
+    private protected virtual void InvalidateTapeStateFastPathCache()
+    {
+    }
+
+    /// <summary>
     /// True when the regularization goes on after the clip (<see cref="RegularizationOrder.ClipThenRegularize"/>,
     /// PyTorch's order), false when the clip covers it.
     /// </summary>
@@ -306,6 +328,38 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
     // Active step's pre-computed global squared norm while StepCore executes on _gradientsClippedAhead.
     private double? _activeStepClippedAheadNormSq;
+
+    // Pre-clip global squared norm ClipTapeGradientsAhead computed, handed to the Step that consumes its dictionary.
+    private double? _clippedAheadPreClipNormSq;
+
+    // Pre-clip global squared norm of the most recent tape Step's gradients, or null when that step computed none.
+    private double? _lastStepGradientNormSq;
+
+    /// <summary>
+    /// The global L2 norm of the most recent tape <see cref="Step(TapeStepContext{T})"/>'s gradients, before any
+    /// clipping, or null when that step did not compute one.
+    /// </summary>
+    /// <remarks>
+    /// This is the value the step's global-norm clip (or Adam's anomaly guard) already reduced to a host double, so
+    /// reading it costs nothing. With clipping by norm disabled no step computes it, unless
+    /// <see cref="ComputeGradientNormEveryStep"/> is set. A non-finite norm is reported as is.
+    /// </remarks>
+    internal double? LastStepGradientNorm =>
+        _lastStepGradientNormSq is double sq ? Math.Sqrt(sq) : null;
+
+    /// <summary>
+    /// When true, a tape step whose clipping options would not reduce the global gradient norm reduces it anyway so
+    /// <see cref="LastStepGradientNorm"/> is always set. That is one extra sum of squares per step and, for gradients
+    /// resident on a GPU, one device reduction plus a device-to-host read of its scalar. Off by default.
+    /// </summary>
+    internal bool ComputeGradientNormEveryStep { get; set; }
+
+    // Number of tape Steps run so far; lets a caller tell whether LastStepGradientNorm describes a recent step (a
+    // fused compiled plan updates the weights without calling Step).
+    private long _tapeStepCount;
+
+    /// <summary>The number of tape <see cref="Step(TapeStepContext{T})"/> calls this optimizer has run.</summary>
+    internal long TapeStepCount => Interlocked.Read(ref _tapeStepCount);
 
     /// <summary>
     /// Marks <paramref name="gradients"/> as already clipped for the upcoming <see cref="Step(TapeStepContext{T})"/>
@@ -357,6 +411,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         bool canReuseNormInStep = false)
     {
         _clippedAheadNormSq = null;
+        _clippedAheadPreClipNormSq = null;
+        TapeClipNormThreadCache.LastPreClipNormSq = null;
         // The clip scales the gradients in place; a layer that published one by reference keeps the unclipped values.
         if (GradientOptions.EnableGradientClipping)
             LayerBase<T>.SnapshotPublishedGradientsBeforeInPlaceWrite(gradients.Values);
@@ -372,6 +428,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             try
             {
                 ApplyTapeGlobalNormGradientClipping(context, GradientOptions.MaxGradientNorm);
+                _clippedAheadPreClipNormSq = TapeClipNormThreadCache.LastPreClipNormSq;
                 if (canReuseNormInStep)
                 {
                     _clippedAheadNormSq = TapeClipNormThreadCache.LastPostClipNormSq;
@@ -2586,14 +2643,26 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         _pendingFusedPlanState = output.ToArray();
     }
 
-    internal void MaterializePendingFusedOptimizerStateToEager(IReadOnlyList<Tensor<T>> canonicalParameters)
+    /// <summary>
+    /// Moves a restored fused-plan state (moments and step count) into this optimizer's eager tape state, so an eager
+    /// step continues the checkpointed trajectory instead of restarting the optimizer.
+    /// </summary>
+    /// <param name="planParameters">The parameter order of the plan that wrote the state (its canonical order).</param>
+    /// <param name="eagerParameters">The order the eager step indexes its state by; <c>null</c> when it is the same.</param>
+    /// <exception cref="InvalidOperationException">The state has no exact eager representation: moments stored in
+    /// reduced precision, a parameter whose update count differs from the optimizer step (the eager optimizer
+    /// bias-corrects every parameter with one step count), or a trained parameter the eager step does not have.</exception>
+    internal void MaterializePendingFusedOptimizerStateToEager(
+        IReadOnlyList<Tensor<T>> planParameters,
+        IReadOnlyList<Tensor<T>>? eagerParameters = null)
     {
-        if (_pendingFusedPlanState is not { Length: > 8 } || canonicalParameters is null)
+        if (_pendingFusedPlanState is not { Length: > 8 } || planParameters is null)
             return;
+        eagerParameters ??= planParameters;
 
-        var expectedLengths = new int[canonicalParameters.Count];
-        for (int i = 0; i < canonicalParameters.Count; i++)
-            expectedLengths[i] = canonicalParameters[i].Length;
+        var expectedLengths = new int[planParameters.Count];
+        for (int i = 0; i < planParameters.Count; i++)
+            expectedLengths[i] = planParameters[i].Length;
 
         using var input = new MemoryStream(_pendingFusedPlanState, writable: false);
         using var reader = new BinaryReader(input, System.Text.Encoding.UTF8, leaveOpen: true);
@@ -2609,8 +2678,47 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             hasVelocityIncludesLearningRate: version >= 5,
             hasEnrollmentMetadata: version >= FusedOptimizerStateVersion,
             expectedParameterLengths: expectedLengths);
-        if (checkpoint is null || checkpoint.Parameters.Length != canonicalParameters.Count)
+        if (checkpoint is null || checkpoint.Parameters.Length != planParameters.Count)
             return;
+
+        var eagerIndex = new Dictionary<Tensor<T>, int>(TensorReferenceComparer<Tensor<T>>.Instance);
+        for (int i = 0; i < eagerParameters.Count; i++)
+        {
+            if (eagerParameters[i] is { } parameter && !eagerIndex.ContainsKey(parameter))
+                eagerIndex[parameter] = i;
+        }
+
+        // Validate everything before changing any state, so a refusal leaves the fused state pending (and the eager
+        // step refusing) rather than half-moved.
+        var carried = new bool[planParameters.Count];
+        for (int p = 0; p < planParameters.Count; p++)
+        {
+            var state = checkpoint.Parameters[p];
+            if (state.MBFloat16 is not null || state.VBFloat16 is not null || state.MScales is not null || state.VScales is not null)
+            {
+                throw new InvalidOperationException(
+                    $"{GetType().Name} was restored from a compiled-plan checkpoint whose moments are stored in reduced " +
+                    "precision, but this step runs on the eager path, which keeps full-precision moments. Resume on the " +
+                    "compiled path, or restore from a checkpoint written with full-precision moments.");
+            }
+            if (state.AcceptedUpdates == 0)
+                continue;
+            if (state.AcceptedUpdates != checkpoint.OptimizerStep)
+            {
+                throw new InvalidOperationException(
+                    $"{GetType().Name} was restored from a compiled-plan checkpoint in which parameter {p} was updated " +
+                    $"{state.AcceptedUpdates} times but the optimizer took {checkpoint.OptimizerStep} steps. The eager path " +
+                    "bias-corrects every parameter with one step count, so it cannot continue this state exactly. Resume on " +
+                    "the compiled path.");
+            }
+            if (!eagerIndex.ContainsKey(planParameters[p]))
+            {
+                throw new InvalidOperationException(
+                    $"{GetType().Name} was restored from a compiled-plan checkpoint that trains parameter {p}, which the " +
+                    "eager step does not train, so its moments have nowhere to go. Resume on the compiled path.");
+            }
+            carried[p] = true;
+        }
 
         var stepField = EnumerateOptimizerFields()
             .FirstOrDefault(candidate => candidate.Name == "_tapeStep" && candidate.FieldType == typeof(int));
@@ -2624,56 +2732,168 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         FieldInfo? maxSecondMomentField = stateFields.FirstOrDefault(f =>
             f.Name is "_tapeVMax");
 
+        Dictionary<int, Tensor<T>> Moments(
+            Func<AiDotNet.Tensors.Engines.Compilation.FusedOptimizerParameterCheckpoint, float[]?> single,
+            Func<AiDotNet.Tensors.Engines.Compilation.FusedOptimizerParameterCheckpoint, double[]?> wide)
+        {
+            var map = new Dictionary<int, Tensor<T>>(planParameters.Count);
+            for (int p = 0; p < planParameters.Count; p++)
+            {
+                if (!carried[p]) continue;
+                var target = planParameters[p];
+                int index = eagerIndex[target];
+                var pCkpt = checkpoint.Parameters[p];
+                if (single(pCkpt) is { } f)
+                    map[index] = new Tensor<float>(target._shape, new Vector<float>((float[])f.Clone())).Cast<T>();
+                else if (wide(pCkpt) is { } d)
+                    map[index] = new Tensor<double>(target._shape, new Vector<double>((double[])d.Clone())).Cast<T>();
+            }
+            return map;
+        }
+
         lock (_tapeStateSync)
         {
-            if (firstMomentField is not null)
-            {
-                var mMap = new Dictionary<int, Tensor<T>>(canonicalParameters.Count);
-                for (int i = 0; i < canonicalParameters.Count; i++)
-                {
-                    var pCkpt = checkpoint.Parameters[i];
-                    if (pCkpt.MFloat is { } mf)
-                        mMap[i] = new Tensor<float>(canonicalParameters[i]._shape, new Vector<float>((float[])mf.Clone())).Cast<T>();
-                    else if (pCkpt.MDouble is { } md)
-                        mMap[i] = new Tensor<double>(canonicalParameters[i]._shape, new Vector<double>((double[])md.Clone())).Cast<T>();
-                }
-                if (mMap.Count > 0)
-                    _pendingTapeTensorStates[firstMomentField.Name] = mMap;
-            }
-
-            if (secondMomentField is not null)
-            {
-                var vMap = new Dictionary<int, Tensor<T>>(canonicalParameters.Count);
-                for (int i = 0; i < canonicalParameters.Count; i++)
-                {
-                    var pCkpt = checkpoint.Parameters[i];
-                    if (pCkpt.VFloat is { } vf)
-                        vMap[i] = new Tensor<float>(canonicalParameters[i]._shape, new Vector<float>((float[])vf.Clone())).Cast<T>();
-                    else if (pCkpt.VDouble is { } vd)
-                        vMap[i] = new Tensor<double>(canonicalParameters[i]._shape, new Vector<double>((double[])vd.Clone())).Cast<T>();
-                }
-                if (vMap.Count > 0)
-                    _pendingTapeTensorStates[secondMomentField.Name] = vMap;
-            }
-
-            if (maxSecondMomentField is not null)
-            {
-                var vmaxMap = new Dictionary<int, Tensor<T>>(canonicalParameters.Count);
-                for (int i = 0; i < canonicalParameters.Count; i++)
-                {
-                    var pCkpt = checkpoint.Parameters[i];
-                    if (pCkpt.VMaxFloat is { } vmf)
-                        vmaxMap[i] = new Tensor<float>(canonicalParameters[i]._shape, new Vector<float>((float[])vmf.Clone())).Cast<T>();
-                    else if (pCkpt.VMaxDouble is { } vmd)
-                        vmaxMap[i] = new Tensor<double>(canonicalParameters[i]._shape, new Vector<double>((double[])vmd.Clone())).Cast<T>();
-                }
-                if (vmaxMap.Count > 0)
-                    _pendingTapeTensorStates[maxSecondMomentField.Name] = vmaxMap;
-            }
+            if (firstMomentField is not null && Moments(s => s.MFloat, s => s.MDouble) is { Count: > 0 } mMap)
+                _pendingTapeTensorStates[firstMomentField.Name] = mMap;
+            if (secondMomentField is not null && Moments(s => s.VFloat, s => s.VDouble) is { Count: > 0 } vMap)
+                _pendingTapeTensorStates[secondMomentField.Name] = vMap;
+            if (maxSecondMomentField is not null && Moments(s => s.VMaxFloat, s => s.VMaxDouble) is { Count: > 0 } vmaxMap)
+                _pendingTapeTensorStates[maxSecondMomentField.Name] = vmaxMap;
         }
 
         _pendingFusedPlanState = null;
         _restoredEagerStateAwaitingEagerPath = true;
+    }
+
+    /// <summary>
+    /// Binds eager moments restored from a checkpoint (held by parameter index until a step names the parameters) to
+    /// <paramref name="eagerParameters"/>, the order the eager step indexes them by, without consuming them. A compiled
+    /// step calls this first so <see cref="TryInstallEagerStateIntoPlan"/> can find each parameter's moments.
+    /// </summary>
+    /// <summary>
+    /// True while eager moments restored from a checkpoint still wait for <see cref="BindPendingTapeState"/>: a caller
+    /// checks this before it builds the parameter list, so a step with nothing to bind skips that walk.
+    /// </summary>
+    internal bool HasPendingTapeState
+    {
+        get
+        {
+            lock (_tapeStateSync) return _pendingTapeTensorStates.Count > 0;
+        }
+    }
+
+    internal void BindPendingTapeState(IReadOnlyList<Tensor<T>> eagerParameters)
+    {
+        Guard.NotNull(eagerParameters);
+        lock (_tapeStateSync)
+        {
+            if (_pendingTapeTensorStates.Count == 0)
+                return;
+            RebuildTapeParameterIndex(eagerParameters);
+        }
+    }
+
+    /// <summary>Set when eager moments were installed into a plan; cleared (and the eager copy dropped) once that
+    /// plan's first step succeeded.</summary>
+    private bool _eagerStateInstalledInPlan;
+
+    /// <summary>
+    /// Installs this optimizer's eager state (step count and moments) into a freshly configured compiled plan, so the
+    /// plan continues the eager trajectory: an eager-written checkpoint resumed on the compiled path, or eager steps
+    /// that ran before the compiled path engaged. PyTorch keeps one optimizer state whichever way the step runs.
+    /// </summary>
+    /// <returns><c>false</c> when there is no eager state to carry.</returns>
+    /// <exception cref="InvalidOperationException">The eager state cannot be carried exactly.</exception>
+    internal bool TryInstallEagerStateIntoPlan(AiDotNet.Tensors.Engines.Compilation.CompiledTrainingPlan<T> plan)
+    {
+        Guard.NotNull(plan);
+        var stepField = EnumerateOptimizerFields()
+            .FirstOrDefault(candidate => candidate.Name == "_tapeStep" && candidate.FieldType == typeof(int));
+        int step = stepField?.GetValue(this) is int s ? s : 0;
+        var stateFields = EnumerateTapeTensorStateFields().ToList();
+
+        lock (_tapeStateSync)
+        {
+            bool anyLive = stateFields.Any(f => f.GetValue(this) is ConcurrentDictionary<Tensor<T>, Tensor<T>> { IsEmpty: false });
+            // A restored field with no entries (e.g. an unused AMSGrad max) leaves an empty pending map behind.
+            bool anyUnbound = _pendingTapeTensorStates.Values.Any(entries => entries.Count > 0);
+            if (step == 0 && !anyLive && !anyUnbound)
+                return false;
+
+            string Refusal(string why) =>
+                $"{GetType().Name} holds eager optimizer state (step {step}) that the compiled plan cannot continue exactly: " +
+                why + ". Continuing would silently restart the optimizer. Train on the eager path instead.";
+
+            if (anyUnbound)
+                throw new InvalidOperationException(Refusal("its restored moments are not bound to this model's parameters"));
+            foreach (var field in stateFields)
+            {
+                if (TransientTapeTensorStates(field.Name).Any())
+                    throw new InvalidOperationException(Refusal($"its '{field.Name}' state is held in a compressed form"));
+            }
+
+            FieldInfo? first = stateFields.FirstOrDefault(f => f.Name is "_tapeM" or "_tapeVelocity" or "_tapeMomentum");
+            FieldInfo? second = stateFields.FirstOrDefault(f => f.Name is "_tapeV" or "_tapeMeanSquare" or "_tapeSquaredGrad");
+            FieldInfo? max = stateFields.FirstOrDefault(f => f.Name is "_tapeVMax");
+            foreach (var field in stateFields)
+            {
+                if (field != first && field != second && field != max
+                    && field.GetValue(this) is ConcurrentDictionary<Tensor<T>, Tensor<T>> { IsEmpty: false })
+                    throw new InvalidOperationException(Refusal($"its '{field.Name}' state has no compiled-plan counterpart"));
+            }
+
+            var checkpoint = plan.CaptureFusedOptimizerCheckpoint()
+                ?? throw new InvalidOperationException(Refusal("the plan has no configured optimizer"));
+            if (checkpoint.MomentStorageMode != AiDotNet.Tensors.Engines.Compilation.FusedMomentStorageMode.Float32)
+                throw new InvalidOperationException(Refusal($"the plan stores its moments as {checkpoint.MomentStorageMode}"));
+
+            ConcurrentDictionary<Tensor<T>, Tensor<T>>? Live(FieldInfo? field)
+                => field?.GetValue(this) as ConcurrentDictionary<Tensor<T>, Tensor<T>>;
+            var m = Live(first);
+            var v = Live(second);
+            var vmax = Live(max);
+            var parameters = plan.Parameters;
+            var planSet = new HashSet<Tensor<T>>(parameters, TensorReferenceComparer<Tensor<T>>.Instance);
+            foreach (var live in new[] { m, v, vmax })
+            {
+                if (live is not null && live.Keys.Any(parameter => !planSet.Contains(parameter)))
+                    throw new InvalidOperationException(Refusal("it holds moments for a parameter the plan does not train"));
+            }
+
+            bool isFloat = typeof(T) == typeof(float);
+            if (!isFloat && typeof(T) != typeof(double))
+                throw new InvalidOperationException(Refusal($"the numeric type {typeof(T).Name} has no plan moment layout"));
+
+            checkpoint.OptimizerStep = step;
+            for (int p = 0; p < parameters.Length; p++)
+            {
+                var state = checkpoint.Parameters[p];
+                // The eager optimizer bias-corrects every parameter with its one step count.
+                state.AcceptedUpdates = step;
+                var parameter = parameters[p];
+                if (m is not null && m.TryGetValue(parameter, out var mp))
+                {
+                    if (isFloat) state.MFloat = (float[])(object)mp.AsSpan().ToArray();
+                    else state.MDouble = (double[])(object)mp.AsSpan().ToArray();
+                }
+                if (v is not null && v.TryGetValue(parameter, out var vp))
+                {
+                    if (isFloat) state.VFloat = (float[])(object)vp.AsSpan().ToArray();
+                    else state.VDouble = (double[])(object)vp.AsSpan().ToArray();
+                }
+                if (vmax is not null && vmax.TryGetValue(parameter, out var vmp))
+                {
+                    if (isFloat) state.VMaxFloat = (float[])(object)vmp.AsSpan().ToArray();
+                    else state.VMaxDouble = (double[])(object)vmp.AsSpan().ToArray();
+                }
+            }
+
+            plan.RestoreFusedOptimizerCheckpoint(checkpoint, plan.LearningRateSchedules.ToArray());
+        }
+
+        _eagerStateInstalledInPlan = true;
+        _restoredEagerStateAwaitingEagerPath = false;
+        return true;
     }
 
     /// <summary>
@@ -3038,18 +3258,26 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             // part of the active model (e.g. after a parameter set is replaced, or an optimizer is reused
             // across models without a full Reset) would linger as stale references and could be serialized
             // as state for parameters that no longer exist.
-            _tapeParameterIndices.Clear();
-            for (int parameterIndex = 0; parameterIndex < count; parameterIndex++)
-            {
-                var parameter = parameters[parameterIndex];
-                if (parameter is null) continue;
-
-                _tapeParameterIndices[parameter] = parameterIndex;
-                RestorePendingTapeTensorStates(parameterIndex, parameter);
-            }
-            _tapeIndexedParameterCount = count;
-            _tapeIndexedParametersRef = parameters;
+            RebuildTapeParameterIndex(parameters);
         }
+    }
+
+    /// <summary>Indexes <paramref name="parameters"/> by position and binds pending restored state to them. Caller
+    /// holds <c>_tapeStateSync</c>.</summary>
+    private void RebuildTapeParameterIndex(IReadOnlyList<Tensor<T>> parameters)
+    {
+        int count = parameters.Count;
+        _tapeParameterIndices.Clear();
+        for (int parameterIndex = 0; parameterIndex < count; parameterIndex++)
+        {
+            var parameter = parameters[parameterIndex];
+            if (parameter is null) continue;
+
+            _tapeParameterIndices[parameter] = parameterIndex;
+            RestorePendingTapeTensorStates(parameterIndex, parameter);
+        }
+        _tapeIndexedParameterCount = count;
+        _tapeIndexedParametersRef = parameters;
     }
 
     /// <summary>
@@ -3342,8 +3570,11 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         bool matchedClippedAhead = _gradientsClippedAhead is not null && ReferenceEquals(_gradientsClippedAhead, context.Gradients);
         GradientsClippedAhead = matchedClippedAhead;
         _activeStepClippedAheadNormSq = matchedClippedAhead ? _clippedAheadNormSq : null;
+        TapeClipNormThreadCache.LastPreClipNormSq = matchedClippedAhead ? _clippedAheadPreClipNormSq : null;
         _gradientsClippedAhead = null;
         _clippedAheadNormSq = null;
+        _clippedAheadPreClipNormSq = null;
+        _lastStepGradientNormSq = null;
         context = WithSparseLeavesAsValueViews(context);
         var learningRateGroups = CaptureLearningRateGroups(context);
         _stepNoGrad = new NoGradScope<T>();
@@ -3357,6 +3588,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             // keeps the unclipped values first.
             if (!GradientsClippedAhead && GradientOptions.EnableGradientClipping)
                 LayerBase<T>.SnapshotPublishedGradientsBeforeInPlaceWrite(context.Gradients.Values);
+            // Opt-in monitoring: reduce the norm now, before a by-value clip changes the gradients, when no clip by
+            // norm will reduce it during the step.
+            if (ComputeGradientNormEveryStep && !GradientsClippedAhead && !(TapeStepGradientClipNorm > 0.0))
+                TapeClipNormThreadCache.LastPreClipNormSq = MonitoringGlobalGradientSquaredNorm(context);
             if (!ClipsGradientsInStepCore && !GradientsClippedAhead) ApplyConfiguredTapeGradientClipping(context);
             StepCore(context);
             ApplyLearningRateGroups(learningRateGroups);
@@ -3364,6 +3599,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         }
         finally
         {
+            _lastStepGradientNormSq = TapeClipNormThreadCache.LastPreClipNormSq;
+            TapeClipNormThreadCache.LastPreClipNormSq = null;
+            Interlocked.Increment(ref _tapeStepCount);
             GradientsClippedAhead = false;
             _activeStepClippedAheadNormSq = null;
             _stepNoGrad?.Dispose();
@@ -3557,6 +3795,12 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             writer.Write(fusedState.Length);
             writer.Write(fusedState);
         }
+
+        // The batch and epoch counters (CurrentStep / CurrentEpoch). Without them a restored optimizer reported step 0
+        // while its scheduler, moments and the data cursor were at the checkpoint's step.
+        writer.Write(CounterStateExtensionMarker);
+        writer.Write(_currentStep);
+        writer.Write(_currentEpoch);
     }
 
     /// <inheritdoc />
@@ -3604,7 +3848,37 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         public PreparedScheduler? Scheduler;
         public SchedulerStepMode? StepMode;
         public byte[]? FusedPlanState;
+        public (int Step, int Epoch)? Counters;
         public bool RestoredEagerMoments;
+    }
+
+    /// <summary>
+    /// Reads the next length-prefixed string and consumes it only when it equals <paramref name="marker"/>; otherwise
+    /// (a different marker, too few bytes for one, or no bytes left) the stream position is restored and false returned.
+    /// </summary>
+    private static bool TryConsumeMarker(BinaryReader reader, string marker)
+    {
+        var stream = reader.BaseStream;
+        if (!stream.CanSeek || stream.Position >= stream.Length)
+        {
+            return false;
+        }
+
+        long start = stream.Position;
+        try
+        {
+            if (string.Equals(reader.ReadString(), marker, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+        catch (Exception ex) when (ex is System.IO.EndOfStreamException or System.IO.IOException or FormatException)
+        {
+            // Not a complete string: not our section.
+        }
+
+        stream.Position = start;
+        return false;
     }
 
     private ParsedExtensionPayload ParseExtensionPayload(BinaryReader reader)
@@ -3703,6 +3977,21 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             }
         }
 
+        // Checkpoints written before the counter section carry no counters. Their base payload ends here, but a derived
+        // optimizer's own extension (e.g. AdamW's "AdamWMomentFormat" header) may follow, so "bytes remain" does not
+        // mean a counter section follows: peek the marker and rewind when it is not ours.
+        if (TryConsumeMarker(reader, CounterStateExtensionMarker))
+        {
+            int step = reader.ReadInt32();
+            int epoch = reader.ReadInt32();
+            if (step < 0 || epoch < 0)
+            {
+                throw new InvalidOperationException(
+                    $"Optimizer checkpoint has negative counters (step {step}, epoch {epoch}).");
+            }
+            parsed.Counters = (step, epoch);
+        }
+
         return parsed;
     }
 
@@ -3746,6 +4035,12 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         _pendingFusedPlanState = parsed.FusedPlanState;
 
         _restoredEagerStateAwaitingEagerPath = parsed.RestoredEagerMoments && _pendingFusedPlanState is null;
+
+        if (parsed.Counters is { } counters)
+        {
+            _currentStep = counters.Step;
+            _currentEpoch = counters.Epoch;
+        }
     }
     /// <summary>
     /// A scheduler restored from a checkpoint but not yet installed. A built-in scheduler is fully rebuilt with its
@@ -4232,6 +4527,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             if (field.GetValue(this) is ConcurrentDictionary<Tensor<T>, Tensor<T>> activeState)
             {
                 activeState[parameter] = restoredState;
+                InvalidateTapeStateFastPathCache();
             }
 
             pendingEntries.Remove(parameterIndex);
@@ -4260,6 +4556,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             }
         }
 
+        InvalidateTapeStateFastPathCache();
         DisposeCachedGpuGradBuffers();
     }
 
@@ -4387,6 +4684,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             if (deviceNorm is not null && deviceNorm.IsFinite)
             {
                 double devSq = deviceNorm.TotalNormSquared;
+                TapeClipNormThreadCache.LastPreClipNormSq = devSq;
                 double devNorm = Math.Sqrt(devSq);
                 if (devNorm > maxNorm && devNorm > 0.0)
                 {
@@ -4417,6 +4715,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 globalNormSq += v * v;
             }
         }
+        TapeClipNormThreadCache.LastPreClipNormSq = globalNormSq;
         if (double.IsNaN(globalNormSq) || double.IsInfinity(globalNormSq))
         {
             TapeClipNormThreadCache.LastPostClipNormSq = globalNormSq;
@@ -4705,6 +5004,101 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         foreach (var grad in grads)
             engine.TensorCopy(engine.TensorClamp(grad, lo, hi), grad);   // in place: callers hold the tensor
+    }
+
+    /// <summary>
+    /// The global squared gradient norm for <see cref="ComputeGradientNormEveryStep"/>: summed in double on the host
+    /// for host-current gradients, and by one device sum of squares (whose scalar is read back) for gradients still
+    /// pending on a GPU.
+    /// </summary>
+    private static double MonitoringGlobalGradientSquaredNorm(TapeStepContext<T> context)
+        => MonitoringDenseGradientSquaredNorm(context) + MonitoringSparseEmbeddingSquaredNorm(context);
+
+    /// <summary>
+    /// The squared norm of the sparse embedding gradients the step has not densified (the second gradient form the
+    /// clip also covers, see <see cref="ClippableGradients"/>), without changing the gradients the optimizer receives.
+    /// Rows that occur once contribute their value rows; a parameter whose rows repeat is coalesced (summed per row)
+    /// on a local dense copy before squaring, since its gradient row is the sum of its contributions.
+    /// </summary>
+    private static double MonitoringSparseEmbeddingSquaredNorm(TapeStepContext<T> context)
+    {
+        double sum = 0.0;
+        foreach (var param in context.Parameters)
+        {
+            // A parameter with a dense gradient already counts it there (the dense entry takes priority).
+            if (!SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param)) continue;
+            var sparse = DifferentiableOps.GetSparseEmbeddingGradsFor(param);
+            if (sparse is null || sparse.Count == 0) continue;
+            if (SparseEmbeddingOptimizerHelpers.HasDuplicateRows(sparse))
+            {
+                var engine = AiDotNetEngine.Current;
+                var coalesced = sparse[0].ToDense(engine);
+                for (int i = 1; i < sparse.Count; i++)
+                    coalesced = engine.TensorAdd(coalesced, sparse[i].ToDense(engine));
+                sum += SparseEmbeddingOptimizerHelpers.SumOfSquares(coalesced);
+                continue;
+            }
+
+            foreach (var contribution in sparse)
+                if (contribution.NumIndices > 0 && contribution.Values is { Length: > 0 } values)
+                    sum += SparseEmbeddingOptimizerHelpers.SumOfSquares(values);
+        }
+        return sum;
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("Opt-in monitoring norm: host fallback for gradients the SIMD sum of squares does not cover")]
+    private static double MonitoringDenseGradientSquaredNorm(TapeStepContext<T> context)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        double sum = 0.0;
+        bool devicePending = false;
+        foreach (var kvp in context.Gradients)
+        {
+            var grad = kvp.Value;
+            if (grad is null || grad.Length == 0) continue;
+            if (grad.HasPendingGpuData)
+            {
+                devicePending = true;
+                continue;
+            }
+            sum += HostSumOfSquares(grad, numOps);
+        }
+
+        if (!devicePending) return sum;
+
+        if (typeof(T) == typeof(float) && AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine)
+        {
+            var deviceGrads = new List<Tensor<float>>();
+            foreach (var kvp in context.Gradients)
+                if (kvp.Value is { Length: > 0, HasPendingGpuData: true } pending) deviceGrads.Add((Tensor<float>)(object)pending);
+            using var deviceSum = AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryGradientSumOfSquares(deviceGrads);
+            if (deviceSum is not null)
+                return deviceSum.IsFinite ? sum + deviceSum.TotalNormSquared
+                    : deviceSum.NanCount > 0 ? double.NaN : double.PositiveInfinity;
+        }
+
+        // No device reduction available: read the pending gradients back.
+        foreach (var kvp in context.Gradients)
+        {
+            var grad = kvp.Value;
+            if (grad is null || grad.Length == 0 || !grad.HasPendingGpuData) continue;
+            sum += HostSumOfSquares(grad, numOps);
+        }
+        return sum;
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("Opt-in monitoring norm: host fallback for gradients the SIMD sum of squares does not cover")]
+    private static double HostSumOfSquares(Tensor<T> grad, INumericOperations<T> numOps)
+    {
+        if (TrySumOfSquaresHostSimd(grad, out double sq)) return sq;
+        var span = (grad.IsContiguous ? grad : grad.Contiguous()).AsSpan();
+        double sum = 0.0;
+        for (int i = 0; i < span.Length; i++)
+        {
+            double v = numOps.ToDouble(span[i]);
+            sum += v * v;
+        }
+        return sum;
     }
 
     /// <summary>
@@ -6048,4 +6442,9 @@ internal static class TapeClipNormThreadCache
 {
     [ThreadStatic]
     internal static double? LastPostClipNormSq;
+
+    // Pre-clip global squared gradient norm the current tape step already reduced to a host double (by its clip,
+    // its anomaly guard, or the opt-in monitoring reduction); null when the step computed none.
+    [ThreadStatic]
+    internal static double? LastPreClipNormSq;
 }

@@ -38,6 +38,13 @@ public partial class SpectrogramStripeDropLayer<T> : LayerBase<T>
     private readonly int _freqStripes;
     private long _forwardCounter;
 
+    /// <inheritdoc />
+    internal override long? StochasticDrawCounter
+    {
+        get => System.Threading.Interlocked.Read(ref _forwardCounter);
+        set => System.Threading.Interlocked.Exchange(ref _forwardCounter, value ?? 0L);
+    }
+
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
@@ -80,8 +87,8 @@ public partial class SpectrogramStripeDropLayer<T> : LayerBase<T>
     private void FillMask(Tensor<T> mask, int batch, int channels, int time, int freq)
     {
         long counter = System.Threading.Interlocked.Increment(ref _forwardCounter);
-        var random = RandomSeed.HasValue
-            ? RandomHelper.CreateSeededRandom(unchecked((int)((uint)RandomSeed.Value * 2654435761u ^ (uint)counter)))
+        var random = StochasticDrawSeed(unchecked((ulong)counter)) is int drawSeed
+            ? RandomHelper.CreateSeededRandom(drawSeed)
             : RandomHelper.CreateSecureRandom();
         var keepTime = Tensor<T>.CreateDefault(new[] { batch, time }, NumOps.One);
         var keepFreq = Tensor<T>.CreateDefault(new[] { batch, freq }, NumOps.One);

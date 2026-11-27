@@ -38,11 +38,9 @@ namespace AiDotNet.VisionLanguage.Medical;
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new RadFM&lt;double&gt;(architecture, "radfm.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new RadFM&lt;double&gt;(architecture, new RadFMOptions());
+/// var model = new RadFM&lt;double&gt;(architecture, new RadFMOptions());
+/// var scan = Tensor&lt;double&gt;.CreateRandom(3, 224, 224);   // [3, H, W] RGB, the architecture's input size
+/// Tensor&lt;double&gt; answer = model.AnswerMedicalQuestion(scan, "Is there an opacity in the left lung?");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -83,6 +81,7 @@ public partial class RadFM<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -107,6 +106,7 @@ public partial class RadFM<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -160,12 +160,12 @@ public partial class RadFM<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
 
-        // Fuse visual features with prompt tokens via ConcatenateTensors
+        // Embed the prompt tokens and append them to the visual token sequence
         Tensor<T> fusedInput;
         if (prompt is not null)
         {
             var promptTokens = TokenizeText(prompt);
-            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
+            fusedInput = FusePromptTokens(visualFeatures, promptTokens);
         }
         else
         {
@@ -212,7 +212,8 @@ public partial class RadFM<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
     private void ComputeEncoderDecoderBoundary()
     {
         int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 3;
+        // PatchEmbedding + LayerNorm, the vision blocks, then the connector (Dense, Dense, LayerNorm).
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb + 3;
     }
 
     private Tensor<T> TokenizeText(string text)

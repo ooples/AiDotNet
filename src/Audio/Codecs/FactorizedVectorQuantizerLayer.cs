@@ -106,12 +106,7 @@ public sealed partial class FactorizedVectorQuantizerLayer<T> : LayerBase<T>, IR
             RegisterSubLayer(_inProjection[q]);
             RegisterSubLayer(_outProjection[q]);
             // nn.Embedding: N(0, 1).
-            _codebooks[q] = new Tensor<T>(new[] { bins, codeDim });
-            for (int i = 0; i < _codebooks[q].Length; i++)
-            {
-                double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-                _codebooks[q][i] = NumOps.FromDouble(Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
-            }
+            _codebooks[q] = SeededNoiseTensors.StandardNormal<T>(new[] { bins, codeDim }, random);
             RegisterTrainableParameter(_codebooks[q], PersistentTensorRole.Weights);
         }
     }

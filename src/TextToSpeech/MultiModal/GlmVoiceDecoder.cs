@@ -102,9 +102,7 @@ internal sealed class GlmVoiceDecoder<T>
     internal Tensor<T> CallNoise(int frames)
     {
         var random = new Random(Configuration.NoiseSeed);
-        var noise = new Tensor<T>(new[] { 1, Configuration.Flow.OutputSize, frames });
-        for (int i = 0; i < noise.Length; i++)
-            noise[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble()));
+        var noise = SeededNoiseTensors.StandardNormal<T>(new[] { 1, Configuration.Flow.OutputSize, frames }, random);
         return noise;
     }
 

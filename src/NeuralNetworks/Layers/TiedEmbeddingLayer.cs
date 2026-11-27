@@ -55,11 +55,7 @@ public partial class TiedEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         var random = RandomSeed.HasValue
             ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value)
             : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
-        for (int i = 0; i < _table.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            _table[i] = NumOps.FromDouble(Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
-        }
+        SeededNoiseTensors.FillStandardNormal(_table, random);
         RegisterTrainableParameter(_table, PersistentTensorRole.Embeddings);
     }
 

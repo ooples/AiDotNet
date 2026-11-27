@@ -28,7 +28,199 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     internal const string StreamingSamplesInEpochKey = "streaming.samples_in_epoch";
     internal const string StreamingGlobalBatchSizeKey = "streaming.global_batch_size";
     internal const string StreamingWorldSizeKey = "streaming.world_size";
+    internal const string StreamingRngBaseSeedKey = "rng.base_seed";
+    internal const string StreamingRngDrawCountersKey = "rng.draw_counters";
     internal const string StreamingMpScaleKey = "mp.scale";
+
+    /// <summary>The seed drawn for this run's unseeded stochastic layers, or null when every one has its own seed.</summary>
+    private int? _stochasticBaseSeed;
+
+    /// <summary>
+    /// The dropout base seed: derived from the configured <paramref name="seed"/>, so two runs with the same seed draw the
+    /// same masks (a multiplicative hash keeps it apart from the data-order seed itself), or drawn when none is set.
+    /// </summary>
+    internal static int DrawStochasticBaseSeed(int? seed)
+        => seed is int s
+            ? (int)(unchecked((uint)s * 2654435761u) % (uint)(int.MaxValue - 1)) + 1
+            : RandomHelper.CreateSecureRandom().Next(1, int.MaxValue);
+
+    /// <summary>
+    /// Gives every stochastic layer its per-rank stream (the rank; 0 in a single process) and, for layers without a
+    /// RandomSeed, a seed derived from one base seed rank 0 draws and broadcasts. A layer's masks are then a function of
+    /// (seed, rank, draw counter), all three of which the checkpoint records, so a resumed run continues the
+    /// uninterrupted run's masks; and data-parallel ranks draw different, reproducible masks, as each PyTorch DDP rank
+    /// draws from its own generator.
+    /// </summary>
+    private void ConfigureStochasticStreams(DistributedTraining.ICommunicationBackend<T>? distBackend, int? seed)
+    {
+        _stochasticBaseSeed = null;
+        if (_model is not NeuralNetworks.NeuralNetworkBase<T> neuralNet) return;
+        var layers = neuralNet.CollectStochasticLayers();
+        int worldSize = distBackend is null ? 1 : Math.Max(1, distBackend.WorldSize);
+        int rank = worldSize > 1 ? distBackend!.Rank : 0;
+        bool needsSeed = layers.Any(layer => layer.RandomSeed is null);
+        int baseSeed = 0;
+        if (worldSize > 1)
+        {
+            var numOps = MathHelper.GetNumericOperations<T>();
+            var plan = new Vector<T>(6);
+            if (rank == 0)
+            {
+                Span<T> w = plan.AsWritableSpan();
+                w[0] = numOps.FromDouble(needsSeed ? 1.0 : 0.0);
+                WriteIntAsU7Chunks(numOps, w, 1, needsSeed ? DrawStochasticBaseSeed(seed) : 0);
+            }
+            plan = distBackend!.Broadcast(plan, root: 0);
+            needsSeed = numOps.ToDouble(plan.AsSpan()[0]) > 0.0;
+            baseSeed = ReadIntFromU7Chunks(numOps, plan.AsSpan(), 1);
+        }
+        else if (needsSeed)
+        {
+            baseSeed = DrawStochasticBaseSeed(seed);
+        }
+
+        foreach (var layer in layers) layer.StochasticStream = rank;
+        if (needsSeed) ApplyStochasticBaseSeed(layers, baseSeed);
+    }
+
+    private void ApplyStochasticBaseSeed(IReadOnlyList<NeuralNetworks.Layers.LayerBase<T>> layers, int baseSeed)
+    {
+        _stochasticBaseSeed = baseSeed;
+        for (int i = 0; i < layers.Count; i++)
+        {
+            layers[i].StochasticFallbackSeed = layers[i].RandomSeed is null
+                ? unchecked(baseSeed * 31 + (i + 1) * (int)0x9E3779B1u)
+                : null;
+        }
+    }
+
+    /// <summary>
+    /// Adds the random state to a checkpoint: the drawn base seed and every rank's draw counters
+    /// ("c,c,...;c,c,..." in rank order). Collective when distributed: every rank must call it for the same save.
+    /// </summary>
+    private void AddStochasticCheckpointState(Dictionary<string, object> metadata, DistributedTraining.ICommunicationBackend<T>? distBackend)
+    {
+        if (_model is not NeuralNetworks.NeuralNetworkBase<T> neuralNet) return;
+        var layers = neuralNet.CollectStochasticLayers();
+        if (layers.Count == 0) return;
+        int worldSize = distBackend is null ? 1 : Math.Max(1, distBackend.WorldSize);
+        int rank = worldSize > 1 ? distBackend!.Rank : 0;
+        var counters = new long[worldSize, layers.Count];
+        if (worldSize > 1)
+        {
+            // Each rank writes its own slots (two 32-bit halves, 7 bits per element) and a sum gathers them exactly.
+            var numOps = MathHelper.GetNumericOperations<T>();
+            const int PerCounter = 10;
+            var gathered = new Vector<T>(checked(worldSize * layers.Count * PerCounter));
+            Span<T> w = gathered.AsWritableSpan();
+            for (int i = 0; i < layers.Count; i++)
+            {
+                long c = layers[i].StochasticDrawCounter ?? 0L;
+                int at = (rank * layers.Count + i) * PerCounter;
+                WriteIntAsU7Chunks(numOps, w, at, unchecked((int)(c >> 32)));
+                WriteIntAsU7Chunks(numOps, w, at + 5, unchecked((int)c));
+            }
+            distBackend!.AllReduce(gathered, DistributedTraining.ReductionOperation.Sum);
+            ReadOnlySpan<T> r = gathered.AsSpan();
+            for (int k = 0; k < worldSize; k++)
+                for (int i = 0; i < layers.Count; i++)
+                {
+                    int at = (k * layers.Count + i) * PerCounter;
+                    long hi = ReadIntFromU7Chunks(numOps, r, at), lo = unchecked((uint)ReadIntFromU7Chunks(numOps, r, at + 5));
+                    counters[k, i] = (hi << 32) | lo;
+                }
+        }
+        else
+        {
+            for (int i = 0; i < layers.Count; i++) counters[0, i] = layers[i].StochasticDrawCounter ?? 0L;
+        }
+
+        var text = new System.Text.StringBuilder();
+        for (int k = 0; k < worldSize; k++)
+        {
+            if (k > 0) text.Append(';');
+            for (int i = 0; i < layers.Count; i++)
+            {
+                if (i > 0) text.Append(',');
+                text.Append(counters[k, i].ToString(CultureInfo.InvariantCulture));
+            }
+        }
+        metadata[StreamingRngDrawCountersKey] = text.ToString();
+        if (_stochasticBaseSeed is int baseSeed) metadata[StreamingRngBaseSeedKey] = baseSeed;
+    }
+
+    /// <summary>The random state of a checkpoint as one string ("seed|counters"), for broadcasting from rank 0.</summary>
+    private static string ReadStochasticCheckpointState(Dictionary<string, object> metadata)
+    {
+        string seed = metadata.TryGetValue(StreamingRngBaseSeedKey, out var s) && s is not null
+            ? Convert.ToInt32(s, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture)
+            : string.Empty;
+        string counters = metadata.TryGetValue(StreamingRngDrawCountersKey, out var c) && c is not null
+            ? Convert.ToString(c, CultureInfo.InvariantCulture) ?? string.Empty
+            : string.Empty;
+        return seed + "|" + counters;
+    }
+
+    /// <summary>
+    /// Restores the state <see cref="ReadStochasticCheckpointState"/> read: the base seed, and this rank's draw counters
+    /// (rank r takes the counters rank r saved; a rank the saving run did not have takes rank 0's -- its masks cannot
+    /// match a run that never had it, but they continue a real sequence rather than restart one).
+    /// </summary>
+    /// <remarks>
+    /// Must run after the model state is loaded: loading a serialized model rebuilds its layers, and a rebuilt layer
+    /// starts at draw counter 0 on stream 0 with no fallback seed. The rank's stream and the run's base seed are
+    /// therefore re-applied here before the checkpoint's own values replace them.
+    /// </remarks>
+    private void RestoreStochasticCheckpointState(string state, int rank, string checkpointId)
+    {
+        if (_model is not NeuralNetworks.NeuralNetworkBase<T> neuralNet) return;
+        var layers = neuralNet.CollectStochasticLayers();
+        foreach (var layer in layers) layer.StochasticStream = rank;
+        if (_stochasticBaseSeed is int configuredBaseSeed) ApplyStochasticBaseSeed(layers, configuredBaseSeed);
+        if (string.IsNullOrEmpty(state)) return;
+        int bar = state.IndexOf('|');
+        string seedText = bar < 0 ? state : state.Substring(0, bar);
+        string countersText = bar < 0 ? string.Empty : state.Substring(bar + 1);
+        if (seedText.Length > 0)
+            ApplyStochasticBaseSeed(layers, int.Parse(seedText, CultureInfo.InvariantCulture));
+        if (seedText.Length == 0 && countersText.Length == 0)
+        {
+            // A checkpoint written before draw counters were recorded: resume, with the masks restarting their sequence.
+            if (layers.Count > 0)
+                System.Diagnostics.Trace.TraceWarning(
+                    $"Checkpoint '{checkpointId}' records no dropout draw counters (it predates them); the model's "
+                    + $"{layers.Count} stochastic layer(s) restart their mask sequence on resume.");
+            return;
+        }
+        if (countersText.Length == 0)
+        {
+            if (layers.Count > 0)
+                throw new InvalidOperationException(
+                    $"Cannot resume from checkpoint '{checkpointId}': it records no dropout draw counters, but the model has "
+                    + $"{layers.Count} stochastic layer(s); resumed masks would not continue the checkpointed run's.");
+            return;
+        }
+        var ranks = countersText.Split(';');
+        var mine = ranks[rank < ranks.Length ? rank : 0].Split(',');
+        int restored = layers.Count;
+        if (mine.Length != layers.Count)
+        {
+            // Checkpoints written before off-chain (GetExtraTrainableLayers) stochastic layers were collected record only
+            // the on-chain ones, which are the leading entries of the list in the same order: restore those and let the
+            // off-chain layers start their sequence, rather than refuse a checkpoint that is otherwise complete.
+            int onChain = neuralNet.CollectStochasticLayers(includeExtraRoots: false).Count;
+            if (mine.Length != onChain || onChain >= layers.Count)
+                throw new InvalidOperationException(
+                    $"Cannot resume from checkpoint '{checkpointId}': it records {mine.Length} stochastic layer counter(s) but "
+                    + $"the model has {layers.Count}.");
+            System.Diagnostics.Trace.TraceWarning(
+                $"Checkpoint '{checkpointId}' records draw counters for the model's {onChain} on-chain stochastic layer(s) "
+                + $"only (it predates off-chain ones); the other {layers.Count - onChain} restart their mask sequence on resume.");
+            restored = onChain;
+        }
+        for (int i = 0; i < restored; i++)
+            layers[i].StochasticDrawCounter = long.Parse(mine[i], CultureInfo.InvariantCulture);
+    }
     internal const string StreamingMpGrowthTrackerKey = "mp.growth_tracker";
     internal const string StreamingMpTotalUpdatesKey = "mp.total_updates";
     internal const string StreamingMpSkippedUpdatesKey = "mp.skipped_updates";
@@ -179,6 +371,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         distCoordinator?.EnsureInitialParametersSynchronized(
             neuralNet.CollectTrainableParameters(),
             neuralNet.InvalidateLayerWeightCaches);
+        distCoordinator?.BroadcastBuffers(neuralNet.CollectRegisteredBuffers(), neuralNet.InvalidateLayerWeightCaches);
         neuralNet.ActiveMixedPrecisionContext?.ClearFp32SnapshotPool();
     }
 
@@ -376,6 +569,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         int stepInt = checked((int)globalStep);
         var metrics = StreamingCheckpointMetrics(trainLoss, hasValidationLoss, validationLoss);
         var (metricValue, minimizeMetric) = ResolveAutoCheckpointMetric(metrics);
+        bool singleProcess = distBackend is null || (distBackend.WorldSize <= 1 && distCoordinator is null);
+        // Most steps save nothing. The metadata reads state a compiled step keeps on the device (the loss scaler's), so
+        // it is built only for a step that saves; a frequency or interval policy decides that without the metric.
+        if (singleProcess && !forceSave
+            && _checkpointManager is CheckpointManagement.CheckpointManagerBase<T, TInput, TOutput> { AutoSaveDependsOnMetric: false } manager
+            && !manager.ShouldAutoSaveCheckpoint(stepInt))
+        {
+            return false;
+        }
         var metadata = StreamingCheckpointMetadata(
             epoch,
             batchInEpoch,
@@ -389,8 +591,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             fitSeed,
             fitBatchSize);
 
-        if (distBackend is null || (distBackend.WorldSize <= 1 && distCoordinator is null))
+        if (distBackend is null || singleProcess)
         {
+            AddStochasticCheckpointState(metadata, null);
             if (forceSave)
             {
                 _checkpointManager.SaveCheckpoint(_model, _optimizer, epoch, stepInt, metrics, metadata);
@@ -425,6 +628,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         {
             return false;
         }
+
+        AddStochasticCheckpointState(metadata, distBackend);
 
         if (distCoordinator is not null
             && _model is NeuralNetworks.NeuralNetworkBase<T> nn
@@ -586,6 +791,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         ValidateCheckpointSeed(metadata, options.Seed, latest.CheckpointId);
         int? savedFitSeed = TryReadOptionalIntMetadata(metadata, StreamingFitSeedKey);
+        RequireCheckpointedDataOrder(options.Seed, savedFitSeed, latest.CheckpointId);
         int? savedFitBatchSize = TryReadOptionalIntMetadata(metadata, StreamingFitBatchSizeKey) ?? savedBatchSize;
 
         long samplesInEpoch;
@@ -618,6 +824,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 $"Checkpoint '{latest.CheckpointId}' has no saved model state to resume from.");
         }
 
+        // After the model state: restoring it can rebuild the layers, which would drop draw counters restored earlier.
+        RestoreStochasticCheckpointState(ReadStochasticCheckpointState(metadata), rank: 0, latest.CheckpointId);
+
         if (model is NeuralNetworks.NeuralNetworkBase<T> restoredNn)
         {
             restoredNn.InvalidateLayerWeightCaches();
@@ -625,6 +834,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             distCoordinator?.EnsureInitialParametersSynchronized(
                 restoredNn.CollectTrainableParameters(),
                 restoredNn.InvalidateLayerWeightCaches);
+            // A checkpoint restored as a parameter vector carries no buffers; rank 0's are the restored ones.
+            distCoordinator?.BroadcastBuffers(restoredNn.CollectRegisteredBuffers(), restoredNn.InvalidateLayerWeightCaches);
         }
 
         ILearningRateScheduler? configuredScheduler =
@@ -681,6 +892,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         int? savedFitBatchSize = null;
         byte[]? rank0StateBytes = null;
         byte[]? rank0OptimizerBytes = null;
+        byte[]? rank0RngState = null;
+        string rngCheckpointId = string.Empty;
         Exception? rank0Error = null;
 
         if (distBackend.Rank == 0)
@@ -698,6 +911,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
                     ValidateCheckpointSeed(metadata, options.Seed, latest.CheckpointId);
                     savedFitSeed = TryReadOptionalIntMetadata(metadata, StreamingFitSeedKey);
+                    RequireCheckpointedDataOrder(options.Seed, savedFitSeed, latest.CheckpointId);
                     savedFitBatchSize = TryReadOptionalIntMetadata(metadata, StreamingFitBatchSizeKey) ?? savedBatchSize;
 
                     samplesInEpoch = metadata.TryGetValue(StreamingSamplesInEpochKey, out var samplesObj) && samplesObj is not null
@@ -726,6 +940,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     }
 
                     rank0OptimizerBytes = latest.OptimizerData;
+                    rank0RngState = System.Text.Encoding.UTF8.GetBytes(ReadStochasticCheckpointState(metadata));
+                    rngCheckpointId = latest.CheckpointId;
                     hasMpScale = TryReadMpMetadata(metadata, out mpScale, out mpGrowthTracker, out mpTotalUpdates, out mpSkippedUpdates);
                     status = 1;
                 }
@@ -806,6 +1022,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             mpSkippedUpdates = ReadIntFromU7Chunks(numOps, mpR, 20);
         }
 
+        byte[] sharedRngState = BroadcastByteArray(distBackend, distBackend.Rank == 0 ? rank0RngState : null, root: 0);
+
         byte[] sharedStateBytes = BroadcastByteArray(distBackend, distBackend.Rank == 0 ? rank0StateBytes : null, root: 0);
         if (sharedStateBytes.Length > 0 && model is ICheckpointableModel checkpointableModel)
         {
@@ -829,6 +1047,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
         }
 
+        // After the model state on every rank: LoadState rebuilds the layers, which would drop counters restored earlier.
+        RestoreStochasticCheckpointState(System.Text.Encoding.UTF8.GetString(sharedRngState), distBackend.Rank, rngCheckpointId);
+
         if (model is NeuralNetworks.NeuralNetworkBase<T> restoredNn)
         {
             restoredNn.InvalidateLayerWeightCaches();
@@ -836,6 +1057,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             distCoordinator?.EnsureInitialParametersSynchronized(
                 restoredNn.CollectTrainableParameters(),
                 restoredNn.InvalidateLayerWeightCaches);
+            // A checkpoint restored as a parameter vector carries no buffers; rank 0's are the restored ones.
+            distCoordinator?.BroadcastBuffers(restoredNn.CollectRegisteredBuffers(), restoredNn.InvalidateLayerWeightCaches);
         }
 
         ILearningRateScheduler? configuredScheduler =
@@ -886,6 +1109,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             FastForwardScheduler(configuredScheduler, restoredSchedulerStep);
             gradientOptimizer.SetLearningRateScheduler(configuredScheduler);
         }
+    }
+
+    // With no configured seed the order is the drawn seed the checkpoint records; one that records none cannot be continued.
+    private static void RequireCheckpointedDataOrder(int? configuredSeed, int? savedFitSeed, string checkpointId)
+    {
+        if (configuredSeed is null && savedFitSeed is null)
+            throw new InvalidOperationException(
+                $"Cannot resume from checkpoint '{checkpointId}': the run had no Seed and the checkpoint records no drawn " +
+                "data-order seed, so the batches skipped on resume would not be the batches already trained on.");
     }
 
     private static void ValidateCheckpointSeed(Dictionary<string, object> metadata, int? expectedSeed, string checkpointId)
@@ -1513,6 +1745,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // validation alone, and they are freed. Any other loss may cache one (a basis built on its first call, or a
         // caller's loss nested in a composite), so it runs with every scope suspended: neither a loss scope nor the
         // enclosing predict scope can free what it keeps.
+        // A fused readout (an LM head fused with its cross-entropy) gives the loss without forming the readout's output.
+        if (model is NeuralNetworks.NeuralNetworkBase<T> network && x is Tensor<T> xt && y is Tensor<T> yt
+            && network.TryFusedReadoutInferenceLoss(xt, yt, lossFunction, out var fusedLoss))
+            return fusedLoss;
         var releasing = model as NeuralNetworks.NeuralNetworkBase<T> is { ReleasesPredictResults: true } n ? n : null;
         bool lossKeepsNothing = lossFunction is LossFunctions.LossFunctionBase<T> { KeepsResultsBetweenCalls: false };
         // A scope frees GPU results only; host arrays were left to the garbage collector. On the CPU Predict returns a
@@ -1545,5 +1781,111 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return lossFunction.CalculateLoss(
             ConversionsHelper.ConvertToVector<T, TOutput>(prediction),
             ConversionsHelper.ConvertToVector<T, TOutput>(y));
+    }
+
+    /// <summary>
+    /// Builds the step-level monitor reporter for a streaming run, or null when no monitor session is open or
+    /// <see cref="StreamingTrainingOptions{T, TInput, TOutput}.MonitorEveryNSteps"/> is 0. Also returns an action
+    /// that undoes any optimizer setting it changed for the run (the opt-in gradient-norm reduction).
+    /// </summary>
+    private (TrainingMonitoring.StreamingStepMonitorReporter<T>? Reporter, Action? Restore) CreateStreamingStepReporter(
+        StreamingTrainingOptions<T, TInput, TOutput>? streamingOptions,
+        string? monitorSessionId,
+        IStreamingDataLoader<T, TInput, TOutput> rawLoader,
+        bool distributed,
+        int gradientAccumulationSteps,
+        int epochs,
+        long startStep)
+    {
+        var defaults = streamingOptions ?? new StreamingTrainingOptions<T, TInput, TOutput>();
+        if (_trainingMonitor is null || monitorSessionId is null || defaults.MonitorEveryNSteps <= 0)
+            return (null, null);
+
+        bool monitorGradNorm = defaults.MonitorGradNorm;
+        var network = _model as NeuralNetworks.NeuralNetworkBase<T>;
+        var gradientOptimizer = _optimizer as GradientBasedOptimizerBase<T, TInput, TOutput>;
+        Action? restore = null;
+
+        // On an eager tape step the network's own global-norm clip (default max norm 1.0) reduces the pre-clip norm:
+        // to a host double on a CPU engine (free to read), on the device for a GPU engine (reading it waits for the
+        // device, so only with MonitorGradNorm). Without a network clip, the optimizer's clip by norm (or Adam's
+        // anomaly guard) reduces it; only when neither does is an extra reduction needed, and only with
+        // MonitorGradNorm. A step taken by a fused compiled plan reports the norm the plan's own clip computed, which
+        // stays on the device until read, so only with MonitorGradNorm.
+        bool networkClips = network is not null && network.MaxGradNormValue > 0.0;
+        if (monitorGradNorm && !networkClips && gradientOptimizer is not null && !gradientOptimizer.ComputeGradientNormEveryStep)
+        {
+            gradientOptimizer.ComputeGradientNormEveryStep = true;
+            restore = () => gradientOptimizer.ComputeGradientNormEveryStep = false;
+        }
+
+        long lastClipCount = network?.GradientClipCount ?? 0L;
+        long lastOptimizerStepCount = gradientOptimizer?.TapeStepCount ?? 0L;
+        long lastPlanNormSteps = 0L;
+        double? GradNorm()
+        {
+            // A fused compiled plan that clipped since the last report took the step: its norm is the step's.
+            if (network is not null
+                && Training.CompiledTapeTrainingStep<T>.TryReadPlanGradientNorm(network, ref lastPlanNormSteps, monitorGradNorm)
+                    is double planNorm)
+                return planNorm;
+
+            if (network is not null)
+            {
+                long clipCount = network.GradientClipCount;
+                if (clipCount != lastClipCount)
+                {
+                    lastClipCount = clipCount;
+                    // The eager step this clip belonged to is now reported: advance the optimizer baseline too, else a
+                    // later compiled step with no readable plan norm would report this step's optimizer norm as its own.
+                    if (gradientOptimizer is not null) lastOptimizerStepCount = gradientOptimizer.TapeStepCount;
+                    // The optimizer saw the network-clipped gradients, so its norm would not be the step's norm.
+                    return network.TryGetLastGradientNorm(allowDeviceRead: monitorGradNorm);
+                }
+            }
+
+            // Only when the optimizer's tape step ran since the last report: a fused compiled plan steps without it.
+            if (gradientOptimizer is not null)
+            {
+                long stepCount = gradientOptimizer.TapeStepCount;
+                if (stepCount != lastOptimizerStepCount)
+                {
+                    lastOptimizerStepCount = stepCount;
+                    return gradientOptimizer.LastStepGradientNorm;
+                }
+            }
+
+            return null;
+        }
+
+        long totalSteps = 0L;
+        if (!distributed && rawLoader.SampleCount > 0 && rawLoader.BatchSize > 0)
+        {
+            long batchesPerEpoch = (rawLoader.SampleCount + rawLoader.BatchSize - 1) / rawLoader.BatchSize;
+            long stepsPerEpoch = (batchesPerEpoch + gradientAccumulationSteps - 1) / gradientAccumulationSteps;
+            totalSteps = stepsPerEpoch * Math.Max(0, epochs);
+        }
+        if (defaults.MaxSteps is long maxSteps && (totalSteps == 0L || maxSteps < totalSteps))
+            totalSteps = maxSteps;
+
+        var reporter = new TrainingMonitoring.StreamingStepMonitorReporter<T>(
+            _trainingMonitor,
+            monitorSessionId,
+            defaults.MonitorEveryNSteps,
+            defaults.TokensPerSample,
+            defaults.MonitorResourceIntervalSeconds,
+            GradNorm,
+            startStep,
+            totalSteps);
+        reporter.TakeResourceBaseline();
+        return (reporter, restore);
+    }
+
+    /// <summary>The configured optimizer's current learning rate, or NaN when there is none to read.</summary>
+    private double CurrentStreamingLearningRate()
+    {
+        if (_optimizer is IGradientBasedOptimizer<T, TInput, TOutput> gradientOptimizer)
+            return gradientOptimizer.GetCurrentLearningRate();
+        return _optimizer?.GetOptions().InitialLearningRate ?? double.NaN;
     }
 }

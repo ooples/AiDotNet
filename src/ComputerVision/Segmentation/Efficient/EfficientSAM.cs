@@ -254,6 +254,9 @@ public partial class EfficientSAM<T> : Common.PromptableSegmentationBase<T>
     /// <inheritdoc />
     public override void SetImage(Tensor<T> image)
     {
+        // Cleared first, so a SetImage that fails leaves no probabilities of the previous image beside the new
+        // embedding.
+        _imageProbabilities = null;
         base.SetImage(image);
         var embedding = _imageEmbedding;
         if (embedding is not null)
@@ -265,8 +268,7 @@ public partial class EfficientSAM<T> : Common.PromptableSegmentationBase<T>
     /// <inheritdoc />
     public override PromptedSegmentationResult<T> SegmentFromPoints(Tensor<T> points, Tensor<T> labels)
     {
-        var features = Common.SegmentationPostProcessing.PromptFeatures(
-            _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width])));
+        var features = Common.SegmentationPostProcessing.PromptFeatures(RequireImageEmbedding());
         int h = features.Shape[1], w = features.Shape[2];
         var attention = Common.SegmentationPostProcessing.PointAttention(
             points, labels, h, w, sigma: Math.Max(h, w) / 10.0);
@@ -278,8 +280,7 @@ public partial class EfficientSAM<T> : Common.PromptableSegmentationBase<T>
     /// <inheritdoc />
     public override PromptedSegmentationResult<T> SegmentFromBox(Tensor<T> box)
     {
-        var features = Common.SegmentationPostProcessing.PromptFeatures(
-            _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width])));
+        var features = Common.SegmentationPostProcessing.PromptFeatures(RequireImageEmbedding());
         int h = features.Shape[1], w = features.Shape[2];
         int bx1 = (int)NumOps.ToDouble(box[0]), by1 = (int)NumOps.ToDouble(box[1]);
         int bx2 = (int)NumOps.ToDouble(box[2]), by2 = (int)NumOps.ToDouble(box[3]);
@@ -291,8 +292,7 @@ public partial class EfficientSAM<T> : Common.PromptableSegmentationBase<T>
     /// <inheritdoc />
     public override PromptedSegmentationResult<T> SegmentFromMask(Tensor<T> mask)
     {
-        var features = Common.SegmentationPostProcessing.PromptFeatures(
-            _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width])));
+        var features = Common.SegmentationPostProcessing.PromptFeatures(RequireImageEmbedding());
         int h = features.Shape[1], w = features.Shape[2];
         var scoreMap = Common.SegmentationPostProcessing.GatedChannelMean(
             features, Common.SegmentationPostProcessing.PositiveMaskGate(mask, h, w));
@@ -302,8 +302,7 @@ public partial class EfficientSAM<T> : Common.PromptableSegmentationBase<T>
     /// <inheritdoc />
     public override List<PromptedSegmentationResult<T>> SegmentEverything()
     {
-        var features = Common.SegmentationPostProcessing.PromptFeatures(
-            _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width])));
+        var features = Common.SegmentationPostProcessing.PromptFeatures(RequireImageEmbedding());
         var probs = _imageProbabilities ?? Common.SegmentationTensorOps.SoftmaxAlongClassDim(features);
         return Common.SegmentationPostProcessing.SegmentEveryClass(features, probs);
     }

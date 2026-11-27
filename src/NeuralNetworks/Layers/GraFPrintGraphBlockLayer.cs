@@ -56,6 +56,13 @@ public partial class GraFPrintGraphBlockLayer<T> : LayerBase<T>, ILayerSerializa
 
     private long _dropPathCounter;
 
+    /// <inheritdoc />
+    internal override long? StochasticDrawCounter
+    {
+        get => System.Threading.Interlocked.Read(ref _dropPathCounter);
+        set => System.Threading.Interlocked.Exchange(ref _dropPathCounter, value ?? 0L);
+    }
+
     private static long _nextInstanceId;
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<long, int[,,]> LastNeighborsByInstance = new();
     private readonly long _instanceId = System.Threading.Interlocked.Increment(ref _nextInstanceId);
@@ -461,9 +468,7 @@ public partial class GraFPrintGraphBlockLayer<T> : LayerBase<T>, ILayerSerializa
         T rate = NumOps.FromDouble(_dropPathRate);
         T scale = NumOps.FromDouble(1.0 / (1.0 - _dropPathRate));
         long counter = System.Threading.Interlocked.Increment(ref _dropPathCounter);
-        int? seed = RandomSeed.HasValue
-            ? unchecked((int)(((uint)RandomSeed.Value * 2654435761u) ^ (uint)counter))
-            : null;
+        int? seed = StochasticDrawSeed(unchecked((ulong)counter));
         var mask = Engine.TensorDropoutMask<T>([batch, 1, 1, 1], rate, scale, seed);
         return Engine.TensorMultiply(branch, mask);
     }

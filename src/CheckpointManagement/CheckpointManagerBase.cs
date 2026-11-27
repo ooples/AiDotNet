@@ -59,6 +59,15 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
     protected AutoCheckpointConfiguration? AutoConfig;
 
     /// <summary>
+    /// True when an auto-save can depend on the metric (save on improvement): a caller can then decide a step will not
+    /// save only by asking with the metric. Otherwise <see cref="ShouldAutoSaveCheckpoint"/> with no metric decides.
+    /// </summary>
+    internal bool AutoSaveDependsOnMetric
+    {
+        get { lock (SyncLock) return AutoConfig?.SaveOnImprovement == true; }
+    }
+
+    /// <summary>
     /// The last step at which an auto-checkpoint was saved.
     /// </summary>
     protected int LastAutoSaveStep;

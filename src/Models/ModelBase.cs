@@ -440,6 +440,86 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
         }
     }
 
+    /// <summary>
+    /// A new instance of this model holding <paramref name="parameters"/>: <see cref="DeepCopy"/> followed by
+    /// <see cref="SetParameters"/>, without round-tripping this model's own parameter values through
+    /// <see cref="Serialize"/> only to overwrite them.
+    /// </summary>
+    /// <param name="parameters">The copy's parameter vector.</param>
+    /// <returns>The new instance.</returns>
+    /// <remarks>
+    /// <para>
+    /// DeepCopy carries the parameters as doubles in a byte payload, so building a copy only to replace its
+    /// parameters held the source's vector, the payload and the decoded vector alive at once beside both
+    /// models' weights. A Cascade R-CNN at 70 million parameters ran out of memory doing that. This path
+    /// carries only the declared non-parameter state.
+    /// </para>
+    /// <para>
+    /// Only for a model whose <see cref="Serialize"/> and <see cref="Deserialize"/> add nothing to this base's:
+    /// a model that persists something extra in an override keeps <c>DeepCopy().SetParameters</c>. The
+    /// native-precision parameter shadows (<c>ReadAfterParameters</c>) are not replayed: they are the source's
+    /// working values, and the supplied vector replaces them.
+    /// </para>
+    /// </remarks>
+    private protected IFullModel<T, TInput, TOutput> CopyWithParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            byte[]? declaredState = State.Count > 0 ? WriteDeclaredState() : null;
+
+            var copy = (ModelBase<T, TInput, TOutput>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
+            PrepareCopyForStateRestore(copy);
+            if (TryGetParameterCount(out int expectedParameterCount))
+            {
+                AiDotNet.Models.CloneEngine.PrepareParameterTopology(
+                    this,
+                    copy,
+                    expectedParameterCount,
+                    () => copy.GetParameters().Length);
+            }
+
+            if (declaredState is not null)
+            {
+                using var stream = new MemoryStream(declaredState);
+                using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+                copy.State.ReadBeforeParameters(reader);
+            }
+
+            copy.SetParameters(parameters);
+            AiDotNet.Models.CloneEngine.RestoreMutableConstructorConfiguration(this, copy);
+            return copy;
+        }
+    }
+
+    /// <summary>
+    /// The declared non-parameter state as the bytes <see cref="Serialize"/> appends after the parameters.
+    /// Written on its own so its size is known before the payload stream is sized.
+    /// </summary>
+    private byte[] WriteDeclaredState()
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            State.WriteAll(writer);
+            writer.Flush();
+        }
+
+        return stream.ToArray();
+    }
+
+    /// <summary>
+    /// The exact size of a <see cref="Serialize"/> payload: magic, the length-prefixed UTF-8 type name, the
+    /// parameter count, the parameters as doubles and the declared state.
+    /// </summary>
+    internal static long SerializedPayloadBytes(string typeName, int parameterCount, int declaredStateBytes)
+    {
+        int nameBytes = System.Text.Encoding.UTF8.GetByteCount(typeName);
+        int prefixBytes = 1;
+        for (int rest = nameBytes >> 7; rest != 0; rest >>= 7) prefixBytes++;   // BinaryWriter's 7-bit length prefix
+        return sizeof(int) + prefixBytes + nameBytes + sizeof(int) + 8L * parameterCount + declaredStateBytes;
+    }
+
     /// <summary>Reads this model's parameter count, or reports that its layout is not resolved yet.</summary>
     /// <param name="count">The parameter count when the layout is resolved; zero otherwise.</param>
     /// <returns><c>true</c> when the count was read.</returns>
@@ -447,7 +527,12 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
     {
         try
         {
-            count = GetParameters().Length;
+            // A component-backed model reads the count from its registry, the enumeration its vector folds, so a copy
+            // does not build the source's whole parameter vector only to measure it. The registry throws the same
+            // not-ready exception for an unresolved layout. A model without components has only its vector.
+            count = Components.Count > 0
+                ? checked((int)_parameterRegistry.ParameterCount)
+                : GetParameters().Length;
             return true;
         }
         catch (AiDotNet.Models.Parameters.ParameterLayoutNotReadyException)
@@ -540,11 +625,20 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
 
         var parameters = GetParameters();
 
-        using var stream = new MemoryStream();
+        // Sized exactly, up front: a growing MemoryStream doubles its buffer, holding the old and the new one at
+        // once and ending with up to twice the payload, and ToArray then copies it once more. The declared state
+        // is written first into its own buffer so that its size is part of the figure; left out, the first state
+        // byte past the capacity doubled a buffer that was already the size of the parameters. A stream that ends
+        // exactly at its capacity hands its own buffer back instead of copying it.
+        string typeName = GetType().FullName ?? GetType().Name;
+        byte[] declaredState = WriteDeclaredState();
+        long payloadBytes = SerializedPayloadBytes(typeName, parameters.Length, declaredState.Length);
+        byte[]? exactBuffer = payloadBytes <= MaxExactPayloadBytes ? new byte[(int)payloadBytes] : null;
+        using var stream = exactBuffer is null ? new MemoryStream() : new MemoryStream(exactBuffer, 0, exactBuffer.Length, writable: true, publiclyVisible: false);
         using var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
 
         writer.Write(ModelSerializationMagic);
-        writer.Write(GetType().FullName ?? GetType().Name);
+        writer.Write(typeName);
         writer.Write(parameters.Length);
         // Convert in bounded blocks: Half is not IConvertible, and a full double copy can be very large.
         const int SerializationBlockSize = 16384;
@@ -558,11 +652,21 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
 
         // Whatever the model declared that the parameter vector does not carry: a retained training
         // set, fitted knots, kernel centres, an ensemble's children.
-        State.WriteAll(writer);
+        writer.Write(declaredState);
 
         writer.Flush();
-        return stream.ToArray();
+        if (exactBuffer is null) return stream.ToArray();
+        if (stream.Position != exactBuffer.Length)
+        {
+            throw new InvalidOperationException(
+                $"{typeName} serialized {stream.Position:N0} bytes into a payload sized for {exactBuffer.Length:N0}.");
+        }
+
+        return exactBuffer;
     }
+
+    // The largest array a payload can be written into directly; above it the stream grows on its own, as before.
+    private const long MaxExactPayloadBytes = 0x7FFFFFC7;
 
     /// <summary>The parameter vector restored from the doubles the serialization payload stores.</summary>
     private static Vector<T> ParametersFromPayload(double[] payload) =>
@@ -599,14 +703,23 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
 
         int count = reader.ReadInt32();
         var parameters = new Vector<T>(count);
-        var payload = new double[count];
-        for (int i = 0; i < count; i++)
-        {
-            payload[i] = reader.ReadDouble();
-        }
 
-        // Convert the whole payload to T at once, then fill the parameter vector.
-        ParametersFromPayload(payload).AsSpan().CopyTo(parameters.AsWritableSpan());
+        // Decode in bounded blocks straight into the parameter vector. Reading the whole payload into a double[]
+        // and converting that at once held two more copies of the parameters alive.
+        const int DeserializationBlockSize = 16384;
+        var block = new double[Math.Min(count, DeserializationBlockSize)];
+        for (int start = 0; start < count;)
+        {
+            int length = Math.Min(DeserializationBlockSize, count - start);
+            for (int i = 0; i < length; i++)
+            {
+                block[i] = reader.ReadDouble();
+            }
+
+            var decoded = length == block.Length ? block : block.AsSpan(0, length).ToArray();
+            ParametersFromPayload(decoded).AsSpan().CopyTo(parameters.AsWritableSpan().Slice(start, length));
+            start += length;
+        }
 
         // Restore STRUCTURE before pouring the flat parameter vector into it. A fitted tree can have
         // one constant in its constructor-created shell and two after its declared node graph is

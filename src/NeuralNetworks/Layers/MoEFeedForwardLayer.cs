@@ -77,6 +77,13 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>The number of experts activated per token.</summary>
     public int TopK => _topK;
 
+    /// <summary>Whether the kept top-k router probabilities are renormalized to sum to 1 (Mixtral, Qwen2-MoE) or
+    /// used as the softmax over all experts gave them (OLMoE, <c>norm_topk_prob = false</c>).</summary>
+    public bool NormalizeTopK => _normalizeTopK;
+
+    /// <summary>Construction state: the 'normalizeTopK' the layer was built with.</summary>
+    private readonly bool _normalizeTopK;
+
     /// <summary>The gate projection of expert <paramref name="e"/>.</summary>
     public DenseLayer<T> ExpertGate(int e) => _gate[e];
 
@@ -116,8 +123,24 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>, IShapeContract
     /// <param name="activation">Gate activation (SiLU for Mixtral).</param>
     /// <param name="sharedFfnDim">If &gt; 0, adds an always-on shared expert of this inner dimension
     /// (Qwen2-MoE); its gated output, weighted by <c>sigmoid(sharedGate(x))</c>, is added for every token.</param>
+    public MoEFeedForwardLayer(int hiddenSize, int ffnDim, int numExperts, int topK, IActivationFunction<T>? activation,
+        int sharedFfnDim)
+        : this(hiddenSize, ffnDim, numExperts, topK, activation, sharedFfnDim, normalizeTopK: true)
+    {
+    }
+
+    /// <summary>Creates a sparse MoE feed-forward layer, choosing whether the kept top-k router probabilities are
+    /// renormalized.</summary>
+    /// <param name="hiddenSize">Model (residual stream) dimension.</param>
+    /// <param name="ffnDim">Each expert's inner (intermediate) dimension.</param>
+    /// <param name="numExperts">Total expert count E.</param>
+    /// <param name="topK">Experts activated per token k (1 ≤ k ≤ E).</param>
+    /// <param name="activation">Gate activation (SiLU when null).</param>
+    /// <param name="sharedFfnDim">Inner dimension of an always-on shared expert; 0 for none.</param>
+    /// <param name="normalizeTopK">Renormalize the kept top-k probabilities to sum to 1 (Mixtral). False keeps the
+    /// softmax-over-all-experts probabilities of the chosen experts (OLMoE and Qwen2-MoE, <c>norm_topk_prob = false</c>).</param>
     public MoEFeedForwardLayer(int hiddenSize, int ffnDim, int numExperts, int topK, IActivationFunction<T>? activation = null,
-        int sharedFfnDim = 0)
+        int sharedFfnDim = 0, bool normalizeTopK = true)
         : base(new[] { -1, hiddenSize }, new[] { -1, hiddenSize })
     {
         _hiddenSize = hiddenSize;
@@ -132,6 +155,7 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>, IShapeContract
         _numExperts = numExperts;
         _topK = topK;
         _sharedFfnDim = sharedFfnDim;
+        _normalizeTopK = normalizeTopK;
         var act = activation ?? new SiLUActivation<T>();
         _activation = act;
 
@@ -256,7 +280,8 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>, IShapeContract
         return Engine.Reshape(output, input._shape);
     }
 
-    // For each token: softmax over experts, keep the top-k, renormalize their weights (Mixtral convention).
+    // For each token: softmax over experts, keep the top-k, renormalize their weights (Mixtral convention; OLMoE
+    // keeps them unnormalized).
     private Tensor<T> ComputeRouting(Tensor<T> routerOut, int n)
     {
         // Routing weights are a fresh constant table, built off the tape.
@@ -286,6 +311,7 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>, IShapeContract
         var chosen = Engine.TensorAdd(above, tiedKept);
 
         var kept = Engine.TensorMultiply(probs, chosen);
+        if (!_normalizeTopK) return kept;
         var topSum = Engine.ReduceSum(kept, new[] { 1 }, keepDims: true);
         return Engine.TensorDivide(kept, topSum); // renormalize
     }

@@ -3,6 +3,8 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
 
+using AiDotNet.Helpers;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -196,13 +198,7 @@ public partial class T5EncoderStack<T> : LayerBase<T>, IShapeContract
     private static Tensor<T> SampleNormal(Random random, int[] shape, double std)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = random.NextDouble();
-            tensor[i] = numOps.FromDouble(std * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
-        }
+        var tensor = SeededNoiseTensors.StandardNormal<T>(shape, random, std);
 
         return tensor;
     }

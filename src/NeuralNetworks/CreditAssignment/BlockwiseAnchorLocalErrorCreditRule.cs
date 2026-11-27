@@ -64,6 +64,25 @@ public sealed class BlockwiseAnchorLocalErrorCreditRule<T>
     }
 
     /// <summary>Creates a blockwise anchor local-error credit rule with training-only residual frame-alignment heads.</summary>
+    /// <remarks>
+    /// Each intermediate anchor block <c>b</c> evaluates its local readout loss on <c>h + (h U_b) V_bᵀ</c> instead of <c>h</c>,
+    /// where <c>U_b</c> and <c>V_b</c> are <c>[hiddenDimension, auxiliaryProjectionRank]</c> matrices owned by the rule
+    /// (<see cref="AuxiliaryParameters"/>) and trained by its own AdamW step in <see cref="ApplyAuxiliaryGradients"/>. The
+    /// heads exist only in the training objective: the model's forward pass and its parameters are unchanged. <c>V_b</c> starts
+    /// small, so the first steps see almost the plain anchor loss.
+    /// </remarks>
+    /// <param name="readoutLayerCount">Trailing layers forming the shared readout (language model: norm + head = 2).</param>
+    /// <param name="anchorStride">Maximum number of trainable hidden layers per decoupled block (e.g. 4 for 3 GDN + 1 MLA).</param>
+    /// <param name="maxCandidates">Candidate vocabulary subset size <c>U</c> for intermediate block anchors (<see cref="int.MaxValue"/> uses full vocabulary).</param>
+    /// <param name="localWeight">Base weight λ applied to each intermediate block anchor's local loss.</param>
+    /// <param name="detachReadoutOnHiddenBlocks">When <c>true</c> (default), intermediate block anchors detach the shared readout's own parameters so only the terminal block updates the readout.</param>
+    /// <param name="useDepthProgressiveWeight">When <c>true</c>, scales intermediate anchor <c>k</c>'s weight by <c>((k + 1) / H)²</c>.</param>
+    /// <param name="streamBlocksSequentially">When <c>true</c> (default), runs each decoupled block on its own sequential tape/scope for <c>O(AnchorStride)</c> activation memory with zero recomputation.</param>
+    /// <param name="seed">Optional deterministic seed when <paramref name="maxCandidates"/> samples negative vocabulary candidates.</param>
+    /// <param name="auxiliaryProjectionRank">Rank <c>r</c> of each block's alignment head; 0 disables the heads.</param>
+    /// <param name="hiddenDimension">Width of the hidden states the anchors see; required when <paramref name="auxiliaryProjectionRank"/> is positive.</param>
+    /// <param name="maxAnchorBlocks">Number of intermediate anchor blocks that get a head; a network with more intermediate anchors throws.</param>
+    /// <param name="auxiliaryLearningRate">AdamW learning rate of the heads; must be positive and finite.</param>
     public static BlockwiseAnchorLocalErrorCreditRule<T> CreateWithFrameAlignment(
         int readoutLayerCount,
         int anchorStride,
@@ -107,6 +126,10 @@ public sealed class BlockwiseAnchorLocalErrorCreditRule<T>
             throw new ArgumentOutOfRangeException(nameof(auxiliaryProjectionRank), "Must be non-negative.");
         if (auxiliaryProjectionRank > 0 && hiddenDimension < 1)
             throw new ArgumentOutOfRangeException(nameof(hiddenDimension), "Must be positive when auxiliaryProjectionRank > 0.");
+        if (auxiliaryProjectionRank > 0 && maxAnchorBlocks < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxAnchorBlocks), "Must be positive when auxiliaryProjectionRank > 0.");
+        if (double.IsNaN(auxiliaryLearningRate) || double.IsInfinity(auxiliaryLearningRate) || auxiliaryLearningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(auxiliaryLearningRate), "Must be positive and finite.");
 
         ReadoutLayerCount = readoutLayerCount;
         AnchorStride = anchorStride;
@@ -118,9 +141,9 @@ public sealed class BlockwiseAnchorLocalErrorCreditRule<T>
         _seed = seed ?? 20261111;
         _auxRank = auxiliaryProjectionRank;
         _hiddenDim = hiddenDimension;
-        _auxLr = auxiliaryLearningRate > 0.0 ? auxiliaryLearningRate : 1.5e-3;
+        _auxLr = auxiliaryLearningRate;
 
-        if (_auxRank > 0 && _hiddenDim > 0 && maxAnchorBlocks > 0)
+        if (_auxRank > 0)
         {
             using var suspend = AiDotNet.Tensors.Engines.TensorScope.Suspend();
             using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
@@ -240,10 +263,17 @@ public sealed class BlockwiseAnchorLocalErrorCreditRule<T>
 
         var s = context.Step;
         var hEval = context.Output;
-        if (_auxU.Length > 0 && hEval.Shape.Length >= 2 && hEval.Shape[hEval.Shape.Length - 1] == _hiddenDim)
+        if (_auxU.Length > 0)
         {
-            int rawSlot = context.HiddenIndex / Math.Max(1, AnchorStride);
-            int anchorSlot = Math.Min(_auxU.Length - 1, Math.Max(0, rawSlot));
+            if (hEval.Shape.Length < 2 || hEval.Shape[hEval.Shape.Length - 1] != _hiddenDim)
+                throw new InvalidOperationException(
+                    $"Frame-alignment heads expect hidden states of width {_hiddenDim}; hidden layer {context.HiddenIndex} " +
+                    $"produced shape [{string.Join(", ", hEval.Shape.ToArray())}].");
+            int anchorSlot = context.HiddenIndex / AnchorStride;
+            if (anchorSlot >= _auxU.Length)
+                throw new InvalidOperationException(
+                    $"Intermediate anchor block {anchorSlot} has no frame-alignment head: the rule was created with " +
+                    $"maxAnchorBlocks = {_auxU.Length}. Create it with at least {anchorSlot + 1}.");
             int rows = hEval.Length / _hiddenDim;
             var h2d = hEval.Rank == 2 ? hEval : s.Engine.Reshape(hEval, [rows, _hiddenDim]);
             var latent = s.Engine.TensorMatMul(h2d, _auxU[anchorSlot]);

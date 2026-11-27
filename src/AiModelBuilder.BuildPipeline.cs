@@ -2403,6 +2403,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <param name="stopReason">
     /// On return, a human-readable reason when training should stop; otherwise null.
     /// </param>
+    /// <param name="stepProgressReported">True when a step reporter already published optimizer-step progress at this
+    /// epoch boundary; the epoch-count progress write is then skipped so it does not overwrite the step counts.</param>
     /// <returns><c>true</c> to continue training; <c>false</c> to abort.</returns>
     private bool InvokeTrainingEpoch(
         int epoch,
@@ -2411,7 +2413,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         string? monitorSessionId,
         TimeSpan elapsed,
         CancellationToken cancellationToken,
-        out string? stopReason)
+        out string? stopReason,
+        bool stepProgressReported = false)
     {
         stopReason = null;
         double? stepsPerSecond = elapsed.TotalSeconds > 0 ? (epoch + 1) / elapsed.TotalSeconds : (double?)null;
@@ -2421,7 +2424,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         if (_trainingMonitor is not null && monitorSessionId is not null)
         {
             _trainingMonitor.LogMetric(monitorSessionId, "loss", epochLoss, epoch);
-            if (totalEpochs > 0)
+            // A streaming run whose step reporter already published step progress at this epoch boundary keeps it:
+            // writing epoch counts into the same current/total step fields would replace step 50/100 with 1/2.
+            if (totalEpochs > 0 && !stepProgressReported)
             {
                 _trainingMonitor.UpdateProgress(monitorSessionId, epoch + 1, totalEpochs, epoch + 1, totalEpochs);
             }
@@ -2639,6 +2644,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 : null;
         if (distCoordinator is not null && _model is NeuralNetworks.NeuralNetworkBase<T> distNeuralNet)
         {
+            distCoordinator.CompiledOptimizerUpdate = _streamingTrainingOptions?.DataParallelUpdateInCompiledPlan ?? false;
             distNeuralNet.DistributedCoordinator = distCoordinator;
         }
 
@@ -2675,12 +2681,19 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         {
             var streamingOptions = _streamingTrainingOptions;
             int gradientAccumulationSteps = Math.Max(1, streamingOptions?.GradientAccumulationSteps ?? 1);
+            // The compiled data-parallel update runs one micro-batch per step. Asked for together with accumulation it
+            // would fall back to the eager accumulated step without a word, so the combination is refused up front.
+            if (distCoordinator is { CompiledOptimizerUpdate: true } && gradientAccumulationSteps > 1)
+                throw new NotSupportedException(
+                    $"DataParallelUpdateInCompiledPlan runs one micro-batch per step and cannot be combined with "
+                    + $"GradientAccumulationSteps = {gradientAccumulationSteps}; turn one of them off.");
 
             await InitializeStreamingLazyAndDistributedStateAsync(
                 rawLoader,
                 distBackend,
                 distCoordinator,
                 cancellationToken);
+            ConfigureStochasticStreams(distBackend, streamingOptions?.Seed);
 
             if (gradientModelDistributed && distBackend is not null)
             {
@@ -2855,6 +2868,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 }
             }
 
+            // The data order: with no configured seed, a seed drawn once (rank 0, broadcast) and checkpointed as the fit
+            // seed, so a resumed run -- at any world size -- skips exactly the samples it already trained on. Drawing a
+            // fresh order each epoch on rank 0 left a resumed epoch shuffled differently from the one it continues.
+            if (activeFitSeed is null && (distBackend is { WorldSize: > 1 } || streamingOptions is not null))
+            {
+                activeFitSeed = ResolveStreamingPipelineFitPlan(
+                    streamingOptions, rawLoader, distLoader, distBackend, savedFitSeed, savedFitBatchSize).FitSeed;
+            }
+            int? shuffleBaseSeed = streamingOptions?.Seed ?? activeFitSeed;
+
             IStreamingDataLoader<T, TInput, TOutput> activeLoader =
                 (IStreamingDataLoader<T, TInput, TOutput>?)distLoader ?? rawLoader;
             if (!activeLoader.IsLoaded)
@@ -2863,6 +2886,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
 
             InvokeTrainingCallbacksBegin(epochs);
+
+            // Step-level monitor reporting (MonitorEveryNSteps). Defaults apply when no streaming options were set.
+            var (stepReporter, restoreGradNormFlag) = CreateStreamingStepReporter(
+                streamingOptions, streamingMonitorSessionId, rawLoader, distBackend is not null,
+                gradientAccumulationSteps, epochs, globalStep);
+            long monitorSamplesSeen = 0L;
 
             // #1790: guarantee OnTrainEnd fires (and the monitor session closes) even if the streaming loop
             // throws — the "always called" contract, symmetric with the non-streaming path.
@@ -2875,7 +2904,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 int epochBatches = 0;
                 int batchInEpoch = 0;
                 long samplesInEpoch = (epoch == startEpoch && resumeSkipBatches == 0) ? resumeSkipSamples : 0L;
-                int? epochSeed = streamingOptions?.Seed is int baseSeed ? unchecked(baseSeed + epoch) : null;
+                int? epochSeed = shuffleBaseSeed is int baseSeed ? unchecked(baseSeed + epoch) : null;
                 var microBatchBuffer = (gradientAccumulationSteps > 1 || distCoordinator is not null)
                     ? new List<(Tensor<T> Input, Tensor<T> Target)>(gradientAccumulationSteps)
                     : null;
@@ -2903,6 +2932,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 await foreach (var (inputs, outputs) in activeLoader.GetBatchesAsync(shuffle: true, seed: epochSeed, cancellationToken: cancellationToken))
                 {
                     batchInEpoch++;
+                    T stepLoss = streamingLastLoss;
+                    bool stepHasLoss = false;
+                    // Optimizer updates this step applied: one, except when a batch that cannot be stacked is trained
+                    // one sample at a time (each sample its own update); the reporter then works in update units.
+                    int stepUpdates = 1;
 
                     // Resume: skip the batches of the resumed epoch that the checkpointed run already trained on.
                     if (epoch == startEpoch && batchInEpoch <= resumeSkipBatches)
@@ -2916,11 +2950,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                         long globalBatchSamples = distLoader.LastBatchGlobalSampleCount;
                         if (globalBatchSamples <= 0) continue;
                         samplesInEpoch += globalBatchSamples;
+                        monitorSamplesSeen += globalBatchSamples;
                     }
                     else
                     {
                         if (inputs.Length == 0) continue;
                         samplesInEpoch += inputs.Length;
+                        monitorSamplesSeen += inputs.Length;
                     }
 
                     TOutput[] processedOutputs = outputs;
@@ -2974,9 +3010,30 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     bool isIdleDistributedNeuralRank = distCoordinator is not null
                         && processedInputs.Length == 0
                         && _model is NeuralNetworks.NeuralNetworkBase<T>;
+                    // A data-parallel step whose update runs in the compiled plan goes through Train, whose fused
+                    // path runs it (one micro-batch per step); the accumulated step is the eager reference.
+                    bool compiledDistributedStep = distCoordinator is { CompiledOptimizerUpdate: true }
+                        && gradientAccumulationSteps <= 1
+                        && _model is INeuralNetwork<T>;
+                    // Agreed before any rank enters the plan's exchange, and before the batch's type is looked at (every
+                    // rank reaches it, the idle one included): a rank that threw alone would leave the others waiting
+                    // in the all-reduce until the collective timeout. It costs one one-element all-reduce per step. The
+                    // flag cannot ride the gradient exchange: an idle rank has no batch to run the plan on, so it never
+                    // reaches that exchange. Nor can each rank derive it locally from the loader's slicing: that holds
+                    // only when every rank's inner loader yields the same global stream, which a pre-sharded loader, a
+                    // growing source or an AggregateSamples that filters samples breaks, and one rank deciding alone is
+                    // the hang this check exists to prevent.
+                    if (compiledDistributedStep && !distCoordinator!.AllRanks(processedInputs.Length > 0))
+                        throw new NotSupportedException(
+                            "A rank received no samples this step; the data-parallel compiled update needs every rank to "
+                            + "have a batch (size the dataset to a multiple of the global batch, or turn the compiled "
+                            + "data-parallel update off).");
                     if (distillationStep is not null)
                     {
-                        epochLoss = AddLossScalars(epochLoss, distillationStep(processedInputs, processedOutputs));
+                        T distillationLoss = distillationStep(processedInputs, processedOutputs);
+                        epochLoss = AddLossScalars(epochLoss, distillationLoss);
+                        stepLoss = distillationLoss;
+                        stepHasLoss = true;
                         epochBatches++;
                     }
                     else if (((processedInputs.Length > 0 && processedInputs[0] is Tensor<T>
@@ -2990,7 +3047,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                             nnBaseForOpt.SetBaseTrainOptimizer(gboTrain);
                         }
 
-                        if ((gradientAccumulationSteps > 1 || distCoordinator is not null)
+                        if ((gradientAccumulationSteps > 1 || (distCoordinator is not null && !compiledDistributedStep))
                             && nn is NeuralNetworks.NeuralNetworkBase<T> accumNn
                             && microBatchBuffer is not null)
                         {
@@ -3005,18 +3062,43 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                             accumulatedMicroBatches = 0;
                             var accumLoss = nn.GetLastLoss();
                             epochLoss = AddLossScalars(epochLoss, accumLoss);
+                            stepLoss = accumLoss;
+                            stepHasLoss = true;
                             epochBatches++;
                         }
                         else
                         {
                             var inputArray = processedInputs.Cast<Tensor<T>>().ToArray();
                             var outputArray = processedOutputs.Cast<Tensor<T>>().ToArray();
-                            if (TryStackTensorBatch(inputArray, out var batchedInput) &&
-                                TryStackTensorBatch(outputArray, out var batchedTarget))
+                            Tensor<T>? batchedTarget = null;
+                            bool stacked = TryStackTensorBatch(inputArray, out var batchedInput) &&
+                                TryStackTensorBatch(outputArray, out batchedTarget);
+                            if (compiledDistributedStep)
+                            {
+                                // Every rank must take the same path: a rank that stacked makes one Train call (one
+                                // optimizer step, one in-plan exchange) while a rank that did not makes one per sample,
+                                // so the replicas would diverge or wait on each other's exchange. Agreed with a
+                                // collective, like the sample check above, so no rank decides alone. When any rank
+                                // cannot stack, all train per sample, which needs the same sample count on every rank.
+                                if (!distCoordinator!.AllRanks(stacked))
+                                {
+                                    stacked = false;
+                                    if (!distCoordinator.RanksAgree(inputArray.Length))
+                                        throw new NotSupportedException(
+                                            "A batch on some rank could not be stacked into one tensor, so every rank trains "
+                                            + "its samples one at a time this step, but the ranks hold different numbers of "
+                                            + "samples; the data-parallel compiled update needs the same number of updates "
+                                            + "on every rank (give every sample the same shape, or turn the compiled "
+                                            + "data-parallel update off).");
+                                }
+                            }
+                            if (stacked)
                             {
                                 nn.Train((batchedInput ?? throw new InvalidOperationException("batchedInput is null where it is required.")), (batchedTarget ?? throw new InvalidOperationException("batchedTarget is null where it is required.")));
                                 var lastLoss = nn.GetLastLoss();
                                 epochLoss = numOps.Add(epochLoss, lastLoss);
+                                stepLoss = lastLoss;
+                                stepHasLoss = true;
                                 epochBatches++;
                             }
                             else
@@ -3027,12 +3109,22 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                                 // (Adam moments, AdamW weight decay, schedulers)
                                 // is correctly engaged, just at a smaller per-
                                 // call batch dim.
+                                T sampleLossSum = numOps.Zero;
                                 for (int i = 0; i < inputArray.Length; i++)
                                 {
                                     nn.Train(inputArray[i], outputArray[i]);
                                     var sampleLoss = nn.GetLastLoss();
                                     epochLoss = numOps.Add(epochLoss, sampleLoss);
+                                    sampleLossSum = AddLossScalars(sampleLossSum, sampleLoss);
+                                    stepHasLoss = true;
                                     epochBatches++;
+                                }
+                                if (inputArray.Length > 0)
+                                {
+                                    // Each sample was its own optimizer update: report the step as that many updates,
+                                    // at their mean loss, not as one update at the last sample's loss.
+                                    stepUpdates = inputArray.Length;
+                                    stepLoss = ComputeRunningMeanLoss(sampleLossSum, inputArray.Length);
                                 }
                             }
                         }
@@ -3055,6 +3147,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                         }
 
                         epochLoss = AddLossScalars(epochLoss, globalBatchLoss);
+                        stepLoss = globalBatchLoss;
+                        stepHasLoss = true;
                         epochBatches++;
                     }
                     else if (distBackend is { WorldSize: > 1 })
@@ -3086,6 +3180,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                         }
 
                         epochLoss = AddLossScalars(epochLoss, batchLoss);
+                        stepLoss = batchLoss;   // one update per batch, at the batch's mean loss
+                        stepHasLoss = true;
                         epochBatches++;
                     }
 
@@ -3093,6 +3189,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     cursorEpoch = epoch;
                     cursorBatchInEpoch = batchInEpoch;
                     cursorSamplesInEpoch = samplesInEpoch;
+                    stepReporter?.OnStep(
+                        globalStep,
+                        stepHasLoss,
+                        stepLoss,
+                        monitorSamplesSeen,
+                        CurrentStreamingLearningRate(),
+                        stepReporter.TotalSteps,
+                        epoch + 1,
+                        epochs,
+                        stepUpdates);
                     T runningEpochLoss = epochBatches > 0
                         ? numOps.Divide(epochLoss, numOps.FromDouble(epochBatches))
                         : numOps.Zero;
@@ -3139,6 +3245,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     && microBatchBuffer is not null
                     && _model is NeuralNetworks.NeuralNetworkBase<T> flushNn)
                 {
+                    long stepBeforeFlush = globalStep;
                     (epochLoss, epochBatches, globalStep, lastValidationLoss, hasValidationLoss, lastCheckpointStep, stepBudgetReached) =
                         await FlushRemainingAccumulatedMicroBatchesAsync(
                             flushNn,
@@ -3162,6 +3269,18 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                             gradientAccumulationSteps,
                             activeFitSeed,
                             activeFitBatchSize);
+                    if (globalStep > stepBeforeFlush)
+                    {
+                        stepReporter?.OnStep(
+                            globalStep,
+                            true,
+                            flushNn.GetLastLoss(),
+                            monitorSamplesSeen,
+                            CurrentStreamingLearningRate(),
+                            stepReporter.TotalSteps,
+                            epoch + 1,
+                            epochs);
+                    }
                     cursorEpoch = epoch;
                     cursorBatchInEpoch = batchInEpoch;
                     cursorSamplesInEpoch = samplesInEpoch;
@@ -3228,6 +3347,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     : numOps.Zero;
                 streamingLastEpoch = epoch;
                 streamingLastLoss = avgEpochLoss;
+                stepReporter?.OnEpochEnd(globalStep, epoch + 1, epochs);
 
                 // Stream this epoch's metrics to the monitor, invoke user callbacks, and evaluate
                 // the abort signals (callback veto / cancellation / monitor issue).
@@ -3238,7 +3358,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     streamingMonitorSessionId,
                     DateTime.UtcNow - streamingStart,
                     cancellationToken,
-                    out var epochStopReason);
+                    out var epochStopReason,
+                    stepProgressReported: stepReporter is not null);
                 if (SynchronizeDistributedStopSignal(distBackend, !continueTraining))
                 {
                     streamingEarlyStopTriggered = true;
@@ -3296,6 +3417,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
             finally
             {
+                restoreGradNormFlag?.Invoke();
+
                 // Notify callbacks that training has ended, then close the monitor session — always, even on
                 // throw. Isolate the two so a throwing OnTrainEnd callback can't leak the monitor session.
                 try

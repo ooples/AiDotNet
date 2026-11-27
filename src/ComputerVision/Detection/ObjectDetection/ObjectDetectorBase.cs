@@ -42,6 +42,13 @@ public abstract partial class ObjectDetectorBase<T> : VisionTaskModelBase<T>
     /// satisfies the contract — ResNet, CSPDarknet, EfficientNet, SwinTransformer,
     /// or a future custom implementation — can plug in.
     /// </summary>
+    /// <remarks>
+    /// Trainable, like <see cref="Neck"/>: the parameter registry already carries every backbone weight. Left
+    /// unclassified, the generated state ALSO persisted the whole backbone, so every Serialize, DeepCopy and
+    /// WithParameters wrote a ResNet-50 twice (Cascade R-CNN: 189 MB of state beside the 556 MB vector, and over
+    /// 1.7 GB allocated to write it), and every restore loaded it twice.
+    /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter(Optional = true)]
     protected IDetectionBackbone<T>? Backbone { get; set; }
 
     /// <summary>
@@ -270,13 +277,40 @@ public abstract partial class ObjectDetectorBase<T> : VisionTaskModelBase<T>
     /// </summary>
     protected virtual IReadOnlyCollection<int> DataOutputIndices => Array.Empty<int>();
 
-    /// <summary>The concatenated outputs of <see cref="Predict"/>, with <see cref="DataOutputIndices"/> out of the loss.</summary>
+    /// <summary>
+    /// The concatenated outputs of <see cref="Predict"/>, with <see cref="DataOutputIndices"/> and the zero rows that pad
+    /// a two-stage detector's per-RoI heads out of the loss.
+    /// </summary>
     protected override Tensor<T> TrainingForward(Tensor<T> input)
     {
+        _rawStepPredictionCount = -1;
         if (DataOutputIndices.Count == 0) return Predict(input);
         NoteResolvedInput(input);
-        return CvTensorOps<T>.ConcatenateTrainableOutputs(Forward(input), DataOutputIndices, RawStepTarget);
+        var prediction = CvTensorOps<T>.ConcatenateTrainableOutputs(
+            Forward(input), DataOutputIndices, RawStepTarget, out int predictionCount);
+        _rawStepPredictionCount = predictionCount;
+        return prediction;
     }
+
+    /// <summary>
+    /// How many positions of the last <see cref="TrainingForward"/> output are predictions, or -1 when all are.
+    /// Scratch: it describes one step in progress.
+    /// </summary>
+    [AiDotNet.Attributes.Scratch]
+    private int _rawStepPredictionCount = -1;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Averages over the predictions only. A two-stage detector pads its per-RoI heads to the proposal cap, and those
+    /// padding rows (and the data outputs) carry the target's values, so they add nothing to the squared error; counting
+    /// them in the mean anyway made the loss depend on how many proposals survived NMS. Training that let more
+    /// proposals survive then raised the loss although every prediction's error fell (Cascade R-CNN: 185 then 264
+    /// proposals, the mean per prediction 1.53 then 1.31, the padded mean 0.313 then 0.368).
+    /// </remarks>
+    private protected override Tensor<T> RawStepLoss(Tensor<T> predicted, Tensor<T> target)
+        => _rawStepPredictionCount < 0
+            ? base.RawStepLoss(predicted, target)
+            : CvTensorOps<T>.MeanSquaredErrorOverPredictions(predicted, target, _rawStepPredictionCount);
 
     /// <summary>
     /// Post-processes raw network outputs into detections.

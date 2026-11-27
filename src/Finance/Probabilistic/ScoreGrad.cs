@@ -944,10 +944,7 @@ public partial class ScoreGrad<T> : ForecastingModelBase<T>
 
         for (int i = 0; i < dataVec.Length; i++)
         {
-            double u1 = _random.NextDouble();
-            double u2 = _random.NextDouble();
-            double noise = Math.Sqrt(-2.0 * Math.Log(Math.Max(u1, 1e-10))) * Math.Cos(2.0 * Math.PI * u2);
-            noise *= sigma;
+            double noise = sigma * SeededNoiseTensors.NextStandardNormal(_random, BoxMullerGuard.Floored);
             noiseVec[i] = NumOps.FromDouble(noise);
 
             double dataVal = NumOps.ToDouble(dataVec[i]);
@@ -1077,13 +1074,7 @@ public partial class ScoreGrad<T> : ForecastingModelBase<T>
     {
         var noiseVec = new T[size];
 
-        for (int i = 0; i < size; i++)
-        {
-            double u1 = _random.NextDouble();
-            double u2 = _random.NextDouble();
-            double noise = Math.Sqrt(-2.0 * Math.Log(Math.Max(u1, 1e-10))) * Math.Cos(2.0 * Math.PI * u2);
-            noiseVec[i] = NumOps.FromDouble(noise * sigma);
-        }
+        SeededNoiseTensors.WriteStandardNormal<T>(noiseVec, _random, sigma, BoxMullerGuard.Floored);
 
         return new Tensor<T>(new[] { size }, new Vector<T>(noiseVec));
     }

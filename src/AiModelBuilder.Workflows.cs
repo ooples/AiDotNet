@@ -1678,7 +1678,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // so any future Tensors-side default updates flow through
             // without freezing the AiDotNet-side config at today's
             // values.
-            nnBase.ConfigureWeightLifetime(new GpuOffloadOptions());
+            nnBase.ForceWeightStreaming(_weightStreamingConfig.StoreDtype);
             return;
         }
 

@@ -889,9 +889,7 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <summary>A standard normal draw from the agent's (seedable) generator, by the Box-Muller transform.</summary>
     private T StandardNormal()
     {
-        double u1 = 1.0 - Random.NextDouble();
-        double u2 = Random.NextDouble();
-        return NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
+        return NumOps.FromDouble(SeededNoiseTensors.NextStandardNormal(Random));
     }
 
     // =====================================================================================================

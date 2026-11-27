@@ -40,11 +40,9 @@ namespace AiDotNet.VisionLanguage.Document;
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new TextMonkey&lt;double&gt;(architecture, "textmonkey.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new TextMonkey&lt;double&gt;(architecture, new TextMonkeyOptions());
+/// var model = new TextMonkey&lt;double&gt;(architecture, new TextMonkeyOptions());
+/// var page = Tensor&lt;double&gt;.CreateRandom(3, 224, 224);   // [3, H, W] RGB page, the architecture's input size
+/// Tensor&lt;double&gt; answer = model.AnswerDocumentQuestion(page, "What is the invoice total?");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -95,6 +93,7 @@ public partial class TextMonkey<T> : VisionLanguageModelBase<T>, IDocumentUnders
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -121,6 +120,7 @@ public partial class TextMonkey<T> : VisionLanguageModelBase<T>, IDocumentUnders
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -181,7 +181,7 @@ public partial class TextMonkey<T> : VisionLanguageModelBase<T>, IDocumentUnders
         // Shifted window attention and token resampling handled by encoder layers
         var decoderInput = visualFeatures;
         if (promptTokens is not null)
-            decoderInput = visualFeatures.ConcatenateTensors(promptTokens);
+            decoderInput = FusePromptTokens(visualFeatures, promptTokens);
 
         // Step 4: LLM decoder
         var output = decoderInput;
@@ -233,10 +233,13 @@ public partial class TextMonkey<T> : VisionLanguageModelBase<T>, IDocumentUnders
 
     private void ComputeEncoderDecoderBoundary()
     {
-        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        // PatchEmbedding, one TransformerEncoderLayer (+ Dropout) per vision block, the final LayerNorm, then the
+        // projection to the decoder width when it differs.
+        int lpb = _options.DropoutRate > 0 ? 2 : 1;
         _encoderLayerEnd =
             1
             + _options.NumVisionLayers * lpb
+            + 1
             + (_options.VisionDim != _options.DecoderDim ? 1 : 0);
     }
 

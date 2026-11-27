@@ -37,11 +37,9 @@ namespace AiDotNet.VisionLanguage.Unified;
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new OmniGen2&lt;double&gt;(architecture, "omnigen2.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new OmniGen2&lt;double&gt;(architecture, new OmniGen2Options());
+/// var model = new OmniGen2&lt;double&gt;(architecture, new OmniGen2Options());
+/// var image = Tensor&lt;double&gt;.CreateRandom(3, 224, 224);   // [3, H, W] RGB, the architecture's input size
+/// Tensor&lt;double&gt; caption = model.GenerateFromImage(image, "Describe this image.");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -82,6 +80,7 @@ public partial class OmniGen2<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -106,6 +105,7 @@ public partial class OmniGen2<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -156,7 +156,7 @@ public partial class OmniGen2<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
         for (int i = 0; i < _encoderLayerEnd; i++)
             features = Layers[i].Forward(features);
 
-        // Fuse visual features with prompt tokens via ConcatenateTensors
+        // Embed the prompt tokens and append them to the visual token sequence
 
         Tensor<T> fusedInput;
 
@@ -164,7 +164,7 @@ public partial class OmniGen2<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
         {
             var promptTokens = TokenizeText(prompt);
 
-            fusedInput = features.ConcatenateTensors(promptTokens);
+            fusedInput = FusePromptTokens(features, promptTokens);
         }
         else
         {
@@ -313,8 +313,9 @@ public partial class OmniGen2<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
     private void ComputeEncoderDecoderBoundary()
     {
         int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        // PatchEmbedding + LayerNorm, the vision blocks, then the projection to the shared width when it differs.
         _encoderLayerEnd =
-            1
+            2
             + _options.NumVisionLayers * lpb
             + (_options.VisionDim != _options.DecoderDim ? 1 : 0);
     }
