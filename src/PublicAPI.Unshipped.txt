@@ -26680,6 +26680,12 @@ override AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.Bu
 AiDotNet.Finance.Trading.Agents.FinancialPPOAgent<T>.StoreExperienceWithPrivilegedCritic(AiDotNet.Tensors.LinearAlgebra.Vector<T>! state, AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, T reward, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextState, bool done, AiDotNet.Tensors.LinearAlgebra.Vector<T>! privileged, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextPrivileged) -> void
 AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.PrivilegedCriticInputSize.get -> int
 AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.PrivilegedCriticInputSize.set -> void
+override AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> bool
+override AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> bool
+override AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> bool
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> bool
+*REMOVED*override AiDotNet.Finance.Forecasting.Neural.DeepAR<T>.ConcatenatePredictions(System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! predictions, int totalSteps) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.Finance.Forecasting.Neural.DeepAR<T>.ShiftInputWithPredictions(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! prediction, int stepsUsed) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.ModelLoading.Pretrained.HuggingFaceConfig.NormTopKProb.get -> bool?
 AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionLayer<T>.ConfigureProjectionNorm(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! queryNormWeight, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! keyNormWeight, double epsilon) -> void
 AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionLayer<T>.UsesProjectionNorm.get -> bool
@@ -26728,6 +26734,7 @@ AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ShuffleEachEpoch.get -> b
 AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ShuffleEachEpoch.set -> void
 AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ValidationFraction.get -> double
 AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ValidationFraction.set -> void
+override AiDotNet.VisionLanguage.VisionLanguageModelBase<T>.RegisterComponents() -> void
 override AiDotNet.ActivationFunctions.ELUActivation<T>.Derivative(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.ActivationFunctions.SwishActivation<T>.Derivative(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.Models.Options.KnowledgeDistillationOptions<T, TInput, TOutput>.SparseTopK.get -> int

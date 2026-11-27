@@ -663,7 +663,7 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     }
 
     private void FillStandardNormal(Tensor<T> eps)
-        => SyntheticTensorOps<T>.FillStandardNormal(eps, _random);
+        => SeededNoiseTensors.FillStandardNormal(eps, _random);
 
     /// <summary>
     /// Runs the VAE decoder forward pass to reconstruct data from latent code.
@@ -1196,7 +1196,7 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     }
 
     private Vector<T> CreateStandardNormalVector(int length)
-        => SyntheticTensorOps<T>.StandardNormalVector(length, _random);
+        => SeededNoiseTensors.StandardNormalVector<T>(length, _random);
 
     #endregion
 

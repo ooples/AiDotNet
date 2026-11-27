@@ -769,7 +769,7 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     }
 
     private Vector<T> CreateStandardNormalVector(int length)
-        => SyntheticTensorOps<T>.StandardNormalVector(length, _random);
+        => SeededNoiseTensors.StandardNormalVector<T>(length, _random);
 
     #endregion
 

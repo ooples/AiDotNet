@@ -143,7 +143,7 @@ public class EigenDecompositionIntegrationTests
     /// n*(n-1)/2 off-diagonal pairs. For n &gt; ~50 this produced a grossly
     /// under-converged decomposition with ~99% wrong off-diagonal entries.
     /// This test exercises the n=50 / n=128 / n=256 sizes the issue calls out
-    /// (n=256 was the original PPMI byte-LM repro from HarmonicEngine#103);
+    /// (n=256 was the original PPMI byte-LM repro from a downstream consumer);
     /// without the fix, every assertion below trips.
     ///
     /// Asserts:

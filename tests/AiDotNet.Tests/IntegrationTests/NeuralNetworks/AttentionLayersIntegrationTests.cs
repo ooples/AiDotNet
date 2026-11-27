@@ -360,7 +360,7 @@ public class AttentionLayersIntegrationTests
     /// of its registered trainable parameters (Q/K/V/O projection weights + output bias).
     ///
     /// <para>This guards against the FA-vs-MHA degenerate-output bug observed in the
-    /// HarmonicEngine consumer at dModel=128/L=2/ctx=64/10KB WikiText-2: FA arm produced
+    /// A downstream consumer at dModel=128/L=2/ctx=64/10KB WikiText-2: FA arm produced
     /// top1=0% / top5=100% / ppl=V=256 uniform-output, indicating that gradient flow
     /// through Engine.FlashAttention to the layer's projection weights was broken.</para>
     ///
@@ -445,9 +445,9 @@ public class AttentionLayersIntegrationTests
     /// Regression test: a tiny model built around FlashAttentionLayer must train
     /// (loss decreases by at least 5% over 20 SGD steps on a random target).
     ///
-    /// <para>This reproduces the HarmonicEngine PathB FlashAttention sanity failure
+    /// <para>This reproduces a downstream FlashAttention sanity failure
     /// (top1=0% / top5=100% / ppl=V on 10KB WikiText-2) at a tiny scale that runs in
-    /// under a second. If the layer trains here, the HE consumer test will also train.</para>
+    /// under a second. If the layer trains here, the downstream consumer test will also train.</para>
     /// </summary>
     [Fact(Timeout = 120000)]
     public async Task FlashAttentionLayer_TrainsViaTape_LossDecreases()

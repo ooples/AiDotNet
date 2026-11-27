@@ -273,9 +273,11 @@ internal static class CvTensorOps<T>
         if (present == count)
             return rows;
 
+        // Padding an already padded tensor keeps its prediction count: its own padding rows are not predictions.
+        int predictions = PredictionRows(rows);
         var padded = Engine.TensorConstantPad(rows, new[] { 0, 0, 0, count - present }, NumOps.Zero);
         PaddedPredictionRows.Remove(padded);
-        PaddedPredictionRows.Add(padded, new System.Runtime.CompilerServices.StrongBox<int>(present));
+        PaddedPredictionRows.Add(padded, new System.Runtime.CompilerServices.StrongBox<int>(predictions));
         return padded;
     }
 
@@ -402,32 +404,46 @@ internal static class CvTensorOps<T>
         Tensor<T>? target, out int predictionCount)
     {
         var prediction = ConcatenateOutputs(outputs);
-        var ops = MathHelper.GetNumericOperations<T>();
-        var keep = new Tensor<T>[outputs.Count];
-        var drop = new Tensor<T>[outputs.Count];
+
+        // Count first: the masks below are only needed when some position is not a prediction.
+        var predictedPerOutput = new int[outputs.Count];
         predictionCount = 0;
         for (int i = 0; i < outputs.Count; i++)
         {
-            keep[i] = new Tensor<T>(outputs[i].Shape.ToArray());
-            drop[i] = new Tensor<T>(outputs[i].Shape.ToArray());
             if (dataOutputs.Contains(i))
             {
-                drop[i].Fill(ops.One);
+                predictedPerOutput[i] = -1;
                 continue;
             }
 
             // Row-major: a head's first PredictionRows rows are its predictions, the rest PadRows' zero padding.
             int rows = outputs[i].Rank > 0 ? outputs[i].Shape[0] : 1;
             int perRow = rows == 0 ? 0 : outputs[i].Length / rows;
-            int predicted = Math.Min(rows, PredictionRows(outputs[i])) * perRow;
-            keep[i].AsWritableSpan().Slice(0, predicted).Fill(ops.One);
-            drop[i].AsWritableSpan().Slice(predicted).Fill(ops.One);
-            predictionCount += predicted;
+            predictedPerOutput[i] = Math.Min(rows, PredictionRows(outputs[i])) * perRow;
+            predictionCount += predictedPerOutput[i];
         }
 
         if (predictionCount == prediction.Length)
         {
             return prediction;
+        }
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        var keep = new Tensor<T>[outputs.Count];
+        var drop = new Tensor<T>[outputs.Count];
+        for (int i = 0; i < outputs.Count; i++)
+        {
+            keep[i] = new Tensor<T>(outputs[i].Shape.ToArray());
+            drop[i] = new Tensor<T>(outputs[i].Shape.ToArray());
+            int predicted = predictedPerOutput[i];
+            if (predicted < 0)
+            {
+                drop[i].Fill(ops.One);
+                continue;
+            }
+
+            keep[i].AsWritableSpan().Slice(0, predicted).Fill(ops.One);
+            drop[i].AsWritableSpan().Slice(predicted).Fill(ops.One);
         }
 
         var kept = Engine.TensorMultiply(prediction, ConcatenateOutputs(keep));

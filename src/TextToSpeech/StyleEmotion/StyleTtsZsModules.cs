@@ -142,9 +142,7 @@ internal sealed class StyleTtsZsPromptTextEncoder<T>
     public (Tensor<T> Text, Tensor<T> Style) Forward(int[] ids, Tensor<T> promptMel, bool training, Random random)
     {
         int n = ids.Length, t = promptMel.Shape[1];
-        var idTensor = new Tensor<T>(new[] { n });
-        for (int i = 0; i < n; i++) idTensor[i] = NumOps.FromDouble(ids[i]);
-        var text = Embedding.Forward(idTensor);
+        var text = Embedding.Forward(TtsIdTensors.From<T>(ids));
         var prompt = PromptProjection.Forward(_engine.TensorTranspose(promptMel));
         var h = Conformer.Forward(StyleTtsZsOps.Join(_engine, Separator, text, prompt), training, random);
         var textOut = TextProjection.Forward(StyleTtsZsOps.Rows(_engine, h, 0, n));

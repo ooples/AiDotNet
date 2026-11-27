@@ -521,8 +521,9 @@ public partial class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
     private void ComputeEncoderDecoderBoundary()
     {
         int layersPerBlock = TransformerBlockLayerCount(_options.DropoutRate);
+        // PatchEmbedding + LayerNorm, the vision blocks, then the projection to the shared width when it differs.
         _encoderLayerEnd =
-            1
+            2
             + _options.NumVisionLayers * layersPerBlock
             + (_options.VisionDim != _options.DecoderDim ? 1 : 0);
     }

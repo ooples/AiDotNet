@@ -51,7 +51,7 @@ public class CategoricalCrossEntropyTapeIssue1191Tests
     /// </summary>
     /// <remarks>
     /// V=8 is chosen to match the minimal reproducer the issue links
-    /// to (HarmonicEngine PR #80 / Phase_A4_AiDotNet_1187_Reproducer).
+    /// to (a downstream #1187 reproducer).
     /// </remarks>
     [Fact]
     public void ComputeTapeLoss_UniformSoftmax_OneHotTarget_ReturnsLnV_NotLnV_OverV()
@@ -255,7 +255,7 @@ public class CategoricalCrossEntropyTapeIssue1191Tests
 
     /// <summary>
     /// Issue #1191 end-to-end repro. Mirrors the V=8 identity-mapping
-    /// task from HarmonicEngine PR #80 / Phase_A4_AiDotNet_1187_Reproducer
+    /// task from a downstream #1187 reproducer
     /// at slightly larger iteration count to stay well above the noise
     /// floor of a stochastic Transformer optimizer.
     ///

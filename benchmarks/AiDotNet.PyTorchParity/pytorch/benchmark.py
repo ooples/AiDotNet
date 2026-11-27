@@ -11,7 +11,10 @@ inference batch size gets its own specialized graph instead of the
 automatic-dynamic symbolic graph a second batch size would otherwise trigger.
 --compile-mode selects the TorchInductor mode (reduce-overhead adds CUDA
 graphs) and --optimizer-impl selects AdamW's implementation (fused on CPU and
-CUDA). ../run_matrix.py runs several of these PyTorch configurations against
+CUDA). Dynamo does not trace nn.LSTM or nn.GRU by default and runs them eagerly;
+--compile-rnn sets torch._dynamo.config.allow_rnn so they compile as well. The
+report's protocol block records how many graphs Dynamo compiled for each model.
+../run_matrix.py runs several of these PyTorch configurations against
 AiDotNet and compares AiDotNet to the fastest one. Pin both sides to the same
 CPU thread count:
     python benchmark.py --threads 8 ...
@@ -103,6 +106,8 @@ class ModelResult:
     inference: list[InferenceBatchResult]
     # Set when the two rows compute different functions despite matching sizes, so the timing is not a parity result.
     note: str = ""
+    # Large-data mode (--data): whole epochs over a prepared dataset, with test accuracy after each (scale_data.py).
+    scale: dict | None = None
 
 
 class ResourceMonitor:
@@ -1286,22 +1291,34 @@ class MnistVAE(nn.Module):
 GAT_NODES, GAT_FEATURES, GAT_CLASSES = 2708, 1433, 7
 
 
-def cora_like_graph(nodes: int = GAT_NODES) -> torch.Tensor:
-    """The C# gat row's graph: a ring plus a chord i -> i+7 from every node, undirected, with self-loops - 5,416 edges
-    against Cora's 5,429. Returned as the additive attention mask AiDotNet's GraphAttentionLayer builds: 0 on an
-    edge, -1e9 elsewhere."""
+def cora_like_adjacency(nodes: int = GAT_NODES) -> torch.Tensor:
+    """The C# gat row's graph as a 0/1 matrix: a ring plus a chord i -> i+7 from every node, undirected, with
+    self-loops - 5,416 undirected edges against Cora's 5,429, 13,540 stored entries with the self-loops."""
     adjacency = torch.eye(nodes)
     index = torch.arange(nodes)
     for step in (1, 7):
         adjacency[index, (index + step) % nodes] = 1
         adjacency[(index + step) % nodes, index] = 1
-    return (1 - adjacency) * -1e9
+    return adjacency
+
+
+def cora_like_graph(nodes: int = GAT_NODES) -> torch.Tensor:
+    """The additive attention mask AiDotNet's GraphAttentionLayer builds from the graph: 0 on an edge, -1e9
+    elsewhere (the dense formulation, which DenseGATLayer takes)."""
+    return (1 - cora_like_adjacency(nodes)) * -1e9
+
+
+def cora_like_edges(nodes: int = GAT_NODES) -> tuple[torch.Tensor, torch.Tensor]:
+    """The graph's stored entries as (row, column) index vectors in row-major order: row i attends to column j."""
+    rows, columns = cora_like_adjacency(nodes).nonzero(as_tuple=True)
+    return rows, columns
 
 
 class DenseGATLayer(nn.Module):
-    """AiDotNet's GraphAttentionLayer on its dense path (and the GAT authors' reference implementation): per head,
+    """The GAT authors' reference implementation (and AiDotNet's GraphAttentionLayer dense fallback): per head,
     Wh = X W, e_ij = LeakyReLU_0.2(a_self . Wh_i + a_neigh . Wh_j) + mask_ij, softmax over j, dropout on the
-    coefficients, then aggregation; heads are concatenated (hidden layer) or averaged (output layer), plus a bias."""
+    coefficients, then aggregation; heads are concatenated (hidden layer) or averaged (output layer), plus a bias.
+    O(nodes^2 * heads). Kept as the reference that test_gat_twin.py checks EdgeGATLayer against."""
 
     def __init__(self, inputs: int, outputs: int, heads: int, concat: bool, dropout: float) -> None:
         super().__init__()
@@ -1323,21 +1340,50 @@ class DenseGATLayer(nn.Module):
         return out + self.bias
 
 
+class EdgeGATLayer(DenseGATLayer):
+    """DenseGATLayer evaluated over the graph's stored entries only, as AiDotNet's layer runs it (its CSR kernel) and
+    as PyG's GATConv does. The parameters and the coefficients are the same: every masked dense entry contributes
+    exp(-1e9 - max) = 0 to its row's softmax. O(edges * heads) work and memory instead of O(nodes^2 * heads).
+    Every row needs an entry (a fully masked dense row softmaxes to 1/N everywhere); the self-loops guarantee it."""
+
+    def forward(self, x: torch.Tensor, edges: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:  # type: ignore[override]
+        rows, columns = edges
+        wh = torch.einsum("bnf,hfo->bhno", x, self.weight)                              # [B, H, N, O]
+        self_scores = torch.einsum("bhno,ho->bhn", wh, self.attention[:, :self.outputs])
+        neighbor_scores = torch.einsum("bhno,ho->bhn", wh, self.attention[:, self.outputs:])
+        scores = F.leaky_relu(self_scores[..., rows] + neighbor_scores[..., columns], 0.2)  # [B, H, E]
+        # Softmax over each row's entries. The row maximum is only a shift (softmax does not depend on it), so it is
+        # taken without a gradient, as torch.softmax's own stabilization.
+        row_max = torch.full_like(self_scores, float("-inf")).scatter_reduce(
+            -1, rows.expand_as(scores), scores.detach(), reduce="amax", include_self=True)
+        weights = torch.exp(scores - row_max[..., rows])
+        totals = torch.zeros_like(self_scores).index_add(-1, rows, weights)
+        coefficients = F.dropout(weights / totals[..., rows], self.dropout, self.training)
+        out = torch.zeros_like(wh).index_add(2, rows, coefficients[..., None] * wh[..., columns, :])
+        out = out.permute(0, 2, 1, 3).flatten(2) if self.concat else out.mean(dim=1)
+        return out + self.bias
+
+
 class CoraGAT(nn.Module):
     """The "gat" row: Velickovic et al.'s Cora GAT as AiDotNet's GraphAttentionNetwork builds it - 1,433 features ->
     8 heads x 8 (ELU, concatenated) -> 1 head x 7 classes, attention dropout 0.6 - trained full-batch for node
     classification on the Cora-sized graph, 92,373 parameters (PyG's GATConv pair on Cora has the same count).
     AiDotNet applies the paper's 0.6 dropout to the attention coefficients only, not also to each layer's input, so
-    this twin does too. One sample is the whole graph: the row runs at batch size 1."""
+    this twin does too. Attention runs over the graph's 13,540 stored entries (EdgeGATLayer), as AiDotNet's sparse
+    kernel does. A dense N x N twin did 2,708^2 / 13,540 = 542x the attention work, which made the row a
+    dense-versus-sparse comparison. One sample is the whole graph: the row runs at batch size 1."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.register_buffer("mask", cora_like_graph())
-        self.gat1 = DenseGATLayer(GAT_FEATURES, 8, 8, concat=True, dropout=0.6)
-        self.gat2 = DenseGATLayer(64, GAT_CLASSES, 1, concat=False, dropout=0.6)
+        rows, columns = cora_like_edges()
+        self.register_buffer("edge_rows", rows)
+        self.register_buffer("edge_columns", columns)
+        self.gat1 = EdgeGATLayer(GAT_FEATURES, 8, 8, concat=True, dropout=0.6)
+        self.gat2 = EdgeGATLayer(64, GAT_CLASSES, 1, concat=False, dropout=0.6)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.gat2(F.elu(self.gat1(x, self.mask)), self.mask)
+        edges = (self.edge_rows, self.edge_columns)
+        return self.gat2(F.elu(self.gat1(x, edges)), edges)
 
     @staticmethod
     def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
@@ -1805,13 +1851,14 @@ class HifiGanV1(nn.Module):
     def forward(self, mel: torch.Tensor) -> torch.Tensor:
         return self.generator(mel)
 
-    def compile_parts(self) -> None:
+    def compile_parts(self, **compile_options: object) -> None:
         """--compile: train_step calls the networks directly, so compile them rather than only forward."""
         # The protocol fixes training to 32 frames and inference to 256 at b1/b8/b16.
         # Automatic dynamic promotion can leave MPD reflection padding symbolic when the
         # frozen discriminator recompiles for generator gradients. Specialize every shape.
-        self.generator = torch.compile(self.generator, dynamic=False)
-        self.discriminators = torch.compile(self.discriminators, dynamic=False)
+        options = {**compile_options, "dynamic": False}
+        self.generator = torch.compile(self.generator, **options)
+        self.discriminators = torch.compile(self.discriminators, **options)
 
     def train_step(self, mel: torch.Tensor, audio: torch.Tensor) -> torch.Tensor:
         if mel.shape[0] != 1:
@@ -2264,12 +2311,22 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
     # Static shapes: training at one batch size and then inferring at several would otherwise make Dynamo mark the batch
     # dimension dynamic and time a symbolic-shape graph. Each shape and grad mode gets its own graph, so allow enough.
     compile_options: dict[str, object] = {"dynamic": False, "mode": args.compile_mode}
+    if args.compile_rnn:
+        if not args.compile:
+            raise SystemExit("--compile-rnn only applies under --compile")
+        torch._dynamo.config.allow_rnn = True
+    compiled_graphs: dict[str, int] = {}
     if args.compile:
         torch._dynamo.config.cache_size_limit = max(torch._dynamo.config.cache_size_limit, 8 + 2 * len(inference_batches))
     # CUDA graphs only exist on a CUDA device; reduce-overhead on the CPU runs the default Inductor code.
     cuda_graphs = args.compile and device.type == "cuda" and args.compile_mode == "reduce-overhead"
 
     model_results: list[ModelResult] = []
+    dataset = None
+    if args.data:
+        import scale_data
+
+        dataset = scale_data.ScaleDataset(args.data)
     for name in [item.strip() for item in args.models.split(",") if item.strip()]:
         mark_phase(name, "construction")
         model, shape = make_model(name)
@@ -2293,6 +2350,14 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
         # Trainable only: the decoder LM's frozen, zeroed in_proj_bias stands in for attention AiDotNet builds without
         # a Q/K/V bias, and counting it reported 768 parameters the C# row does not have.
         parameters = sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad)
+        optimizer_settings = getattr(model, "optimizer_settings", {"lr": 1e-3})
+        if dataset is not None:
+            if any(hasattr(model, attr) for attr in ("train_step", "training_loss", "make_optimizer", "compile_parts")) or \
+                    getattr(model, "regression", False) or getattr(model, "loss_from_forward", False):
+                raise SystemExit(f"{name} has no large-data mode: it is not a plain classifier")
+            # The model reads the dataset's raw bytes and normalises them itself, so under torch.compile the conversion
+            # is fused into the compiled graph (and its CUDA graph) and only uint8 data crosses to the GPU.
+            model = scale_data.Normalized(model, dataset, shape).to(device)
         if args.compile:
             # torch.compile (TorchInductor) — the "PyTorch compiled" comparison.
             # Counts params BEFORE compile (the wrapper hides .parameters()).
@@ -2309,6 +2374,18 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
                     return fixture.numeric(original, model, args.lstm_numerics)
             else:
                 model = torch.compile(model, **compile_options)
+        if dataset is not None:
+            adamw_options = {"fused": True} if args.optimizer_impl == "fused" else {}
+            optimizer = torch.optim.AdamW(model.parameters(), **optimizer_settings, **adamw_options)
+            scale = scale_data.train(model, shape, dataset, device, args.epochs, args.batch_size, args.seed, optimizer,
+                                     cuda_graphs, synchronize, begin_step,
+                                     lambda: ResourceMonitor(track_gpu=device.type == "cuda",
+                                                             gpu_id=cuda_smi_id(device), torch_device=device))
+            if args.compile:
+                total = torch._dynamo.utils.counters["stats"]["unique_graphs"]
+                compiled_graphs[name] = total - sum(compiled_graphs.values())
+            model_results.append(ModelResult(name, str(device), parameters, None, [], MODEL_NOTES.get(name, ""), scale))
+            continue
         if fixture_path is not None:
             model.eval()
             with torch.no_grad():
@@ -2324,6 +2401,10 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
         model.eval()
         inference = benchmark_inference(model, shape, device, args.inference_iterations, args.warmup_iterations,
                                         inference_batches, args.warmup_min_ms, cuda_graphs, model_name=name)
+        if args.compile:
+            # Graphs Dynamo compiled for this model (training and inference). Zero means torch.compile ran it eagerly.
+            total = torch._dynamo.utils.counters["stats"]["unique_graphs"]
+            compiled_graphs[name] = total - sum(compiled_graphs.values())
         if fixture is not None:
             fixture.complete()
 
@@ -2343,6 +2424,8 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
             "compile_mode": args.compile_mode if args.compile else None,
             "dynamic_shapes": False if args.compile else None,
             "cuda_graphs": cuda_graphs,
+            "compile_rnn": bool(args.compile_rnn),
+            "compiled_graphs": compiled_graphs if args.compile else None,
             "optimizer_impl": args.optimizer_impl,
             "epochs": args.epochs,
             "train_batches": args.train_batches,
@@ -2352,6 +2435,7 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
             "warmup_min_ms": args.warmup_min_ms,
             "inference_batch_sizes": inference_batches,
             "seed": args.seed,
+            "data": str(args.data) if args.data else None,
             "precision": PRECISION,
         },
         "results": [asdict(result) for result in model_results],
@@ -2382,6 +2466,10 @@ def main() -> None:
     parser.add_argument("--compile-mode", default="default",
                         choices=["default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"],
                         help="torch.compile mode under --compile. reduce-overhead records CUDA graphs on a CUDA device.")
+    parser.add_argument("--data", help="Large-data mode: train --epochs whole epochs over this scale/prepare_data.py "
+                                       "dataset and score its test split after each epoch, instead of synthetic batches.")
+    parser.add_argument("--compile-rnn", action="store_true",
+                        help="Under --compile, also trace nn.LSTM/nn.GRU (torch._dynamo.config.allow_rnn); otherwise they run eagerly.")
     parser.add_argument("--optimizer-impl", default="default", choices=["default", "fused"],
                         help="AdamW implementation: PyTorch's default choice (foreach on CUDA) or the fused kernel.")
     parser.add_argument("--output", type=Path, default=Path("../results/pytorch.json"))
@@ -2398,6 +2486,10 @@ def main() -> None:
                         help="Training steps under torch.autocast(bfloat16) (the C# side's AutocastScope). fp16 needs "
                              "GradScaler loss scaling in both arms and is not wired yet.")
     args = parser.parse_args()
+    if args.data and args.precision != "fp32":
+        # scale_data.train applies no autocast, so a bf16 request would train in fp32 while the
+        # report claimed bf16. Refuse it rather than record a precision that did not run.
+        parser.error("--data supports only --precision fp32: large-data training applies no autocast")
     global PRECISION
     PRECISION = args.precision
 

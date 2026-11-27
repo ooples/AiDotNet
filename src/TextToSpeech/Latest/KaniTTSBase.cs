@@ -220,11 +220,7 @@ public abstract partial class KaniTTSBase<T> : TtsModelBase<T>, ICodecTts<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
-        var codes = CodecEncode(audio);
-        var tokens = new Tensor<T>(new[] { codes.GetLength(0), codes.GetLength(1) });
-        for (int q = 0; q < codes.GetLength(0); q++)
-            for (int t = 0; t < codes.GetLength(1); t++) tokens[q, t] = NumOps.FromDouble(codes[q, t]);
-        return tokens;
+        return TtsIdTensors.FromGrid<T>(CodecEncode(audio));
     }
 
     /// <inheritdoc />

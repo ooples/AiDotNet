@@ -324,4 +324,33 @@ public class ClusteringReducedPrecisionRegressionTests
         Assert.True(IsFinite(center) && Math.Abs(center - 1.0) < 1e-2, $"Updated center was {center}.");
         Assert.Equal(100_001, ((int[])(countsField.GetValue(model) ?? Array.Empty<int>()))[0]);
     }
+
+    [Fact]
+    public void KMeans_Half_InertiaScoresTheIntAssignmentsPastTwoThousandFortyEight()
+    {
+        // 2050 rows, each the 12-bit binary code of its index, and one center per row: every row is its own cluster
+        // and the fit's inertia is exactly zero. Center 2049 is not a half-precision integer (it rounds to 2048), so
+        // scoring the labels converted to half sent row 2049 to center 2048, one unit away, and reported inertia 1.
+        const int n = 2050;
+        const int bits = 12;
+        var x = new Matrix<Half>(n, bits);
+        for (int i = 0; i < n; i++)
+        {
+            for (int b = 0; b < bits; b++)
+            {
+                x[i, b] = H((i >> b) & 1);
+            }
+        }
+
+        var model = new KMeans<Half>(new KMeansOptions<Half>
+        {
+            NumClusters = n,
+            InitMethod = KMeansInitMethod.Custom,
+            InitialCenters = x,
+            MaxIterations = 1,
+        });
+        model.Train(x, new Vector<Half>(n));
+
+        Assert.Equal(0.0, D(model.Inertia));
+    }
 }

@@ -18,7 +18,7 @@ namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 /// A training step under a local-objective credit rule on the GPU engine. The rule's gradient computer returned its
 /// output loss and prediction past the tape that made them, and the GPU engine releases a finished tape's
 /// intermediates, so Train threw "GPU intermediate of a finished GradientTape" when it read the loss (every
-/// <c>--credit tied</c> run of an HRE language model failed at its first step).
+/// <c>--credit tied</c> run of a downstream language model failed at its first step).
 /// </summary>
 [Collection("TrainingDiagnosticsSequential")]
 public class GpuLocalCreditTrainStepTests

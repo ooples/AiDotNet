@@ -90,9 +90,7 @@ internal sealed class KokoroCore<T>
         var aligned = _engine.Reshape(_engine.TensorMatMul(_engine.TensorTranspose(encoded), alignment),
             new[] { 1, 640, frames });
         var (pitch, energy) = _prosody.Prosody(aligned, prosodic, training, random);
-        var ids = new Tensor<T>(new[] { length });
-        for (int i = 0; i < length; i++) ids[i] = operations.FromDouble(tokens[i]);
-        var text = _text.Forward(ids, training, random);
+        var text = _text.Forward(TtsIdTensors.From<T>(tokens), training, random);
         var asr = _engine.Reshape(_engine.TensorMatMul(_engine.Reshape(text, new[] { 512, length }), alignment),
             new[] { 1, 512, frames });
         var audio = _decoder.Forward(asr, pitch, energy, acoustic, training, random);

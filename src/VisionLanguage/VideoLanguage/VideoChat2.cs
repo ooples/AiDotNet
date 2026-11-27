@@ -40,11 +40,10 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new VideoChat2&lt;double&gt;(architecture, "videochat2.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new VideoChat2&lt;double&gt;(architecture, new VideoChat2Options());
+/// var model = new VideoChat2&lt;double&gt;(architecture, new VideoChat2Options());
+/// var frames = new List&lt;Tensor&lt;double&gt;&gt;();
+/// for (int i = 0; i &lt; 8; i++) frames.Add(Tensor&lt;double&gt;.CreateRandom(3, 224, 224));   // 8 frames, [3, H, W] each
+/// Tensor&lt;double&gt; answer = model.GenerateFromVideo(frames, "What happens in this clip?");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -99,6 +98,7 @@ public partial class VideoChat2<T> : VisionLanguageModelBase<T>, IVideoLanguageM
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -140,6 +140,7 @@ public partial class VideoChat2<T> : VisionLanguageModelBase<T>, IVideoLanguageM
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -190,12 +191,12 @@ public partial class VideoChat2<T> : VisionLanguageModelBase<T>, IVideoLanguageM
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoderOut = Layers[i].Forward(encoderOut);
 
-        // Fuse visual features with prompt tokens via ConcatenateTensors
+        // Embed the prompt tokens and append them to the visual token sequence
         Tensor<T> fusedInput;
         if (prompt is not null)
         {
             var promptTokens = TokenizeText(prompt);
-            fusedInput = encoderOut.ConcatenateTensors(promptTokens);
+            fusedInput = FusePromptTokens(encoderOut, promptTokens);
         }
         else
         {
@@ -324,11 +325,13 @@ public partial class VideoChat2<T> : VisionLanguageModelBase<T>, IVideoLanguageM
     {
         // CreateDefaultVideoQFormerVLMLayers: patch(1)+LN(1) + numVisionLayers·(block+optional dropout)
         // + (visionDim!=qFormerDim ? 1 : 0) map + numQFormerLayers·(7 block layers + optional dropout)
-        // before the projection + LLM. The visual segment ends after the Q-Former.
+        // + the projection (Dense + LayerNorm), then the LLM.
         int perBlock = _options.DropoutRate > 0 ? 2 : 1;
         int qfPerBlock = _options.DropoutRate > 0 ? 8 : 7;
         int mapLayers = _options.VisionDim != _options.QFormerDim ? 1 : 0;
-        _encoderLayerEnd = 2 + _options.NumVisionLayers * perBlock + mapLayers + _options.NumQFormerLayers * qfPerBlock;
+        // Through the Q-Former and the MLP projection to the LLM (Dense + LayerNorm), so the visual tokens are
+        // DecoderDim wide where the prompt joins them.
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * perBlock + mapLayers + _options.NumQFormerLayers * qfPerBlock + 2;
     }
 
     private Tensor<T> TokenizeText(string text)

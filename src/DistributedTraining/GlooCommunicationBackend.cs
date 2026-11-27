@@ -547,7 +547,9 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         string? masterAddr = ResolveMasterAddress();
         string? masterPortStr = ResolveMasterPort();
 
-        if (string.IsNullOrEmpty(masterAddr) || string.IsNullOrEmpty(masterPortStr))
+        // Pattern checks rather than string.IsNullOrEmpty: net471's declaration carries no NotNullWhen, so the
+        // compiler would not know masterAddr is non-null below.
+        if (masterAddr is not { Length: > 0 } || masterPortStr is not { Length: > 0 })
         {
             throw new InvalidOperationException(
                 "GlooCommunicationBackend TCP mode requires MasterAddress/MasterPort or the environment variables:\n" +

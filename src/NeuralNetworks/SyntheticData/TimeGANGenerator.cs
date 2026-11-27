@@ -744,7 +744,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     {
         // Box-Muller from the seeded _random, both outputs of each pair, so the options seed makes the
         // draw reproducible (an engine random fill would bypass _random).
-        return SyntheticTensorOps<T>.StandardNormalPairTensor([batchSize, sequenceLength, dim], _random);
+        return SeededNoiseTensors.StandardNormalPairs<T>([batchSize, sequenceLength, dim], _random);
     }
 
     // ----- Batched, tape-tracked recurrent forward methods -----

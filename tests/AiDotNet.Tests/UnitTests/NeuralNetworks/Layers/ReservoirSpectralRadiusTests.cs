@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -34,5 +35,99 @@ public class ReservoirSpectralRadiusTests
         var matrix = new Tensor<double>(new[] { 3.0, 1.0, 0.0, -5.0 }, new[] { 2, 2 });
 
         Assert.Equal(5.0, layer.ComputeMaxEigenvalue(matrix), Precision);
+    }
+
+    [Fact]
+    public void SpectralRadius_TinyDiagonalEntry_SurvivesBalancing()
+    {
+        // Upper-triangular: eigenvalues are the diagonal [0, 2^-600, 0]. Balancing the middle row by 2^-537 used to
+        // flush its diagonal entry to zero before the column scaling could restore it.
+        double d = Math.Pow(2, -600);
+        var a = new[]
+        {
+            0.0, double.Epsilon, 0.0,
+            0.0, d, 1.0,
+            0.0, 0.0, 0.0,
+        };
+
+        Assert.Equal(1.0, ReservoirLayer<double>.SpectralRadiusInPlace(a, 3) / d, Precision);
+    }
+
+    [Fact]
+    public void SpectralRadius_SmallRotationBeforeNilpotentBlock_IsNotSplit()
+    {
+        // A rotation of radius 2^-60 followed by the nilpotent block [[0, 1], [0, 0]]. A whole-matrix norm still
+        // contains the deflated block's 1, so the old split test zeroed the rotation's coupling and returned 0.
+        double r = Math.Pow(2, -60);
+        var a = new[]
+        {
+            0.0, -r, 0.0, 0.0,
+            r, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 1.0,
+            0.0, 0.0, 0.0, 0.0,
+        };
+
+        Assert.Equal(1.0, ReservoirLayer<double>.SpectralRadiusInPlace(a, 4) / r, Precision);
+    }
+
+    [Fact]
+    public void SpectralRadius_TinyComplexPair_DoesNotUnderflow()
+    {
+        // [[d, -d], [d, d]] has eigenvalues d(1 +/- i), radius sqrt(2) d. The separate nilpotent block keeps the
+        // whole-matrix scale at 1, and the unscaled product d * d underflowed so the pair looked real with radius d.
+        double d = Math.Pow(2, -600);
+        var a = new[]
+        {
+            d, -d, 0.0, 0.0,
+            d, d, 0.0, 0.0,
+            0.0, 0.0, 0.0, 1.0,
+            0.0, 0.0, 0.0, 0.0,
+        };
+
+        Assert.Equal(Math.Sqrt(2), ReservoirLayer<double>.SpectralRadiusInPlace(a, 4) / d, Precision);
+    }
+
+    // numpy.linalg.eigvals moduli of RandomReservoir(size, density, seed), dumped from .NET and read back with
+    // np.loadtxt. AiDotNet.Tensors 0.152.1 Linalg.Eig, which this layer called before, returns 0.9640, 0.9200,
+    // 2.4715 and 0.6683 for these four: a wrong spectral radius, so the reservoir was scaled to the wrong radius.
+    [Theory]
+    [InlineData(100, 0.1, 1, 0.987483918802371)]
+    [InlineData(37, 0.3, 4, 0.9486365196746817)]
+    [InlineData(100, 1.0, 3, 2.9365774244347898)]
+    [InlineData(200, 0.05, 5, 1.053266845019182)]
+    public void ComputeMaxEigenvalue_RandomReservoir_MatchesNumpy(int size, double density, int seed, double expected)
+    {
+        var layer = new ReservoirLayer<double>(inputSize: 1, reservoirSize: 2);
+        Assert.Equal(expected, layer.ComputeMaxEigenvalue(RandomReservoir(size, density, seed)), 10);
+    }
+
+    [SkippableFact]
+    public void ComputeMaxEigenvalue_DefaultReservoir_AllocatesOnlyItsWorkingCopy()
+    {
+#if !NETCOREAPP3_0_OR_GREATER
+        // net471 has no per-thread allocation counter, and a process-wide one counts parallel tests too.
+        Skip.If(true, "GC.GetAllocatedBytesForCurrentThread needs .NET Core 3.0 or later.");
+#else
+        // The census shape: LiquidStateMachine's 100-neuron reservoir. The full Linalg.Eig allocated ~98 MB and took
+        // ~170 ms here, 4.7x LiquidStateMachine's construction time; the in-place QR needs one n x n copy.
+        var layer = new ReservoirLayer<double>(inputSize: 1, reservoirSize: 2);
+        var matrix = RandomReservoir(100, 0.1, 7);
+        layer.ComputeMaxEigenvalue(matrix);
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        layer.ComputeMaxEigenvalue(matrix);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.True(allocated < 1_000_000, $"spectral radius of a 100 x 100 reservoir allocated {allocated:N0} bytes");
+#endif
+    }
+
+    private static Tensor<double> RandomReservoir(int size, double density, int seed)
+    {
+        var random = new Random(seed);
+        var values = new double[size * size];
+        for (int i = 0; i < values.Length; i++)
+            values[i] = random.NextDouble() < density ? random.NextDouble() - 0.5 : 0.0;
+        return new Tensor<double>(values, new[] { size, size });
     }
 }

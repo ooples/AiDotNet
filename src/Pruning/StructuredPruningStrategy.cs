@@ -701,9 +701,7 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
     /// <param name="mask">Pruning mask to apply</param>
     public void ApplyPruning(Vector<T> weights, IPruningMask<T> mask)
     {
-        var pruned = mask.Apply(weights);
-        for (int i = 0; i < weights.Length; i++)
-            weights[i] = pruned[i];
+        PruningWriteBack.Copy(mask.Apply(weights), weights);
     }
 
     /// <summary>
@@ -719,11 +717,7 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
     /// </remarks>
     public void ApplyPruning(Matrix<T> weights, IPruningMask<T> mask)
     {
-        var pruned = mask.Apply(weights);
-
-        for (int i = 0; i < weights.Rows; i++)
-            for (int j = 0; j < weights.Columns; j++)
-                weights[i, j] = pruned[i, j];
+        PruningWriteBack.Copy(mask.Apply(weights), weights);
     }
 
     /// <summary>
@@ -733,12 +727,7 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
     /// <param name="mask">Pruning mask to apply</param>
     public void ApplyPruning(Tensor<T> weights, IPruningMask<T> mask)
     {
-        var pruned = mask.Apply(weights);
-        var prunedFlat = pruned.ToVector();
-
-        // Write pruned values back to the original tensor using flat indexer
-        for (int i = 0; i < prunedFlat.Length; i++)
-            weights[i] = prunedFlat[i];
+        PruningWriteBack.Copy(mask.Apply(weights), weights);
     }
 
     /// <summary>

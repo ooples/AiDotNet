@@ -178,6 +178,10 @@ public partial class PositionalEncodingLayer<T> : LayerBase<T>, IShapeContract
     {
         // Formula: PE(pos, 2i) = sin(pos / 10000^(2i/d_model))
         //          PE(pos, 2i+1) = cos(pos / 10000^(2i/d_model))
+        // Built in the constructor, which can run inside an ambient TensorArena or TensorScope; the table lives as
+        // long as the layer, so it must not take storage that the next Reset or scope exit reissues.
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        using var noScope = AiDotNet.Tensors.Engines.TensorScope.Suspend();
         encodings = BuildSinusoidRows(0, maxSequenceLength, embeddingSize);
     }
 
@@ -291,6 +295,12 @@ public partial class PositionalEncodingLayer<T> : LayerBase<T>, IShapeContract
 
         lock (_encodingLock)
         {
+            // The table outlives this forward, so a rebuild must not take its storage from an ambient TensorArena
+            // or TensorScope: built inside one, the next Reset handed the rows to other work and later forwards
+            // added whatever that work wrote there.
+            using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+            using var noScope = AiDotNet.Tensors.Engines.TensorScope.Suspend();
+
             // Dynamically adjust embedding size if needed
             if (inputEmbedDim != embeddingSize)
             {

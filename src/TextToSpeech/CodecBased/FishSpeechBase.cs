@@ -247,11 +247,7 @@ public abstract partial class FishSpeechBase<T> : TtsModelBase<T>, ICodecTts<T>,
     /// <remarks>Firefly-GAN's codes <c>[frames, codebooks]</c> of audio at the model's rate.</remarks>
     public Tensor<T> EncodeToTokens(Tensor<T> audio)
     {
-        var codes = EncodeAudio(audio);
-        var tokens = new Tensor<T>(new[] { codes.GetLength(1), codes.GetLength(0) });
-        for (int t = 0; t < codes.GetLength(1); t++)
-            for (int b = 0; b < codes.GetLength(0); b++) tokens[t, b] = Ops.FromDouble(codes[b, t]);
-        return tokens;
+        return TtsIdTensors.FromGrid<T>(EncodeAudio(audio), transpose: true);
     }
 
     /// <inheritdoc />

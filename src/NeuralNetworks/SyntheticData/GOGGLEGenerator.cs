@@ -529,9 +529,7 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         var z = new Vector<T>(dim);
         for (int i = 0; i < dim; i++)
         {
-            double u1 = 1.0 - _random.NextDouble();
-            double u2 = _random.NextDouble();
-            double eps = Math.Sqrt(-2.0 * Math.Log(Math.Max(u1, 1e-10))) * Math.Cos(2.0 * Math.PI * u2);
+            double eps = SeededNoiseTensors.NextStandardNormal(_random, BoxMullerGuard.FlooredComplement);
             double m = NumOps.ToDouble(mean[i]);
             double lv = NumOps.ToDouble(logvar[i]);
             z[i] = NumOps.FromDouble(m + eps * Math.Exp(0.5 * lv));
@@ -592,7 +590,7 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     }
 
     private void FillStandardNormal(Tensor<T> eps)
-        => SyntheticTensorOps<T>.FillStandardNormal(eps, _random, BoxMullerGuard.FlooredComplement);
+        => SeededNoiseTensors.FillStandardNormal(eps, _random, guard: BoxMullerGuard.FlooredComplement);
 
     private Tensor<T> DecoderForwardTape(Tensor<T> z)
     {
@@ -890,7 +888,7 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     #region Helpers
 
     private Vector<T> CreateStandardNormalVector(int length)
-        => SyntheticTensorOps<T>.StandardNormalVector(length, _random, BoxMullerGuard.FlooredComplement);
+        => SeededNoiseTensors.StandardNormalVector<T>(length, _random, guard: BoxMullerGuard.FlooredComplement);
 
     private static Tensor<T> SanitizeAndClipGradient(Tensor<T> grad, double maxNorm)
     {

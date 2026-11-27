@@ -40,7 +40,7 @@ public sealed class MetaVoicePublicPipelineTests
         MaximumNewTokens = 5, FirstStageTopP = 1, SpeakerGuidance = 2, PromptGuidance = 2,
         TrainingDropout = 0, FineTuneLastBlocks = 1, MinReferenceDurationSec = .001, RawDecoderOutput = true
     };
-    private static MetaVoice1B<double> Model()
+    internal static MetaVoice1B<double> Model()
     {
         AiDotNetEngine.ResetToCpu();
         var architecture = new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,

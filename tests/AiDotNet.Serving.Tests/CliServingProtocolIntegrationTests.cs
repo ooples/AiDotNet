@@ -20,7 +20,7 @@ namespace AiDotNet.Serving.Tests;
 [Collection("ServingIntegrationTests")]
 public sealed class CliServingProtocolIntegrationTests : IClassFixture<ServingTestWebApplicationFactory>, IAsyncLifetime
 {
-    private const string TestModelName = "hre-cli-test-model";
+    private const string TestModelName = "cli-test-model";
     private readonly ServingTestWebApplicationFactory _factory;
     private readonly HttpClient _client;
 
@@ -319,7 +319,7 @@ public sealed class CliServingProtocolIntegrationTests : IClassFixture<ServingTe
     [Fact(Timeout = 60000)]
     public async Task CliAlias_WithTwoGenerativeModelsLoaded_IsAmbiguousAndReturns404()
     {
-        const string secondModel = "hre-cli-test-model-2";
+        const string secondModel = "cli-test-model-2";
         using (var scope = _factory.Services.CreateScope())
         {
             var tokenizer = CharacterTokenizer.CreateAscii();

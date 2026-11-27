@@ -11,13 +11,13 @@ using Xunit;
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 
 /// <summary>
-/// Regression coverage for AiDotNet#1346 / HE PathB FlashAttention sanity.
+/// Regression coverage for AiDotNet#1346 / a downstream FlashAttention sanity run.
 ///
 /// <para>The Tensors-side fix in PR #362 verified that
 /// <c>engine.FlashAttention</c> records into the lazy graph and that
 /// the compiled training plan produces non-zero gradients on Q/K/V
 /// projections (see <c>FlashAttentionCompiledPlanTests</c>). However,
-/// the HE consumer that wraps <see cref="FlashAttentionLayer{T}"/> inside
+/// the downstream consumer that wraps <see cref="FlashAttentionLayer{T}"/> inside
 /// a <see cref="Transformer{T}"/> with the custom layer list
 /// <c>Embedding + FlashAttention + LayerNorm + Dense + readout</c>
 /// still trained to top-1 = 0% (uniform output).</para>
@@ -87,7 +87,7 @@ public class FlashAttentionLayerTransformerTrainingIssue1346Tests
     }
 
     /// <summary>
-    /// Direct repro of the HE PathB consumer setup. Builds a Transformer
+    /// Direct repro of the downstream consumer setup. Builds a Transformer
     /// with custom layer list mirroring
     /// <c>AiDotNetFacadeTransformerLMPredictor.BuildFlashAttentionLayerList</c>:
     /// Embedding + FA + LayerNorm + Dense + Dense + LayerNorm + slice +
