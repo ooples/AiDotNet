@@ -73,6 +73,7 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
     private readonly int _ffnDim;
     private readonly double _dropoutRate;
     private readonly TransformerNormPlacement _normPlacement;
+    private readonly double _layerNormEpsilon;
     // The FFN inner activation, retained so it round-trips through serialization
     // (the FFN Dense layer is reconstructed from the block's metadata, not its own).
     private readonly IActivationFunction<T> _ffnActivation;
@@ -111,11 +112,16 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
     /// <param name="ffnActivation">The feed-forward inner activation; null uses ReLU (Vaswani 2017).</param>
     /// <param name="normPlacement">Whether each LayerNorm precedes its sublayer (the default) or follows
     /// the residual sum. A paper's block must use the paper's placement: the two compute different functions.</param>
+    /// <param name="layerNormEpsilon">The LayerNorms' variance epsilon: BERT uses 1e-12 (the released
+    /// <c>layer_norm_eps</c>), and a checkpoint reproduces only with its own value.</param>
     public TransformerEncoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0.0,
         IActivationFunction<T>? ffnActivation = null,
-        TransformerNormPlacement normPlacement = TransformerNormPlacement.PreNorm)
+        TransformerNormPlacement normPlacement = TransformerNormPlacement.PreNorm,
+        double layerNormEpsilon = NumericalStabilityHelper.LargeEpsilon)
         : base(new[] { hiddenSize }, new[] { hiddenSize })
     {
+        if (!(layerNormEpsilon > 0) || double.IsInfinity(layerNormEpsilon))
+            throw new ArgumentOutOfRangeException(nameof(layerNormEpsilon), "Must be positive and finite.");
         if (hiddenSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(hiddenSize));
         if (numHeads <= 0)
@@ -132,17 +138,18 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
         _ffnDim = ffnDim;
         _dropoutRate = dropoutRate;
         _normPlacement = normPlacement;
+        _layerNormEpsilon = layerNormEpsilon;
 
         _attention = new MultiHeadAttentionLayer<T>(numHeads, hiddenSize / numHeads, activationFunction: new IdentityActivation<T>());
         // Size the norms eagerly (their featureSize is known = hiddenSize) so they are
         // not lazy; the Dense FFN layers still resolve their input dim on first forward.
-        _norm1 = new LayerNormalizationLayer<T>(hiddenSize);
+        _norm1 = new LayerNormalizationLayer<T>(hiddenSize, layerNormEpsilon);
         // FFN inner activation defaults to ReLU (original Transformer, Vaswani 2017);
         // BERT-class encoders pass GELU (Devlin 2018) to stay paper-faithful.
         _ffnActivation = ffnActivation ?? new ReLUActivation<T>();
         _ffnUp = new DenseLayer<T>(ffnDim, _ffnActivation);
         _ffnDown = new DenseLayer<T>(hiddenSize, new IdentityActivation<T>() as IActivationFunction<T>);
-        _norm2 = new LayerNormalizationLayer<T>(hiddenSize);
+        _norm2 = new LayerNormalizationLayer<T>(hiddenSize, layerNormEpsilon);
         if (dropoutRate > 0)
         {
             _attnDropout = new DropoutLayer<T>(dropoutRate);
@@ -243,6 +250,8 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
     public double DropoutRate => _dropoutRate;
     /// <summary>Where each LayerNorm sits relative to its residual connection — persisted for deserialization.</summary>
     public TransformerNormPlacement NormPlacement => _normPlacement;
+    /// <summary>The LayerNorms' variance epsilon.</summary>
+    public double LayerNormEpsilon => _layerNormEpsilon;
 
     /// <summary>
     /// Forward pass. All shape ops route through <see cref="LayerBase{T}.Engine"/> and every
@@ -358,6 +367,7 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
         metadata["FfnDim"] = _ffnDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["DropoutRate"] = _dropoutRate.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["NormPlacement"] = _normPlacement.ToString();
+        metadata["LayerNormEpsilon"] = _layerNormEpsilon.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
         // Persist the FFN inner activation so the deserialized block rebuilds the
         // same FFN (BERT GELU vs Vaswani ReLU); without this a cloned block always
         // fell back to the constructor default and diverged from the original.

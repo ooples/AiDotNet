@@ -285,6 +285,7 @@ public sealed class FinancialLanguageModelFamilyTests
             AssertEqual(stored["bert.embeddings.word_embeddings.weight"], embedding.WordEmbedding.GetTrainableParameters()[0]);
 
             var block = Assert.IsType<TransformerEncoderBlock<double>>(model.Layers[2]);
+            Assert.Equal(1e-12, block.LayerNormEpsilon);   // BERT's layer_norm_eps, so the checkpoint reproduces
             var attention = Assert.IsType<MultiHeadAttentionLayer<double>>(block.AttentionLayer);
             AssertTransposed(stored["bert.encoder.layer.1.attention.self.query.weight"], attention.GetQueryWeights());
             AssertEqual(stored["bert.encoder.layer.1.attention.self.value.bias"], attention.GetValueBias()

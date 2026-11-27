@@ -26945,3 +26945,13 @@ AiDotNet.Models.Options.FinancialLanguageModelOptions<T>.ValidateNLPOptions() ->
 *REMOVED*override AiDotNet.Finance.NLP.FinGPT<T>.TrainCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> void
 *REMOVED*override AiDotNet.Finance.NLP.FinMA<T>.TrainCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> void
 *REMOVED*override AiDotNet.Finance.NLP.SECBERT<T>.TrainCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> void
+AiDotNet.ActivationFunctions.ExactGELUActivation<T>
+AiDotNet.ActivationFunctions.ExactGELUActivation<T>.ExactGELUActivation() -> void
+override AiDotNet.ActivationFunctions.ExactGELUActivation<T>.SupportsScalarOperations() -> bool
+override AiDotNet.ActivationFunctions.ExactGELUActivation<T>.Activate(T input) -> T
+override AiDotNet.ActivationFunctions.ExactGELUActivation<T>.Derivative(T input) -> T
+override AiDotNet.ActivationFunctions.ExactGELUActivation<T>.Activate(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.ActivationFunctions.ExactGELUActivation<T>.Derivative(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.NeuralNetworks.Layers.TransformerEncoderBlock<T>.LayerNormEpsilon.get -> double
+*REMOVED*AiDotNet.NeuralNetworks.Layers.TransformerEncoderBlock<T>.TransformerEncoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0, AiDotNet.Interfaces.IActivationFunction<T>? ffnActivation = null, AiDotNet.Enums.TransformerNormPlacement normPlacement = AiDotNet.Enums.TransformerNormPlacement.PreNorm) -> void
+AiDotNet.NeuralNetworks.Layers.TransformerEncoderBlock<T>.TransformerEncoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0, AiDotNet.Interfaces.IActivationFunction<T>? ffnActivation = null, AiDotNet.Enums.TransformerNormPlacement normPlacement = AiDotNet.Enums.TransformerNormPlacement.PreNorm, double layerNormEpsilon = 1E-05) -> void

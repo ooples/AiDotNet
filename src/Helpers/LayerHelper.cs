@@ -16331,6 +16331,9 @@ public static partial class LayerHelper<T>
         int forecastHorizon = 12)
         => CreateDefaultRelationalGCNLayers(numNodes: numNodes, numFeatures: numFeatures, numRelations: numRelations, hiddenDimension: hiddenDimension, numLayers: numLayers, numBases: numBases, forecastHorizon: forecastHorizon);
 
+    /// <summary>BERT's LayerNorm epsilon (the released config's <c>layer_norm_eps</c>).</summary>
+    private const double BertLayerNormEpsilon = 1e-12;
+
     /// <summary>
     /// Builds a BERT encoder (Devlin et al. 2019): token, position and segment embeddings, a stack of transformer
     /// blocks and, for sequence-level tasks, BERT's pooler.
@@ -16385,9 +16388,11 @@ public static partial class LayerHelper<T>
 
             for (int i = 0; i < numLayers; i++)
             {
+                // BERT's feed-forward uses the exact (erf) GELU and its LayerNorms an epsilon of 1e-12 (the released
+                // config's hidden_act = "gelu" and layer_norm_eps), so a loaded checkpoint reproduces its outputs.
                 var block = new TransformerEncoderBlock<T>(
                     hiddenDimension, numAttentionHeads, intermediateDimension, hiddenDropoutRate,
-                    new GELUActivation<T>(), normPlacement);
+                    new ExactGELUActivation<T>(), normPlacement, BertLayerNormEpsilon);
                 if (block.AttentionLayer is MultiHeadAttentionLayer<T> attention)
                 {
                     // BERT's query, key and value projections have biases (the released BertSelfAttention); the key
@@ -16401,7 +16406,7 @@ public static partial class LayerHelper<T>
 
             // Pre-LN leaves the residual stream unnormalized after the last block; Post-LN already normalized it.
             if (normPlacement == TransformerNormPlacement.PreNorm)
-                yield return new LayerNormalizationLayer<T>(hiddenDimension, 1e-12);
+                yield return new LayerNormalizationLayer<T>(hiddenDimension, BertLayerNormEpsilon);
 
             if (pool)
             {
