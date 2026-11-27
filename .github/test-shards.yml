@@ -1476,6 +1476,16 @@ shard:
     # 133 classes, about 344 s of test time measured locally (before ModelInputMeetsFirstLayerTests moved to the survey shard).
     filter: >-
       Category!=GPU&Category!=Stress&Category!=Sweep&(
+      FullyQualifiedName~AiDotNet.Tests.ModelLoading.MoELoadStagingTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelLoading.PretrainedBf16StreamingTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.CheckpointedAuxiliaryLossTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.FrozenSubLayerTrainingTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.GroupedQueryAttentionStepTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.ParameterReadBeforeTrainingTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TrainableParameterCountTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.DistributedTraining.DistributedTapeCoordinatorAgreementTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.DistributedTraining.StochasticBaseSeedTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.DistributedTraining.StreamingTrainingOptionsCopyTests.|
       FullyQualifiedName~AiDotNet.Tests.Video.UnsharpKernelTests.|
       FullyQualifiedName~AiDotNet.Tests.Video.NiqeDomainTests.|
       FullyQualifiedName~AiDotNet.Tests.Video.VideoOptionsCopyTests.|
