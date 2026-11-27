@@ -86,11 +86,7 @@ public partial class WeightNormConv1DLayer<T> : LayerBase<T>, IShapeContract
         _bias = new Tensor<T>(new[] { outChannels });
         if (initStandardDeviation > 0)
         {
-            for (int i = 0; i < _direction.Length; i++)
-            {
-                double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-                _direction[i] = NumOps.FromDouble(initStandardDeviation * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
-            }
+            SeededNoiseTensors.FillStandardNormal(_direction, random, initStandardDeviation);
         }
         else
         {

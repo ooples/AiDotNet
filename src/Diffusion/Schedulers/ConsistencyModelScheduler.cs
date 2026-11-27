@@ -181,14 +181,7 @@ public sealed class ConsistencyModelScheduler<T> : NoiseSchedulerBase<T>
 
     private Vector<T> GenerateNoise(int length)
     {
-        var result = new Vector<T>(length);
-        for (int i = 0; i < length; i++)
-        {
-            double u1 = 1.0 - _random.NextDouble();
-            double u2 = _random.NextDouble();
-            double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            result[i] = NumOps.FromDouble(normal);
-        }
+        var result = SeededNoiseTensors.StandardNormalVector<T>(length, _random);
 
         return result;
     }

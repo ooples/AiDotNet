@@ -173,8 +173,7 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
                     continue;
                 }
                 var std = NumOps.Exp(_logStd[i]);
-                var noise = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(Math.Max(Random.NextDouble(), double.Epsilon)))
-                    * Math.Cos(2.0 * Math.PI * Random.NextDouble()));
+                var noise = NumOps.FromDouble(SeededNoiseTensors.NextStandardNormal(Random, BoxMullerGuard.Floored, floor: double.Epsilon));
                 action[i] = NumOps.Add(output[i], NumOps.Multiply(std, noise));
             }
             return action;

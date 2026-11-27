@@ -130,9 +130,7 @@ internal sealed class KaldiFbank<T>
         if (dither > 0)
         {
             var rng = random ?? throw new ArgumentNullException(nameof(random), "Dither needs a generator.");
-            var noise = new Tensor<T>(new[] { frames, n });
-            for (int i = 0; i < noise.Length; i++)
-                noise.SetFlat(i, NumOps.FromDouble(dither * Math.Sqrt(-2.0 * Math.Log(1.0 - rng.NextDouble())) * Math.Cos(2.0 * Math.PI * rng.NextDouble())));
+            var noise = SeededNoiseTensors.StandardNormal<T>(new[] { frames, n }, rng, dither);
             framed = _engine.TensorAdd(framed, noise);
         }
         var re = _engine.TensorMatMul(framed, _real);

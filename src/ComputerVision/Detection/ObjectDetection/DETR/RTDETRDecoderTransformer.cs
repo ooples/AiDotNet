@@ -62,11 +62,7 @@ internal sealed class RtdetrDecoderTransformer<T> : CvParameterModule<T>
         // denoising_class_embed: nn.Embedding(num_classes + 1, d, padding_idx=num_classes), N(0, 1), padding row 0.
         var random = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextRandom();
         _labelEmbed = new Tensor<T>(new[] { numClasses + 1, dModel });
-        for (int i = 0; i < numClasses * dModel; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            _labelEmbed[i] = _numOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
-        }
+        SeededNoiseTensors.WriteStandardNormal(_labelEmbed.AsWritableSpan().Slice(0, numClasses * dModel), random);
 
         for (int i = 0; i < numLayers; i++)
         {

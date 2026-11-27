@@ -362,16 +362,8 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         return clipped;
     }
 
-    private Tensor<T> Gaussian(int[] shape, Random random, double scale)
-    {
-        var t = new Tensor<T>(shape);
-        for (int i = 0; i < t.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            t[i] = NumOps.FromDouble(scale * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
-        }
-        return t;
-    }
+    private static Tensor<T> Gaussian(int[] shape, Random random, double scale)
+        => SeededNoiseTensors.StandardNormal<T>(shape, random, scale);
 
     // ---------------------------------------------------------------- inference
 

@@ -387,9 +387,7 @@ public abstract class TimeSeriesFoundationModelBase<T> : ForecastingModelBase<T>
     /// <summary>Box-Muller standard normal draw from a caller-owned generator.</summary>
     private T NextStandardNormal(Random random)
     {
-        double u1 = 1.0 - random.NextDouble();
-        double u2 = 1.0 - random.NextDouble();
-        return NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
+        return NumOps.FromDouble(SeededNoiseTensors.NextStandardNormal(random));
     }
     #endregion
 }

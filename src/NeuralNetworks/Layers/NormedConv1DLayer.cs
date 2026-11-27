@@ -231,17 +231,13 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
 
     private Tensor<T> NormalizedGaussian(int length, Random random)
     {
-        var result = new Tensor<T>(new[] { length });
         var values = new double[length];
+        SeededNoiseTensors.WriteStandardNormal<double>(values, random);
         double norm = 0;
-        for (int i = 0; i < length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            values[i] = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
-            norm += values[i] * values[i];
-        }
-        for (int i = 0; i < length; i++) result[i] = NumOps.FromDouble(values[i] / Math.Max(Math.Sqrt(norm), 1e-12));
-        return result;
+        foreach (double value in values) norm += value * value;
+        double magnitude = Math.Max(Math.Sqrt(norm), 1e-12);
+        for (int i = 0; i < length; i++) values[i] /= magnitude;
+        return new Tensor<double>(values, new[] { length }).Cast<T>();
     }
 
     /// <inheritdoc />

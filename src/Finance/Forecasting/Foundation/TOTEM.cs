@@ -262,17 +262,7 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         var rand = initSeed.HasValue
             ? RandomHelper.CreateSeededRandom(initSeed.Value)
             : RandomHelper.CreateSecureRandom();
-        T scale = NumOps.Divide(NumOps.One, NumOps.FromDouble(Math.Sqrt(_codebookDimension)));
-        for (int c = 0; c < _numCodebooks; c++)
-            for (int k = 0; k < _codebookSize; k++)
-                for (int d = 0; d < _codebookDimension; d++)
-                {
-                    double u1 = 1.0 - rand.NextDouble();
-                    double u2 = 1.0 - rand.NextDouble();
-                    T sample = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
-                    int idx = c * _codebookSize * _codebookDimension + k * _codebookDimension + d;
-                    _codebooks.Data.Span[idx] = NumOps.Multiply(scale, sample);
-                }
+        SeededNoiseTensors.WriteStandardNormal(_codebooks.AsWritableSpan(), rand, 1.0 / Math.Sqrt(_codebookDimension));
     }
 
     /// <summary>Gets a codebook value at the given indices.</summary>

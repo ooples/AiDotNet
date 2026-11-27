@@ -97,14 +97,7 @@ public class FedMeZO<T> : Infrastructure.FederatedLearningComponentBase<T>, IFed
         var rng = RandomHelper.CreateSeededRandom(seed);
         var z = new T[_modelDim];
 
-        for (int i = 0; i < _modelDim; i++)
-        {
-            // Box-Muller for standard normal.
-            double u1 = 1.0 - rng.NextDouble();
-            double u2 = 1.0 - rng.NextDouble();
-            double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            z[i] = NumOps.FromDouble(normal);
-        }
+        SeededNoiseTensors.WriteStandardNormal<T>(z, rng);
 
         return new Vector<T>(z);
     }

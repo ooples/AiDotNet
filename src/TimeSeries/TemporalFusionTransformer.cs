@@ -533,13 +533,7 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         int size = 1;
         foreach (var s in shape) size *= s;
         var data = new T[size];
-        for (int i = 0; i < size; i++)
-        {
-            double u1 = 1.0 - _random.NextDouble();
-            double u2 = _random.NextDouble();
-            double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            data[i] = NumOps.FromDouble(normal * stddev);
-        }
+        SeededNoiseTensors.WriteStandardNormal<T>(data, _random, stddev);
         return new Tensor<T>(shape, new Vector<T>(data));
     }
 

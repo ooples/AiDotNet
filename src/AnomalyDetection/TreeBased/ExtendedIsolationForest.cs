@@ -270,10 +270,7 @@ public partial class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
                 foreach (int d in dims)
                 {
                     // Random Gaussian component (Box-Muller at Random.NextDouble boundary)
-                    double u1 = 1.0 - _random.NextDouble();
-                    double u2 = 1.0 - _random.NextDouble();
-                    double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                    _normal[d] = _numOps.FromDouble(z);
+                    _normal[d] = _numOps.FromDouble(SeededNoiseTensors.NextStandardNormal(_random));
                 }
 
                 // Normalize to unit length
