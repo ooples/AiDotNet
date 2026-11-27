@@ -1,0 +1,5 @@
+model,device,operation,batch,launches,ai_parameters,torch_parameters,ai_median_ms,ai_min_ms,ai_max_ms,torch_configuration,torch_median_ms,torch_min_ms,torch_max_ms,torch_over_ai,launch_ratio_min,launch_ratio_max,torch-compile_median_ms,torch-compile-fused_median_ms,flags
+vit,cpu,train,64,5,2690122,2693578,345.41835,339.00285,415.0006000000001,torch-compile-fused,482.1129,475.2824999999999,511.5941,1.3957362137825047,1.2327550851733706,1.4121301358156246,492.45105,482.1129,parameters-differ
+vit,cpu,inference,1,5,2690122,2693578,3.094,3.069,4.171,torch-compile-fused,4.407,4.394,4.467,1.4243697478991597,1.0709661951570366,1.4359726295210167,4.422,4.407,parameters-differ
+vit,cpu,inference,8,5,2690122,2693578,13.048,12.955,17.98,torch-compile-fused,16.645,16.578,16.975,1.275674432863274,0.9220244716351501,1.3033630221130224,16.703,16.645,parameters-differ
+vit,cpu,inference,16,5,2690122,2693578,25.144,24.23,30.234,torch-compile,35.807,35.397,39.079,1.4240773146675152,1.292551432162466,1.4608749484110606,35.807,35.811,parameters-differ
