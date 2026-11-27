@@ -551,8 +551,9 @@ public static class CompiledStepRandom<T>
     }
 
     // Box-Muller, two samples per pair of uniforms, in the order an eager host loop would write them: the shared
-    // definition in SeededNoiseTensors.
-    private static void FillStandardNormal(Tensor<T> tensor, Random random) =>
+    // definition in SeededNoiseTensors. Internal so SyntheticTensorOps<T>.StandardNormalPairTensor shares this one
+    // definition for its eager (unrecorded) draws.
+    internal static void FillStandardNormal(Tensor<T> tensor, Random random) =>
         AiDotNet.Helpers.SeededNoiseTensors.WriteStandardNormalPairs(tensor.AsWritableSpan(), random);
 
     private static void FillUniform(Tensor<T> tensor, Random random, double min, double max)

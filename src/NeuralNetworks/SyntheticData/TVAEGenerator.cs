@@ -880,34 +880,7 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
     }
 
     private List<ColumnMetadata> PrepareColumns(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
-    {
-        var prepared = new List<ColumnMetadata>(columns.Count);
-
-        for (int col = 0; col < columns.Count; col++)
-        {
-            var meta = columns[col].Clone();
-            meta.ColumnIndex = col;
-
-            if (meta.IsNumerical)
-            {
-                ComputeColumnStatistics(data, col, meta);
-            }
-            else if (meta.IsCategorical && meta.NumCategories == 0)
-            {
-                var categories = new HashSet<string>();
-                for (int row = 0; row < data.Rows; row++)
-                {
-                    var val = NumOps.ToDouble(data[row, col]);
-                    categories.Add(val.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                }
-                meta.Categories = categories.OrderBy(c => c, StringComparer.Ordinal).ToList().AsReadOnly();
-            }
-
-            prepared.Add(meta);
-        }
-
-        return prepared;
-    }
+        => SyntheticTensorOps<T>.PrepareColumns(data, columns, ComputeColumnStatistics);
 
     private void ComputeColumnStatistics(Matrix<T> data, int colIndex, ColumnMetadata meta)
     {
@@ -973,9 +946,7 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
     #region Random Sampling Utilities
 
     private void FillStandardNormal(Tensor<T> tensor)
-    {
-        for (int i = 0; i < tensor.Length; i++) tensor[i] = SampleStandardNormal();
-    }
+        => SyntheticTensorOps<T>.FillStandardNormal(tensor, _random);
 
     private T SampleStandardNormal()
     {
@@ -986,25 +957,14 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
     }
 
     private Vector<T> CreateStandardNormalVector(int length)
-    {
-        var v = new Vector<T>(length);
-        for (int i = 0; i < length; i++)
-        {
-            v[i] = SampleStandardNormal();
-        }
-        return v;
-    }
+        => SyntheticTensorOps<T>.StandardNormalVector(length, _random);
 
     #endregion
 
     #region Helpers
 
     private static Vector<T> GetRow(Matrix<T> matrix, int row)
-    {
-        var v = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++) v[j] = matrix[row, j];
-        return v;
-    }
+        => matrix.GetRow(row);
 
     private static Tensor<T> VectorToTensor(Vector<T> v) => Tensor<T>.FromVector(v);
 
