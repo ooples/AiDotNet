@@ -234,7 +234,9 @@ internal sealed record BenchmarkOptions(
     string? LstmFixture = null,
     string? LstmWorkloadReceipt = null,
     string? LstmNumerics = null,
-    string Precision = "fp32")
+    string Precision = "fp32",
+    // Large-data mode: train whole epochs over a scale/prepare_data.py dataset instead of synthetic batches.
+    string? DataDir = null)
 {
     public static BenchmarkOptions Parse(string[] args)
     {
@@ -283,7 +285,8 @@ internal sealed record BenchmarkOptions(
                 .Select(ParsePositiveBatch).ToArray(), fixturePath, requireMatched,
             map.GetValueOrDefault("hifigan-workload-receipt"), lstmFixture, map.GetValueOrDefault("lstm-workload-receipt"),
             map.GetValueOrDefault("lstm-numerics"),
-            Precision: ParsePrecision(map.GetValueOrDefault("precision", "fp32")));
+            Precision: ParsePrecision(map.GetValueOrDefault("precision", "fp32")),
+            DataDir: map.GetValueOrDefault("data"));
     }
 
     // --precision: fp32 (default) or bf16, the training step under autocast as benchmark.py's twin runs it under
@@ -319,8 +322,23 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
         HifiBenchmarkFixture? sharedFixture = null;
         var factory = new AiDotNetTensorBackend(options.Seed);
         var results = new List<ModelReport>();
+        // ScaleBench.Train applies no autocast, so a bf16 request would train in fp32 while the
+        // report claimed bf16. Refuse it rather than record a precision that did not run.
+        if (options.DataDir is not null && options.Precision != "fp32")
+            throw new ArgumentException("--data supports only --precision fp32: large-data training applies no autocast.");
+        using var dataset = options.DataDir is null ? null : new ScaleDataset(options.DataDir);
         foreach (var modelName in options.Models)
         {
+            if (dataset is not null)
+            {
+                Console.WriteLine($"[bench] {modelName}: building network…");
+                var scaleModel = factory.Create(modelName);
+                var shape = scaleModel.SampleShape ?? throw new NotSupportedException($"{modelName} has no large-data mode");
+                Console.WriteLine($"[bench] {modelName}: {options.Epochs} epochs over {dataset.Name} ({dataset.TrainSamples:N0} samples, batch {options.BatchSize}, {scaleModel.ParameterCount} params)…");
+                var scale = ScaleBench.Train(scaleModel, shape, dataset, options.Epochs, options.BatchSize, options.Seed);
+                results.Add(new ModelReport(modelName, "AiDotNetNeuralNetwork", BenchStats.DeviceName, scaleModel.ParameterCount, null, [], scale));
+                continue;
+            }
             var modelStart = Stopwatch.StartNew();
             Console.WriteLine($"[bench] {modelName}: building network…");
             BenchmarkPhaseTelemetry.Mark(modelName, "construction");
@@ -570,6 +588,10 @@ internal interface IBenchmarkModel
     double? LastLoss => null;
     /// <summary>The batch the next Forward/Backward consumes; settable so the training loop can replay pre-generated batches.</summary>
     (Tensor<float> Input, Tensor<float> Label) CurrentBatch { get; set; }
+    /// <summary>The per-sample input shape a classifier reads in large-data mode, or null for a row without that mode.</summary>
+    int[]? SampleShape => null;
+    /// <summary>The model's outputs for an input batch, in inference mode (large-data mode scores the test split with it).</summary>
+    Tensor<float> Predict(Tensor<float> input) => throw new NotSupportedException("This row has no large-data mode");
 }
 
 internal sealed class AiDotNetTensorBackend(int seed, HifiBenchmarkFixture? hifiFixture = null)
@@ -691,6 +713,8 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
 
     protected abstract NeuralNetworkBase<float> BuildNetwork();
     protected abstract int[] InputShapePerSample { get; }   // shape WITHOUT batch dim
+    public int[]? SampleShape => InputShapePerSample;
+    public Tensor<float> Predict(Tensor<float> input) => Network.Predict(input);
     protected abstract int OutputClasses { get; }
 
     /// <summary>The PyTorch twin's module prefix for each parameter-bearing layer, in layer order (benchmark.py names).</summary>
@@ -1711,7 +1735,8 @@ internal static class RunEnvironmentProbe
 }
 
 internal sealed record BenchmarkReport(string Framework, string DotNetRuntime, RunEnvironment Environment, object AiDotNet, List<ModelReport> Results, BenchmarkOptions Protocol);
-internal sealed record ModelReport(string Model, string Backend, string Device, long Parameters, TrainingReport? Training, List<InferenceReport> Inference);
+internal sealed record ModelReport(string Model, string Backend, string Device, long Parameters, TrainingReport? Training, List<InferenceReport> Inference,
+    ScaleReport? Scale = null);
 // SteadyStateEpochSecondsAvg excludes the first epoch (issue #1566 item 4): the
 // AiDotNet first epoch is dominated by JIT + autotune warmup (~2.1 s) and drops to
 // ~0.36 s thereafter, so TotalSeconds/EpochSeconds[0] are warmup-skewed; the

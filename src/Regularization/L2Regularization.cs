@@ -132,17 +132,15 @@ public class L2Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
     {
         var regularizationStrength = NumOps.FromDouble(Options.Strength);
         var shrinkageFactor = ShrinkTowardZero(regularizationStrength);
-        var result = new Matrix<T>(data.Rows, data.Columns);
-
-        for (int i = 0; i < data.Rows; i++)
+        if (data.Rows == 0 || data.Columns == 0)
         {
-            for (int j = 0; j < data.Columns; j++)
-            {
-                result[i, j] = NumOps.Multiply(data[i, j], shrinkageFactor);
-            }
+            return new Matrix<T>(data.Rows, data.Columns);
         }
 
-        return result;
+        // Through the tensor op, not MatrixMultiplyScalar: a GPU engine runs the matrix op through its float32
+        // scale kernel whatever T is, which cost a double normal-equation matrix half its digits (and overflowed
+        // entries above float.MaxValue). The tensor op keeps T's precision on every engine.
+        return Engine.TensorMultiplyScalar(Tensor<T>.FromMatrix(data), shrinkageFactor).ToMatrix();
     }
 
     /// <summary>
@@ -162,13 +160,11 @@ public class L2Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
     {
         var regularizationStrength = NumOps.FromDouble(Options.Strength);
         var shrinkageFactor = ShrinkTowardZero(regularizationStrength);
-        var result = new Vector<T>(data.Length);
-
-        for (int i = 0; i < data.Length; i++)
+        if (data.Length == 0)
         {
-            result[i] = NumOps.Multiply(data[i], shrinkageFactor);
+            return new Vector<T>(0);
         }
 
-        return result;
+        return Engine.Multiply(data, shrinkageFactor);
     }
 }

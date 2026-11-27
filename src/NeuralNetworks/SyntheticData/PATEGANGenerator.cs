@@ -207,12 +207,7 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             var weights = layer.GetWeights();
             if (weights is not null)
             {
-                double std = Math.Sqrt(2.0 / fanIn);
-                for (int i = 0; i < weights.Length; i++)
-                {
-                    double u1 = 1.0 - _random.NextDouble(), u2 = _random.NextDouble();
-                    weights[i] = NumOps.FromDouble(std * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
-                }
+                SeededNoiseTensors.FillStandardNormal(weights, _random, Math.Sqrt(2.0 / fanIn));
             }
             var biases = layer.GetBiases();
             biases?.Fill(NumOps.Zero);

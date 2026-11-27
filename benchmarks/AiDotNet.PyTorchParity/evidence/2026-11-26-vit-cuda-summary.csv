@@ -1,0 +1,5 @@
+model,device,operation,batch,launches,ai_parameters,torch_parameters,ai_median_ms,ai_min_ms,ai_max_ms,torch_configuration,torch_median_ms,torch_min_ms,torch_max_ms,torch_over_ai,launch_ratio_min,launch_ratio_max,torch-compile_median_ms,torch-compile-fused_median_ms,torch-cudagraphs-fused_median_ms,flags
+vit,cuda,train,64,5,2690122,2693578,36.482350000000004,36.4491,36.60755,torch-cudagraphs-fused,37.34205,37.06715,37.439,1.0235648197004852,1.016956522931979,1.023973236373205,38.10470000000001,37.5455,37.34205,parameters-differ
+vit,cuda,inference,1,5,2690122,2693578,1.688,1.493,1.694,torch-cudagraphs-fused,0.983,0.914,1.136,0.582345971563981,0.574468085106383,0.7064676616915422,2.623,2.618,0.983,parameters-differ
+vit,cuda,inference,8,5,2690122,2693578,2.302,2.246,3.044,torch-cudagraphs-fused,2.258,2.238,2.417,0.9808861859252823,0.7352168199737188,1.0761353517364203,2.654,2.586,2.258,parameters-differ
+vit,cuda,inference,16,5,2690122,2693578,4.198,4.154,4.271,torch-cudagraphs-fused,3.812,3.793,3.934,0.9080514530728917,0.8925310231795832,0.9467982667308618,4.07,4.031,3.812,parameters-differ

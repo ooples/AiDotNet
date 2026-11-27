@@ -218,9 +218,7 @@ internal sealed class CosyVoice2Lm<T>
 
     private Tensor<T> Rows(TiedEmbeddingLayer<T> table, IReadOnlyList<int> ids)
     {
-        var tensor = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) tensor[i] = NumOps.FromDouble(ids[i]);
-        return table.Forward(tensor);
+        return table.Forward(TtsIdTensors.From<T>(ids));
     }
 
     /// <summary>The head's logits <c>[L, SpeechVocabulary + 3]</c> of an input sequence <c>[L, Hidden]</c>.</summary>

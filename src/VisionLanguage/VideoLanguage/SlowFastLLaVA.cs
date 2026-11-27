@@ -37,11 +37,10 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new SlowFastLLaVA&lt;double&gt;(architecture, "slowfastllava.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new SlowFastLLaVA&lt;double&gt;(architecture, new SlowFastLLaVAOptions());
+/// var model = new SlowFastLLaVA&lt;double&gt;(architecture, new SlowFastLLaVAOptions());
+/// var frames = new List&lt;Tensor&lt;double&gt;&gt;();
+/// for (int i = 0; i &lt; 8; i++) frames.Add(Tensor&lt;double&gt;.CreateRandom(3, 224, 224));   // 8 frames, [3, H, W] each
+/// Tensor&lt;double&gt; answer = model.GenerateFromVideo(frames, "What happens in this clip?");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -81,6 +80,7 @@ public partial class SlowFastLLaVA<T> : VisionLanguageModelBase<T>, IVideoLangua
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -120,6 +120,7 @@ public partial class SlowFastLLaVA<T> : VisionLanguageModelBase<T>, IVideoLangua
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -163,26 +164,22 @@ public partial class SlowFastLLaVA<T> : VisionLanguageModelBase<T>, IVideoLangua
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: Slow pathway vision encoder (full spatial resolution)
         var encoderOut = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoderOut = Layers[i].Forward(encoderOut);
-        int visLen = encoderOut.Length;
 
         // Step 2: Tokenize prompt
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
         {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
         }
 
         // Step 3: Slow pathway visual features + text cross-attention
-        // 2-layer MLP cross-modal connector (Linear -> GELU -> Linear)
-        var decoderInput = GatedConnectorInput(encoderOut, promptTokens, dim, _options.VocabSize);
+        // The encoder ends in the MLP projection to the LLM width (the connector); the decoder reads its tokens
+        // followed by the embedded prompt.
+        var decoderInput = VisualDecoderSequence(encoderOut, promptTokens);
 
         // Step 4: LLM decoder
         var output = decoderInput;
@@ -260,7 +257,8 @@ public partial class SlowFastLLaVA<T> : VisionLanguageModelBase<T>, IVideoLangua
             engine.TensorMultiplyScalar(fastReplicated, NumOps.FromDouble(0.3)));
 
         // Project fused features through the LLM decoder
-        var output = fused;
+        // The decoder reads the pooled visual features as decoder-width tokens, followed by the embedded prompt.
+        var output = VisualDecoderSequence(fused, prompt is null ? null : TokenizeText(prompt));
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
         return output;

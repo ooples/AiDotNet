@@ -1,0 +1,7 @@
+# Paths the "Auto-Fix Formatting" workflow leaves out of every batch.
+#
+# One path per line, relative to the repository root, exactly as git prints it. Paths are literal: no
+# globs. Lines starting with '#' and blank lines are ignored.
+#
+# Use it when a formatted file would break CI, or should not be reformatted at all (generated or vendored
+# code). A batch that cannot be merged otherwise blocks every later one. Say why next to the entry.

@@ -19,7 +19,7 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks;
 /// <remarks>
 /// <para>
 /// These are deliberately independent of the two tests that first exposed the defects
-/// (<c>SequenceTokenSliceLayerShapeContractTests</c> and <c>HrePaperAChainShapeValidatorTests</c>):
+/// (<c>SequenceTokenSliceLayerShapeContractTests</c> and <c>CustomChainShapeValidatorTests</c>):
 /// different architectures, a different custom layer, and direct assertions on the property that
 /// actually broke, so a regression cannot hide behind the other suites' assertions.
 /// </para>

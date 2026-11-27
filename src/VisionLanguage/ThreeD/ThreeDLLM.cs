@@ -40,11 +40,9 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new ThreeDLLM&lt;double&gt;(architecture, "threedllm.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new ThreeDLLM&lt;double&gt;(architecture, new ThreeDLLMOptions());
+/// var model = new ThreeDLLM&lt;double&gt;(architecture, new ThreeDLLMOptions());
+/// var pointCloud = Tensor&lt;double&gt;.CreateRandom(2048, 6);   // [points, XYZ + RGB]
+/// Tensor&lt;double&gt; answer = model.GenerateFrom3D(pointCloud, "What objects are on the table?");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -92,6 +90,7 @@ public partial class ThreeDLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLan
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -118,6 +117,7 @@ public partial class ThreeDLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLan
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -166,12 +166,12 @@ public partial class ThreeDLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLan
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoderOut = Layers[i].Forward(encoderOut);
 
-        // Fuse visual features with prompt tokens via ConcatenateTensors
+        // Embed the prompt tokens and append them to the visual token sequence
         Tensor<T> fusedInput;
         if (prompt is not null)
         {
             var promptTokens = TokenizeText(prompt);
-            fusedInput = encoderOut.ConcatenateTensors(promptTokens);
+            fusedInput = FusePromptTokens(encoderOut, promptTokens);
         }
         else
         {

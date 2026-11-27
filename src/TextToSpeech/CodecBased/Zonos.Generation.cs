@@ -16,10 +16,7 @@ public partial class Zonos<T>
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
         var codes = Codec.Encode(audio ?? throw new ArgumentNullException(nameof(audio)));                        // [9, frames]
-        var tokens = new Tensor<T>(new[] { codes.GetLength(1), codes.GetLength(0) });
-        for (int f = 0; f < codes.GetLength(1); f++)
-            for (int k = 0; k < codes.GetLength(0); k++) tokens[f, k] = Ops.FromDouble(codes[k, f]);
-        return tokens;
+        return TtsIdTensors.FromGrid<T>(codes, transpose: true);                                                 // [frames, 9]
     }
 
     /// <inheritdoc />

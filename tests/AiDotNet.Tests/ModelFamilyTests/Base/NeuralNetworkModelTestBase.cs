@@ -3285,7 +3285,10 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
             WritePerformanceProgress(outputDirectory, performanceFileName, "warm-train-step");
             trainTimer.Restart();
-            network.Train(input, target);
+            // The warm step must take the same entry point as the cold one. Calling network.Train directly
+            // bypassed a family's TrainOn routing, so every model that trains only on typed supervision
+            // (TTS durations/codec tokens, grounding boxes, SAM masks) failed here after a successful cold step.
+            TrainOn(network, input, target);
             trainTimer.Stop();
             trainStepMs = trainTimer.Elapsed.TotalMilliseconds;
             _arena.Reset();

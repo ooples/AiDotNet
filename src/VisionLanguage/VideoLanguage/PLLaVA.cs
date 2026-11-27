@@ -38,11 +38,10 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new PLLaVA&lt;double&gt;(architecture, "pllava.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new PLLaVA&lt;double&gt;(architecture, new PLLaVAOptions());
+/// var model = new PLLaVA&lt;double&gt;(architecture, new PLLaVAOptions());
+/// var frames = new List&lt;Tensor&lt;double&gt;&gt;();
+/// for (int i = 0; i &lt; 8; i++) frames.Add(Tensor&lt;double&gt;.CreateRandom(3, 224, 224));   // 8 frames, [3, H, W] each
+/// Tensor&lt;double&gt; answer = model.GenerateFromVideo(frames, "What happens in this clip?");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -89,6 +88,7 @@ public partial class PLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -128,6 +128,7 @@ public partial class PLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -171,27 +172,23 @@ public partial class PLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: Vision encoder (full resolution, no pooling for single image)
         var encoderOut = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoderOut = Layers[i].Forward(encoderOut);
-        int visLen = encoderOut.Length;
 
         // Step 2: Tokenize prompt
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
         {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
         }
 
         // Step 3: Parameter-free visual-text fusion
         // PLLaVA is parameter-free for the pooling, so visual features pass directly
-        // 2-layer MLP cross-modal connector (Linear -> GELU -> Linear)
-        var decoderInput = GatedConnectorInput(encoderOut, promptTokens, dim, _options.VocabSize);
+        // The encoder ends in the MLP projection to the LLM width (the connector); the decoder reads its tokens
+        // followed by the embedded prompt.
+        var decoderInput = VisualDecoderSequence(encoderOut, promptTokens);
 
         // Step 4: LLM decoder
         var output = decoderInput;
@@ -259,7 +256,8 @@ public partial class PLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel
         }
 
         // Step 5: Project through LLM decoder
-        var decoderOutput = temporalPooled;
+        // The decoder reads the pooled visual features as decoder-width tokens, followed by the embedded prompt.
+        var decoderOutput = VisualDecoderSequence(temporalPooled, prompt is null ? null : TokenizeText(prompt));
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             decoderOutput = Layers[i].Forward(decoderOutput);
         return decoderOutput;
@@ -301,9 +299,11 @@ public partial class PLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel
     {
         // CreateDefaultVideoPoolingVLMLayers: patch(1)+LN(1) + numVisionLayers·(block+optional dropout)
         // + 5 pooling layers (transpose, reshape, adaptive-pool, reshape, transpose) before the
-        // projection + LLM. The visual segment ends after the pooling module.
+        // projection + LLM.
         int perBlock = _options.DropoutRate > 0 ? 2 : 1;
-        _encoderLayerEnd = 2 + _options.NumVisionLayers * perBlock + 5;
+        // The encoder includes the pooling (5 layers) and the MLP projection to the LLM (Dense + LayerNorm), so its
+        // tokens are DecoderDim wide and the prompt joins them at the decoder's width.
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * perBlock + 5 + 2;
     }
 
     private Tensor<T> TokenizeText(string text)

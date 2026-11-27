@@ -509,7 +509,7 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
         // accepted and ignored, leaving the user to discover the
         // miswiring as either:
         //   (a) a zero-trainable-parameter model that "trains" vacuously
-        //       (the HRE-substitution consumer reproducer in #1382), OR
+        //       (the custom-layer consumer reproducer in #1382), OR
         //   (b) a shape mismatch on the very first batch when the
         //       custom chain's final shape doesn't match outputSize.
         // Both surface FAR from the constructor where the mistake was

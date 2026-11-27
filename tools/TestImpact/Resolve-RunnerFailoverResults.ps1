@@ -124,5 +124,25 @@ $proof = [ordered]@{ schemaVersion = 1; complete = ($errors.Count -eq 0 -and $ph
 $proof | ConvertTo-Json -Depth 100 | Set-Content "$OutputDirectory/proof.json" -Encoding utf8
 ConvertTo-Json -InputObject @($jobs) -Depth 100 | Set-Content "$OutputDirectory/original-jobs.json" -Encoding utf8
 ConvertTo-Json -InputObject @($resolvedJobs) -Depth 100 | Set-Content "$OutputDirectory/resolved-jobs.json" -Encoding utf8
+# A shard that passed only on its rerun is reported as such. Its checks are green and its results are real, but
+# the first attempt died, and a shard that starves its own runner is indistinguishable here from one GitHub lost.
+$recovered = @($receipts | Where-Object { $_.attempt -ceq 'alternate' })
+foreach ($item in $recovered) {
+    Write-Host "::warning title=Shard recovered by rerun::'$($item.shard)' did not finish on its first runner (job $($item.primaryJobId)) and passed only on its rerun (job $($item.chosenJobId))."
+}
+if ($env:GITHUB_STEP_SUMMARY -and $recovered.Count -gt 0) {
+    $lines = [Collections.Generic.List[string]]::new()
+    $lines.Add("### $($recovered.Count) shard(s) passed only after a rerun")
+    $lines.Add('')
+    $lines.Add('| Shard | Lost job | Rerun job | Tests | Passed |')
+    $lines.Add('| --- | --- | --- | --- | --- |')
+    foreach ($item in $recovered) {
+        $lines.Add("| $($item.shard) | $($item.primaryJobId) | $($item.chosenJobId) | $($item.counts.total) | $($item.counts.passed) |")
+    }
+    # The summary is a courtesy copy of the annotations above. The proof and job files are already written, so
+    # a summary file that cannot be appended to must not fail a verified recovery; the gate below still decides.
+    try { $lines | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8 }
+    catch { Write-Host "::warning title=Step summary not written::Could not append the rerun table to the step summary: $($_.Exception.Message)" }
+}
 if (-not $proof.complete -or $matrix.Count -eq 0) { throw "Logical shard evidence gate failed: $($errors.Count) rejected shard job(s)." }
 Write-Host "Verified $($receipts.Count) required logical shard receipt(s); original attempts remain in original-jobs.json."

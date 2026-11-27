@@ -40,11 +40,10 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new VideoLLaVA&lt;double&gt;(architecture, "videollava.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new VideoLLaVA&lt;double&gt;(architecture, new VideoLLaVAOptions());
+/// var model = new VideoLLaVA&lt;double&gt;(architecture, new VideoLLaVAOptions());
+/// var frames = new List&lt;Tensor&lt;double&gt;&gt;();
+/// for (int i = 0; i &lt; 8; i++) frames.Add(Tensor&lt;double&gt;.CreateRandom(3, 224, 224));   // 8 frames, [3, H, W] each
+/// Tensor&lt;double&gt; answer = model.GenerateFromVideo(frames, "What happens in this clip?");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -92,6 +91,7 @@ public partial class VideoLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageM
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -123,6 +123,7 @@ public partial class VideoLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageM
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -173,12 +174,12 @@ public partial class VideoLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageM
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoderOut = Layers[i].Forward(encoderOut);
 
-        // Fuse visual features with prompt tokens via ConcatenateTensors
+        // Embed the prompt tokens and append them to the visual token sequence
         Tensor<T> fusedInput;
         if (prompt is not null)
         {
             var promptTokens = TokenizeText(prompt);
-            fusedInput = encoderOut.ConcatenateTensors(promptTokens);
+            fusedInput = FusePromptTokens(encoderOut, promptTokens);
         }
         else
         {
@@ -297,7 +298,9 @@ public partial class VideoLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageM
         // LLM decoder. The vision-encoder segment (what EncodeImage runs to produce visual
         // features, before the LLM projection) ends after the vision blocks.
         int perBlock = _options.DropoutRate > 0 ? 2 : 1;
-        _encoderLayerEnd = 2 + _options.NumVisionLayers * perBlock;
+        // The encoder includes the linear projection to the LLM (Dense + LayerNorm), so its tokens are DecoderDim wide
+        // and the prompt joins them at the decoder's width.
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * perBlock + 2;
     }
 
     private Tensor<T> TokenizeText(string text)

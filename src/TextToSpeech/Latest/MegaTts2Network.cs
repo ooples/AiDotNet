@@ -470,15 +470,14 @@ internal sealed class MegaTts2CodeDecoder<T>
     private Tensor<T> Inputs(IReadOnlyList<int> tokens, Tensor<T> linguistic)
     {
         int l = tokens.Count;
-        var ids = new Tensor<T>(new[] { l });
-        var keep = new Tensor<T>(new[] { l, 1 });
+        var kept = new int[l];
         for (int i = 0; i < l; i++)
         {
             if (tokens[i] < 0 || tokens[i] >= Vocabulary) throw new ArgumentOutOfRangeException(nameof(tokens), $"Tokens lie in [0, {Vocabulary}).");
-            ids[i] = NumOps.FromDouble(tokens[i]);
-            if (tokens[i] != 0) keep[i, 0] = NumOps.One;
+            kept[i] = tokens[i] != 0 ? 1 : 0;
         }
-        var embedded = _engine.TensorMultiply(Embedding.Forward(ids), _engine.TensorBroadcastTo(keep, new[] { l, Width }));
+        var keep = TtsIdTensors.From<T>(kept, new[] { l, 1 });
+        var embedded = _engine.TensorMultiply(Embedding.Forward(TtsIdTensors.From<T>(tokens)), _engine.TensorBroadcastTo(keep, new[] { l, Width }));
         return _engine.TensorAdd(embedded, Projection.Forward(linguistic));
     }
 

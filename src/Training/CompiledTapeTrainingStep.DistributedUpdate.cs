@@ -336,7 +336,16 @@ public static partial class CompiledTapeTrainingStep<T>
     }
 
     private static void ScaleInto(ReadOnlySpan<float> source, float factor, Span<float> destination)
-        => System.Numerics.Tensors.TensorPrimitives.Multiply(source, factor, destination);
+    {
+#if NET8_0_OR_GREATER
+        System.Numerics.Tensors.TensorPrimitives.Multiply(source, factor, destination);
+#else
+        // System.Numerics.Tensors is not referenced on .NET Framework.
+        if (destination.Length < source.Length)
+            throw new ArgumentException("The destination is shorter than the source.", nameof(destination));
+        for (int i = 0; i < source.Length; i++) destination[i] = source[i] * factor;
+#endif
+    }
 
     /// <summary>
     /// One engaged step: configures the plan's fused optimizer on the first (taking over the eager optimizer's state,

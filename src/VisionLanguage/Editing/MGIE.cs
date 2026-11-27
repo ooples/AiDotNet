@@ -242,6 +242,7 @@ public partial class MGIE<T> : LatentDiffusionModelBase<T>, IImageEditingVLM<T>
     /// <inheritdoc />
     protected override void RegisterComponents()
     {
+        base.RegisterComponents();
         RegisterParameterComponent(_unet);
         RegisterParameterComponent(_vae);
         RegisterParameterComponent(_instructionEncoder);

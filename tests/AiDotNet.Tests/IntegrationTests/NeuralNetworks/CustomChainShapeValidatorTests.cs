@@ -14,8 +14,8 @@ using Xunit;
 namespace AiDotNetTests.IntegrationTests.NeuralNetworks;
 
 /// <summary>
-/// Repro for the HRE PAPER-A chain shape-validator failure reported in
-/// HarmonicEngine PR #149: when a chain ends with
+/// Repro for a custom-chain shape-validator failure reported downstream:
+/// when a chain ends with
 /// <c>MultiHeadAttention -> SequenceTokenSliceLayer -> custom-readout(rank-2 specific shape)</c>
 /// the custom-chain validator rejects both pairs with "Layer N is not compatible with Layer N+1".
 ///
@@ -24,10 +24,10 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks;
 /// post-forward <c>DeepCopy</c> revalidation path inside the optimizer
 /// pipeline), not by re-implementing the compatibility algorithm in the
 /// test. The mock readout layer (<see cref="FixedShapeRank2Layer"/>)
-/// declares the same shape contract as HarmonicEngine's <c>HreReadoutLayer</c>,
+/// declares the same shape contract as the downstream consumer's readout layer,
 /// which is what surfaces the validator regression.</para>
 /// </summary>
-public partial class HrePaperAChainShapeValidatorTests
+public partial class CustomChainShapeValidatorTests
 {
     /// <summary>
     /// Validator runs at chain-construction time and rejects the chain if any
@@ -38,9 +38,9 @@ public partial class HrePaperAChainShapeValidatorTests
     /// "Layer N (MultiHeadAttention) is not compatible with Layer N+1 (SequenceTokenSliceLayer)".
     /// </summary>
     [Fact]
-    public void HreChain_ConstructTransformer_PassesValidator()
+    public void CustomChain_ConstructTransformer_PassesValidator()
     {
-        var arch = BuildHreLikeArchitecture();
+        var arch = BuildCustomChainArchitecture();
 
         // ctor runs the chain validator. A regression of the rank-mismatch
         // fix would throw here with the "Layer N is not compatible with Layer M"
@@ -55,7 +55,7 @@ public partial class HrePaperAChainShapeValidatorTests
     /// <summary>
     /// After a real <c>Forward</c> resolves the slice layer's per-sample shape
     /// to <c>[ctxLen, embDim]</c>, a downstream <c>DeepCopy</c> re-runs the validator
-    /// on the resolved chain — this is the exact failure path from HarmonicEngine PR #149,
+    /// on the resolved chain — this is the exact failure path from the downstream report,
     /// triggered by <c>AdamOptimizer.Optimize</c> →
     /// <c>OptimizerBase.PrepareAndEvaluateSolution</c> → <c>DeepCopy</c>.
     /// Pre-fix the post-forward revalidation threw because the validator
@@ -63,9 +63,9 @@ public partial class HrePaperAChainShapeValidatorTests
     /// resolved per-sample input.
     /// </summary>
     [Fact]
-    public void HreChain_DeepCopyAfterForward_PassesRevalidation()
+    public void CustomChain_DeepCopyAfterForward_PassesRevalidation()
     {
-        var arch = BuildHreLikeArchitecture();
+        var arch = BuildCustomChainArchitecture();
         var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
 
         // Real forward — this is what causes SequenceTokenSliceLayer to call
@@ -103,7 +103,7 @@ public partial class HrePaperAChainShapeValidatorTests
     /// genuinely incompatible chains like <c>[32, 32]</c> vs <c>[3, 32, 32]</c>.
     /// </summary>
     [Fact]
-    public void HreChain_RankMismatchWithoutWildcard_RejectedByValidator()
+    public void CustomChain_RankMismatchWithoutWildcard_RejectedByValidator()
     {
         // Chain crafted so that ONLY the 1→2 edge fails compatibility — every
         // other transition (0→1, 2→3) is shape-compatible. Without this
@@ -181,15 +181,15 @@ public partial class HrePaperAChainShapeValidatorTests
     private const int MinExpectedLayers = 4;
 
     /// <summary>
-    /// Builds an architecture isomorphic to HarmonicEngine's
-    /// <c>ApplesToApplesHreChain</c>: <c>InputLayer → embed → MHA × 2 →
+    /// Builds an architecture isomorphic to the downstream consumer's
+    /// chain: <c>InputLayer → embed → MHA × 2 →
     /// SequenceTokenSliceLayer → readout</c>. We use AiDotNet's stock
     /// <see cref="EmbeddingLayer{T}"/> as the embed and a
     /// <see cref="FixedShapeRank2Layer"/> as the readout — the shape
     /// declarations are what the validator checks; the math inside is
     /// irrelevant for this regression.
     /// </summary>
-    private static TransformerArchitecture<float> BuildHreLikeArchitecture()
+    private static TransformerArchitecture<float> BuildCustomChainArchitecture()
     {
         var layers = new List<ILayer<float>>
         {
@@ -222,11 +222,11 @@ public partial class HrePaperAChainShapeValidatorTests
     }
 
     /// <summary>
-    /// No-op layer with explicit input/output shapes. Mimics HarmonicEngine's
-    /// <c>HreReadoutLayer</c> shape contract (rank-2 input <c>[batch, embDim]</c>
+    /// No-op layer with explicit input/output shapes. Mimics the downstream
+    /// consumer's readout-layer shape contract (rank-2 input <c>[batch, embDim]</c>
     /// or <c>[-1, embDim]</c>, rank-1 output <c>[vocabSize]</c>) for the
     /// validator-only regression tests. Forward is identity so we can run a
-    /// real <c>Predict</c> through the chain without depending on HRE math.
+    /// real <c>Predict</c> through the chain without depending on the consumer's math.
     /// </summary>
     [TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
     [TensorLayout(TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
