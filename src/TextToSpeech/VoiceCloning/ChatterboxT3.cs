@@ -435,11 +435,13 @@ internal sealed class ChatterboxT3<T>
 
     private Tensor<T> IdTensor(IReadOnlyList<int> ids, int batch)
     {
-        var tensor = new Tensor<T>(new[] { batch, ids.Count });
+        // The same id row for every batch entry, row-major.
+        int count = ids.Count;
+        var rows = new int[batch * count];
         for (int b = 0; b < batch; b++)
-            for (int i = 0; i < ids.Count; i++)
-                tensor[b, i] = NumOps.FromDouble(ids[i]);
-        return tensor;
+            for (int i = 0; i < count; i++)
+                rows[b * count + i] = ids[i];
+        return TtsIdTensors.From<T>(rows, new[] { batch, count });
     }
 
     private static TLayer Own<TLayer>(List<LayerBase<T>> layers, TLayer layer) where TLayer : LayerBase<T>

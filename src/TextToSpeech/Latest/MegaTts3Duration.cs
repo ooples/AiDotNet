@@ -110,9 +110,7 @@ internal sealed class MegaTts3Duration<T>
 
     private Tensor<T> Code(IReadOnlyList<int> codes)
     {
-        var ids = new Tensor<T>(new[] { codes.Count });
-        for (int i = 0; i < codes.Count; i++) ids[i] = NumOps.FromDouble(codes[i]);
-        return CodeEmbedding.Forward(ids);
+        return CodeEmbedding.Forward(TtsIdTensors.From<T>(codes));
     }
 
     // RotaryEmbeddings: rotate-half with cos and sin of position · 10000^(−2k/width), the angles repeated for both halves.

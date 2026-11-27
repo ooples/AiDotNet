@@ -357,9 +357,7 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
     {
         if (recording is null) throw new ArgumentNullException(nameof(recording));
         var ids = EncodePhonemes(EnglishG2P.Default.Phonemize(transcript ?? throw new ArgumentNullException(nameof(transcript))));
-        var tokens = new Tensor<T>(new[] { ids.Length });
-        for (int i = 0; i < ids.Length; i++) tokens[i] = NumOps.FromDouble(ids[i]);
-        return new TtsVoice<T> { ReferenceAudio = recording, ReferenceTokens = tokens };
+        return new TtsVoice<T> { ReferenceAudio = recording, ReferenceTokens = TtsIdTensors.From<T>(ids) };
     }
 
     /// <inheritdoc />
@@ -371,12 +369,12 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
         var ids = EncodePhonemes(EnglishG2P.Default.Phonemize(text));
         if (ids.Length == 0) throw new ArgumentException("The text has no pronounceable content.", nameof(text));
         int length = Math.Min(ids.Length, _options.MaxTextLength);
-        var tokens = new Tensor<T>(new[] { length + 3 });
-        tokens[0] = NumOps.FromDouble(BeginToken);
-        tokens[1] = NumOps.FromDouble(Speaker1Token);
-        for (int i = 0; i < length; i++) tokens[i + 2] = NumOps.FromDouble(ids[i]);
-        tokens[length + 2] = NumOps.FromDouble(EndToken);
-        return tokens;
+        var sequence = new int[length + 3];
+        sequence[0] = BeginToken;
+        sequence[1] = Speaker1Token;
+        Array.Copy(ids, 0, sequence, 2, length);
+        sequence[length + 2] = EndToken;
+        return TtsIdTensors.From<T>(sequence);
     }
 
     private int SemanticCode(int tokenId)
@@ -627,9 +625,7 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
             prompt.Add(_tokenIds["_"]);
             ids.InsertRange(2, prompt);
         }
-        var tensor = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) tensor[i] = NumOps.FromDouble(ids[i]);
-        return tensor;
+        return TtsIdTensors.From<T>(ids);
     }
 
     // PhemeClient.infer_text: continue the prompt's semantic tokens; resample while a token repeats > 100 times.

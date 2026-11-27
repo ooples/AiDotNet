@@ -146,18 +146,16 @@ internal sealed class MegaTts3RelEncoder<T>
     public Tensor<T> Forward(int[,] tokens, Tensor<T>? other)
     {
         int b = tokens.GetLength(0), l = tokens.GetLength(1), h = _hidden;
-        var ids = new Tensor<T>(new[] { b * l });
-        var maskValues = new Tensor<T>(new[] { b, l, 1 });
+        var ids = _engine.Reshape(TtsIdTensors.FromGrid<T>(tokens), new[] { b * l });
+        var mask01 = new int[b * l];
         for (int i = 0; i < b; i++)
         {
             int length = 0;
             for (int j = 0; j < l; j++)
-            {
-                ids[i * l + j] = NumOps.FromDouble(tokens[i, j]);
                 if (tokens[i, j] > 0) length++;
-            }
-            for (int j = 0; j < length; j++) maskValues[i, j, 0] = NumOps.One;
+            for (int j = 0; j < length; j++) mask01[i * l + j] = 1;
         }
+        var maskValues = TtsIdTensors.From<T>(mask01, new[] { b, l, 1 });
         var x = _engine.TensorMultiplyScalar(_engine.Reshape(Embedding.Forward(ids), new[] { b, l, h }), NumOps.FromDouble(Math.Sqrt(h)));
         if (other is not null) x = _engine.TensorAdd(x, other);
         var mask = _engine.TensorBroadcastTo(maskValues, new[] { b, l, h });

@@ -403,11 +403,7 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <summary>Ids as a tensor <c>[count]</c>.</summary>
-    protected Tensor<T> Ids(IReadOnlyList<int> ids)
-    {
-        if (ids is null) throw new ArgumentNullException(nameof(ids));
-        return new Tensor<int>(ids.ToArray(), new[] { ids.Count }).Cast<T>();
-    }
+    protected Tensor<T> Ids(IReadOnlyList<int> ids) => TtsIdTensors.From<T>(ids);
 
     /// <summary>The ids a tensor holds.</summary>
     protected int[] IdsOf(Tensor<T> tensor)

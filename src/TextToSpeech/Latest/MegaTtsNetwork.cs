@@ -94,9 +94,7 @@ internal sealed class MegaTtsVectorQuantizer<T>
     public Tensor<T> Lookup(int[,] codes)
     {
         int b = codes.GetLength(0), l = codes.GetLength(1);
-        var ids = new Tensor<T>(new[] { b * l });
-        for (int i = 0; i < b; i++)
-            for (int j = 0; j < l; j++) ids[i * l + j] = NumOps.FromDouble(codes[i, j]);
+        var ids = _engine.Reshape(TtsIdTensors.FromGrid<T>(codes), new[] { b * l });
         return _engine.Reshape(Codebook.Forward(ids), new[] { b, l, Dimension });
     }
 

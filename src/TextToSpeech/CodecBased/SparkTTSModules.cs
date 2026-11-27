@@ -704,9 +704,7 @@ internal sealed class SparkBiCodec<T>
         using var _ = new NoGradScope<T>();
         var semantic = EncodeSemanticFeatures(audio);
         int[,] ids = _semanticQuantizer.Encode(semantic);
-        var tokens = new Tensor<T>(new[] { ids.GetLength(1) });
-        for (int i = 0; i < tokens.Length; i++) tokens[i] = MathHelper.GetNumericOperations<T>().FromDouble(ids[0, i]);
-        return (tokens, _speaker.Encode(audio).GlobalTokens);
+        return (TtsIdTensors.FromGridRow<T>(ids, 0), _speaker.Encode(audio).GlobalTokens);
     }
 
     public Tensor<T> EncodeSemantic(Tensor<T> audio) => Tokenize(audio).Semantic;

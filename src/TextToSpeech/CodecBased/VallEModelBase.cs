@@ -279,12 +279,7 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <summary>A tensor of token ids.</summary>
-    protected Tensor<T> ToTensor(IReadOnlyList<int> ids)
-    {
-        var tensor = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) tensor[i] = NumOps.FromDouble(ids[i]);
-        return tensor;
-    }
+    protected Tensor<T> ToTensor(IReadOnlyList<int> ids) => TtsIdTensors.From<T>(ids);
 
     /// <summary>The token ids of a tensor, checked against the vocabulary.</summary>
     protected int[] ToIds(Tensor<T> tensor, string name)
@@ -537,11 +532,7 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
     /// <remarks>EnCodec's codes of <paramref name="audio"/>, <c>[frames, codebooks]</c>.</remarks>
     public Tensor<T> EncodeToTokens(Tensor<T> audio)
     {
-        var codes = FramesFirst(Codec.Encode(audio ?? throw new ArgumentNullException(nameof(audio))));
-        var tensor = new Tensor<T>(new[] { codes.GetLength(0), codes.GetLength(1) });
-        for (int f = 0; f < codes.GetLength(0); f++)
-            for (int q = 0; q < codes.GetLength(1); q++) tensor[f, q] = NumOps.FromDouble(codes[f, q]);
-        return tensor;
+        return TtsIdTensors.FromGrid<T>(FramesFirst(Codec.Encode(audio ?? throw new ArgumentNullException(nameof(audio)))));
     }
 
     /// <inheritdoc />
