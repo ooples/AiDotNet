@@ -1,7 +1,7 @@
 -- Migration: Add product classification to license_keys
 --
 -- Adds a `product` column so a single Supabase instance can issue and
--- administer licenses for multiple products (AiDotNet, Harmonic Engine, ...).
+-- administer licenses for multiple products (AiDotNet and others).
 -- The product is also embedded in the license-key prefix (aidn.*, harm.*),
 -- but we store it as a column so the admin panel, RLS, and issuance flow
 -- don't have to parse the key string to classify it.
