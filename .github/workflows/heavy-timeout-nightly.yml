@@ -9,10 +9,12 @@ name: Heavy Timeout Models (nightly)
 # or — as the perf work lands — becomes fast enough to graduate back into the default shards
 # (drop the trait, restore a normal [Fact(Timeout)]).
 #
-# It is INFORMATIONAL, not a merge gate: it is not a required check and never blocks a PR.
-# Individual tests may still hit their own [Fact(Timeout=...)] — that is expected for the
-# heaviest models and is exactly what the umbrella tracking issue records. The point is the
-# dashboard, not a pass/fail gate.
+# It is not a merge gate: it is not a required check and never blocks a PR. Its result is still a
+# verdict, and the tracking issue the notify job keeps follows it. A slice is green only when every
+# chunk's pass is verified from its result file (#2447): a test that fails, times out or runs out of
+# memory or disk fails it, and so does a test host that died -- a signal exit, a missing, empty or
+# truncated result file, an aborted run, or fewer results than discovery listed. A runner that is lost
+# fails the job on GitHub's side, and each failing chunk has already been written as an annotation.
 
 on:
   schedule:
@@ -201,12 +203,16 @@ jobs:
             exit $discoveryExit
           }
 
-          $classes = @($listed |
+          # One entry per listed test, reduced to its class. The count per class is what a chunk's result file
+          # is later held to: a host that dies part-way leaves fewer results than discovery listed (#2447).
+          $listedClasses = @($listed |
             ForEach-Object { $_ -replace '\r', '' } |
             Where-Object { $_ -match '^\s{4}\S+\.\S+' } |
             ForEach-Object { ($_.Trim() -split '\(')[0] } |
-            ForEach-Object { $_.Substring(0, $_.LastIndexOf('.')) } |
-            Sort-Object -Unique)
+            ForEach-Object { $_.Substring(0, $_.LastIndexOf('.')) })
+          $testsPerClass = @{}
+          foreach ($listedClass in $listedClasses) { $testsPerClass[$listedClass] = 1 + [int]$testsPerClass[$listedClass] }
+          $classes = @($listedClasses | Sort-Object -Unique)
 
           if (-not $classes -or $classes.Count -eq 0) {
             # Discovery returning nothing would otherwise "pass" this lane by running no tests at
@@ -231,7 +237,6 @@ jobs:
 
           $rows   = @()
           $failed = 0
-          $envelope = 0
           $index  = 0
 
           # Set only now, so discovery above is never constrained by the cap.
@@ -251,9 +256,9 @@ jobs:
             $filter  = 'Category=HeavyTimeout&Category!=PaperFidelity&(' + (($chunk | ForEach-Object { "FullyQualifiedName~$_" }) -join '|') + ')'
             $names   = ($chunk | ForEach-Object { $_.Substring($_.LastIndexOf('.') + 1) }) -join ', '
             if (((Get-Date) - $laneStarted).TotalMinutes + $chunkCapMinutes -gt $budgetMinutes) {
-              $rows += [pscustomobject]@{ Label = $label; Names = $names; Exit = 'not run (budget)'; Outcome = 'Failed'; Reason = 'not run (budget)'; Seconds = 0; MemPre = -1; MemPost = -1 }
+              $rows += [pscustomobject]@{ Label = $label; Names = $names; Exit = 'not run (budget)'; Outcome = 'Failed'; Reason = 'not run (budget)'; Seconds = 0; MemPre = -1; MemPost = -1; Fails = $true }
               $failed++
-              Write-Host "$label -> not run: the slice's $budgetMinutes-minute budget is spent"
+              Write-Host "::error title=Heavy chunk not run ($names)::$label was not run: the slice's $budgetMinutes-minute budget is spent."
               continue
             }
             $memPre  = Get-AvailableMemoryMb
@@ -304,28 +309,43 @@ jobs:
               Write-Host "::warning::$label could not remove $($stillThere.Count) streaming pool(s): $($stillThere -join ', ')"
             }
 
-            # 124 is timeout's own exit after it stopped the chunk at the cap; 137 is a SIGKILL from any source (the
-            # kill-after escalation, or the kernel OOM killer), so it is reported as such rather than as a timeout.
+            # 124 is timeout's own exit after it stopped the chunk at the cap. Every other exit goes to the
+            # classifier as it is: 137 is a SIGKILL from any source (the kill-after escalation, or the kernel OOM
+            # killer) and 139 an access violation, and it names them.
             if ($exit -eq 124) { $exit = "timeout after $($chunkCapMinutes) min" }
-            elseif ($exit -eq 137) { $exit = 'SIGKILL (timeout escalation or OOM)' }
-            # A chunk whose every failure ran out of memory or disk has outgrown the 16 GB runner, not
-            # broken: it is listed but does not fail the lane, so a real defect among ~600 OOMs is the
-            # thing that turns it red (#2087). Timeouts, crashes and assertions still fail it.
+            # ONLY A VERIFIED PASS IS GREEN (#2447). The chunk's result file has to exist, be whole, and hold
+            # a result for every test discovery listed; exit 0 alone is not believed. A chunk whose tests ran out
+            # of memory or disk used to be listed as "exceeds runner" without failing the lane (#2087), and that
+            # is how FLUX parameter IO writing 5.9x the model to disk, a detector serializing its backbone twice
+            # and an optimizer step allocating ten parameter-sized temporaries stayed green for weeks. It fails
+            # the lane now, as does a host that died: a signal exit, a missing, empty or truncated result file,
+            # an aborted run, or fewer results than discovered.
             # A classifier error fails this chunk; it must not end the step, or the remaining chunks
             # never run and the summary this lane exists to write is lost.
+            $expectedTests = 0
+            foreach ($class in $chunk) { $expectedTests += [int]$testsPerClass[$class] }
             try {
-              $verdict = ./.github/scripts/Measure-HeavyChunkOutcome.ps1 -TrxPath (Join-Path $resultsDir "$label.trx") -ExitCode "$exit"
+              $verdict = ./.github/scripts/Measure-HeavyChunkOutcome.ps1 -TrxPath (Join-Path $resultsDir "$label.trx") `
+                -ExitCode "$exit" -ExpectedTests $expectedTests
             }
             catch {
-              $verdict = [pscustomobject]@{ Outcome = 'Failed'; Reason = "classifier error: $($_.Exception.Message)" }
+              # The script's own message, for the job log only; it names a file of this repository's CI.
+              Write-Host "::warning::$label classifier error: $($_.Exception.Message)"
+              $verdict = [pscustomobject]@{ Outcome = 'Failed'; Reason = 'classifier error'; FailsLane = $true }
             }
-            if ($verdict.Outcome -eq 'Failed') { $failed++ }
-            elseif ($verdict.Outcome -eq 'Envelope') { $envelope++ }
+            # Anything but an explicit $false fails: a verdict without the property must not read as a pass.
+            $chunkFails = -not ($verdict.PSObject.Properties['FailsLane'] -and $verdict.FailsLane -eq $false)
+            if ($chunkFails) {
+              $failed++
+              # An annotation is streamed as it is written, so it survives a runner that is lost before the
+              # step summary below is uploaded.
+              Write-Host "::error title=Heavy chunk $($verdict.Outcome) ($names)::$label exit ${exit}: $($verdict.Reason)"
+            }
             $rows += [pscustomobject]@{
               Label = $label; Names = $names; Exit = $exit; Outcome = [string]$verdict.Outcome; Reason = $verdict.Reason
-              Seconds = $duration; MemPre = $memPre; MemPost = $memPost
+              Seconds = $duration; MemPre = $memPre; MemPost = $memPost; Fails = $chunkFails
             }
-            Write-Host "$label -> exit $exit in ${duration}s (MemAvailable ${memPre} MB -> ${memPost} MB)"
+            Write-Host "$label -> exit $exit, $($verdict.Outcome) in ${duration}s, $expectedTests test(s) expected (MemAvailable ${memPre} MB -> ${memPost} MB)"
           }
 
           # The dashboard this lane exists to be. Reading it should not require opening the log,
@@ -334,24 +354,31 @@ jobs:
           $summary = @()
           $summary += '## Heavy Timeout Models'
           $summary += ''
-          $summary += "$($classes.Count) classes in $($chunks.Count) chunk(s) of up to $chunkSize, one process each. $failed chunk(s) failed; $envelope exceeded the runner's memory or disk."
+          $summary += "$($classes.Count) classes in $($chunks.Count) chunk(s) of up to $chunkSize, one process each. $failed chunk(s) did not pass. Only a pass verified from the chunk's result file is green: a test that ran out of memory or disk and a test host that died both fail the lane."
           $summary += ''
           $summary += '| Chunk | Result | Seconds | Mem before | Mem after | Classes |'
           $summary += '|---|---|---:|---:|---:|---|'
           foreach ($r in $rows) {
-            $result = switch ($r.Outcome) {
-              'Passed'   { 'pass' }
-              'Envelope' { "exceeds runner ($($r.Reason))" }
-              default    { "FAIL ($($r.Reason))" }
+            $result = if (-not $r.Fails) { 'pass' } else {
+              switch ($r.Outcome) {
+                'ResourceExhausted' { "FAIL: out of memory or disk ($($r.Reason))" }
+                'HostDied'          { "FAIL: test host died ($($r.Reason))" }
+                default             { "FAIL ($($r.Reason))" }
+              }
             }
             $summary += "| $($r.Label) | $result | $($r.Seconds) | $($r.MemPre) MB | $($r.MemPost) MB | $($r.Names) |"
           }
           $summary -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
-          Write-Host "=== $($chunks.Count) chunk(s) run, $failed failed, $envelope exceeded the runner ==="
+          Write-Host "=== $($chunks.Count) chunk(s), $failed did not pass ==="
+          # Every chunk owes a row. A loop that ended early would otherwise report only the chunks it reached.
+          if ($rows.Count -ne $chunks.Count) {
+            Write-Host "::error title=Heavy lane lost chunks::$($rows.Count) of $($chunks.Count) chunk(s) were recorded."
+            exit 1
+          }
           if ($failed -gt 0) { exit 1 }
-          # Explicit: the runner ends a pwsh step with `exit $LASTEXITCODE`, so a last chunk that only exceeded the
-          # runner (dotnet test exited 1) failed the job even with 0 failed chunks (run 38859953869, slices 1 and 20).
+          # Explicit: the runner ends a pwsh step with `exit $LASTEXITCODE`, which is the last native command's and
+          # not this lane's verdict.
           exit 0
 
       - name: Upload results
