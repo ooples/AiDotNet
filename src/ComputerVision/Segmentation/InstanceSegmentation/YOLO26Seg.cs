@@ -259,6 +259,9 @@ public partial class YOLO26Seg<T> : Common.InstanceSegmentationBase<T>
     // MaxInstances (100), ConfidenceThreshold (0.5) and NmsThreshold (0.5) come from
     // InstanceSegmentationBase with exactly these defaults, and are settable there too.
 
+    // The fewest pixels a connected component needs to be an instance.
+    private const int MinimumInstanceArea = 4;
+
     /// <inheritdoc/>
     public override InstanceSegmentationResult<T> DetectInstances(Tensor<T> image)
     {
@@ -266,10 +269,12 @@ public partial class YOLO26Seg<T> : Common.InstanceSegmentationBase<T>
         var logits = Common.SegmentationPostProcessing.SingleImageLogits(Predict(image), nameof(image));
         int h = logits.Shape[1], w = logits.Shape[2];
 
-        // Instances are the connected components of each non-background class: at most 100, at least
-        // 4 pixels each, with a mean class probability of at least ConfidenceThreshold, most confident first
+        // Instances are the connected components of each non-background class: at most MaxInstances, at least
+        // MinimumInstanceArea pixels each, with a mean class probability of at least ConfidenceThreshold, most
+        // confident first
         var instances = Common.SegmentationPostProcessing.ConnectedComponentInstances(
-            logits, _numClasses, maxInstances: 100, minArea: 4, confidenceThreshold: ConfidenceThreshold);
+            logits, _numClasses, maxInstances: MaxInstances, minArea: MinimumInstanceArea,
+            confidenceThreshold: ConfidenceThreshold);
 
         var kept = new List<InstanceMask<T>>();
         while (instances.Count > 0)
