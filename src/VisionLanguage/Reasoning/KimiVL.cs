@@ -301,8 +301,9 @@ public partial class KimiVL<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
                     Pick(stepDecay, step)));
         }
 
-        // Step 4: Final answer from reasoning chain
-        var chainInput = reasoningState;
+        // Step 4: the decoder reads one sequence: the visual tokens, the embedded question and the reasoning state as
+        // the final token (the decoder's attention needs a [tokens, DecoderDim] sequence, not a bare state vector).
+        var chainInput = AppendSequenceTokens(FusePromptTokens(visualFeatures, questionTokens), reasoningState);
 
         var output = chainInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)

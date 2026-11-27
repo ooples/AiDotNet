@@ -101,6 +101,7 @@ public partial class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguage
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -143,6 +144,7 @@ public partial class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguage
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -306,12 +308,10 @@ public partial class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguage
         for (int i = _encoderLayerEnd; i < _decoderLayerStart; i++)
             output = Layers[i].Forward(output);
 
-        // Native mode currently owns only the visual connector/decoder weights; prompt embedding
-        // weights come from the published checkpoint. Reject a silent fabricated embedding while
-        // still allowing ONNX mode above to consume the complete exported graph.
-        if (!string.IsNullOrEmpty(prompt))
-            throw new NotSupportedException(
-                "Prompt-conditioned generation in native mode requires a loaded VideoLLaMA2 language-token embedding checkpoint.");
+        // The LLM reads the connector's visual tokens followed by the prompt, embedded through the model's learned
+        // token embedding (a trained, saved parameter of the native model, like the connector and decoder).
+        if (prompt is not null && prompt.Length > 0)
+            output = FusePromptTokens(output, TokenizeText(prompt));
 
         for (int i = _decoderLayerStart; i < Layers.Count; i++)
             output = Layers[i].Forward(output);

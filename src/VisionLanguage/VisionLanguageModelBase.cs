@@ -179,20 +179,84 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
 
         int promptLength = promptTokenIds.Length;
         var text = embedding.Forward(promptTokenIds.Reshape([promptLength]));   // [promptLength, EmbeddingDim]
-        if (visual.Rank > 2)
+        return AppendSequenceTokens(visual, text);
+    }
+
+    /// <summary>
+    /// The decoder's input from a visual stream and an optional prompt: the visual values as
+    /// <see cref="EmbeddingDim"/>-wide tokens (<see cref="AsDecoderTokens"/>) followed by the embedded prompt
+    /// (<see cref="FusePromptTokens"/>). In ONNX mode the graph owns the whole model, so the visual stream is
+    /// returned as it is.
+    /// </summary>
+    /// <param name="visual">The visual features: a token sequence, or values pooled to a flat vector.</param>
+    /// <param name="promptTokenIds">The prompt's token ids, or null for none.</param>
+    /// <returns>The <c>[..., tokens, EmbeddingDim]</c> decoder input.</returns>
+    private protected Tensor<T> VisualDecoderSequence(Tensor<T> visual, Tensor<T>? promptTokenIds)
+    {
+        if (visual is null) throw new ArgumentNullException(nameof(visual));
+        if (IsOnnxMode)
+            return visual;
+        var tokens = AsDecoderTokens(visual);
+        return promptTokenIds is null ? tokens : FusePromptTokens(tokens, promptTokenIds);
+    }
+
+    /// <summary>
+    /// Visual values as a token sequence of the decoder's width: a <c>[..., tokens, EmbeddingDim]</c> sequence as it
+    /// is; anything else (a pooled or flattened feature vector) read flattened as consecutive
+    /// <see cref="EmbeddingDim"/>-wide tokens, the last zero-padded. The decoder's attention needs a token axis; a
+    /// flattened <c>[tokens * EmbeddingDim]</c> vector regroups into exactly its tokens.
+    /// </summary>
+    /// <param name="visual">The visual values.</param>
+    /// <returns>A <c>[..., tokens, EmbeddingDim]</c> sequence.</returns>
+    private protected Tensor<T> AsDecoderTokens(Tensor<T> visual)
+    {
+        if (visual is null) throw new ArgumentNullException(nameof(visual));
+        int width = EmbeddingDim;
+        if (width <= 0)
+            throw new InvalidOperationException($"{GetType().Name} has no decoder width (EmbeddingDim {width}).");
+        if (visual.Rank >= 2 && visual.Shape[visual.Rank - 1] == width)
+            return visual;
+        int count = Math.Max(1, (visual.Length + width - 1) / width);
+        return FitLength(visual, count * width).Reshape([count, width]);
+    }
+
+    /// <summary>
+    /// Appends <paramref name="tokens"/> after a token sequence along its sequence axis (the second-to-last), sharing
+    /// them across any leading batch axes.
+    /// </summary>
+    /// <param name="sequence">The sequence, <c>[..., length, width]</c>; a rank-1 <c>[width]</c> vector is one
+    /// token.</param>
+    /// <param name="tokens">The tokens to append, <c>[count, width]</c>; a rank-1 <c>[width]</c> vector is one
+    /// token.</param>
+    /// <returns><c>[..., length + count, width]</c>.</returns>
+    /// <exception cref="ArgumentException">The widths differ.</exception>
+    private protected Tensor<T> AppendSequenceTokens(Tensor<T> sequence, Tensor<T> tokens)
+    {
+        if (sequence is null) throw new ArgumentNullException(nameof(sequence));
+        if (tokens is null) throw new ArgumentNullException(nameof(tokens));
+        var seq = sequence.Rank == 1 ? sequence.Reshape([1, sequence.Length]) : sequence;
+        var add = tokens.Rank == 1 ? tokens.Reshape([1, tokens.Length]) : tokens;
+        if (add.Rank != 2)
+            throw new ArgumentException($"Tokens to append must be [count, width], not rank {add.Rank}.", nameof(tokens));
+        int width = seq.Shape[seq.Rank - 1];
+        if (add.Shape[1] != width)
+            throw new ArgumentException(
+                $"The tokens are {add.Shape[1]} wide, but the sequence is {width} wide.", nameof(tokens));
+        int count = add.Shape[0];
+        if (seq.Rank > 2)
         {
-            var textShape = new int[visual.Rank];
-            var viewShape = new int[visual.Rank];
-            for (int axis = 0; axis < visual.Rank - 2; axis++)
+            var fullShape = new int[seq.Rank];
+            var viewShape = new int[seq.Rank];
+            for (int axis = 0; axis < seq.Rank - 2; axis++)
             {
-                textShape[axis] = visual.Shape[axis];
+                fullShape[axis] = seq.Shape[axis];
                 viewShape[axis] = 1;
             }
-            textShape[visual.Rank - 2] = viewShape[visual.Rank - 2] = promptLength;
-            textShape[visual.Rank - 1] = viewShape[visual.Rank - 1] = width;
-            text = Engine.TensorBroadcastTo(text.Reshape(viewShape), textShape);
+            fullShape[seq.Rank - 2] = viewShape[seq.Rank - 2] = count;
+            fullShape[seq.Rank - 1] = viewShape[seq.Rank - 1] = width;
+            add = Engine.TensorBroadcastTo(add.Reshape(viewShape), fullShape);
         }
-        return Engine.TensorConcatenate([visual, text], visual.Rank - 2);
+        return Engine.TensorConcatenate([seq, add], seq.Rank - 2);
     }
 
     /// <inheritdoc/>
@@ -670,38 +734,6 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
         if (n > length)
             return Engine.TensorSlice(flat, [0], [length]);
         return Engine.TensorConcatenate([flat, new Tensor<T>([length - n])], 0);
-    }
-
-    /// <summary>
-    /// The instruction-gated 2-layer MLP connector used by the video-language models:
-    /// projected[v] = gelu_tanh(0.8 x) * 0.7 + 0.15 x, read cyclically to <paramref name="dim"/>; with a prompt,
-    /// tok[d] = prompt[d % promptLen] / vocabSize gates it as projected * (0.5 + sigmoid(5 tok)) + 0.3 tok.
-    /// </summary>
-    /// <param name="visual">Encoder output (read flattened).</param>
-    /// <param name="promptTokens">Optional prompt token ids.</param>
-    /// <param name="dim">Decoder input width.</param>
-    /// <param name="vocabSize">Vocabulary size used to scale token ids.</param>
-    /// <returns>The [dim] decoder input.</returns>
-    private protected Tensor<T> GatedConnectorInput(Tensor<T> visual, Tensor<T>? promptTokens, int dim, int vocabSize)
-    {
-        var x = visual.Reshape([visual.Length]);
-        var h = Engine.TensorMultiplyScalar(x, NumOps.FromDouble(0.8));
-        var cubic = Engine.TensorMultiplyScalar(Engine.TensorMultiply(Engine.TensorMultiply(h, h), h), NumOps.FromDouble(0.044715));
-        var inner = Engine.TensorMultiplyScalar(Engine.TensorAdd(h, cubic), NumOps.FromDouble(Math.Sqrt(2.0 / Math.PI)));
-        var gelu = Engine.TensorMultiply(
-            Engine.TensorMultiplyScalar(h, NumOps.FromDouble(0.5)), Engine.TensorAddScalar(Engine.TensorTanh(inner), NumOps.One));
-        var projected = Engine.TensorAdd(
-            Engine.TensorMultiplyScalar(gelu, NumOps.FromDouble(0.7)), Engine.TensorMultiplyScalar(x, NumOps.FromDouble(0.15)));
-
-        var visVal = CyclicTake(projected, dim);
-        if (promptTokens is null || promptTokens.Length == 0 || dim <= 0)
-            return visVal;
-
-        var tokVal = Engine.TensorMultiplyScalar(CyclicTake(promptTokens, dim), NumOps.FromDouble(1.0 / vocabSize));
-        var gate = Engine.TensorSigmoid(Engine.TensorMultiplyScalar(tokVal, NumOps.FromDouble(5.0)));
-        return Engine.TensorAdd(
-            Engine.TensorMultiply(visVal, Engine.TensorAddScalar(gate, NumOps.FromDouble(0.5))),
-            Engine.TensorMultiplyScalar(tokVal, NumOps.FromDouble(0.3)));
     }
 
     /// <summary>

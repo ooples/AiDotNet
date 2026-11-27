@@ -312,7 +312,7 @@ public partial class GPT4Point<T> : VisionLanguageModelBase<T>, IThreeDVisionLan
         {
             Layers.AddRange(
                 LayerHelper<T>.CreateDefaultPointCloudVLMLayers(
-                    512,
+                    _options.PointEncoderDim,
                     _options.DecoderDim,
                     _options.NumVisionLayers,
                     _options.NumDecoderLayers,

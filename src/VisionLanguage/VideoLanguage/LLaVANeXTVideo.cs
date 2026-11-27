@@ -36,11 +36,11 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
-///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///     inputHeight: 336, inputWidth: 336, inputDepth: 3, outputSize: 512);
 ///
 /// var model = new LLaVANeXTVideo&lt;double&gt;(architecture, new LLaVANeXTVideoOptions());
 /// var frames = new List&lt;Tensor&lt;double&gt;&gt;();
-/// for (int i = 0; i &lt; 8; i++) frames.Add(Tensor&lt;double&gt;.CreateRandom(3, 224, 224));   // 8 frames, [3, H, W] each
+/// for (int i = 0; i &lt; 8; i++) frames.Add(Tensor&lt;double&gt;.CreateRandom(3, 336, 336));   // 8 frames, [3, H, W] each
 /// Tensor&lt;double&gt; answer = model.GenerateFromVideo(frames, "What happens in this clip?");
 /// </code>
 /// </example>
@@ -228,7 +228,8 @@ public partial class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLangu
         }
 
         // Step 4: Decode through LLM layers
-        var output = pooled;
+        // The decoder reads the pooled visual features as decoder-width tokens, followed by the embedded prompt.
+        var output = VisualDecoderSequence(pooled, prompt is null ? null : TokenizeText(prompt));
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
         return output;

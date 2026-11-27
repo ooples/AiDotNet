@@ -209,31 +209,38 @@ public partial class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction
         int horizon = _options.PredictionHorizon;
         int obsHistory = _options.ObservationHistory;
 
-        // Step 1: Encode visual observation
+        // Step 1: Encode visual observation: observation tokens [..., tokens, DecoderDim]
         var visualFeatures = EncodeImage(observation);
-        int dim = visualFeatures.Length;
 
         // Step 2: Encode instruction (task specification)
         var instrTokens = TokenizeText(instruction);
-        int instrLen = instrTokens.Length;
 
         var engine = Engine;
 
-        // Step 3: Build backbone input with observation and task tokens:
-        // vis[d] + 0.3 tanh(instr[d % instrLen] / 100).
-        var visFlat = visualFeatures.Reshape([dim]);
-        var backboneInput = instrLen > 0
-            ? engine.TensorAdd(
-                visFlat,
-                engine.TensorMultiplyScalar(
-                    engine.TensorTanh(engine.TensorDivideScalar(CyclicTake(instrTokens, dim), NumOps.FromDouble(100.0))),
-                    NumOps.FromDouble(0.3)))
-            : visFlat.Clone();
+        // Step 3: Backbone input, as in Octo (Ghosh et al. 2024 §3): the observation tokens followed by the embedded
+        // task tokens in one sequence, which the transformer attends over jointly. The sequence keeps its
+        // [..., tokens, DecoderDim] shape; the backbone's attention needs the token axis.
+        // In ONNX mode the graph is the whole model and there is no learned task embedding; the instruction then
+        // conditions the observation additively, vis[d] + 0.3 tanh(instr[d % instrLen] / 100).
+        Tensor<T> backboneInput;
+        if (!IsOnnxMode)
+            backboneInput = FusePromptTokens(visualFeatures, instrTokens);
+        else if (instrTokens.Length > 0)
+        {
+            var visFlat = visualFeatures.Reshape([visualFeatures.Length]);
+            backboneInput = engine.TensorAdd(visFlat, engine.TensorMultiplyScalar(
+                engine.TensorTanh(engine.TensorDivideScalar(CyclicTake(instrTokens, visFlat.Length), NumOps.FromDouble(100.0))),
+                NumOps.FromDouble(0.3)));
+        }
+        else
+            backboneInput = visualFeatures;
 
         // Step 4: Process through transformer backbone
         var backboneOut = backboneInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             backboneOut = Layers[i].Forward(backboneOut);
+        // The readout attends over every backbone output value: observation and task tokens.
+        int dim = backboneOut.Length;
 
         // Step 5: Readout token cross-attention
         // Readout tokens attend to backbone output to extract action-relevant features:
@@ -247,7 +254,7 @@ public partial class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction
         }
         else
         {
-            var key = engine.TensorSlice(backboneOut.Reshape([backboneOut.Length]), [0], [dim]).Reshape([1, dim]);
+            var key = backboneOut.Reshape([1, dim]);
             var query = engine.TensorSin(engine.TensorMultiplyScalar(
                 engine.TensorOuter(engine.TensorArange<T>(1, numReadout + 1, 1), engine.TensorArange<T>(0, dim, 1)),
                 NumOps.FromDouble(Math.PI / dim)));

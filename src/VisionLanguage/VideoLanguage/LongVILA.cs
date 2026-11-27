@@ -79,6 +79,7 @@ public partial class LongVILA<T> : VisionLanguageModelBase<T>, IVideoLanguageMod
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -118,6 +119,7 @@ public partial class LongVILA<T> : VisionLanguageModelBase<T>, IVideoLanguageMod
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -161,26 +163,22 @@ public partial class LongVILA<T> : VisionLanguageModelBase<T>, IVideoLanguageMod
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: Vision encoder
         var encoderOut = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoderOut = Layers[i].Forward(encoderOut);
-        int visLen = encoderOut.Length;
 
         // Step 2: Tokenize prompt
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
         {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
         }
 
         // Step 3: Single-chunk local self-attention + text cross-attention
-        // 2-layer MLP cross-modal connector (Linear -> GELU -> Linear)
-        var decoderInput = GatedConnectorInput(encoderOut, promptTokens, dim, _options.VocabSize);
+        // The encoder ends in the MLP projection to the LLM width (the connector); the decoder reads its tokens
+        // followed by the embedded prompt.
+        var decoderInput = VisualDecoderSequence(encoderOut, promptTokens);
 
         // Step 4: LLM decoder
         var output = decoderInput;
@@ -271,7 +269,8 @@ public partial class LongVILA<T> : VisionLanguageModelBase<T>, IVideoLanguageMod
         var globalOutput = engine.TensorMatMul(chunkWeights.Reshape([1, numChunks]), summaries).Reshape([dim]);
 
         // Step 4: Decode through LLM layers
-        var output = globalOutput;
+        // The decoder reads the pooled visual features as decoder-width tokens, followed by the embedded prompt.
+        var output = VisualDecoderSequence(globalOutput, prompt is null ? null : TokenizeText(prompt));
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
         return output;
@@ -314,9 +313,11 @@ public partial class LongVILA<T> : VisionLanguageModelBase<T>, IVideoLanguageMod
     {
         // CreateDefaultVideoLinearProjectorVLMLayers layout: PatchEmbedding(1) + LayerNorm(1) +
         // numVisionLayers·(TransformerEncoderLayer(1) + optional Dropout) before the projection +
-        // LLM decoder. The vision-encoder segment ends after the vision blocks.
+        // LLM decoder.
         int perBlock = _options.DropoutRate > 0 ? 2 : 1;
-        _encoderLayerEnd = 2 + _options.NumVisionLayers * perBlock;
+        // The encoder includes the linear projection to the LLM (Dense + LayerNorm), so its tokens are DecoderDim wide
+        // and the prompt joins them at the decoder's width.
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * perBlock + 2;
     }
 
     private Tensor<T> TokenizeText(string text)
