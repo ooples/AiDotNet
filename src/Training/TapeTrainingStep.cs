@@ -280,16 +280,6 @@ public static class TapeTrainingStep<T>
     /// Model-owned auxiliary branches use the same recursive traversal as ordinary layers.
     /// The caller's identity set also deduplicates tensors shared across those two routes.
     /// </remarks>
-    /// <summary>
-    /// The base layer a LoRA adapter froze, or <c>null</c>. The adapter keeps that layer in its forward pass, but
-    /// its weights are not trained: handing them (or the layer) to the optimizer would update the very weights the
-    /// adapter exists to leave alone.
-    /// </summary>
-    private static ILayer<T>? FrozenBaseLayerOf(ILayer<T> layer) =>
-        layer is AiDotNet.LoRA.Adapters.LoRAAdapterBase<T> { IsBaseLayerFrozen: true } adapter
-            ? adapter.BaseLayer
-            : null;
-
     internal static void CollectLayerParameters(
         ILayer<T> layer,
         List<Tensor<T>> parameters,
@@ -305,12 +295,11 @@ public static class TapeTrainingStep<T>
             }
         }
 
-        ILayer<T>? frozenBase = FrozenBaseLayerOf(layer);
+        // A child frozen with FreezeSubLayerParameters (requires_grad = False: a LoRA adapter's base layer) is out of the
+        // parameter surface; collecting it handed its weights to the optimizer, which updated them every step.
         foreach (var child in layer.GetSubLayers())
-        {
-            if (ReferenceEquals(child, frozenBase)) continue;
-            CollectLayerParameters(child, parameters, seen, materializedOnly);
-        }
+            if (!NeuralNetworks.Layers.LayerBase<T>.IsFrozenChildOf(layer, child))
+                CollectLayerParameters(child, parameters, seen, materializedOnly);
     }
 
     /// <summary>
@@ -352,7 +341,8 @@ public static class TapeTrainingStep<T>
         }
 
         foreach (var child in layer.GetSubLayers())
-            CollectLayerReferencedParameters(child, parameters, seen, materializedOnly);
+            if (!NeuralNetworks.Layers.LayerBase<T>.IsFrozenChildOf(layer, child))
+                CollectLayerReferencedParameters(child, parameters, seen, materializedOnly);
     }
 
     /// <summary>
@@ -413,11 +403,12 @@ public static class TapeTrainingStep<T>
             var subLayers = layer.GetSubLayers();
             if (subLayers.Count > 0)
             {
-                ILayer<T>? frozenBase = FrozenBaseLayerOf(layer);
-                CollectTrainableRecursive(
-                    frozenBase is null ? subLayers : subLayers.Where(child => !ReferenceEquals(child, frozenBase)),
-                    result,
-                    seen);
+                // Frozen children (FreezeSubLayerParameters) are not trained: the compiled step reads its parameters
+                // from this list.
+                var trained = new List<ILayer<T>>(subLayers.Count);
+                foreach (var child in subLayers)
+                    if (!NeuralNetworks.Layers.LayerBase<T>.IsFrozenChildOf(layer, child)) trained.Add(child);
+                CollectTrainableRecursive(trained, result, seen);
             }
         }
     }

@@ -352,4 +352,42 @@ public class LossScalerTests
         // Assert
         Assert.Equal(500.0, scaler.Scale); // Should not go above max
     }
+    [Fact(Timeout = 60000)]
+    public async Task RestoreState_WhileDeviceAttached_ReadsKeepRestoredStateUntilPushed()
+    {
+        // A compiled plan owns the scaler state on the device; a checkpoint restore replaces it on the host. Reads
+        // before the owner pushes the restored state must not pull the device's pre-restore values back over it.
+        var scaler = new LossScaler<float>();
+        (double, int, long, long)? device = (1024.0, 7, 50L, 3L);
+        scaler.AttachDeviceState(() => device);
+        Assert.Equal(1024.0, scaler.Scale);
+
+        scaler.RestoreState(128.0, 0, 0, 0);
+
+        Assert.Equal(128.0, scaler.Scale);
+        Assert.Equal(0, scaler.TotalUpdates);
+        Assert.Equal((128.0, 0, 0, 0), scaler.CaptureState());
+        Assert.True(scaler.TakeHostStateChange());
+        Assert.Equal((128.0, 0, 0L, 0L), scaler.HostState);
+
+        // Once the owner has installed the replacement, reads follow the device again.
+        device = (256.0, 1, 1L, 0L);
+        Assert.Equal(256.0, scaler.Scale);
+        Assert.Equal(1, scaler.TotalUpdates);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Reset_WhileDeviceAttached_ReadsKeepResetStateUntilPushed()
+    {
+        var scaler = new LossScaler<float>();
+        (double, int, long, long)? device = (1024.0, 7, 50L, 3L);
+        scaler.AttachDeviceState(() => device);
+
+        scaler.Reset(64.0);
+
+        Assert.Equal(64.0, scaler.Scale);
+        Assert.Equal(0, scaler.TotalUpdates);
+        Assert.Equal(0, scaler.SkippedUpdates);
+        Assert.True(scaler.TakeHostStateChange());
+    }
 }

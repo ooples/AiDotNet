@@ -722,6 +722,47 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     private int? _randomSeed;
     private Random? _seededRandom;
 
+    /// <summary>
+    /// The random stream this layer's per-step draws (dropout and drop-path masks) come from: 0 in a single process and
+    /// on rank 0, the rank elsewhere, so each data-parallel rank draws its own masks, deterministically.
+    /// </summary>
+    internal int StochasticStream { get; set; }
+
+    /// <summary>
+    /// The seed per-step draws use when <see cref="RandomSeed"/> is unset: training draws one (rank 0, shared) and
+    /// checkpoints it, so a resumed run draws the masks the uninterrupted one would. Null leaves such draws unseeded.
+    /// </summary>
+    internal int? StochasticFallbackSeed { get; set; }
+
+    /// <summary>
+    /// The draw counter of a layer whose per-step masks are derived from a seed and a counter, or null for a layer that
+    /// draws none. Checkpointed with the training cursor so a resumed run continues the sequence of masks.
+    /// </summary>
+    internal virtual long? StochasticDrawCounter
+    {
+        get => null;
+        set { }
+    }
+
+    /// <summary>
+    /// The seed of per-step draw <paramref name="counter"/>: <see cref="RandomSeed"/> (else
+    /// <see cref="StochasticFallbackSeed"/>) mixed with the counter, then with <see cref="StochasticStream"/> when it is
+    /// not 0, so stream 0 draws exactly the masks a single process does. Null when neither seed is set.
+    /// </summary>
+    private protected int? StochasticDrawSeed(ulong counter)
+    {
+        if ((RandomSeed ?? StochasticFallbackSeed) is not int seed) return null;
+        uint mixed = unchecked(((uint)seed * 2654435761u) ^ (uint)counter);
+        if (StochasticStream != 0)
+        {
+            uint h = unchecked(mixed ^ ((uint)StochasticStream * 0x9E3779B9u));
+            h = unchecked((h ^ (h >> 16)) * 0x85EBCA6Bu);
+            h = unchecked((h ^ (h >> 13)) * 0xC2B2AE35u);
+            mixed = h ^ (h >> 16);
+        }
+        return unchecked((int)mixed);
+    }
+
     public int? RandomSeed
     {
         get => _randomSeed;
@@ -943,6 +984,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         clone._seededRandom = shareRandomState && _seededRandom is not null
             ? LayerCloning.CloneRandom(_seededRandom)
             : null;
+        // A shared-state clone draws the same per-step masks: same stream, same fallback seed. An independent clone
+        // starts on stream 0 with no fallback seed, like a freshly constructed layer.
+        clone.StochasticStream = shareRandomState ? StochasticStream : 0;
+        clone.StochasticFallbackSeed = shareRandomState ? StochasticFallbackSeed : null;
         clone.TakesSeedFromParentOnly = TakesSeedFromParentOnly;
         clone.SetTrainingMode(IsTrainingMode);
     }
@@ -3600,6 +3645,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// directly so weight allocation always happens after shape resolution.
     /// </summary>
     /// <param name="input">The input tensor whose shape resolves the deferred dims.</param>
+    /// <summary>
+    /// Resolves and initializes this layer from <paramref name="input"/> as its first forward would, without running
+    /// the forward: for a caller that computes the layer's result another way (a fused readout loss) and needs its
+    /// weights to exist first.
+    /// </summary>
+    internal void InitializeFromInputWithoutForward(Tensor<T> input) => EnsureInitializedFromInput(input);
+
     protected void EnsureInitializedFromInput(Tensor<T> input)
     {
         lock (InitializationLock)
@@ -6614,6 +6666,39 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     }
 
     /// <summary>
+    /// Gets the number of values the optimizer trains in this layer and its sub-layers: the summed
+    /// <c>Length</c> of the distinct (by reference) tensors reachable through
+    /// <see cref="GetTrainableParameters"/> and, recursively, <see cref="GetSubLayers"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This differs from <see cref="ParameterCount"/> in two ways. <see cref="ParameterCount"/> is the length of the
+    /// <see cref="GetParameters"/> / <see cref="SetParameters"/> state vector, so it also counts buffers registered with
+    /// <see cref="RegisterBuffer"/> (state that is saved and restored but never learned), and it sums each layer's
+    /// listed tensors plus its sub-layers' tensors, so a tensor listed both by a layer and by one of its sub-layers is
+    /// counted twice. This count excludes buffers and counts each tensor once.
+    /// </para>
+    /// <para>
+    /// It runs the same walk the tape training step uses to collect the tensors it updates, so it equals what
+    /// PyTorch reports as <c>sum(p.numel() for p in module.parameters() if p.requires_grad)</c>. Tensors that are not
+    /// materialized yet (lazy layers before their first forward) have length zero and contribute nothing.
+    /// </para>
+    /// <para><b>For Beginners:</b> the number of weights training actually adjusts in this layer.</para>
+    /// </remarks>
+    public long TrainableParameterCount
+    {
+        get
+        {
+            var tensors = new List<Tensor<T>>();
+            var seen = new HashSet<Tensor<T>>(global::AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            global::AiDotNet.Training.TapeTrainingStep<T>.CollectLayerParameters(this, tensors, seen, materializedOnly: true);
+            long total = 0;
+            foreach (var tensor in tensors) total += tensor.Length;
+            return total;
+        }
+    }
+
+    /// <summary>
     /// True iff every registered sub-layer has finished its lazy-shape
     /// resolution (and thus has a stable trainable-parameter set). Used by
     /// <see cref="ParameterCount"/> to gate cache reuse: a sub-layer's
@@ -8542,9 +8627,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// recurrent state, a buffer reused across calls. A <see cref="AiDotNet.Tensors.Engines.TensorScope"/> around a
     /// model's Predict frees every GPU result the call creates, so a model scopes its calls only when no layer keeps one.
     /// True unless the layer has been checked; a layer that caches its last forward only for backward rewrites that cache
-    /// on its next forward, so it keeps nothing between calls.
+    /// on its next forward, so it keeps nothing between calls. A layer that returns false also lets an inference call free
+    /// its intermediates as soon as its forward returns. A layer defined outside this library may override it once its
+    /// forward has been checked; a lazily built device tensor it keeps can be detached with
+    /// <see cref="AiDotNet.Tensors.Engines.TensorScope.Detach{T}"/>.
     /// </summary>
-    internal virtual bool KeepsResultsBetweenCalls => true;
+    protected internal virtual bool KeepsResultsBetweenCalls => true;
 
     /// <summary>
     /// Gets diagnostic information about this layer's state and behavior.
@@ -9096,6 +9184,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 return true;
         return false;
     }
+
+    /// <summary>
+    /// True when <paramref name="child"/> is a sub-layer of <paramref name="parent"/> frozen with
+    /// <see cref="FreezeSubLayerParameters"/>: the walks that collect what an optimizer updates skip it, as they skip
+    /// it in <see cref="ParameterCount"/>.
+    /// </summary>
+    internal static bool IsFrozenChildOf(ILayer<T> parent, ILayer<T>? child)
+        => parent is LayerBase<T> owner && owner.IsSubLayerParameterFrozen(child);
 
     /// <summary>
     /// Children whose parameters are excluded from this layer's surface. Null until something is

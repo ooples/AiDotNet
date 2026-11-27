@@ -752,6 +752,22 @@ static AiDotNet.Safety.Watermarking.WatermarkStatistics.CountZ(int hits, int tri
 static AiDotNet.Safety.Watermarking.WatermarkStatistics.UpperTailProbability(double z) -> double
 static AiDotNet.Safety.Watermarking.WatermarkStatistics.ZForUpperTail(double p) -> double
 virtual AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.ReleasesInferenceIntermediates.get -> bool
+virtual AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.InferenceForwardIsLayerChain.get -> bool
+override AiDotNet.NeuralNetworks.NeuralNetwork<T>.InferenceForwardIsLayerChain.get -> bool
+override AiDotNet.NeuralNetworks.Layers.ActivationLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.DenseLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.DropoutLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.EmbeddingLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.FeedForwardLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.GlobalPoolingLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.LayerNormalizationLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.PositionalEncodingLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.SSM.GatedDeltaNetLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionLayer<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.KeepsResultsBetweenCalls.get -> bool
+override AiDotNet.NeuralNetworks.Layers.TransformerEncoderBlock<T>.KeepsResultsBetweenCalls.get -> bool
+virtual AiDotNet.NeuralNetworks.Layers.LayerBase<T>.KeepsResultsBetweenCalls.get -> bool
 virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.BandHighHz.get -> double
 virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.BandLowHz.get -> double
 virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> AiDotNet.Safety.Watermarking.WatermarkResult!
@@ -22468,6 +22484,7 @@ override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.ForwardTraced(Ai
 override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.UpdateParameters(T learningRate) -> void
 override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.ResetState() -> void
 AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.TrainableParameterCount.get -> long
+AiDotNet.NeuralNetworks.Layers.LayerBase<T>.TrainableParameterCount.get -> long
 AiDotNet.Models.ModelBase<T, TInput, TOutput>.TrainableParameterCount.get -> long
 AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.TransformerDecoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0, AiDotNet.Interfaces.IActivationFunction<T>? ffnActivation = null) -> void
 *REMOVED*AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.TransformerDecoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0) -> void
@@ -26628,12 +26645,53 @@ AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionStepState<T>.Capacity.get
 AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionStepState<T>.Position.get -> int
 AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionLayer<T>.CreateStepState(int batchSize = 1, int? capacity = null) -> AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionStepState<T>!
 AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionLayer<T>.Step(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.NeuralNetworks.Layers.SSM.MultiLatentAttentionStepState<T>! state) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Training.Memory.GradientCheckpointingContext
+static AiDotNet.Training.Memory.GradientCheckpointingContext.IsSegmentForward.get -> bool
+static AiDotNet.Training.Memory.GradientCheckpointingContext.IsRecomputing.get -> bool
+static AiDotNet.Training.Memory.GradientCheckpointingContext.Preserve<T>(object! owner, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! value) -> void
+static AiDotNet.Training.Memory.GradientCheckpointingContext.TryRecall<T>(object! owner, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! value) -> bool
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.MonitorEveryNSteps.get -> int
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.MonitorEveryNSteps.set -> void
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.DataParallelUpdateInCompiledPlan.get -> bool
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.DataParallelUpdateInCompiledPlan.set -> void
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.MonitorGradNorm.get -> bool
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.MonitorGradNorm.set -> void
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.MonitorResourceIntervalSeconds.get -> double
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.MonitorResourceIntervalSeconds.set -> void
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.TokensPerSample.get -> int?
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.TokensPerSample.set -> void
+const AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.DefaultTimeoutMilliseconds = 1800000 -> int
+AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.TimeoutMilliseconds.get -> int
+AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.TimeoutMilliseconds.set -> void
+AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.MasterAddress.get -> string?
+AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.MasterAddress.set -> void
+AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.MasterPort.get -> int?
+AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.MasterPort.set -> void
+static AiDotNet.DistributedTraining.GlooCommunicationBackend<T>.FromEnvironment() -> AiDotNet.DistributedTraining.GlooCommunicationBackend<T>!
+AiDotNet.MixedPrecision.MixedPrecisionConfig.MatMulAutocastMode.get -> AiDotNet.Tensors.Engines.Gpu.MatMulAutocastMode
+AiDotNet.MixedPrecision.MixedPrecisionConfig.MatMulAutocastMode.set -> void
+AiDotNet.Deployment.Configuration.WeightStreamingConfig.StoreDtype.get -> AiDotNet.Tensors.LinearAlgebra.StreamingStoreDtype?
+AiDotNet.Deployment.Configuration.WeightStreamingConfig.StoreDtype.set -> void
+AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.ConfigureWeightStreaming(AiDotNet.Deployment.Configuration.WeightStreamingConfig! config) -> void
+static AiDotNet.ModelLoading.Pretrained.MoEModelBuilder<T>.BuildStreamed(AiDotNet.ModelLoading.Pretrained.HuggingFaceConfig! config, AiDotNet.Agentic.Models.Local.INamedTensorSource! weights, AiDotNet.Tensors.LinearAlgebra.StreamingStoreDtype weightStore, int warmupSequenceLength = 8) -> AiDotNet.NeuralNetworks.NeuralNetwork<T>!
 AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.ScaleFreeAccountState.get -> bool
 AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.ScaleFreeAccountState.init -> void
 override AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.BuildObservation(int step) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
 AiDotNet.Finance.Trading.Agents.FinancialPPOAgent<T>.StoreExperienceWithPrivilegedCritic(AiDotNet.Tensors.LinearAlgebra.Vector<T>! state, AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, T reward, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextState, bool done, AiDotNet.Tensors.LinearAlgebra.Vector<T>! privileged, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextPrivileged) -> void
 AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.PrivilegedCriticInputSize.get -> int
 AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.PrivilegedCriticInputSize.set -> void
+AiDotNet.ModelLoading.Pretrained.HuggingFaceConfig.NormTopKProb.get -> bool?
+AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionLayer<T>.ConfigureProjectionNorm(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! queryNormWeight, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! keyNormWeight, double epsilon) -> void
+AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionLayer<T>.UsesProjectionNorm.get -> bool
+*REMOVED*AiDotNet.NeuralNetworks.Layers.MoEFeedForwardLayer<T>.MoEFeedForwardLayer(int hiddenSize, int ffnDim, int numExperts, int topK, AiDotNet.Interfaces.IActivationFunction<T>? activation = null, int sharedFfnDim = 0) -> void
+AiDotNet.NeuralNetworks.Layers.MoEFeedForwardLayer<T>.MoEFeedForwardLayer(int hiddenSize, int ffnDim, int numExperts, int topK, AiDotNet.Interfaces.IActivationFunction<T>? activation, int sharedFfnDim) -> void
+AiDotNet.NeuralNetworks.Layers.MoEFeedForwardLayer<T>.MoEFeedForwardLayer(int hiddenSize, int ffnDim, int numExperts, int topK, AiDotNet.Interfaces.IActivationFunction<T>? activation = null, int sharedFfnDim = 0, bool normalizeTopK = true) -> void
+AiDotNet.NeuralNetworks.Layers.MoEFeedForwardLayer<T>.NormalizeTopK.get -> bool
+AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionStepState<T>
+AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionStepState<T>.BatchSize.get -> int
+AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionStepState<T>.Position.get -> int
+AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionLayer<T>.CreateStepState(int batchSize = 1) -> AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionStepState<T>!
+AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionLayer<T>.Step(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionStepState<T>! state) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 static AiDotNet.KnowledgeDistillation.DistillationStrategyFactory<T>.CreateSparseTopKTailBucketStrategy(int topK = 64, double temperature = 2, double alpha = 0.5) -> AiDotNet.Interfaces.IDistillationStrategy<T>!
 AiDotNet.KnowledgeDistillation.Strategies.SparseTopKTailBucketDistillationStrategy<T>
 AiDotNet.KnowledgeDistillation.Strategies.SparseTopKTailBucketDistillationStrategy<T>.SparseTopKTailBucketDistillationStrategy(int topK = 64, double temperature = 2, double alpha = 0.5) -> void
@@ -26695,3 +26753,5 @@ AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.CalculateBatchLoss(AiD
 AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.CurrentTrueLabelBatch.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
 AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.CurrentTrueLabelBatch.set -> void
 AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.Strategy.get -> AiDotNet.Interfaces.IDistillationStrategy<T>!
+AiDotNet.Interfaces.LarsGpuConfig.Epsilon.get -> float
+AiDotNet.Interfaces.LarsGpuConfig.Epsilon.init -> void

@@ -220,7 +220,7 @@ internal static class TensorParallelPartitioner<T>
         {
             case MultiHeadAttentionLayer<T> mha:
                 numHeads = mha.HeadCount; numKVHeads = mha.HeadCount; return true;
-            case GroupedQueryAttentionLayer<T> gqa:
+            case GroupedQueryAttentionLayer<T> gqa when !gqa.UsesProjectionNorm:
                 numHeads = gqa.NumHeads; numKVHeads = gqa.NumKVHeads; return true;
             default:
                 numHeads = 0; numKVHeads = 0; return false;

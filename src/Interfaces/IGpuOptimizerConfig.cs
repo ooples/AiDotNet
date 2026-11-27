@@ -561,6 +561,13 @@ public class LarsGpuConfig : IGpuOptimizerConfig
     public float TrustCoefficient { get; init; }
 
     /// <summary>
+    /// Gets the epsilon added to the local rate's denominator,
+    /// <c>trust * ||w|| / (||g|| + weightDecay * ||w|| + epsilon)</c> (default 1e-8, as
+    /// <see cref="AiDotNet.Models.Options.LARSOptimizerOptions{T, TInput, TOutput}.Epsilon"/>).
+    /// </summary>
+    public float Epsilon { get; init; } = 1e-8f;
+
+    /// <summary>
     /// Creates a new LARS GPU configuration.
     /// </summary>
     /// <param name="learningRate">Global learning rate for parameter updates.</param>
@@ -585,7 +592,8 @@ public class LarsGpuConfig : IGpuOptimizerConfig
         if (state.Velocity == null)
             throw new InvalidOperationException("LARS requires a velocity buffer in the optimizer state.");
 
-        backend.LarsUpdate(param, gradient, state.Velocity, LearningRate, Momentum, WeightDecay, TrustCoefficient, size);
+        backend.LarsUpdate(param, gradient, state.Velocity, LearningRate, Momentum, WeightDecay, TrustCoefficient,
+            Epsilon, size);
     }
 }
 

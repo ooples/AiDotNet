@@ -36,7 +36,7 @@ namespace AiDotNet.Tests.IntegrationTests.DistributedTraining;
 /// overflow skipping, wall-clock auto-checkpointing, and cross-world-size checkpoint resume.
 /// </summary>
 [Collection("SequentialDistributedStreamingEnablers")]
-public sealed class StreamingDistributedEnablersTests : IDisposable
+public sealed partial class StreamingDistributedEnablersTests : IDisposable
 {
     private const int InDim = 8;
     private const int HiddenDim = 16;
@@ -492,6 +492,101 @@ public sealed class StreamingDistributedEnablersTests : IDisposable
                 $"Rank 0 and Rank 1 weights diverged: {MaxAbsDiff(r0Weights, r1Weights)}");
             Assert.True(MaxAbsDiff(expectedWeights, r0Weights) < 1e-5,
                 $"2-rank trajectory diverged from 1-rank reference: {MaxAbsDiff(expectedWeights, r0Weights)}");
+        }
+        finally
+        {
+            ShutdownBackends(backends);
+        }
+    }
+
+    // Two in-process ranks (threads of one process) run the compiled data-parallel update to the end and stay in step.
+    // The first compiled step used to hold a process-wide allocation gate across the update's collectives: the rank
+    // holding it waited in the vote for its peer, which waited for the gate, until the collective timed out.
+    [Fact(Timeout = 180000)]
+    public async Task CompiledDataParallelUpdate_TwoInProcessRanks_TrainWithoutDeadlock_AndAgree()
+    {
+        var init = CreateInitialWeights(seed: 123);
+        var (inputs, targets) = CreateRegressionDataset(sampleCount: 16, seed: 555);   // global batch 8: two full steps
+        var backends = CreateBackends(worldSize: 2, useSharedMemory: false);
+        try
+        {
+            var tasks = Enumerable.Range(0, 2).Select(rank => Task.Run(async () =>
+            {
+                var opt = CreateAdamOptimizer(lr: 0.01, enableClipping: false, maxGradNorm: 1.0);
+                var model = CreateMlp(opt);
+                model.SetParameters(init.Clone());
+                await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+                    .ConfigureModel(model)
+                    .ConfigureOptimizer(opt)
+                    .ConfigureDataLoader(CreateStreamingLoader(inputs, targets, batchSize: 4))
+                    .ConfigureGpuAcceleration(CpuOnlyConfig())
+                    .ConfigureDistributedTraining(backends[rank], DistributedStrategy.DDP)
+                    .ConfigureStreamingTraining(new StreamingTrainingOptions<float, Tensor<float>, Tensor<float>>
+                    {
+                        Seed = 777,
+                        MaxSteps = 6,
+                        DataParallelUpdateInCompiledPlan = true,
+                    })
+                    .BuildAsync();
+                return model.GetParameters().ToArray();
+            })).ToArray();
+            long inPlanStepsBefore = AiDotNet.Training.CompiledTapeTrainingStep<float>.DistributedCompiledUpdateDiagnostics.Steps;
+            var all = Task.WhenAll(tasks);
+            Assert.Same(all, await Task.WhenAny(all, Task.Delay(TimeSpan.FromSeconds(150))));
+            var results = await all;
+            // The update ran in the plan (eager DDP would also leave the ranks equal).
+            Assert.True(AiDotNet.Training.CompiledTapeTrainingStep<float>.DistributedCompiledUpdateDiagnostics.Steps > inPlanStepsBefore,
+                "the in-plan data-parallel update never engaged");
+            Assert.Equal(results[0], results[1]);
+            Assert.NotEqual(init.ToArray(), results[0]);
+        }
+        finally
+        {
+            ShutdownBackends(backends);
+        }
+    }
+
+    // The compiled data-parallel update needs every rank to have a batch. A tail step that leaves one rank empty must
+    // fail on every rank, agreed before any rank enters the plan's exchange: a rank that threw alone would leave its peer
+    // waiting in the gradient all-reduce until the collective timeout.
+    [Fact(Timeout = 120000)]
+    public async Task CompiledDataParallelUpdate_TailStepWithAnEmptyRank_FailsOnEveryRankWithoutHanging()
+    {
+        var init = CreateInitialWeights(seed: 123);
+        var (inputs, targets) = CreateRegressionDataset(sampleCount: 9, seed: 555);   // global batch 8: the tail is 1 sample
+        var backends = CreateBackends(worldSize: 2, useSharedMemory: false);
+        try
+        {
+            var tasks = Enumerable.Range(0, 2).Select(rank => Task.Run(async () =>
+            {
+                var opt = CreateAdamOptimizer(lr: 0.01, enableClipping: false, maxGradNorm: 1.0);
+                var model = CreateMlp(opt);
+                model.SetParameters(init.Clone());
+                try
+                {
+                    await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+                        .ConfigureModel(model)
+                        .ConfigureOptimizer(opt)
+                        .ConfigureDataLoader(CreateStreamingLoader(inputs, targets, batchSize: 4))
+                        .ConfigureGpuAcceleration(CpuOnlyConfig())
+                        .ConfigureDistributedTraining(backends[rank], DistributedStrategy.DDP)
+                        .ConfigureStreamingTraining(new StreamingTrainingOptions<float, Tensor<float>, Tensor<float>>
+                        {
+                            Seed = 777,
+                            MaxSteps = 4,
+                            DataParallelUpdateInCompiledPlan = true,
+                        })
+                        .BuildAsync();
+                    return "completed";
+                }
+                catch (NotSupportedException ex) when (ex.Message.Contains("received no samples"))
+                {
+                    return "refused";
+                }
+            })).ToArray();
+            var all = Task.WhenAll(tasks);
+            Assert.Same(all, await Task.WhenAny(all, Task.Delay(TimeSpan.FromSeconds(90))));
+            Assert.All(await all, outcome => Assert.Equal("refused", outcome));
         }
         finally
         {
@@ -1751,8 +1846,8 @@ public sealed class StreamingDistributedEnablersTests : IDisposable
     {
         // 1a. SharedMemory rejects Rank 1 requesting larger slotCapacityBytes than existing Rank 0 mapping
         string mismatchLargerSession = "shm_mismatch_lg_" + Guid.NewGuid().ToString("N");
-        using (var r0 = new SharedMemoryCommunicationBackend<float>(0, 2, mismatchLargerSession, slotCapacityBytes: 64 * 1024, timeoutMilliseconds: 1_500))
-        using (var r1 = new SharedMemoryCommunicationBackend<float>(1, 2, mismatchLargerSession, slotCapacityBytes: 128 * 1024, timeoutMilliseconds: 1_500))
+        using (var r0 = new SharedMemoryCommunicationBackend<float>(0, 2, mismatchLargerSession, slotCapacityBytes: 64 * 1024, timeoutMilliseconds: 10_000))
+        using (var r1 = new SharedMemoryCommunicationBackend<float>(1, 2, mismatchLargerSession, slotCapacityBytes: 128 * 1024, timeoutMilliseconds: 30_000))
         {
             var t0 = Task.Run(() => r0.Initialize());
             var t1 = Task.Run(() => Assert.Throws<InvalidOperationException>(() => r1.Initialize()));
@@ -1763,8 +1858,11 @@ public sealed class StreamingDistributedEnablersTests : IDisposable
 
         // 1b. SharedMemory header validation rejects Rank 1 opening smaller slotCapacityBytes against existing Rank 0 mapping
         string mismatchSmallerSession = "shm_mismatch_sm_" + Guid.NewGuid().ToString("N");
-        using (var r0 = new SharedMemoryCommunicationBackend<float>(0, 2, mismatchSmallerSession, slotCapacityBytes: 128 * 1024, timeoutMilliseconds: 1_500))
-        using (var r1 = new SharedMemoryCommunicationBackend<float>(1, 2, mismatchSmallerSession, slotCapacityBytes: 64 * 1024, timeoutMilliseconds: 1_500))
+        using (var r0 = new SharedMemoryCommunicationBackend<float>(0, 2, mismatchSmallerSession, slotCapacityBytes: 128 * 1024, timeoutMilliseconds: 10_000))
+        // Rank 1 waits for rank 0's mapping before it can read the header, and rank 0 gives the mapping up when its own
+        // wait for rank 1 times out: with 1.5 s each, a loaded machine let rank 0 time out and leave before rank 1
+        // attached. Both waits now have slack; the mismatch is still detected as soon as rank 1 reads the header.
+        using (var r1 = new SharedMemoryCommunicationBackend<float>(1, 2, mismatchSmallerSession, slotCapacityBytes: 64 * 1024, timeoutMilliseconds: 30_000))
         {
             var t0 = Task.Run(() => r0.Initialize());
             var t1 = Task.Run(() => Assert.Throws<InvalidOperationException>(() => r1.Initialize()));
@@ -1792,14 +1890,12 @@ public sealed class StreamingDistributedEnablersTests : IDisposable
         int freePort = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
         listener.Stop();
 
-        string? prevAddr = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_ADDR");
-        string? prevPort = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_PORT");
-        Environment.SetEnvironmentVariable("AIDOTNET_MASTER_ADDR", "127.0.0.1");
-        Environment.SetEnvironmentVariable("AIDOTNET_MASTER_PORT", freePort.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        try
+        // An explicit rendezvous: the process-wide AIDOTNET_MASTER_* variables are also set by tests in other,
+        // parallel collections, and a port changed between this test's set and its Initialize sent the ranks to
+        // different rendezvous (a 90 s hang).
         {
-            var g0 = new GlooCommunicationBackend<float>(rank: 0, worldSize: 2);
-            var g1 = new GlooCommunicationBackend<float>(rank: 1, worldSize: 2);
+            var g0 = new GlooCommunicationBackend<float>(rank: 0, worldSize: 2) { MasterAddress = "127.0.0.1", MasterPort = freePort };
+            var g1 = new GlooCommunicationBackend<float>(rank: 1, worldSize: 2) { MasterAddress = "127.0.0.1", MasterPort = freePort };
             try
             {
                 await Task.WhenAll(Task.Run(() => g0.Initialize()), Task.Run(() => g1.Initialize()));
@@ -1821,11 +1917,6 @@ public sealed class StreamingDistributedEnablersTests : IDisposable
                 g0.Shutdown();
                 g1.Shutdown();
             }
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("AIDOTNET_MASTER_ADDR", prevAddr);
-            Environment.SetEnvironmentVariable("AIDOTNET_MASTER_PORT", prevPort);
         }
     }
 
@@ -2313,11 +2404,7 @@ public sealed class StreamingDistributedEnablersTests : IDisposable
         int freePort = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
         listener.Stop();
 
-        string? prevAddr = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_ADDR");
-        string? prevPort = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_PORT");
-        Environment.SetEnvironmentVariable("AIDOTNET_MASTER_ADDR", "127.0.0.1");
-        Environment.SetEnvironmentVariable("AIDOTNET_MASTER_PORT", freePort.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        try
+        // An explicit rendezvous (see the dynamic-broadcast test): not the process-wide AIDOTNET_MASTER_* variables.
         {
             const int scatterChunk = 3001;
             var fullScatterPayload = new Half[scatterChunk * 2];
@@ -2326,8 +2413,8 @@ public sealed class StreamingDistributedEnablersTests : IDisposable
                 fullScatterPayload[i] = (Half)((i % 97) * 0.25f - 6.0f);
             }
 
-            var g0 = new GlooCommunicationBackend<Half>(rank: 0, worldSize: 2);
-            var g1 = new GlooCommunicationBackend<Half>(rank: 1, worldSize: 2);
+            var g0 = new GlooCommunicationBackend<Half>(rank: 0, worldSize: 2) { MasterAddress = "127.0.0.1", MasterPort = freePort };
+            var g1 = new GlooCommunicationBackend<Half>(rank: 1, worldSize: 2) { MasterAddress = "127.0.0.1", MasterPort = freePort };
             try
             {
                 await Task.WhenAll(Task.Run(() => g0.Initialize()), Task.Run(() => g1.Initialize()));
@@ -2352,11 +2439,6 @@ public sealed class StreamingDistributedEnablersTests : IDisposable
                 g0.Shutdown();
                 g1.Shutdown();
             }
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("AIDOTNET_MASTER_ADDR", prevAddr);
-            Environment.SetEnvironmentVariable("AIDOTNET_MASTER_PORT", prevPort);
         }
     }
 

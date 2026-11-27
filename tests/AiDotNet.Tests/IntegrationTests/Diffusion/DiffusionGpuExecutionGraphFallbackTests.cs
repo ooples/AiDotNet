@@ -352,7 +352,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
     private static void AssertFp16ConvPrimitiveMatchesFp32(
         AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend backend, string backendName)
     {
-        var hb = backend as AiDotNet.Tensors.Engines.Gpu.IGpuHalfPrecisionBackend;
+        var hb = backend as AiDotNet.Tensors.Engines.Gpu.IGpuHalfFusedKernels;
         if (hb is null || !hb.SupportsHgemm || !hb.Fp16Im2colAvailable) return; // no FP16 GEMM / no im2col kernel here
         void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_fp16precision.txt"), s + System.Environment.NewLine); } catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"DiffusionGpuExecutionGraphFallbackTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); } }
 
@@ -650,7 +650,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
         try { backend = new AiDotNet.Tensors.Engines.DirectGpu.CUDA.CudaBackend(); if (!backend.IsAvailable) return; }
         catch { return; }
         void Log(string s) { try { System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet_tensorcore.txt"), s + System.Environment.NewLine); } catch (System.Exception bestEffortError) { System.Diagnostics.Trace.TraceWarning($"DiffusionGpuExecutionGraphFallbackTests: a best-effort step failed ({bestEffortError.GetType().Name}: {bestEffortError.Message})"); } }
-        Log($"SupportsHgemm={(backend as AiDotNet.Tensors.Engines.Gpu.IGpuHalfPrecisionBackend)?.SupportsHgemm}");
+        Log($"SupportsHgemm={(backend as AiDotNet.Tensors.Engines.Gpu.IGpuHalfFusedKernels)?.SupportsHgemm}");
 
         const int iters = 100;
         void BenchGemm(int M, int N, int K)
@@ -666,7 +666,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
             var sw = System.Diagnostics.Stopwatch.StartNew();
             for (int i = 0; i < iters; i++) backend.Gemm(a, b, c, M, N, K); backend.Synchronize(); sw.Stop();
             double f32 = sw.Elapsed.TotalMilliseconds * 1000.0 / iters;
-            var hb = backend as AiDotNet.Tensors.Engines.Gpu.IGpuHalfPrecisionBackend;
+            var hb = backend as AiDotNet.Tensors.Engines.Gpu.IGpuHalfFusedKernels;
             double f16 = -1;
             try {
                 for (int i = 0; i < 5; i++) hb.GemmFp16In32fOut(aH, bH, c, M, N, K); backend.Synchronize();
@@ -694,7 +694,7 @@ public class DiffusionGpuExecutionGraphFallbackTests
 
         // FULL FP16 conv (im2col_kn_fp16hw + GemmFp16, incl. im2col overhead) vs FP32 Conv2D at the UNet's
         // ACTUAL shapes (mostly N=256 after downsampling). hw=spatial, so N=hw*hw.
-        var hbb = backend as AiDotNet.Tensors.Engines.Gpu.IGpuHalfPrecisionBackend;
+        var hbb = backend as AiDotNet.Tensors.Engines.Gpu.IGpuHalfFusedKernels;
         double worstFullRel = 0; // correctness gate: the FP16 full-conv path must match the FP32 reference
         void BenchFullFp16(int inC, int outC, int hw)
         {

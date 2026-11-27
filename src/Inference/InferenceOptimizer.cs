@@ -776,6 +776,10 @@ internal class InferenceOptimizer<T>
     private CachedGroupedQueryAttention<T>? BuildCachedGqaReplacement(
         GroupedQueryAttentionLayer<T> gqa, bool enableFlashAttention, bool useCausalMask)
     {
+        // The cached layer has no query/key projection norm (OLMoE); rebuilding would drop it.
+        if (gqa.UsesProjectionNorm)
+            return null;
+
         var inputShape = gqa.GetInputShape();
         if (inputShape.Length < 2)
             return null;
@@ -823,7 +827,7 @@ internal class InferenceOptimizer<T>
     {
         // The paged layer stores only an output bias; it cannot carry Q/K/V projection biases, and the source's
         // flattened parameter vector would not line up. Let the caller use the contiguous cache in that case.
-        if (gqa.UsesProjectionBias)
+        if (gqa.UsesProjectionBias || gqa.UsesProjectionNorm)
         {
             return null;
         }

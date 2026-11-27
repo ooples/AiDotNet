@@ -134,6 +134,15 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
     public DistributedStrategy Strategy { get; }
 
     /// <summary>
+    /// Whether a compiled DDP step runs its optimizer update inside the compiled plan (the fused optimizer, a CUDA graph
+    /// on the GPU), with the gradient all-reduce between the plan's backward and its update, instead of the reference
+    /// path where the optimizer instance steps on the reduced gradients. Off by default; set from
+    /// <see cref="Models.Options.StreamingTrainingOptions{T, TInput, TOutput}.DataParallelUpdateInCompiledPlan"/>.
+    /// Every rank must use the same setting.
+    /// </summary>
+    internal bool CompiledOptimizerUpdate { get; set; }
+
+    /// <summary>
     /// Gets this process's zero-based rank within the communication group.
     /// </summary>
     public int Rank => Backend.Rank;
@@ -345,6 +354,130 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
         return true;
     }
 
+    /// <summary>Whether <paramref name="local"/> holds on every rank (a min-reduce of one flag).</summary>
+    [AiDotNet.Attributes.ScalarKernel("Exchanges one agreement flag across ranks")]
+    internal bool AllRanks(bool local)
+    {
+        if (WorldSize <= 1) return local;
+        EnsureBackendInitialized();
+        var flag = new Vector<T>(1);
+        flag.AsWritableSpan()[0] = local ? NumOps.One : NumOps.Zero;
+        Backend.AllReduce(flag, ReductionOperation.Min);
+        return NumOps.GreaterThan(flag.AsSpan()[0], NumOps.Zero);
+    }
+
+    /// <summary>
+    /// Whether every rank holds the same <paramref name="values"/>. Each value is exchanged as 7-bit chunks, which any
+    /// element type represents exactly (a float holds integers exactly only up to 2^24, so a gradient of 16,777,217
+    /// elements compared as one float would disagree with itself).
+    /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("Exchanges a few layout counts across ranks as 7-bit chunks")]
+    internal bool RanksAgree(params long[] values)
+    {
+        if (values is null) throw new ArgumentNullException(nameof(values));
+        if (WorldSize <= 1 || values.Length == 0) return true;
+        EnsureBackendInitialized();
+        const int Chunks = 10;   // 64 bits, 7 per chunk
+        var min = new Vector<T>(values.Length * Chunks);
+        Span<T> w = min.AsWritableSpan();
+        for (int v = 0; v < values.Length; v++)
+        {
+            ulong u = unchecked((ulong)values[v]);
+            for (int c = 0; c < Chunks; c++) w[v * Chunks + c] = NumOps.FromDouble((double)((u >> (7 * c)) & 0x7FUL));
+        }
+        var max = new Vector<T>(min.AsSpan().ToArray());
+        Backend.AllReduce(min, ReductionOperation.Min);
+        Backend.AllReduce(max, ReductionOperation.Max);
+        ReadOnlySpan<T> lo = min.AsSpan(), hi = max.AsSpan();
+        for (int i = 0; i < lo.Length; i++)
+            if (!NumOps.Equals(lo[i], hi[i])) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// A 64-bit FNV-1a fingerprint of the ordered layout of <paramref name="tensors"/>: the count, then each tensor's
+    /// rank and dimensions in order. Two lists fingerprint alike when they have the same shapes in the same order.
+    /// </summary>
+    internal static long OrderedLayoutFingerprint(IReadOnlyList<Tensor<T>> tensors)
+    {
+        const ulong Prime = 1099511628211UL;
+        ulong h = 14695981039346656037UL;
+        void Mix(long value)
+        {
+            ulong u = unchecked((ulong)value);
+            for (int b = 0; b < 8; b++)
+            {
+                h ^= (u >> (8 * b)) & 0xFFUL;
+                h = unchecked(h * Prime);
+            }
+        }
+        Mix(tensors.Count);
+        foreach (var tensor in tensors)
+        {
+            int[] shape = tensor._shape;
+            Mix(shape.Length);
+            foreach (int d in shape) Mix(d);
+        }
+        return unchecked((long)h);
+    }
+
+    private static string DescribeShapes(IReadOnlyList<Tensor<T>> tensors)
+    {
+        var parts = new string[tensors.Count];
+        for (int i = 0; i < parts.Length; i++) parts[i] = "[" + string.Join("x", tensors[i]._shape) + "]";
+        return "[" + string.Join(", ", parts) + "]";
+    }
+
+    /// <summary>
+    /// Broadcasts Rank 0's registered buffers (non-trainable persistent state such as batch-norm running statistics) to
+    /// every other rank, as PyTorch DDP broadcasts module buffers from rank 0 when it wraps the model: without it each
+    /// rank kept the buffers it initialized or loaded itself, and evaluation diverged across ranks.
+    /// </summary>
+    /// <param name="buffers">Every registered buffer of the model, in the same order on every rank.</param>
+    /// <param name="invalidateCaches">Invoked after the buffers are overwritten.</param>
+    public void BroadcastBuffers(IReadOnlyList<Tensor<T>> buffers, Action? invalidateCaches = null)
+    {
+        ThrowIfDisposed();
+        if (buffers is null) throw new ArgumentNullException(nameof(buffers));
+        if (WorldSize <= 1) return;
+        EnsureBackendInitialized();
+        var unique = new List<Tensor<T>>(buffers.Count);
+        var seen = new HashSet<Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+        long total = 0;
+        foreach (var buffer in buffers)
+        {
+            if (buffer is null || buffer.Length == 0 || !seen.Add(buffer)) continue;
+            unique.Add(buffer);
+            total += buffer.Length;
+        }
+        // The layout must agree before any data moves (a rank with a different buffer set would unpack garbage), and
+        // every rank reaches this agreement, including one with no buffers: a rank that returned early would leave the
+        // others waiting in it until the collective timeout.
+        // Count and total alone accept [1,3] against [2,2]; the ordered layout (each buffer's rank and dimensions, in
+        // order) must match too, else part of rank 0's second buffer would land in this rank's first. The layout is
+        // agreed as one fixed-width fingerprint so every rank exchanges the same number of values whatever it holds.
+        if (!RanksAgree(unique.Count, total, OrderedLayoutFingerprint(unique)))
+            throw new InvalidOperationException(
+                $"Rank {Rank}: the ranks' models register different buffers ({unique.Count} tensors, {total} elements here, "
+                + $"shapes {DescribeShapes(unique)}), "
+                + "so rank 0's buffers cannot be broadcast onto them.");
+        if (total == 0) return;
+        var flat = new Vector<T>(checked((int)total));
+        if (Rank == 0)
+        {
+            Span<T> dst = flat.AsWritableSpan();
+            int offset = 0;
+            foreach (var buffer in unique)
+            {
+                buffer.Contiguous().AsSpan().CopyTo(dst.Slice(offset, buffer.Length));
+                offset += buffer.Length;
+            }
+        }
+        flat = Backend.Broadcast(flat, root: 0);
+        UnpackVectorIntoParameters(flat.AsSpan().Slice(0, (int)total), unique.ToArray(), preserveGpuWeightBuffers: false);
+        invalidateCaches?.Invoke();
+    }
+
     /// <summary>
     /// Broadcasts Rank 0's initial trainable parameters to all other ranks once per distinct parameter list.
     /// Subsequent calls with the identical parameter tensor list are idempotent no-ops until <see cref="ResetParameterSync"/> is called.
@@ -406,6 +539,35 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
     public static long CountValidElements(Tensor<T>? targetBatch)
     {
         return targetBatch is null ? 0L : targetBatch.Length;
+    }
+
+    /// <summary>
+    /// The number of target elements <paramref name="loss"/>'s mean reduction divides by for
+    /// <paramref name="targetBatch"/>: for cross-entropy the supervised rows, so ignored targets (the ignore index,
+    /// padding) carry no weight, as PyTorch DDP with a loss normalized over the global count of valid tokens does.
+    /// Losses that average over every target element (and a loss that did not score this target) count
+    /// <see cref="CountValidElements(Tensor{T})"/>.
+    /// </summary>
+    public static long CountValidElements(Tensor<T>? targetBatch, ILossFunction<T>? loss)
+    {
+        if (targetBatch is null || targetBatch.Length == 0) return 0L;
+        return loss is LossFunctions.LossFunctionBase<T> lossBase && lossBase.CountMeanReductionElements(targetBatch) is long counted
+            ? counted
+            : targetBatch.Length;
+    }
+
+    /// <summary>
+    /// The number of target elements divided by in the mean reduction of the loss that actually scored the step's
+    /// objective: <paramref name="scored"/> is what that loss reported while the objective was scored (or traced, for a
+    /// compiled plan), so the rank weight describes the same reduction as the gradient it scales. With no report the
+    /// objective's loss averages over every target element (no loss that leaves targets out of its mean scored it).
+    /// </summary>
+    internal static long CountValidElements(Tensor<T>? targetBatch, LossFunctions.MeanReductionRecord<T>? scored)
+    {
+        if (targetBatch is null || targetBatch.Length == 0) return 0L;
+        return scored is not null && scored.Loss.CountMeanReductionElements(targetBatch, scored.Layout) is long counted
+            ? counted
+            : targetBatch.Length;
     }
 
     /// <summary>
@@ -776,7 +938,7 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
             {
                 if (maxGradNorm > 0.0)
                 {
-                    ClipGradientsByGlobalNorm(uniqueParams, gradients, maxGradNorm);
+                    ClipReducedGradients(trainableParameters, uniqueParams, gradients, maxGradNorm);
                 }
 
                 gradOptBase.ClipTapeGradientsAhead(
@@ -790,7 +952,7 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
                 regularizeGradients?.Invoke(trainableParameters, gradients);
                 if (maxGradNorm > 0.0)
                 {
-                    ClipGradientsByGlobalNorm(uniqueParams, gradients, maxGradNorm);
+                    ClipReducedGradients(trainableParameters, uniqueParams, gradients, maxGradNorm);
                 }
             }
 
@@ -866,7 +1028,7 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
                 {
                     if (maxGradNorm > 0.0)
                     {
-                        ClipGradientsByGlobalNorm(uniqueParams, gradients, maxGradNorm);
+                        ClipReducedGradients(trainableParameters, uniqueParams, gradients, maxGradNorm);
                     }
 
                     if (optClipNorm > 0.0)
@@ -881,7 +1043,7 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
                     regularizeGradients?.Invoke(trainableParameters, gradients);
                     if (maxGradNorm > 0.0)
                     {
-                        ClipGradientsByGlobalNorm(uniqueParams, gradients, maxGradNorm);
+                        ClipReducedGradients(trainableParameters, uniqueParams, gradients, maxGradNorm);
                     }
 
                     if (optClipNorm > 0.0)
@@ -1445,6 +1607,29 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
                 ScaleTensorInPlace(shardGradTensor, s2);
             }
         }
+    }
+
+    /// <summary>
+    /// The clip a step over full (replicated) reduced gradients applies at the maximum norm, in place of the
+    /// coordinator's own global-norm clip. A network sets it to its own clip, so a data-parallel step clips the reduced
+    /// gradients exactly as the same network's one-process step clips its gradients (the same norm in the same order),
+    /// and the pre-clip norm is recorded for the step's reported gradient norm. It returns false when it does not take
+    /// the clip; the coordinator's own global-norm clip runs then.
+    /// </summary>
+    internal Func<IReadOnlyList<Tensor<T>>, Dictionary<Tensor<T>, Tensor<T>>, double, bool>? ReducedGradientClip { get; set; }
+
+    private void ClipReducedGradients(
+        IReadOnlyList<Tensor<T>> trainableParameters,
+        Tensor<T>[] uniqueParams,
+        Dictionary<Tensor<T>, Tensor<T>> gradients,
+        double maxNorm)
+    {
+        if (ReducedGradientClip is { } clip && clip(trainableParameters, gradients, maxNorm))
+        {
+            return;
+        }
+
+        ClipGradientsByGlobalNorm(uniqueParams, gradients, maxNorm);
     }
 
     private static void ClipGradientsByGlobalNorm(

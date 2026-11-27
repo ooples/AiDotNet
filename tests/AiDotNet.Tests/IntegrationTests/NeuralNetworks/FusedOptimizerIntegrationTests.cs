@@ -146,6 +146,63 @@ public class FusedOptimizerIntegrationTests
     }
 
     /// <summary>
+    /// FP16 mixed precision with a fused optimizer that is neither Adam nor SGD (RMSprop) trains on the fused compiled
+    /// step: autocast and the loss scaler run inside the plan, RMSprop's own update applies the unscaled FP32 master
+    /// gradients, every loss is finite and the loss descends. (It replaces the test of the removed environment-gated
+    /// FP16 activation route, which reached the same optimizers through a separate plan.)
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task Fp16MixedPrecision_NonAdamFusedOptimizer_TrainsOnTheFusedStep()
+    {
+        await Task.CompletedTask;
+
+        var network = BuildMlp();
+        var input = CreateRandomTensor(new[] { 16, 4 }, seed: 42);
+        var target = CreateRandomTensor(new[] { 16, 2 }, seed: 43);
+        network.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
+        network.EnableMixedPrecision(new AiDotNet.MixedPrecision.MixedPrecisionConfig
+        {
+            PrecisionType = MixedPrecisionType.FP16,
+        });
+
+        var optimizer = new RootMeanSquarePropagationOptimizer<float, Tensor<float>, Tensor<float>>(network,
+            new RootMeanSquarePropagationOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 0.01,
+                Decay = 0.9,
+                Epsilon = 1e-8,
+                UseAdaptiveLearningRate = false
+            });
+
+        var originalOptions = TensorCodecOptions.Current;
+        try
+        {
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+            CompiledTapeTrainingStep<float>.Invalidate();
+            CompiledTapeTrainingStep<float>.ResetFusedStepCount();
+
+            var losses = new List<float>();
+            for (int step = 0; step < 15; step++)
+            {
+                network.TrainPublic(input, target, optimizer);
+                float loss = network.LastLossPublic;
+                losses.Add(loss);
+                Assert.False(float.IsNaN(loss) || float.IsInfinity(loss), $"FP16 step {step} produced a non-finite loss");
+            }
+
+            Assert.True(CompiledTapeTrainingStep<float>.GetFusedStepCount() > 0,
+                "FP16 RMSprop never took the fused compiled step (a silent eager fallback).");
+            Assert.True(losses[losses.Count - 1] < losses[0],
+                $"FP16 RMSprop training did not descend: first {losses[0]}, last {losses[losses.Count - 1]}");
+        }
+        finally
+        {
+            TensorCodecOptions.SetCurrent(originalOptions);
+            CompiledTapeTrainingStep<float>.Invalidate();
+        }
+    }
+
+    /// <summary>
     /// With <see cref="TensorCodecOptions.EnableCompilation"/> true, <c>T=float</c>, and a plain
     /// Adam optimizer (no LR scheduler, no adaptive rates), <c>TryTrainWithFusedOptimizer</c>
     /// engages the compiled fused fwd+bwd+update kernel. Training must complete without
@@ -485,141 +542,6 @@ public class FusedOptimizerIntegrationTests
             if (step == 0) first = last;
         }
         Assert.True(last < first, $"fast-clip did not reduce loss: {first} -> {last}");
-    }
-
-    /// <summary>
-    /// End-to-end validation of the FP16-activation training path for a NON-Adam fused
-    /// optimizer (Tensors #574 + AiDotNet #1543). With <c>AIDOTNET_FP16_ACTIVATIONS=1</c>,
-    /// <c>T=float</c>, <c>EnableCompilation=true</c>, and RMSprop (a fused-mappable optimizer
-    /// that is neither Adam nor SGD), <c>TryStepWithFusedOptimizer</c> routes through the
-    /// optimizer-agnostic <c>MixedPrecisionCompiledPlan.ComputeGradients</c> branch (FP16
-    /// activation storage, grads bridged FP16↔FP32) and applies RMSprop's own master update
-    /// via <c>Step</c>. Requires a Tensors build exposing <c>ComputeGradients</c> (0.92.0+);
-    /// the reflection bridge gates on <c>IsComputeGradientsAvailable</c>, so a missing API
-    /// silently falls back to eager and the fused-engagement assertion below would fail.
-    /// Asserts the fused path engages and loss descends with finite values — a broken FP16
-    /// bridge or a silent eager fallback fails one of these.
-    /// </summary>
-    [Fact(Timeout = 120000)]
-    public async Task Fp16Activations_NonAdamFusedOptimizer_DescendsLoss_ViaComputeGradients()
-    {
-        await Task.CompletedTask;
-
-        var network = BuildMlp();
-        var input = CreateRandomTensor(new[] { 16, 4 }, seed: 42);
-        var target = CreateRandomTensor(new[] { 16, 2 }, seed: 43);
-
-        // Warmup forward so layer weight tensors are materialized.
-        network.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
-
-        var rmsOptions = new RootMeanSquarePropagationOptimizerOptions<float, Tensor<float>, Tensor<float>>
-        {
-            InitialLearningRate = 0.01,
-            Decay = 0.9,
-            Epsilon = 1e-8,
-            UseAdaptiveLearningRate = false
-        };
-        var optimizer = new RootMeanSquarePropagationOptimizer<float, Tensor<float>, Tensor<float>>(network, rmsOptions);
-
-        var originalOptions = TensorCodecOptions.Current;
-        string? originalEnv = Environment.GetEnvironmentVariable("AIDOTNET_FP16_ACTIVATIONS");
-        try
-        {
-            Environment.SetEnvironmentVariable("AIDOTNET_FP16_ACTIVATIONS", "1");
-            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
-            CompiledTapeTrainingStep<float>.Invalidate();
-            CompiledTapeTrainingStep<float>.ResetFusedStepCount();
-
-            var losses = new List<float>();
-            for (int step = 0; step < 15; step++)
-            {
-                network.TrainPublic(input, target, optimizer);
-                float loss = network.LastLossPublic;
-                losses.Add(loss);
-                Assert.False(float.IsNaN(loss) || float.IsInfinity(loss),
-                    $"FP16 path produced non-finite loss at step {step}");
-            }
-
-            // The fused compiled path must have actually engaged — otherwise the FP16
-            // ComputeGradients branch never ran and we silently tested eager training.
-            Assert.True(CompiledTapeTrainingStep<float>.GetFusedStepCount() > 0,
-                "FP16 fused path never engaged — silent eager fallback (ComputeGradients missing from the linked Tensors build?).");
-
-            // FP16-computed grads applied by RMSprop's own master update must still train.
-            Assert.True(losses[losses.Count - 1] < losses[0],
-                $"FP16 RMSprop training did not descend: first {losses[0]}, last {losses[losses.Count - 1]}");
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("AIDOTNET_FP16_ACTIVATIONS", originalEnv);
-            TensorCodecOptions.SetCurrent(originalOptions);
-            CompiledTapeTrainingStep<float>.Invalidate();
-        }
-    }
-
-    /// <summary>
-    /// End-to-end behavioral contract for FP16-activation training through the high-level
-    /// <see cref="NeuralNetworkBase{T}"/> path on a model that uses the between-matmul ops the
-    /// resident-memory win depends on — LayerNorm + GELU (Tensors #558). A transformer block separates
-    /// matmuls with LayerNorm/GELU, so those ops (not just the GEMM the matmul-only tests cover) must
-    /// keep their activations Half. Dense → LayerNorm → GELU → Dense, Adam, <c>AIDOTNET_FP16_ACTIVATIONS=1</c>.
-    /// <para>On Tensors 0.96.0 (PR #606) the FP16-native LayerNorm/GELU ops keep the activation chain Half,
-    /// so this Adam-trained Dense → LayerNorm → GELU → Dense model routes through the fused FP16 plan. The
-    /// test asserts both that the fused path actually engaged (<c>GetFusedStepCount() &gt; 0</c>) and that
-    /// FP16 activations through LayerNorm + GELU train the FP32 master weights (finite loss every step,
-    /// loss descends) — the end-to-end resident-memory win Tensors #558 / #606 targets.</para>
-    /// </summary>
-    [Fact(Timeout = 120000)]
-    public async Task Fp16Activations_LayerNormGeluBlock_EngagesFusedFp16Path_AndTrains()
-    {
-        await Task.CompletedTask;
-
-        var network = BuildLayerNormGeluNet();
-        var input = CreateRandomTensor(new[] { 16, 4 }, seed: 42);
-        var target = CreateRandomTensor(new[] { 16, 2 }, seed: 43);
-
-        // Warmup forward so layer weight tensors are materialized before training.
-        network.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
-
-        var optimizer = BuildAdam(network, learningRate: 0.01);
-        var originalOptions = TensorCodecOptions.Current;
-        string? originalEnv = Environment.GetEnvironmentVariable("AIDOTNET_FP16_ACTIVATIONS");
-        try
-        {
-            Environment.SetEnvironmentVariable("AIDOTNET_FP16_ACTIVATIONS", "1");
-            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
-            CompiledTapeTrainingStep<float>.Invalidate();
-            CompiledTapeTrainingStep<float>.ResetFusedStepCount();
-
-            var losses = new List<float>();
-            for (int step = 0; step < 15; step++)
-            {
-                network.TrainPublic(input, target, optimizer);
-                float loss = network.LastLossPublic;
-                losses.Add(loss);
-                Assert.False(float.IsNaN(loss) || float.IsInfinity(loss),
-                    $"FP16 LayerNorm/GELU path produced non-finite loss at step {step}");
-            }
-
-            // The fused FP16 plan must have actually engaged. On 0.96.0 (Tensors PR #606) both the matmul
-            // and the LayerNorm/GELU activations stay Half, so this Adam-trained model routes through the
-            // fused FP16 ComputeGradients/StepAdam path rather than the eager FP32 fallback. (Engagement
-            // required the MixedPrecisionReflection.StepAdam float-arg fix in this PR: 0.96.0 made StepAdam
-            // public with float hyperparams, and the reflection bridge was still passing doubles — which
-            // threw on invoke and silently dropped every Adam FP16 step to eager.)
-            Assert.True(CompiledTapeTrainingStep<float>.GetFusedStepCount() > 0,
-                "FP16 fused path never engaged for the LayerNorm/GELU model — silent eager fallback.");
-
-            // FP16 activations through LayerNorm + GELU must still train the FP32 master weights.
-            Assert.True(losses[losses.Count - 1] < losses[0],
-                $"FP16 LayerNorm/GELU training did not descend: first {losses[0]}, last {losses[losses.Count - 1]}");
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("AIDOTNET_FP16_ACTIVATIONS", originalEnv);
-            TensorCodecOptions.SetCurrent(originalOptions);
-            CompiledTapeTrainingStep<float>.Invalidate();
-        }
     }
 
     /// <summary>
