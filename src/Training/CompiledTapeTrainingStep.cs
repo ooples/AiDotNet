@@ -1736,6 +1736,7 @@ public static partial class CompiledTapeTrainingStep<T>
                 }
 
                 closure.RecordStep(failed: entry is null, reason: reason);
+                if (entry is null) Fd("closure objective plan cache miss, compiling this step: " + reason);
                 if (closure.IsDynamic)
                     ReportClosureFallback(closure, ClosureFallbackReason.Dynamic,
                         "its structure changed on more than " + ClosureObjectiveState<T>.MaxEarlyFailures + " of its first "
