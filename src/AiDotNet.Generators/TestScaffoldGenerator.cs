@@ -7375,7 +7375,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputSize: 16, outputSize: 3), " +
                     "new AiDotNet.Models.Options.FinMAOptions<double> { MaxSequenceLength = 16, " +
                     "VocabularySize = 64, HiddenDimension = 32, NumAttentionHeads = 4, " +
-                    "IntermediateDimension = 64, NumLayers = 2, NumClasses = 3, NumAgents = 1, " +
+                    "IntermediateDimension = 64, NumLayers = 2, NumClasses = 3, " +
                     "DropoutRate = 0.0 })";
             }
             else if ((model.ClassName == "Emu2" || model.ClassName == "Emu3") && model.TypeParameterCount == 1)
@@ -7485,7 +7485,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 32, outputSize: 5), new AiDotNet.Models.Options.FinBERTToneOptions<double> { " +
                     "MaxSequenceLength = 32, VocabularySize = 2048, HiddenDimension = 32, NumAttentionHeads = 4, " +
-                    "IntermediateDimension = 64, NumLayers = 2, NumToneClasses = 5, DropoutRate = 0.0, UseFinegrainedTone = true })";
+                    "IntermediateDimension = 64, NumLayers = 2, NumToneClasses = 5, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "FinBERT" && model.TypeParameterCount == 1)
             {
@@ -7494,7 +7494,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputSize: 32, outputSize: 3), new AiDotNet.Models.Options.FinBERTOptions<double> { " +
                     "MaxSequenceLength = 32, VocabularySize = 2048, HiddenDimension = 32, NumAttentionHeads = 4, " +
                     "IntermediateDimension = 64, NumLayers = 2, NumSentimentClasses = 3, DropoutRate = 0.0, " +
-                    "AttentionDropoutRate = 0.0, HiddenDropoutRate = 0.0, MaxPositionEmbeddings = 32 })";
+                    "AttentionDropoutRate = 0.0, MaxPositionEmbeddings = 32 })";
             }
             else if (model.ClassName == "FinGPT" && model.TypeParameterCount == 1)
             {
@@ -7502,7 +7502,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
                     "inputSize: 12, outputSize: 3), new AiDotNet.Models.Options.FinGPTOptions<double> { " +
                     "MaxSequenceLength = 12, VocabularySize = 64, HiddenDimension = 12, NumAttentionHeads = 1, " +
-                    "IntermediateDimension = 24, NumLayers = 1, NumClasses = 3, DropoutRate = 0.0, TaskType = \"classification\" })";
+                    "IntermediateDimension = 24, NumLayers = 1, NumClasses = 3, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "FastSAM" && model.TypeParameterCount == 1)
             {
@@ -8919,7 +8919,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputSize: 16, outputSize: 64), " +
                     "new AiDotNet.Models.Options.BloombergGPTOptions<double> { MaxSequenceLength = 16, " +
                     "VocabularySize = 64, HiddenDimension = 32, NumAttentionHeads = 4, " +
-                    "IntermediateDimension = 64, NumLayers = 2, DropoutRate = 0.0, TaskType = \"generation\" })";
+                    "IntermediateDimension = 64, NumLayers = 2, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "BridgeTower" && model.TypeParameterCount == 1)
             {

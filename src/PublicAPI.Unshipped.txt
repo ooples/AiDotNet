@@ -26889,7 +26889,6 @@ override AiDotNet.Finance.Base.FinancialNLPModelBase<T>.RegisterGeneratedState(A
 override AiDotNet.Finance.NLP.SECBERT<T>.BertOptions.get -> AiDotNet.Models.Options.FinancialBertEncoderOptions<T>!
 override AiDotNet.Finance.NLP.InvestLM<T>.ReleasedTokenizerDescription.get -> string!
 override AiDotNet.Finance.NLP.InvestLM<T>.LanguageModelOptions.get -> AiDotNet.Models.Options.FinancialLanguageModelOptions<T>!
-override AiDotNet.Finance.NLP.InvestLM<T>.TrainCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> void
 override AiDotNet.Finance.NLP.FinMA<T>.LanguageModelOptions.get -> AiDotNet.Models.Options.FinancialLanguageModelOptions<T>!
 override AiDotNet.Finance.NLP.FinGPT<T>.ReleasedTokenizerDescription.get -> string!
 override AiDotNet.Finance.NLP.FinGPT<T>.LanguageModelOptions.get -> AiDotNet.Models.Options.FinancialLanguageModelOptions<T>!
@@ -26897,7 +26896,6 @@ override AiDotNet.Finance.NLP.FinMA<T>.ReleasedTokenizerDescription.get -> strin
 override AiDotNet.Finance.NLP.FinBERTTone<T>.BertOptions.get -> AiDotNet.Models.Options.FinancialBertEncoderOptions<T>!
 AiDotNet.Finance.NLP.FinBERT<T>.FinBERT(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.Models.Options.FinBERTOptions<T>? options = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null) -> void
 override AiDotNet.Finance.NLP.FinBERT<T>.BertOptions.get -> AiDotNet.Models.Options.FinancialBertEncoderOptions<T>!
-override AiDotNet.Finance.NLP.FinBERT<T>.TrainCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> void
 override AiDotNet.Finance.NLP.FinancialBERT<T>.BertOptions.get -> AiDotNet.Models.Options.FinancialBertEncoderOptions<T>!
 override AiDotNet.Finance.NLP.BloombergGPT<T>.ReleasedTokenizerDescription.get -> string!
 override AiDotNet.Finance.NLP.BloombergGPT<T>.LanguageModelOptions.get -> AiDotNet.Models.Options.FinancialLanguageModelOptions<T>!
@@ -26941,3 +26939,9 @@ AiDotNet.Models.Options.FinancialLanguageModelOptions<T>.ValidateNLPOptions() ->
 *REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultFinancialBERTLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int maxSequenceLength = 512, int vocabularySize = 30522, int hiddenSize = 768, int numAttentionHeads = 12, int numHiddenLayers = 12, double dropoutProbability = 0.1) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
 *REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultFinMALayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int vocabularySize = 32000, int maxSequenceLength = 2048, int hiddenDimension = 768, int numAttentionHeads = 12, int intermediateDimension = 3072, int numLayers = 12, int numClasses = 3, double dropoutRate = 0.1) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
 *REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultSECBERTLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int maxSequenceLength = 512, int vocabularySize = 30522, int hiddenSize = 768, int numAttentionHeads = 12, int numHiddenLayers = 12, double dropoutProbability = 0.1) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*override AiDotNet.Finance.NLP.BloombergGPT<T>.TrainCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> void
+*REMOVED*override AiDotNet.Finance.NLP.FinancialBERT<T>.TrainCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> void
+*REMOVED*override AiDotNet.Finance.NLP.FinBERTTone<T>.TrainCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> void
+*REMOVED*override AiDotNet.Finance.NLP.FinGPT<T>.TrainCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> void
+*REMOVED*override AiDotNet.Finance.NLP.FinMA<T>.TrainCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> void
+*REMOVED*override AiDotNet.Finance.NLP.SECBERT<T>.TrainCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> void

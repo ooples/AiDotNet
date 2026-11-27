@@ -111,12 +111,4 @@ public partial class FinancialBERT<T> : FinancialBertModelBase<T>
         => InitializeBertLayers(
             _options.NumAttentionHeads, _options.IntermediateDimension, _options.NumLayers, NumSentimentClasses,
             _options.DropoutRate);
-
-    /// <inheritdoc/>
-    protected override void TrainCore(Tensor<T> input, Tensor<T> target, Tensor<T> output)
-    {
-        SetTrainingMode(true);
-        _optimizer.UpdateParameters(Layers);
-        SetTrainingMode(false);
-    }
 }

@@ -120,12 +120,4 @@ public partial class InvestLM<T> : FinancialDecoderModelBase<T>
                 _options.IntermediateDimension, _options.NumLayers, pool),
             NumSentimentClasses,
             _options.DropoutRate);
-
-    /// <inheritdoc/>
-    protected override void TrainCore(Tensor<T> input, Tensor<T> target, Tensor<T> output)
-    {
-        SetTrainingMode(true);
-        _optimizer.UpdateParameters(Layers);
-        SetTrainingMode(false);
-    }
 }
