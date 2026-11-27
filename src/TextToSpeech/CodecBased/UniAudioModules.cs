@@ -43,11 +43,7 @@ internal static class UniAudioOps<T>
     }
 
     internal static Tensor<T> Ids(IReadOnlyList<int> ids)
-    {
-        var result = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) result[i] = NumOps.FromDouble(ids[i]);
-        return result;
-    }
+        => TtsIdTensors.From<T>(ids);
 
     internal static int[] IdsOf(Tensor<T> ids)
     {

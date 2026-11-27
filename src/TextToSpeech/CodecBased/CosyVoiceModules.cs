@@ -640,11 +640,7 @@ internal sealed class CosyVoiceLm<T>
     public int EndToken => Configuration.SpeechVocabulary;
 
     private Tensor<T> Ids(IReadOnlyList<int> ids)
-    {
-        var tensor = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) tensor[i] = NumOps.FromDouble(ids[i]);
-        return tensor;
-    }
+        => TtsIdTensors.From<T>(ids);
 
     /// <summary>The LM's input <c>[2 + |text| + 1 + |speech|, LlmSize]</c>: sos, the projected x-vector (none when null),
     /// the encoded text, task_id, the speech tokens' embeddings.</summary>

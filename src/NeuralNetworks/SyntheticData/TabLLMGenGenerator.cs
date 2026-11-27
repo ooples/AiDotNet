@@ -727,17 +727,7 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
     /// Creates a vector of standard normal random values using Box-Muller transform.
     /// </summary>
     private Vector<T> CreateStandardNormalVector(int size)
-    {
-        var v = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
-        {
-            double u1 = Math.Max(1e-10, _random.NextDouble());
-            double u2 = _random.NextDouble();
-            double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            v[i] = NumOps.FromDouble(normal);
-        }
-        return v;
-    }
+        => SyntheticTensorOps<T>.StandardNormalVector(size, _random, BoxMullerGuard.Floored);
 
     /// <summary>
     /// Sanitizes a gradient tensor by replacing NaN/Inf values with zero and applying gradient clipping.
