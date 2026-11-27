@@ -142,6 +142,30 @@ public class TrainableOutputsTests
         }
     }
 
+    [Fact]
+    public void HalfLoss_OverACountWhoseReciprocalHalfRounds_KeepsTheMeanGradient()
+    {
+        // 1 / 3 000 000 is a Half subnormal, which rounds it by about 7%; 2 * 100 / 3 000 000 is a normal Half. Each
+        // prediction's gradient must be the latter, to Half's precision, not a multiple of the rounded reciprocal.
+        const int n = 3_000_000;
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        var predicted = new Tensor<Half>(new[] { n });
+        predicted.Fill(ops.FromDouble(100.0));
+        var target = new Tensor<Half>(new[] { n });
+
+        using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<Half>();
+        var loss = CvTensorOps<Half>.MeanSquaredErrorOverPredictions(predicted, target, n);
+        var gradients = tape.ComputeGradients(loss, new[] { predicted });
+
+        Assert.InRange(ops.ToDouble(loss[0]), 10_000.0 * 0.999, 10_000.0 * 1.001);
+        Assert.True(gradients.TryGetValue(predicted, out var gradient));
+        double expected = 2.0 * 100.0 / n;
+        for (int i = 0; i < n; i += 99_991)
+        {
+            Assert.InRange(ops.ToDouble(gradient[i]), expected * 0.99, expected * 1.01);
+        }
+    }
+
     private static double RawStepLoss(int survivors, double error, int cap, int width)
     {
         var rows = new Tensor<double>(new[] { survivors, width });

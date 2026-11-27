@@ -302,24 +302,36 @@ internal static class CvTensorOps<T>
     /// </summary>
     /// <remarks>
     /// Half cannot hold the sum before the division: 40 000 squared errors of 4 sum to 160 000, past Half's 65504,
-    /// although the mean is 4 (see <see cref="Mean"/>). For Half each term is divided by the count before the sum, so
-    /// the recorded graph never holds a value larger than the mean and its gradient, <c>2 (p - t) / count</c>, is the
-    /// same as the wide types'. That 16-bit sum still rounds at every step, so the value is then corrected to the mean
-    /// summed in float and divided in double, by adding a constant the gradient does not see.
+    /// although the mean is 4 (see <see cref="Mean"/>). Nor can it hold <c>1 / count</c> once the count passes a few
+    /// thousand: the reciprocal falls into the subnormals, where it rounds by up to half its value, and to zero past
+    /// 2^25. For Half the count is split into a power of two <c>2^s</c> (the largest not above it) and the factor
+    /// <c>2^s / count</c> in <c>(1/2, 1]</c>. Each difference is scaled by half of the power of two before it is
+    /// squared, which is exact, so the sum is <c>sum (p - t)^2 / 2^s</c> -- between the mean and twice it, never past
+    /// Half's range when the mean is not -- and the factor, which Half holds to 11 bits, finishes the division. The
+    /// gradient, <c>2 (p - t) / count</c>, is then the wide types' wherever Half can represent it: no reciprocal of
+    /// the count is ever rounded on the way. That 16-bit sum still rounds at every step, so the value is then
+    /// corrected to the mean summed in float and divided in double, by adding a constant the gradient does not see.
     /// </remarks>
     internal static Tensor<T> MeanSquaredErrorOverPredictions(Tensor<T> predicted, Tensor<T> target, int predictionCount)
     {
         var difference = Engine.TensorSubtract(predicted, target);
         var squared = Engine.TensorMultiply(difference, difference);
         int count = Math.Max(1, predictionCount > 0 && predictionCount <= squared.Length ? predictionCount : squared.Length);
-        var inverseCount = NumOps.FromDouble(1.0 / count);
 
         if (typeof(T) != typeof(Half))
         {
-            return Engine.TensorMultiplyScalar(Engine.ReduceSum(squared, null), inverseCount);
+            return Engine.TensorMultiplyScalar(Engine.ReduceSum(squared, null), NumOps.FromDouble(1.0 / count));
         }
 
-        var mean = Engine.ReduceSum(Engine.TensorMultiplyScalar(squared, inverseCount), null);
+        // count = 2^shift * (count / 2^shift), with the second factor in [1, 2).
+        int shift = 0;
+        while ((count >> (shift + 1)) > 0) shift++;
+        int lowShift = shift / 2;
+        var scaledLow = Engine.TensorMultiplyScalar(difference, NumOps.FromDouble(Math.Pow(2.0, -lowShift)));
+        var scaledHigh = Engine.TensorMultiplyScalar(difference, NumOps.FromDouble(Math.Pow(2.0, lowShift - shift)));
+        var mean = Engine.TensorMultiplyScalar(
+            Engine.ReduceSum(Engine.TensorMultiply(scaledLow, scaledHigh), null),
+            NumOps.FromDouble(Math.Pow(2.0, shift) / count));
         double correction;
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
