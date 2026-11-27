@@ -527,7 +527,12 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
     {
         try
         {
-            count = GetParameters().Length;
+            // A component-backed model reads the count from its registry, the enumeration its vector folds, so a copy
+            // does not build the source's whole parameter vector only to measure it. The registry throws the same
+            // not-ready exception for an unresolved layout. A model without components has only its vector.
+            count = Components.Count > 0
+                ? checked((int)_parameterRegistry.ParameterCount)
+                : GetParameters().Length;
             return true;
         }
         catch (AiDotNet.Models.Parameters.ParameterLayoutNotReadyException)
