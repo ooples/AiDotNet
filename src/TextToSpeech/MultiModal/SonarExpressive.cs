@@ -151,11 +151,7 @@ internal sealed class SonarExpressive<T>
     }
 
     private Tensor<T> Ids(IReadOnlyList<int> ids)
-    {
-        var t = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) t[i] = NumOps.FromDouble(ids[i]);
-        return t;
-    }
+        => TtsIdTensors.From<T>(ids);
 
     private Tensor<T> Dropout(Tensor<T> x, Random? random) =>
         random is not null && Configuration.Dropout > 0 ? T5Seq2Seq<T>.Dropout(_engine, x, Configuration.Dropout, random) : x;
