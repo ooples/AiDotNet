@@ -47,7 +47,7 @@ export interface ProductInfo {
  */
 const PRODUCT_DISPLAY_NAMES: Readonly<Record<ProductSlug, string>> = {
   aidotnet: "AiDotNet",
-  harmonic_engine: "Harmonic Engine",
+  harmonic_engine: "Ooples Internal",
   token_optimizer: "Token Optimizer",
 };
 

@@ -22,7 +22,7 @@ test.describe('Admin — licenses', () => {
     // a new product without updating the options regresses admin filter
     // UX silently.
     const productOptions = await page.locator('#filter-product option').allTextContents();
-    expect(productOptions).toEqual(['All Products', 'AiDotNet', 'Harmonic Engine', 'Token Optimizer']);
+    expect(productOptions).toEqual(['All Products', 'AiDotNet', 'Ooples Internal', 'Token Optimizer']);
 
     const tierOptions = await page.locator('#filter-tier option').allTextContents();
     expect(tierOptions).toEqual(['All Tiers', 'Community', 'Professional', 'Enterprise']);
@@ -30,7 +30,7 @@ test.describe('Admin — licenses', () => {
     // Open the Issue License modal. The empty "Select a product"
     // placeholder must be present and disabled/selected — this is the
     // guard that prevents accidental AiDotNet issuance when the admin
-    // meant to issue Harmonic Engine.
+    // meant to issue another product.
     await page.getByRole('button', { name: 'Issue License' }).click();
     await expect(page.locator('#issue-modal')).toBeVisible();
 
