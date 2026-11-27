@@ -17,7 +17,7 @@
 --
 -- This migration was applied to the production project (yfkqwpgjahoamlgckjib)
 -- via the Management API on 2026-05-04 to unblock the AiDotNet Transformer
--- baseline runs in HarmonicEngine. This file commits the same fix so
+-- baseline runs downstream. This file commits the same fix so
 -- environment refreshes / fresh installs pick it up without manual SQL.
 
 CREATE OR REPLACE FUNCTION public.validate_license_key(

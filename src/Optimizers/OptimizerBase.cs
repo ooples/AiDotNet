@@ -597,7 +597,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         // dataset than training). The corrupted running stats are then
         // read on the next training forward pass, producing NaN
         // gradients and NaN params.
-        // Reproducer: tests/Learning/Phase_PAPER_A_BuildAsyncDiagnostic_1380Bisect.cs
+        // Reproducer: a downstream BuildAsync bisect for #1380
         //   .Optimizer_Optimize_With_Split_Data_Should_Not_NaN (FAILS without this fix)
         //   .Optimizer_Optimize_With_SmallTrain_FullVal_Should_Not_NaN (PASSES — full val = no corruption)
         // Wrap the eval in a SetTrainingMode(false)/(true) try/finally;

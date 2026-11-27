@@ -1666,7 +1666,7 @@ shard:
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.ActivationLayerShapeContractTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.CopyOnWriteCloneDefectRegressionTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.FlashAttentionFusedCompiledTrainingIssue1346Tests.|
-      FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.HrePaperAChainShapeValidatorTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.CustomChainShapeValidatorTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.CustomObjectiveFusedRoutingTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.PreActivationCacheTraceTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.InputLayerMultiDimShapeIssue1325IntegrationTests.|

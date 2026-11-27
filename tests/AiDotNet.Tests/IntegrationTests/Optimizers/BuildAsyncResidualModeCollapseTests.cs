@@ -82,8 +82,8 @@ public class BuildAsyncResidualModeCollapseTests
     // Canary fixture: small Transformer + token-classification task at
     // dModel=32, heads=2, L=2, ctx=16, V=16. Picked to (a) keep wall
     // under 60 s for the full 8-arm diagnostic, (b) match the
-    // HarmonicEngine consumer ticket
-    // (Phase_PAPER_A_PathB_SingleSeed_Runner) which reports the
+    // Downstream consumer ticket
+    // (a single-seed runner) which reports the
     // residual collapse on the same kind of fixture, scaled down for
     // diagnostic-time-budget reasons.
     private const int SampleCount = 128;
