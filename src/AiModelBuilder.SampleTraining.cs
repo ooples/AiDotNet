@@ -174,6 +174,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         SampleObjectiveTrainingOptions options,
         CancellationToken cancellationToken)
     {
+        // The parameter copy, the restore and the result all act on the object that trains, not on whatever _model
+        // holds by the time this deferred build runs.
+        if (trainable is not IFullModel<T, TInput, TOutput> model)
+        {
+            throw new InvalidOperationException(
+                $"{trainable.GetType().Name} trains on samples but is not a full model of this builder's types, so its " +
+                "parameters cannot be read or restored.");
+        }
         RejectBuildTimeAdversarialTraining(RobustnessBuildPath.SampleObjective);
         if (_preprocessingPipeline is not null || _targetPipeline is not null)
         {
@@ -263,7 +271,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                         epochsWithoutImprovement = 0;
                         lastEpochIsBest = true;
                         // A copy: GetParameters may return a view of storage the next step overwrites.
-                        if (options.RestoreBestModel) bestParameters = _model!.GetParameters().Clone();
+                        if (options.RestoreBestModel) bestParameters = model.GetParameters().Clone();
                     }
                     else
                     {
@@ -297,14 +305,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         // As the input/target path returns its best step's model: the epoch with the lowest held-out objective.
-        if (bestParameters is not null && !lastEpochIsBest) _model!.SetParameters(bestParameters);
+        if (bestParameters is not null && !lastEpochIsBest) model.SetParameters(bestParameters);
 
         var history = new Dictionary<string, List<double>> { ["train_loss"] = trainLosses };
         if (validationLosses.Count > 0) history["validation_loss"] = validationLosses;
 
         var optimizationResult = new OptimizationResult<T, TInput, TOutput>
         {
-            BestSolution = _model,
+            BestSolution = model,
             Iterations = steps,
             FitnessHistory = new Vector<T>(trainLosses.Select(numOps.FromDouble)),
             BestFitnessScore = numOps.FromDouble(validationLosses.Count > 0
