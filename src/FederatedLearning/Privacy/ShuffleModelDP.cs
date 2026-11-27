@@ -114,9 +114,7 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
             var noisy = new T[kvp.Value.Length];
             for (int i = 0; i < noisy.Length; i++)
             {
-                double u1 = 1.0 - rng.NextDouble();
-                double u2 = 1.0 - rng.NextDouble();
-                double noise = noiseScale * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+                double noise = noiseScale * SeededNoiseTensors.NextStandardNormal(rng);
                 noisy[i] = NumOps.Add(kvp.Value[i], NumOps.FromDouble(noise));
             }
 

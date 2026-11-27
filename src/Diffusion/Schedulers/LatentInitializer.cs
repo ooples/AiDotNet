@@ -57,13 +57,7 @@ public class LatentInitializer<T>
     public Vector<T> CreateNoiseLatent(int size)
     {
         // Seeded Box-Muller draws stay one per element in master's order (no engine op consumes a caller Random).
-        var gaussian = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
-        {
-            double u1 = 1.0 - _random.NextDouble();
-            double u2 = _random.NextDouble();
-            gaussian[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
-        }
+        var gaussian = SeededNoiseTensors.StandardNormalVector<T>(size, _random);
 
         return AiDotNetEngine.Current.Multiply(gaussian, NumOps.FromDouble(_initNoiseSigma));
     }
@@ -81,13 +75,7 @@ public class LatentInitializer<T>
         var oneMinusStrength = NumOps.Subtract(NumOps.One, strengthT);
 
         // Seeded Box-Muller draws stay one per element in master's order (no engine op consumes a caller Random).
-        var gaussian = new Vector<T>(encodedImage.Length);
-        for (int i = 0; i < encodedImage.Length; i++)
-        {
-            double u1 = 1.0 - _random.NextDouble();
-            double u2 = _random.NextDouble();
-            gaussian[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
-        }
+        var gaussian = SeededNoiseTensors.StandardNormalVector<T>(encodedImage.Length, _random);
 
         var noise = engine.Multiply(gaussian, NumOps.FromDouble(_initNoiseSigma));
         return engine.Add(engine.Multiply(encodedImage, oneMinusStrength), engine.Multiply(noise, strengthT));

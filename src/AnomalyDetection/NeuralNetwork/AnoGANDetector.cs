@@ -224,16 +224,7 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
     private Matrix<T> InitializeMatrix(int rows, int cols, double scale)
     {
         var matrix = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                double u1 = 1.0 - _random.NextDouble();
-                double u2 = 1.0 - _random.NextDouble();
-                double val = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * scale;
-                matrix[i, j] = NumOps.FromDouble(val);
-            }
-        }
+        SeededNoiseTensors.WriteStandardNormal(matrix.AsWritableSpan(), _random, scale);
         return matrix;
     }
 
@@ -305,14 +296,7 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
     /// </summary>
     private Vector<T> SampleLatent(Random rng)
     {
-        var z = new Vector<T>(_latentDim);
-        for (int i = 0; i < _latentDim; i++)
-        {
-            double u1 = 1.0 - rng.NextDouble();
-            double u2 = 1.0 - rng.NextDouble();
-            double val = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            z[i] = NumOps.FromDouble(val);
-        }
+        var z = SeededNoiseTensors.StandardNormalVector<T>(_latentDim, rng);
         return z;
     }
 
