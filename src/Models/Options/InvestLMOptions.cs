@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using System;
 
 namespace AiDotNet.Models.Options;
@@ -36,7 +37,7 @@ namespace AiDotNet.Models.Options;
 /// <b>Reference:</b> Yang et al., "InvestLM: A Large Language Model for Investment", 2023.
 /// </para>
 /// </remarks>
-public class InvestLMOptions<T> : ModelOptions
+public class InvestLMOptions<T> : FinancialLanguageModelOptions<T>
 {
     /// <summary>
     /// Initializes a new instance with default InvestLM configuration.
@@ -47,6 +48,7 @@ public class InvestLMOptions<T> : ModelOptions
     /// Initializes a new instance by copying from another instance.
     /// </summary>
     public InvestLMOptions(InvestLMOptions<T> other)
+        : base(other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
         // Seed is declared on ModelOptions rather than in this file, so a copy constructor
@@ -61,45 +63,38 @@ public class InvestLMOptions<T> : ModelOptions
         NumLayers = other.NumLayers;
         NumClasses = other.NumClasses;
         DropoutRate = other.DropoutRate;
-        TaskType = other.TaskType;
     }
 
-    /// <summary>Maximum sequence length in tokens (default: 2048).</summary>
+    /// <summary>Maximum sequence length in tokens (default: 2048, LLaMA-65B's context).</summary>
+    [PaperDefault(2048, Source = "Touvron et al. 2023 (LLaMA), Table 2 and the released LLaMA-65B config: 2k context")]
     public int MaxSequenceLength { get; set; } = 2048;
 
-    /// <summary>Vocabulary size (default: 32000 for LLaMA-style).</summary>
+    /// <summary>Vocabulary size (default: 32000, the LLaMA SentencePiece vocabulary).</summary>
+    [PaperDefault(32000, Source = "Touvron et al. 2023 (LLaMA), Table 2 and the released LLaMA-65B config")]
     public int VocabularySize { get; set; } = 32000;
 
-    /// <summary>Hidden dimension (default: 768).</summary>
-    public int HiddenDimension { get; set; } = 768;
+    /// <summary>Hidden dimension (default: 8192, LLaMA-65B, which InvestLM fine-tunes).</summary>
+    [PaperDefault(8192, Source = "Touvron et al. 2023 (LLaMA), Table 2 and the released LLaMA-65B config")]
+    public int HiddenDimension { get; set; } = 8192;
 
-    /// <summary>Number of attention heads (default: 12).</summary>
-    public int NumAttentionHeads { get; set; } = 12;
+    /// <summary>Number of attention heads (default: 64, LLaMA-65B).</summary>
+    [PaperDefault(64, Source = "Touvron et al. 2023 (LLaMA), Table 2 and the released LLaMA-65B config")]
+    public int NumAttentionHeads { get; set; } = 64;
 
-    /// <summary>Intermediate feed-forward dimension (default: 3072).</summary>
-    public int IntermediateDimension { get; set; } = 3072;
+    /// <summary>SwiGLU feed-forward width (default: 22016, LLaMA-65B).</summary>
+    [PaperDefault(22016, Source = "Touvron et al. 2023 (LLaMA), Table 2 and the released LLaMA-65B config: SwiGLU width")]
+    public int IntermediateDimension { get; set; } = 22016;
 
-    /// <summary>Number of transformer layers (default: 12).</summary>
-    public int NumLayers { get; set; } = 12;
+    /// <summary>Number of decoder blocks (default: 80, LLaMA-65B).</summary>
+    [PaperDefault(80, Source = "Touvron et al. 2023 (LLaMA), Table 2 and the released LLaMA-65B config")]
+    public int NumLayers { get; set; } = 80;
 
     /// <summary>Number of output classes (default: 3 for recommendation: buy/hold/sell).</summary>
     public int NumClasses { get; set; } = 3;
 
-    /// <summary>Dropout rate (default: 0.1).</summary>
-    public double DropoutRate { get; set; } = 0.1;
-
-    /// <summary>
-    /// Task type: "recommendation", "sentiment", "qa", "summary" (default: "recommendation").
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Different investment NLP tasks:
-    /// - recommendation: Buy/hold/sell classification
-    /// - sentiment: Investment sentiment analysis
-    /// - qa: Investment-related question answering
-    /// - summary: Investment research summarization
-    /// </para>
-    /// </remarks>
-    public string TaskType { get; set; } = "recommendation";
+    /// <summary>Dropout rate (default: 0.0; LLaMA is trained without dropout).</summary>
+    [PaperDefault(0.0, Source = "Touvron et al. 2023 (LLaMA), Table 2 and the released LLaMA-65B config: no dropout")]
+    public double DropoutRate { get; set; } = 0.0;
 
     /// <summary>
     /// Validates the InvestLM options.
@@ -112,6 +107,7 @@ public class InvestLMOptions<T> : ModelOptions
     /// </remarks>
     public void Validate()
     {
+        ValidateNLPOptions();
         if (MaxSequenceLength < 1)
             throw new ArgumentException("MaxSequenceLength must be at least 1.", nameof(MaxSequenceLength));
         if (VocabularySize < 1)
@@ -120,6 +116,8 @@ public class InvestLMOptions<T> : ModelOptions
             throw new ArgumentException("HiddenDimension must be at least 1.", nameof(HiddenDimension));
         if (NumAttentionHeads < 1)
             throw new ArgumentException("NumAttentionHeads must be at least 1.", nameof(NumAttentionHeads));
+        if (NumAttentionHeads >= 1 && HiddenDimension % NumAttentionHeads != 0)
+            throw new ArgumentException("HiddenDimension must be divisible by NumAttentionHeads.", nameof(NumAttentionHeads));
         if (IntermediateDimension < 1)
             throw new ArgumentException("IntermediateDimension must be at least 1.", nameof(IntermediateDimension));
         if (NumLayers < 1)
@@ -128,7 +126,5 @@ public class InvestLMOptions<T> : ModelOptions
             throw new ArgumentException("NumClasses must be at least 1.", nameof(NumClasses));
         if (DropoutRate < 0 || DropoutRate >= 1)
             throw new ArgumentException("DropoutRate must be between 0 (inclusive) and 1 (exclusive).", nameof(DropoutRate));
-        if (string.IsNullOrWhiteSpace(TaskType))
-            throw new ArgumentException("TaskType cannot be null or empty.", nameof(TaskType));
     }
 }

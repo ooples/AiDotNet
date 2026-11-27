@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet.Enums;
+using AiDotNet.Finance.Enums;
 using AiDotNet.Finance.NLP;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
@@ -138,7 +139,7 @@ public class BertEmbeddingLayerTests
             numLayers: 1,
             numClasses: 3,
             dropoutRate: 0.0,
-            taskType: "classification").ToList();
+            taskType: FinancialNLPTaskType.Classification).ToList();
 
         Assert.IsType<BertEmbeddingLayer<double>>(layers[0]);
         Assert.Single(layers.OfType<BertEmbeddingLayer<double>>());
@@ -166,7 +167,7 @@ public class BertEmbeddingLayerTests
             numLayers: 1,
             numClasses: 3,
             dropoutRate: 0.0,
-            taskType: "sentiment").ToList();
+            taskType: FinancialNLPTaskType.Classification).ToList();
 
         Assert.IsType<BertEmbeddingLayer<double>>(layers[0]);
         Assert.Single(layers.OfType<BertEmbeddingLayer<double>>());

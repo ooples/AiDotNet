@@ -1,41 +1,29 @@
+using AiDotNet.Attributes;
 using System;
 
 namespace AiDotNet.Models.Options;
 
 /// <summary>
-/// Configuration options for FinMA (Financial Multi-Agent) model.
+/// Configuration options for FinMA, the financial LLaMA of the PIXIU project.
 /// </summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <typeparam name="T">The numeric type used for calculations (typically double or float).</typeparam>
 /// <remarks>
 /// <para>
-/// FinMA is a financial multi-agent LLM system designed to handle complex financial
-/// tasks through specialized agent coordination.
+/// FinMA is LLaMA (Touvron et al. 2023) fine-tuned on PIXIU's financial instruction data (FIT, 136K samples) covering
+/// sentiment analysis, news headline classification, named entity recognition, question answering and stock movement
+/// prediction. It keeps LLaMA's decoder unchanged: pre-RMSNorm blocks with rotary position embeddings, causal
+/// self-attention and a SwiGLU feed-forward network. FinMA-7B fine-tunes LLaMA-7B, whose dimensions are the defaults
+/// here; FinMA-30B fine-tunes LLaMA-30B.
 /// </para>
-/// <para><b>For Beginners:</b> FinMA uses multi-agent approach for financial NLP:
-///
-/// <b>The Key Insight:</b>
-/// Complex financial tasks often require multiple capabilities (sentiment analysis,
-/// entity extraction, numerical reasoning). FinMA coordinates specialized agents
-/// to handle different aspects of a financial analysis task.
-///
-/// <b>What Problems Does FinMA Solve?</b>
-/// - Multi-faceted financial document analysis
-/// - Complex financial question answering
-/// - Coordinated analysis of earnings reports
-/// - Integrated sentiment and entity extraction
-/// - Financial reasoning with multiple information sources
-///
-/// <b>Key Benefits:</b>
-/// - Specialized agents for different tasks
-/// - Better handling of complex queries
-/// - Modular and extensible architecture
-/// - Can combine multiple analysis types
+/// <para><b>For Beginners:</b> FinMA reads financial text and, in this library, classifies it: the hidden state of the
+/// last token summarizes the whole input and a linear head turns it into class scores.
 /// </para>
 /// <para>
-/// <b>Reference:</b> Zhang et al., "FinMA: A Multi-Agent Financial LLM System", 2024.
+/// <b>Reference:</b> Xie et al., "PIXIU: A Large Language Model, Instruction Data and Evaluation Benchmark for
+/// Finance", 2023. https://arxiv.org/abs/2306.05443
 /// </para>
 /// </remarks>
-public class FinMAOptions<T> : ModelOptions
+public class FinMAOptions<T> : FinancialLanguageModelOptions<T>
 {
     /// <summary>
     /// Initializes a new instance with default FinMA configuration.
@@ -46,6 +34,7 @@ public class FinMAOptions<T> : ModelOptions
     /// Initializes a new instance by copying from another instance.
     /// </summary>
     public FinMAOptions(FinMAOptions<T> other)
+        : base(other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
         // Seed is declared on ModelOptions rather than in this file, so a copy constructor
@@ -60,45 +49,38 @@ public class FinMAOptions<T> : ModelOptions
         NumLayers = other.NumLayers;
         NumClasses = other.NumClasses;
         DropoutRate = other.DropoutRate;
-        NumAgents = other.NumAgents;
     }
 
-    /// <summary>Maximum sequence length in tokens (default: 2048).</summary>
+    /// <summary>Maximum sequence length in tokens (default: 2048, LLaMA-7B's context).</summary>
+    [PaperDefault(2048, Source = "Touvron et al. 2023 (LLaMA), Table 2 and the released LLaMA-7B config: 2k context")]
     public int MaxSequenceLength { get; set; } = 2048;
 
-    /// <summary>Vocabulary size (default: 32000 for LLaMA-style).</summary>
+    /// <summary>Vocabulary size (default: 32000, the LLaMA SentencePiece vocabulary).</summary>
+    [PaperDefault(32000, Source = "Touvron et al. 2023 (LLaMA), Table 2 and the released LLaMA-7B config")]
     public int VocabularySize { get; set; } = 32000;
 
-    /// <summary>Hidden dimension (default: 768).</summary>
-    public int HiddenDimension { get; set; } = 768;
+    /// <summary>Hidden dimension (default: 4096, LLaMA-7B, which FinMA-7B fine-tunes).</summary>
+    [PaperDefault(4096, Source = "Touvron et al. 2023 (LLaMA), Table 2 and the released LLaMA-7B config")]
+    public int HiddenDimension { get; set; } = 4096;
 
-    /// <summary>Number of attention heads (default: 12).</summary>
-    public int NumAttentionHeads { get; set; } = 12;
+    /// <summary>Number of attention heads (default: 32, LLaMA-7B).</summary>
+    [PaperDefault(32, Source = "Touvron et al. 2023 (LLaMA), Table 2 and the released LLaMA-7B config")]
+    public int NumAttentionHeads { get; set; } = 32;
 
-    /// <summary>Intermediate feed-forward dimension (default: 3072).</summary>
-    public int IntermediateDimension { get; set; } = 3072;
+    /// <summary>SwiGLU feed-forward width (default: 11008, LLaMA-7B).</summary>
+    [PaperDefault(11008, Source = "Touvron et al. 2023 (LLaMA), Table 2 and the released LLaMA-7B config: SwiGLU width")]
+    public int IntermediateDimension { get; set; } = 11008;
 
-    /// <summary>Number of transformer layers (default: 12).</summary>
-    public int NumLayers { get; set; } = 12;
+    /// <summary>Number of decoder blocks (default: 32, LLaMA-7B).</summary>
+    [PaperDefault(32, Source = "Touvron et al. 2023 (LLaMA), Table 2 and the released LLaMA-7B config")]
+    public int NumLayers { get; set; } = 32;
 
     /// <summary>Number of output classes (default: 3).</summary>
     public int NumClasses { get; set; } = 3;
 
-    /// <summary>Dropout rate (default: 0.1).</summary>
-    public double DropoutRate { get; set; } = 0.1;
-
-    /// <summary>
-    /// Number of specialized agents (default: 4).
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> FinMA uses multiple specialized agents:
-    /// - Sentiment Agent: Analyzes sentiment
-    /// - Entity Agent: Extracts financial entities
-    /// - Reasoning Agent: Performs numerical reasoning
-    /// - Summary Agent: Generates summaries
-    /// </para>
-    /// </remarks>
-    public int NumAgents { get; set; } = 4;
+    /// <summary>Dropout rate (default: 0.0; LLaMA is trained without dropout).</summary>
+    [PaperDefault(0.0, Source = "Touvron et al. 2023 (LLaMA), Table 2 and the released LLaMA-7B config: no dropout")]
+    public double DropoutRate { get; set; } = 0.0;
 
     /// <summary>
     /// Validates the FinMA options.
@@ -111,6 +93,7 @@ public class FinMAOptions<T> : ModelOptions
     /// </remarks>
     public void Validate()
     {
+        ValidateNLPOptions();
         if (MaxSequenceLength < 1)
             throw new ArgumentException("MaxSequenceLength must be at least 1.", nameof(MaxSequenceLength));
         if (VocabularySize < 1)
@@ -119,6 +102,8 @@ public class FinMAOptions<T> : ModelOptions
             throw new ArgumentException("HiddenDimension must be at least 1.", nameof(HiddenDimension));
         if (NumAttentionHeads < 1)
             throw new ArgumentException("NumAttentionHeads must be at least 1.", nameof(NumAttentionHeads));
+        if (NumAttentionHeads >= 1 && HiddenDimension % NumAttentionHeads != 0)
+            throw new ArgumentException("HiddenDimension must be divisible by NumAttentionHeads.", nameof(NumAttentionHeads));
         if (IntermediateDimension < 1)
             throw new ArgumentException("IntermediateDimension must be at least 1.", nameof(IntermediateDimension));
         if (NumLayers < 1)
