@@ -190,7 +190,7 @@ public class VerticalFederatedUnlearner<T> : FederatedLearningComponentBase<T>
             {
                 double val = NumOps.ToDouble(param[i]);
                 // Box-Muller for Gaussian noise
-                double z = SeededNoiseTensors.NextStandardNormal(random, BoxMullerGuard.Floored);
+                double z = SeededNoiseTensors.NextStandardNormal(random, BoxMullerGuard.Floored, floor: 1e-15);
                 noised[i] = NumOps.FromDouble(val + noiseScale * z);
             }
 

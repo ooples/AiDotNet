@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using System;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Helpers;
@@ -132,7 +133,6 @@ public class SeededNoiseTensorsParityTests
     [InlineData((int)BoxMullerGuard.Complement, 0.25, 0.75)]
     [InlineData((int)BoxMullerGuard.FlooredComplement, 0.25, 0.75)]
     [InlineData((int)BoxMullerGuard.Floored, 0.25, 0.25)]
-    [InlineData((int)BoxMullerGuard.FlooredAtEpsilon, 0.25, 0.25)]
     public void Guard_DerivesTheFirstUniformAsNamed(int guardValue, double first, double expectedU1)
     {
         var guard = (BoxMullerGuard)guardValue;
@@ -153,28 +153,71 @@ public class SeededNoiseTensorsParityTests
         Assert.Equal(Math.Sqrt(-2.0 * Math.Log(1e-10)), draw);
     }
 
-    // TRPOAgent's floor: only an exact zero moves, and it moves to double.Epsilon, not to 1e-10, so the tail is kept.
-    [Fact]
-    public void FlooredAtEpsilon_KeepsAZeroUniformFinite_AtTheEpsilonTail()
+    // The floors the converted models use: TRPOAgent (double.Epsilon), GR00T and Transfusion (1e-12),
+    // VerticalFederatedUnlearner (1e-15). A zero uniform moves to the floor itself, so each keeps its own tail.
+    [Theory]
+    [InlineData(double.Epsilon)]
+    [InlineData(1e-12)]
+    [InlineData(1e-15)]
+    public void Floored_KeepsAZeroUniformFinite_AtTheGivenFloor(double floor)
     {
-        double draw = SeededNoiseTensors.NextStandardNormal(new ScriptedRandom(0.0, 0.0), BoxMullerGuard.FlooredAtEpsilon);
+        double draw = SeededNoiseTensors.NextStandardNormal(new ScriptedRandom(0.0, 0.0), BoxMullerGuard.Floored, floor);
 
-        Assert.Equal(Math.Sqrt(-2.0 * Math.Log(double.Epsilon)), draw);
-        Assert.True(draw > 38.0);
+        Assert.Equal(Math.Sqrt(-2.0 * Math.Log(floor)), draw);
     }
 
-    // The converted TRPO draw is the loop it replaced, value for value.
-    [Fact]
-    public void FlooredAtEpsilon_MatchesTheTrpoLoop()
+    // Each converted floored loop, value for value: max(u, floor) for the first uniform, cos(2 pi u2) for the angle.
+    [Theory]
+    [InlineData(double.Epsilon)]
+    [InlineData(1e-12)]
+    [InlineData(1e-15)]
+    public void Floored_MatchesTheLoopItReplaced(double floor)
     {
         var loopRandom = RandomHelper.CreateSeededRandom(Seed);
         var helperRandom = RandomHelper.CreateSeededRandom(Seed);
         for (int i = 0; i < 17; i++)
         {
-            double loop = Math.Sqrt(-2.0 * Math.Log(Math.Max(loopRandom.NextDouble(), double.Epsilon)))
+            double loop = Math.Sqrt(-2.0 * Math.Log(Math.Max(loopRandom.NextDouble(), floor)))
                 * Math.Cos(2.0 * Math.PI * loopRandom.NextDouble());
-            Assert.Equal(loop, SeededNoiseTensors.NextStandardNormal(helperRandom, BoxMullerGuard.FlooredAtEpsilon));
+            Assert.Equal(loop, SeededNoiseTensors.NextStandardNormal(helperRandom, BoxMullerGuard.Floored, floor));
         }
+    }
+
+    // ABINet's and T5RelativeBiasAttentionLayer's initialisers took the sine of the complemented second uniform; the
+    // sine branch reproduces that loop exactly, scale included, rather than the cosine draw of the same uniforms.
+    [Fact]
+    public void SineOfComplement_MatchesTheSineLoop()
+    {
+        const int n = 13;
+        const double std = 0.02;
+        var loopRandom = RandomHelper.CreateSeededRandom(Seed);
+        var expected = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            double u1 = 1.0 - loopRandom.NextDouble();
+            double u2 = 1.0 - loopRandom.NextDouble();
+            expected[i] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2) * std;
+        }
+
+        var actual = new double[n];
+        SeededNoiseTensors.WriteStandardNormal(actual.AsSpan(), RandomHelper.CreateSeededRandom(Seed), std,
+            branch: BoxMullerBranch.Sine, secondUniform: BoxMullerSecondUniform.OneMinus);
+
+        Assert.Equal(expected, actual);
+        var cosine = new double[n];
+        SeededNoiseTensors.WriteStandardNormal(cosine.AsSpan(), RandomHelper.CreateSeededRandom(Seed), std);
+        Assert.NotEqual(expected, cosine);
+    }
+
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(-1e-10)]
+    [InlineData(1.0)]
+    [InlineData(double.NaN)]
+    public void Floor_OutsideTheOpenUnitInterval_Throws(double floor)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            SeededNoiseTensors.NextStandardNormal(new ScriptedRandom(0.5, 0.5), BoxMullerGuard.Floored, floor));
     }
 
     [Fact]
@@ -188,7 +231,6 @@ public class SeededNoiseTensorsParityTests
     [InlineData((int)BoxMullerGuard.Complement)]
     [InlineData((int)BoxMullerGuard.FlooredComplement)]
     [InlineData((int)BoxMullerGuard.Floored)]
-    [InlineData((int)BoxMullerGuard.FlooredAtEpsilon)]
     public void Span_Vector_Tensor_And_Scalar_DrawTheSameSequence(int guardValue)
     {
         var guard = (BoxMullerGuard)guardValue;

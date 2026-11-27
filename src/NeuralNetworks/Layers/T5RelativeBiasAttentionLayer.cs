@@ -425,7 +425,8 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     {
         var t = new Tensor<T>(shape);
         var span = t.Data.Span;
-        SeededNoiseTensors.WriteStandardNormal(span, _rng, std);
+        SeededNoiseTensors.WriteStandardNormal(span, _rng, std, branch: BoxMullerBranch.Sine,
+            secondUniform: BoxMullerSecondUniform.OneMinus);
         return t;
     }
 

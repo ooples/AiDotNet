@@ -580,7 +580,7 @@ public partial class Transfusion<T>
     {
         var noise = new Tensor<T>(like._shape);
         var span = noise.AsWritableSpan();
-        SeededNoiseTensors.WriteStandardNormal(span, rng, guard: BoxMullerGuard.Floored);
+        SeededNoiseTensors.WriteStandardNormal(span, rng, guard: BoxMullerGuard.Floored, floor: 1e-12);
         return noise;
     }
 

@@ -119,7 +119,7 @@ public sealed class GR00TFlowMatchingActionHead<T>
 
     private Tensor<T> SampleGaussian(int dim)
     {
-        var x = SeededNoiseTensors.StandardNormal<T>([dim], _noiseSource, guard: BoxMullerGuard.Floored);
+        var x = SeededNoiseTensors.StandardNormal<T>([dim], _noiseSource, guard: BoxMullerGuard.Floored, floor: 1e-12);
         return x;
     }
 }

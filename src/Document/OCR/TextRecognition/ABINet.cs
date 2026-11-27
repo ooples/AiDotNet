@@ -457,7 +457,8 @@ public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T
 
     private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
     {
-        SeededNoiseTensors.FillStandardNormal(tensor, random, stdDev);
+        SeededNoiseTensors.FillStandardNormal(tensor, random, stdDev, branch: BoxMullerBranch.Sine,
+            secondUniform: BoxMullerSecondUniform.OneMinus);
     }
 
     #endregion
