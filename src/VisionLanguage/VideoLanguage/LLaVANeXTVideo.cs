@@ -36,13 +36,12 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
-///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///     inputHeight: 336, inputWidth: 336, inputDepth: 3, outputSize: 512);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new LLaVANeXTVideo&lt;double&gt;(architecture, "llavanextvideo.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new LLaVANeXTVideo&lt;double&gt;(architecture, new LLaVANeXTVideoOptions());
+/// var model = new LLaVANeXTVideo&lt;double&gt;(architecture, new LLaVANeXTVideoOptions());
+/// var frames = new List&lt;Tensor&lt;double&gt;&gt;();
+/// for (int i = 0; i &lt; 8; i++) frames.Add(Tensor&lt;double&gt;.CreateRandom(3, 336, 336));   // 8 frames, [3, H, W] each
+/// Tensor&lt;double&gt; answer = model.GenerateFromVideo(frames, "What happens in this clip?");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -82,6 +81,7 @@ public partial class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLangu
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -111,6 +111,7 @@ public partial class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLangu
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -161,12 +162,12 @@ public partial class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLangu
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoderOut = Layers[i].Forward(encoderOut);
 
-        // Fuse visual features with prompt tokens via ConcatenateTensors
+        // Embed the prompt tokens and append them to the visual token sequence
         Tensor<T> fusedInput;
         if (prompt is not null)
         {
             var promptTokens = TokenizeText(prompt);
-            fusedInput = encoderOut.ConcatenateTensors(promptTokens);
+            fusedInput = FusePromptTokens(encoderOut, promptTokens);
         }
         else
         {
@@ -227,7 +228,8 @@ public partial class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLangu
         }
 
         // Step 4: Decode through LLM layers
-        var output = pooled;
+        // The decoder reads the pooled visual features as decoder-width tokens, followed by the embedded prompt.
+        var output = VisualDecoderSequence(pooled, prompt is null ? null : TokenizeText(prompt));
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
         return output;
@@ -270,7 +272,9 @@ public partial class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLangu
         // CreateDefaultVideoPoolingVLMLayers: patch(1)+LN(1) + numVisionLayers·(block+optional dropout)
         // + 5 pooling layers before the projection + LLM. Visual segment ends after the pooling module.
         int perBlock = _options.DropoutRate > 0 ? 2 : 1;
-        _encoderLayerEnd = 2 + _options.NumVisionLayers * perBlock + 5;
+        // The encoder includes the pooling (5 layers) and the MLP projection to the LLM (Dense + LayerNorm), so its
+        // tokens are DecoderDim wide and the prompt joins them at the decoder's width.
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * perBlock + 5 + 2;
     }
 
     private Tensor<T> TokenizeText(string text)

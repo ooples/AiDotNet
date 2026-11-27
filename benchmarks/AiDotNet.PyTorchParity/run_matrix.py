@@ -6,6 +6,9 @@ Every row reports the median and interquartile range over the launches (9 by def
 counts of both sides, and the first and last training loss of both sides as evidence that the timed step trains.
 
 --classical runs the classical-ML rows (ClassicalBench.cs against scikit-learn, XGBoost and LightGBM) the same way.
+
+--scale DATA_ROOT runs the large-data comparison instead: whole epochs over the real and synthetic datasets that
+scale/prepare_data.py wrote to DATA_ROOT, with the test split scored after every epoch (scale/scale_matrix.py).
 """
 import argparse
 import contextlib
@@ -27,6 +30,8 @@ from importlib import metadata
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE / "scale"))
+import scale_matrix  # noqa: E402
 sys.path.insert(0, str(HERE / "pytorch"))
 from compare import _index
 
@@ -67,7 +72,40 @@ ARMS = {
         protocol=dict(compile=True, compile_mode="reduce-overhead", optimizer_impl="fused", dynamic_shapes=False,
                       cuda_graphs=True),
         description="torch.compile reduce-overhead (CUDA graphs) with fused AdamW"),
+    # torch.compile does not trace nn.LSTM or nn.GRU unless torch._dynamo.config.allow_rnn is set: Dynamo skips the
+    # whole forward and the arms above run those models eagerly (cuDNN on CUDA, oneDNN on CPU). These arms compile
+    # them too, so the RNN rows are compared with whichever is faster. CPU LSTM is excluded because PyTorch 2.14 fails
+    # to compile it ("expected Tensor() for op: torch.ops.aten.mkldnn_rnn_layer.default").
+    "torch-compile-fused-rnn": dict(
+        flags=["--compile", "--optimizer-impl", "fused", "--compile-rnn"], devices=("cpu",), models=("gru",),
+        protocol=dict(compile=True, compile_mode="default", optimizer_impl="fused", dynamic_shapes=False, compile_rnn=True),
+        description="torch.compile default mode with fused AdamW, tracing nn.GRU (allow_rnn)"),
+    "torch-cudagraphs-fused-rnn": dict(
+        flags=["--compile", "--compile-mode", "reduce-overhead", "--optimizer-impl", "fused", "--compile-rnn"],
+        devices=("cuda",), models=("lstm", "gru"),
+        protocol=dict(compile=True, compile_mode="reduce-overhead", optimizer_impl="fused", dynamic_shapes=False,
+                      cuda_graphs=True, compile_rnn=True),
+        description="torch.compile reduce-overhead (CUDA graphs) with fused AdamW, tracing nn.LSTM/nn.GRU (allow_rnn)"),
 }
+# Models whose forward Dynamo skips unless allow_rnn is set, so a compiled arm without it legitimately compiles nothing.
+RNN_MODELS = ("lstm", "gru")
+
+
+def sides_for(info, device, model):
+    """AiDotNet plus every PyTorch configuration that runs this model on this device. Runs recorded before
+    configurations could be limited to some models have no configurationModels entry and run every model."""
+    limited = info.get("configurationModels", {})
+    return ["aidotnet", *(a for a in info["torchConfigurations"][device] if model in (limited.get(a) or (model,)))]
+
+
+def uncovered_pairs(devices, models, configurations):
+    """Each "model on device" pair that no selected PyTorch configuration runs. A configuration limited to some models
+    (the RNN arms) can run on a device yet run none of the selected models there, which would leave that row with no
+    PyTorch side and no comparison, so the check is per pair rather than per device."""
+    return [f"{model} on {device}" for device in devices for model in models
+            if not any(device in ARMS[a]["devices"] and model in ARMS[a].get("models", (model,)) for a in configurations)]
+
+
 # A side whose slowest launch exceeds its fastest by this factor is reported as unstable.
 UNSTABLE_SPREAD = 1.5
 # A CUDA launch whose loaded SM clock moved more than this fraction (max/min - 1) is flagged clock-varied, and one
@@ -214,7 +252,43 @@ def condition_flags(before, after):
         flags.add("ci-job")
     if gpu_busy(before):
         flags.add("busy-gpu")
+    if gpu_clock_low(after):
+        flags.add("gpu-clock-low")
     return sorted(flags)
+
+
+# A CUDA launch whose GPU, busy at its end, ran below this fraction of its maximum SM clock is flagged gpu-clock-low,
+# and the runner refuses to start CUDA measurements when its load probe sustains less.
+LOW_CLOCK_FRACTION = 0.6
+# With --gpu-clock-lock, the reference is the locked clock instead: the probe must sustain at least this fraction of
+# it (so the lock is in effect and nothing caps the GPU below it), and so must every busy launch.
+LOCKED_CLOCK_FRACTION = 0.9
+# The SM clock the run declared locked (nvidia-smi -lgc), or None. Set from protocol.json, so a resume keeps it.
+GPU_CLOCK_LOCK = None
+
+
+def clock_floor(max_clock):
+    """The SM clock below which a busy GPU counts as held down: 90% of the declared lock, else 60% of the maximum."""
+    return LOCKED_CLOCK_FRACTION * GPU_CLOCK_LOCK if GPU_CLOCK_LOCK else LOW_CLOCK_FRACTION * max_clock
+
+
+def gpu_clock_low(state):
+    """True when the GPU was working (P0, over 30% utilization) below clock_floor."""
+    gpu = state.get("gpu") or {}
+    try:
+        return (gpu.get("pstate") == "P0" and float(gpu["utilization.gpu"]) > 30
+                and float(gpu["clocks.sm"]) < clock_floor(float(gpu["clocks.max.sm"])))
+    except (KeyError, ValueError):
+        return False
+
+
+def gpu_clock_probe(env):
+    """Run pytorch/gpu_clock_probe.py: the SM clock the GPU sustains under a matrix-multiplication load."""
+    output = subprocess.run([sys.executable, str(HERE / "pytorch/gpu_clock_probe.py")], cwd=HERE, env=env, text=True,
+                            capture_output=True, check=True).stdout
+    probe = json.loads(output.strip().splitlines()[-1])
+    probe["time"] = now()
+    return probe
 
 
 def gpu_busy(state):
@@ -422,24 +496,23 @@ def schedule(common):
             [("train", int(value("--batch-size"))), *(("inference", b) for b in inference)])
 
 
-def measurements(path, side, model, device, common):
-    """Validate one report against the protocol. Return (parameter count, [train ms/update, inference ms...],
-    (first loss, last loss))."""
-    epochs, batches, operations = schedule(common)
-    inference = [b for o, b in operations if o == "inference"]
-    obj = json.loads(path.read_text(encoding="utf-8-sig"))
+def check_protocol(obj, side, model, device, train_batch=None):
+    """Check that a report ran the requested framework, device, threads and PyTorch configuration, and, when
+    TRAIN_BATCH is given, that it trained at that batch."""
     ai = side == "aidotnet"
     rows = obj["Results" if ai else "results"]
     if len(rows) != 1 or obj["Framework" if ai else "framework"] != ("AiDotNet" if ai else "PyTorch"):
         raise ValueError("Unexpected framework or number of models")
     # The matrix runs fp32 in both arms; a report at another precision (benchmark --precision) is not comparable.
-    precision = obj["Protocol"].get("Precision", "fp32") if ai else obj["protocol"].get("precision", "fp32")
+    # AiDotNet reports gained their Protocol block with --precision; one without it predates the option and ran fp32,
+    # so archived runs still regenerate.
+    protocol = obj.get("Protocol" if ai else "protocol") or {}
+    precision = protocol.get("Precision" if ai else "precision", "fp32")
     if precision != "fp32":
         raise ValueError(f"{side} ran at precision {precision!r}; the matrix compares fp32")
     # The training timing is filed under the schedule's training batch, so the report must have trained at it.
-    train_batch = next(b for o, b in operations if o == "train")
-    recorded_batch = obj["Protocol"].get("BatchSize") if ai else obj["protocol"].get("batch_size")
-    if recorded_batch != train_batch:
+    recorded_batch = protocol.get("BatchSize" if ai else "batch_size")
+    if train_batch is not None and recorded_batch != train_batch:
         raise ValueError(f"{side} trained at batch {recorded_batch!r}, expected {train_batch}")
     if ai:
         env = obj["Environment"]
@@ -452,9 +525,26 @@ def measurements(path, side, model, device, common):
             raise ValueError("PyTorch device/thread count mismatch")
         expected = dict(ARMS[side]["protocol"])
         expected.setdefault("cuda_graphs", False)
-        recorded = {key: obj["protocol"][key] for key in expected}
+        expected.setdefault("compile_rnn", False)
+        # Reports written before compile_rnn existed never set allow_rnn.
+        recorded = {key: obj["protocol"].get(key, False if key == "compile_rnn" else None) for key in expected}
         if recorded != expected:
             raise ValueError(f"PyTorch ran {recorded}, expected {expected}")
+        # A compiled configuration must have compiled something, except an RNN model it was not told to trace.
+        graphs = (obj["protocol"].get("compiled_graphs") or {}).get(model)
+        if graphs == 0 and (model not in RNN_MODELS or expected["compile_rnn"]):
+            raise ValueError("torch.compile compiled no graph for this model")
+
+
+def measurements(path, side, model, device, common):
+    """Validate one report against the protocol. Return (parameter count, [train ms/update, inference ms...],
+    (first loss, last loss))."""
+    epochs, batches, operations = schedule(common)
+    inference = [b for o, b in operations if o == "inference"]
+    obj = json.loads(path.read_text(encoding="utf-8-sig"))
+    ai = side == "aidotnet"
+    rows = obj["Results" if ai else "results"]
+    check_protocol(obj, side, model, device, next(b for o, b in operations if o == "train"))
     row = _index(obj)[model]
     if row.device != device or row.training is None or set(row.inference) != set(inference):
         raise ValueError("Incomplete or mismatched benchmark row")
@@ -492,6 +582,8 @@ def summarize(rows, launches):
     groups = {}
     for r in rows:
         groups.setdefault((r["model"], r["device"], r["operation"], r["batch"]), []).append(r)
+    # One median column per configuration this run used, so an older run's summary keeps its original columns.
+    arms_run = [arm for arm in ARMS if any(r["configuration"] == arm for r in rows)]
     summary = []
     for (model, device, operation, batch), items in groups.items():
         by_side = {}
@@ -537,7 +629,7 @@ def summarize(rows, launches):
             torch_over_ai=t["median"] / a["median"],
             launch_ratio_q1=ratio.get("q1"), launch_ratio_q3=ratio.get("q3"),
             launch_ratio_min=ratio.get("min"), launch_ratio_max=ratio.get("max"),
-            **{f"{arm}_median_ms": medians.get(arm) for arm in ARMS},
+            **{f"{arm}_median_ms": medians.get(arm) for arm in arms_run},
             ai_first_loss=losses.get("ai_first_loss"), ai_last_loss=losses.get("ai_last_loss"),
             torch_first_loss=losses.get("torch_first_loss"), torch_last_loss=losses.get("torch_last_loss"),
             sm_mhz_median=quantile(clocks, 0.5) if clocks else None,
@@ -591,15 +683,58 @@ COLUMNS = ("model", "device", "launch", "framework", "configuration", "operation
            "first_loss", "last_loss", "sm_mhz", "flags")
 
 
+def scale_sides(info, device, model):
+    """AiDotNet plus the PyTorch configurations a large-data row runs: the fastest one from --scale-torch-from, or all."""
+    chosen = (info["scale"].get("torch") or {}).get(device, {}).get(model)
+    return ["aidotnet", chosen] if chosen else sides_for(info, device, model)
+
+
+def scale_jobs(info):
+    """(launch, device, model, dataset, epochs, sides) for every large-data process, sides in launch order."""
+    for launch in range(1, info["launches"] + 1):
+        for device in info["devices"]:
+            for model in info["models"]:
+                for dataset, epochs in info["scale"]["plan"][device][model]:
+                    sides = scale_sides(info, device, model)
+                    shift = (launch - 1) % len(sides)
+                    yield launch, device, model, dataset, epochs, sides[shift:] + sides[:shift]
+
+
+def collect_scale(dest, info):
+    rows, problems = [], []
+    for launch, device, model, dataset, epochs, sides in scale_jobs(info):
+        for side in sides:
+            tag = dest / scale_matrix.tag_name(side, launch, device, model, dataset)
+            try:
+                receipt = json.loads(tag.with_suffix(".receipt.json").read_text(encoding="utf-8"))
+                if receipt["exitCode"] != 0:
+                    raise RuntimeError(f"exited {receipt['exitCode']}")
+                report = tag.with_suffix(".json")
+                check_protocol(json.loads(report.read_text(encoding="utf-8-sig")), side, model, device,
+                               int(info["common"][info["common"].index("--batch-size") + 1]))
+                result = scale_matrix.validate(report, side, model, device, info["scale"]["datasets"][dataset], epochs)
+            except (KeyError, ValueError, OSError, RuntimeError, TypeError) as error:
+                problems.append(f"{tag.name}: {error}")
+                continue
+            for epoch in result["epochs"]:
+                rows.append(dict(model=model, device=device, dataset=dataset, launch=launch,
+                                 framework="AiDotNet" if side == "aidotnet" else "PyTorch", configuration=side, **epoch,
+                                 parameters=result["parameters"], rss_mb_peak=result["rss_mb_peak"],
+                                 gpu_mem_mb_peak=result["gpu_mem_mb_peak"], flags=";".join(receipt.get("flags", []))))
+    return rows, problems
+
+
 def collect(dest):
     """Read and validate every report a run directory should contain. Return (measurement rows, problems)."""
     info = json.loads((dest / "protocol.json").read_text(encoding="utf-8"))
+    if info.get("scale"):
+        return collect_scale(dest, info)
     rows, problems = [], []
     for launch in range(1, info["launches"] + 1):
         for device in info["devices"]:
             for model in info["models"]:
                 common = row_common(info, model)
-                for side in ["aidotnet", *info["torchConfigurations"][device]]:
+                for side in sides_for(info, device, model):
                     tag = dest / f"{side}-{launch}-{device}-{model}"
                     try:
                         receipt = json.loads(tag.with_suffix(".receipt.json").read_text(encoding="utf-8"))
@@ -622,6 +757,9 @@ def collect(dest):
 
 def write_outputs(dest, rows, launches):
     """measurements.csv (every launch), summary.csv (medians, IQRs, ranges, flags) and summary.md (the README table)."""
+    if rows and "dataset" in rows[0]:
+        scale_matrix.write_outputs(dest, rows)
+        return
     with (dest / "measurements.csv").open("w", newline="", encoding="utf-8") as out:
         table = csv.writer(out, lineterminator="\n")
         table.writerow([c if c != "ms" else "median_ms" for c in COLUMNS])
@@ -851,8 +989,19 @@ def main():
     parser.add_argument("--tensors", type=Path, help="Build against this Tensors checkout instead of the repository's NuGet dependency.")
     parser.add_argument("--output", type=Path, default=HERE / "results", help="Parent for unique run directories")
     parser.add_argument("--allow-battery", action="store_true", help="Run even when the machine is on battery power")
+    parser.add_argument("--allow-gpu-clock-cap", action="store_true",
+                        help="Run CUDA measurements even when the GPU sustains under 60%% of its maximum SM clock")
+    parser.add_argument("--gpu-clock-lock", type=int, metavar="MHZ",
+                        help="Declare that the GPU's SM clock is locked at MHZ (nvidia-smi -lgc MHZ,MHZ, run as administrator). "
+                             "The run records it, refuses to start unless the GPU sustains it, and judges gpu-clock-low "
+                             "against it. Use it on a GPU that computes wrong values at its top clocks.")
     parser.add_argument("--summarize", type=Path, metavar="RUN_DIR",
                         help="Only rebuild RUN_DIR's CSVs and table from its raw reports, into RUN_DIR/regenerated")
+    parser.add_argument("--scale", type=Path, metavar="DATA_ROOT",
+                        help="Large-data comparison over the datasets scale/prepare_data.py wrote to DATA_ROOT")
+    parser.add_argument("--scale-torch-from", type=Path, metavar="SUMMARY_CSV",
+                        help="With --scale, run only the fastest PyTorch configuration per training row of this run_matrix "
+                             "summary.csv (default: every configuration)")
     parser.add_argument("--resume", type=Path, metavar="RUN_DIR",
                         help="Continue an interrupted run with its recorded settings and binaries; completed processes are kept")
     args = parser.parse_args()
@@ -886,10 +1035,29 @@ def main():
         if args.classical:
             args.devices, args.models = ["cpu"], []
         arms = {device: [a for a in args.torch_configurations if device in ARMS[a]["devices"]] for device in args.devices}
-        if not all(arms.values()):
-            parser.error("Every device needs at least one PyTorch configuration that runs on it.")
+        uncovered = uncovered_pairs(args.devices, args.models, args.torch_configurations)
+        if uncovered:
+            parser.error("No selected PyTorch configuration runs " + ", ".join(uncovered) + ".")
         # "common" is the core rows' schedule; each row's own arguments are in rowArguments.
         common = row_arguments("mlp", args.smoke)
+        scale = None
+        if args.scale:
+            unsupported = [m for m in args.models if m not in scale_matrix.DATASETS]
+            if unsupported:
+                parser.error(f"No large-data datasets for: {', '.join(unsupported)}")
+            plan = scale_matrix.default_plan(args.devices, args.models)
+            names = sorted({dataset for device in plan.values() for jobs in device.values() for dataset, _ in jobs})
+            missing = [n for n in names if not (args.scale / n / "meta.json").is_file()]
+            if missing:
+                parser.error(f"Run scale/prepare_data.py first; missing under {args.scale}: {', '.join(missing)}")
+            torch_choice = None
+            if args.scale_torch_from:
+                found = scale_matrix.fastest_configurations(args.scale_torch_from)
+                torch_choice = {d: {m: found[d][m] for m in args.models} for d in args.devices}
+            scale = dict(dataRoot=str(args.scale.resolve()), plan=plan, torch=torch_choice,
+                         torchFrom=str(args.scale_torch_from) if args.scale_torch_from else None,
+                         datasets={n: json.loads((args.scale / n / "meta.json").read_text(encoding="utf-8")) for n in names})
+            common = ["--batch-size", "64", "--seed", "1234"]
         import psutil
         args.output.mkdir(exist_ok=True, parents=True)
         dest = Path(tempfile.mkdtemp(dir=args.output.resolve(), prefix=datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ-")))
@@ -897,9 +1065,11 @@ def main():
         info = dict(started=now(), models=args.models, devices=args.devices, launches=launches, smoke=args.smoke, common=common,
                     rowArguments={m: row_arguments(m, args.smoke) for m in args.models},
                     families={m: FAMILIES[m]["family"] for m in args.models if m in FAMILIES},
+                    scale=scale, gpuClockLock=args.gpu_clock_lock,
                     threads=THREADS, referenceModels=[m for m in REFERENCE if m in args.models],
                     torchConfigurations={d: arms[d] for d in args.devices},
                     configurationDescriptions={a: ARMS[a]["description"] for a in args.torch_configurations},
+                    configurationModels={a: list(ARMS[a]["models"]) for a in args.torch_configurations if "models" in ARMS[a]},
                     ai=revision(HERE.parents[1]), torch=torch.__version__, torchvision=torchvision.__version__,
                     packages=package_versions("torch", "torchvision", "triton", "triton-windows", "numpy", "psutil",
                                              "transformers", "scikit-learn", "xgboost", "lightgbm"),
@@ -942,6 +1112,25 @@ def main():
         sys.exit(run_classical(dest, info, env, args.allow_battery))
     if "cuda" in info["devices"] and not torch.cuda.is_available():
         parser.error("CUDA unavailable. Select --devices cpu or install CUDA-enabled PyTorch.")
+    global GPU_CLOCK_LOCK
+    if args.resume and args.gpu_clock_lock and args.gpu_clock_lock != info.get("gpuClockLock"):
+        parser.error(f"This run declared --gpu-clock-lock {info.get('gpuClockLock')}; resume it with the same lock.")
+    GPU_CLOCK_LOCK = info.get("gpuClockLock")
+    if "cuda" in info["devices"] and shutil.which("nvidia-smi"):
+        # Checked on every start, including a resume: the platform can cap a laptop GPU between sessions, and a clock
+        # lock does not survive a reboot.
+        probe = gpu_clock_probe(env)
+        info.setdefault("gpuClockProbes", []).append(probe)
+        save(dest / "protocol.json", info)
+        print(f"GPU sustained {probe['medianSmClock']:.0f} of {probe['maxSmClock']:.0f} MHz under load"
+              + (f" (declared lock {GPU_CLOCK_LOCK} MHz)" if GPU_CLOCK_LOCK else ""), flush=True)
+        if GPU_CLOCK_LOCK and probe["medianSmClock"] > GPU_CLOCK_LOCK + 30:
+            sys.exit(f"The GPU ran at {probe['medianSmClock']:.0f} MHz, above the declared {GPU_CLOCK_LOCK} MHz lock, so the "
+                     f"lock is not in effect. Run nvidia-smi -lgc {GPU_CLOCK_LOCK},{GPU_CLOCK_LOCK} as administrator.")
+        if probe["medianSmClock"] < clock_floor(probe["maxSmClock"]) and not args.allow_gpu_clock_cap:
+            sys.exit(f"The GPU sustains only {probe['medianSmClock']:.0f} of {probe['maxSmClock']:.0f} MHz under load, so "
+                     "its timings would describe the cap. Check the charger and the performance profile, or pass "
+                     "--allow-gpu-clock-cap.")
     global GPU_ID
     if "cuda" in info["devices"]:
         GPU_ID = benchmark_gpu_id(torch) or sole_gpu_id()
@@ -980,7 +1169,7 @@ def main():
                 print(failure, file=sys.stderr, flush=True)
     if problems or reset_failures:
         sys.exit("\n".join(problems + reset_failures))
-    print(dest / "summary.md")
+    print(dest / ("scale-summary.md" if info.get("scale") else "summary.md"))
 
 
 def resolve_clock_request(info, sm, mem, resuming):
@@ -1019,10 +1208,24 @@ def run_models(dest, info, env, allow_battery):
             lines = stem.with_suffix(".log").read_text(encoding="utf-8", errors="replace").splitlines()
             if not all(any(line.startswith(f"[step1] {m}: PASS") for line in lines) for m in refs):
                 raise RuntimeError(f"Missing first-update verdict. See {stem.with_suffix('.log')}")
-    for launch in range(1, info["launches"] + 1):
+    for launch, device, model, dataset, epochs, sides in (scale_jobs(info) if info.get("scale") else ()):
+        root = Path(info["scale"]["dataRoot"])
+        for side in sides:
+            tag = dest / scale_matrix.tag_name(side, launch, device, model, dataset)
+            if completed(tag):
+                continue
+            cmd = (["dotnet", str(dll)] if side == "aidotnet" else
+                   [sys.executable, str(HERE / "pytorch/benchmark.py"), *ARMS[side]["flags"], "--threads", str(THREADS)])
+            try:
+                run([*cmd, "--models", model, "--device", device, *info["common"], "--epochs", str(epochs),
+                     "--data", str(root / dataset), "--output", str(tag.with_suffix(".json"))], tag, env, device,
+                    allow_battery)
+            except RuntimeError as error:
+                print(error, flush=True)
+    for launch in range(1, 0 if info.get("scale") else info["launches"] + 1):
         for device in info["devices"]:
             for model in info["models"]:
-                sides = ["aidotnet", *info["torchConfigurations"][device]]
+                sides = sides_for(info, device, model)
                 # Rotate the order every launch so no side always runs first (or last) on a warming machine.
                 shift = (launch - 1) % len(sides)
                 for side in sides[shift:] + sides[:shift]:

@@ -92,6 +92,7 @@ public partial class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTune
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -120,6 +121,7 @@ public partial class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTune
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -189,7 +191,7 @@ public partial class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTune
         if (prompt is not null)
         {
             var promptTokens = TokenizeText(prompt);
-            fusedInput = qFormerOut.ConcatenateTensors(promptTokens);
+            fusedInput = FusePromptTokens(qFormerOut, promptTokens);
         }
         else
         {
@@ -239,7 +241,10 @@ public partial class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTune
         // 2 + ...: PatchEmbeddingLayer + pre-norm, then N×vision-block.
         int visionLayerEnd = 2 + _options.NumVisionLayers * blockSize;
         int qfProj = _options.VisionDim != _options.QFormerDim ? 1 : 0;
-        int qFormerLayerEnd = visionLayerEnd + qfProj + _options.NumQFormerLayers * qfBlockSize;
+        // The decoder-width projection that opens the helper's decoder belongs with the resampled visual tokens:
+        // the prompt joins them at the decoder's width.
+        int qFormerLayerEnd = visionLayerEnd + qfProj + _options.NumQFormerLayers * qfBlockSize
+            + (_options.QFormerDim != _options.DecoderDim ? 1 : 0);
 
         var allLayers = LayerHelper<T>.CreateDefaultQFormerGenerativeLayers(
             _options.VisionDim,

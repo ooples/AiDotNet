@@ -1645,6 +1645,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TransitivelyOwnedOptimizerResetTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.VisionLanguageNativeConstructionTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.VisionLanguageNativeConstructorValidationTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.VisionTransformerHeadContractTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.WeightStreaming.AutoDetectWeightStreamingTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.WeightStreaming.ResolveInferenceStoreDtypeTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.CurriculumLearning.CurriculumLearningIntegrationTests.|

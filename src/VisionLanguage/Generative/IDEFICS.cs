@@ -87,6 +87,7 @@ public partial class IDEFICS<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -114,6 +115,7 @@ public partial class IDEFICS<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -183,7 +185,7 @@ public partial class IDEFICS<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
         // Step 4: Concatenate perceiver output with prompt tokens
         var decoderInput = perceiverOut;
         if (promptTokens is not null)
-            decoderInput = perceiverOut.ConcatenateTensors(promptTokens);
+            decoderInput = FusePromptTokens(perceiverOut, promptTokens);
 
         // Step 5: LLaMA decoder
         var output = decoderInput;
@@ -211,7 +213,10 @@ public partial class IDEFICS<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
         int pBlockSize = _options.DropoutRate > 0 ? 8 : 7;
         int visionLayerEnd = 1 + _options.NumVisionLayers * blockSize;
         int pProj = _options.VisionDim != _options.PerceiverDim ? 1 : 0;
-        int perceiverLayerEnd = visionLayerEnd + pProj + _options.NumPerceiverLayers * pBlockSize;
+        // The decoder-width projection that opens the helper's decoder belongs with the resampled visual tokens:
+        // the prompt joins them at the decoder's width.
+        int perceiverLayerEnd = visionLayerEnd + pProj + _options.NumPerceiverLayers * pBlockSize
+            + (_options.PerceiverDim != _options.DecoderDim ? 1 : 0);
 
         var allLayers = LayerHelper<T>.CreateDefaultPerceiverResamplerLayers(
             _options.VisionDim,

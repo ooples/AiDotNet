@@ -90,6 +90,7 @@ public partial class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLangu
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -117,6 +118,7 @@ public partial class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLangu
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -181,7 +183,7 @@ public partial class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLangu
         // Step 3: Concatenate visual features with prompt tokens for multimodal sequence
         var decoderInput = visionOut;
         if (promptTokens is not null)
-            decoderInput = visionOut.ConcatenateTensors(promptTokens);
+            decoderInput = FusePromptTokens(visionOut, promptTokens);
 
         // Step 4: Causal Transformer decoder
         var decoderOut = decoderInput;
@@ -207,7 +209,8 @@ public partial class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLangu
         }
 
         int blockSize = _options.DropoutRate > 0 ? 6 : 5;
-        int decoderBlockSize = _options.DropoutRate > 0 ? 6 : 5;
+        // Self-attention, LayerNorm, cross-attention, LayerNorm, Dense, Dense, LayerNorm, optional Dropout.
+        int decoderBlockSize = _options.DropoutRate > 0 ? 8 : 7;
         int visionLayerEnd =
             1
             + _options.NumVisionLayers * blockSize

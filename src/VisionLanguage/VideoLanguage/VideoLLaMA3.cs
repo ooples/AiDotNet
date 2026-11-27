@@ -38,11 +38,10 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new VideoLLaMA3&lt;double&gt;(architecture, "videollama3.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new VideoLLaMA3&lt;double&gt;(architecture, new VideoLLaMA3Options());
+/// var model = new VideoLLaMA3&lt;double&gt;(architecture, new VideoLLaMA3Options());
+/// var frames = new List&lt;Tensor&lt;double&gt;&gt;();
+/// for (int i = 0; i &lt; 8; i++) frames.Add(Tensor&lt;double&gt;.CreateRandom(3, 224, 224));   // 8 frames, [3, H, W] each
+/// Tensor&lt;double&gt; answer = model.GenerateFromVideo(frames, "What happens in this clip?");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -90,6 +89,7 @@ public partial class VideoLLaMA3<T> : VisionLanguageModelBase<T>, IVideoLanguage
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -120,6 +120,7 @@ public partial class VideoLLaMA3<T> : VisionLanguageModelBase<T>, IVideoLanguage
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -151,10 +152,9 @@ public partial class VideoLLaMA3<T> : VisionLanguageModelBase<T>, IVideoLanguage
     }
 
     /// <summary>
-    /// Generates from a single image using VideoLLaMA 3's any-resolution visual tokenizer
-    /// with adaptive spatial token merging. For a single image, only spatial merging applies
-    /// (no temporal merging). Adjacent tokens with high cosine similarity are merged via
-    /// bipartite soft matching, then text tokens are fused via cross-attention.
+    /// Generates from a single image using VideoLLaMA 3's any-resolution visual tokenizer: the image's visual tokens,
+    /// projected to the LLM width, followed by the embedded prompt, go through the LLM decoder. Token reduction
+    /// (the differential frame pruner) applies to video only (Zhang et al. 2025 §3).
     /// </summary>
     public Tensor<T> GenerateFromImage(Tensor<T> image, string? prompt = null)
     {
@@ -163,48 +163,23 @@ public partial class VideoLLaMA3<T> : VisionLanguageModelBase<T>, IVideoLanguage
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
 
-        int dim = _options.DecoderDim;
-
         // Step 1: Any-resolution visual tokenizer
         var encoderOut = p;
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoderOut = Layers[i].Forward(encoderOut);
-        int visLen = encoderOut.Length;
 
-        // Step 2: Adaptive spatial token merging (bipartite soft matching)
-        // Merge adjacent tokens with high similarity to reduce redundancy
-        var mergedVis = new double[visLen];
-        double spatialMergeThreshold = 0.85;
-        for (int v = 0; v < visLen; v++)
-            mergedVis[v] = NumOps.ToDouble(encoderOut[v]);
-        for (int v = 0; v < visLen - 1; v++)
-        {
-            double a = mergedVis[v];
-            double b = mergedVis[v + 1];
-            double normA = Math.Abs(a) + 1e-8;
-            double normB = Math.Abs(b) + 1e-8;
-            double sim = (a * b) / (normA * normB);
-            if (sim > spatialMergeThreshold)
-            {
-                double merged = (a + b) / 2.0;
-                mergedVis[v] = merged;
-                mergedVis[v + 1] = merged;
-            }
-        }
-
-        // Step 3: Tokenize prompt
+        // Step 2: Tokenize prompt
         Tensor<T>? promptTokens = null;
-        int promptLen = 0;
         if (prompt is not null)
         {
             promptTokens = TokenizeText(prompt);
-            promptLen = promptTokens.Length;
         }
 
-        // 2-layer MLP cross-modal connector (Linear -> GELU -> Linear)
-        var decoderInput = GatedConnectorInput(encoderOut, promptTokens, dim, _options.VocabSize);
+        // The encoder ends in the MLP projection to the LLM width (the connector); the decoder reads its tokens
+        // followed by the embedded prompt.
+        var decoderInput = VisualDecoderSequence(encoderOut, promptTokens);
 
-        // Step 5: LLM decoder
+        // Step 3: LLM decoder
         var output = decoderInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
@@ -282,7 +257,8 @@ public partial class VideoLLaMA3<T> : VisionLanguageModelBase<T>, IVideoLanguage
         merged = engine.TensorDivideScalar(merged, NumOps.FromDouble(count));
 
         // Step 4: Decode through LLM layers
-        var output = merged;
+        // The decoder reads the pooled visual features as decoder-width tokens, followed by the embedded prompt.
+        var output = VisualDecoderSequence(merged, prompt is null ? null : TokenizeText(prompt));
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             output = Layers[i].Forward(output);
         return output;

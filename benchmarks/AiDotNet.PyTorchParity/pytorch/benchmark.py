@@ -11,7 +11,10 @@ inference batch size gets its own specialized graph instead of the
 automatic-dynamic symbolic graph a second batch size would otherwise trigger.
 --compile-mode selects the TorchInductor mode (reduce-overhead adds CUDA
 graphs) and --optimizer-impl selects AdamW's implementation (fused on CPU and
-CUDA). ../run_matrix.py runs several of these PyTorch configurations against
+CUDA). Dynamo does not trace nn.LSTM or nn.GRU by default and runs them eagerly;
+--compile-rnn sets torch._dynamo.config.allow_rnn so they compile as well. The
+report's protocol block records how many graphs Dynamo compiled for each model.
+../run_matrix.py runs several of these PyTorch configurations against
 AiDotNet and compares AiDotNet to the fastest one. Pin both sides to the same
 CPU thread count:
     python benchmark.py --threads 8 ...
@@ -103,6 +106,8 @@ class ModelResult:
     inference: list[InferenceBatchResult]
     # Set when the two rows compute different functions despite matching sizes, so the timing is not a parity result.
     note: str = ""
+    # Large-data mode (--data): whole epochs over a prepared dataset, with test accuracy after each (scale_data.py).
+    scale: dict | None = None
 
 
 class ResourceMonitor:
@@ -2306,12 +2311,22 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
     # Static shapes: training at one batch size and then inferring at several would otherwise make Dynamo mark the batch
     # dimension dynamic and time a symbolic-shape graph. Each shape and grad mode gets its own graph, so allow enough.
     compile_options: dict[str, object] = {"dynamic": False, "mode": args.compile_mode}
+    if args.compile_rnn:
+        if not args.compile:
+            raise SystemExit("--compile-rnn only applies under --compile")
+        torch._dynamo.config.allow_rnn = True
+    compiled_graphs: dict[str, int] = {}
     if args.compile:
         torch._dynamo.config.cache_size_limit = max(torch._dynamo.config.cache_size_limit, 8 + 2 * len(inference_batches))
     # CUDA graphs only exist on a CUDA device; reduce-overhead on the CPU runs the default Inductor code.
     cuda_graphs = args.compile and device.type == "cuda" and args.compile_mode == "reduce-overhead"
 
     model_results: list[ModelResult] = []
+    dataset = None
+    if args.data:
+        import scale_data
+
+        dataset = scale_data.ScaleDataset(args.data)
     for name in [item.strip() for item in args.models.split(",") if item.strip()]:
         mark_phase(name, "construction")
         model, shape = make_model(name)
@@ -2335,6 +2350,14 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
         # Trainable only: the decoder LM's frozen, zeroed in_proj_bias stands in for attention AiDotNet builds without
         # a Q/K/V bias, and counting it reported 768 parameters the C# row does not have.
         parameters = sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad)
+        optimizer_settings = getattr(model, "optimizer_settings", {"lr": 1e-3})
+        if dataset is not None:
+            if any(hasattr(model, attr) for attr in ("train_step", "training_loss", "make_optimizer", "compile_parts")) or \
+                    getattr(model, "regression", False) or getattr(model, "loss_from_forward", False):
+                raise SystemExit(f"{name} has no large-data mode: it is not a plain classifier")
+            # The model reads the dataset's raw bytes and normalises them itself, so under torch.compile the conversion
+            # is fused into the compiled graph (and its CUDA graph) and only uint8 data crosses to the GPU.
+            model = scale_data.Normalized(model, dataset, shape).to(device)
         if args.compile:
             # torch.compile (TorchInductor) — the "PyTorch compiled" comparison.
             # Counts params BEFORE compile (the wrapper hides .parameters()).
@@ -2351,6 +2374,18 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
                     return fixture.numeric(original, model, args.lstm_numerics)
             else:
                 model = torch.compile(model, **compile_options)
+        if dataset is not None:
+            adamw_options = {"fused": True} if args.optimizer_impl == "fused" else {}
+            optimizer = torch.optim.AdamW(model.parameters(), **optimizer_settings, **adamw_options)
+            scale = scale_data.train(model, shape, dataset, device, args.epochs, args.batch_size, args.seed, optimizer,
+                                     cuda_graphs, synchronize, begin_step,
+                                     lambda: ResourceMonitor(track_gpu=device.type == "cuda",
+                                                             gpu_id=cuda_smi_id(device), torch_device=device))
+            if args.compile:
+                total = torch._dynamo.utils.counters["stats"]["unique_graphs"]
+                compiled_graphs[name] = total - sum(compiled_graphs.values())
+            model_results.append(ModelResult(name, str(device), parameters, None, [], MODEL_NOTES.get(name, ""), scale))
+            continue
         if fixture_path is not None:
             model.eval()
             with torch.no_grad():
@@ -2366,6 +2401,10 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
         model.eval()
         inference = benchmark_inference(model, shape, device, args.inference_iterations, args.warmup_iterations,
                                         inference_batches, args.warmup_min_ms, cuda_graphs, model_name=name)
+        if args.compile:
+            # Graphs Dynamo compiled for this model (training and inference). Zero means torch.compile ran it eagerly.
+            total = torch._dynamo.utils.counters["stats"]["unique_graphs"]
+            compiled_graphs[name] = total - sum(compiled_graphs.values())
         if fixture is not None:
             fixture.complete()
 
@@ -2385,6 +2424,8 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
             "compile_mode": args.compile_mode if args.compile else None,
             "dynamic_shapes": False if args.compile else None,
             "cuda_graphs": cuda_graphs,
+            "compile_rnn": bool(args.compile_rnn),
+            "compiled_graphs": compiled_graphs if args.compile else None,
             "optimizer_impl": args.optimizer_impl,
             "epochs": args.epochs,
             "train_batches": args.train_batches,
@@ -2394,6 +2435,7 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
             "warmup_min_ms": args.warmup_min_ms,
             "inference_batch_sizes": inference_batches,
             "seed": args.seed,
+            "data": str(args.data) if args.data else None,
             "precision": PRECISION,
         },
         "results": [asdict(result) for result in model_results],
@@ -2424,6 +2466,10 @@ def main() -> None:
     parser.add_argument("--compile-mode", default="default",
                         choices=["default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"],
                         help="torch.compile mode under --compile. reduce-overhead records CUDA graphs on a CUDA device.")
+    parser.add_argument("--data", help="Large-data mode: train --epochs whole epochs over this scale/prepare_data.py "
+                                       "dataset and score its test split after each epoch, instead of synthetic batches.")
+    parser.add_argument("--compile-rnn", action="store_true",
+                        help="Under --compile, also trace nn.LSTM/nn.GRU (torch._dynamo.config.allow_rnn); otherwise they run eagerly.")
     parser.add_argument("--optimizer-impl", default="default", choices=["default", "fused"],
                         help="AdamW implementation: PyTorch's default choice (foreach on CUDA) or the fused kernel.")
     parser.add_argument("--output", type=Path, default=Path("../results/pytorch.json"))
@@ -2440,6 +2486,10 @@ def main() -> None:
                         help="Training steps under torch.autocast(bfloat16) (the C# side's AutocastScope). fp16 needs "
                              "GradScaler loss scaling in both arms and is not wired yet.")
     args = parser.parse_args()
+    if args.data and args.precision != "fp32":
+        # scale_data.train applies no autocast, so a bf16 request would train in fp32 while the
+        # report claimed bf16. Refuse it rather than record a precision that did not run.
+        parser.error("--data supports only --precision fp32: large-data training applies no autocast")
     global PRECISION
     PRECISION = args.precision
 
