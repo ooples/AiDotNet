@@ -65,7 +65,7 @@ internal static class SeededNoiseTensors
         var ops = MathHelper.GetNumericOperations<T>();
         for (int i = 0; i < destination.Length; i++)
         {
-            double value = scale * Draw(random, guard, floor, branch, secondUniform);
+            double value = Draw(random, scale, guard, floor, branch, secondUniform);
             destination[i] = ops.FromDouble(mean == 0.0 ? value : mean + value);
         }
     }
@@ -85,7 +85,7 @@ internal static class SeededNoiseTensors
     {
         if (random is null) throw new ArgumentNullException(nameof(random));
         ValidateFloor(floor);
-        return Draw(random, guard, floor, branch, secondUniform);
+        return Draw(random, 1.0, guard, floor, branch, secondUniform);
     }
 
     /// <summary>The floor the floored guards use when the caller gives none.</summary>
@@ -97,8 +97,10 @@ internal static class SeededNoiseTensors
             throw new ArgumentOutOfRangeException(nameof(floor), "The floor must lie in (0, 1).");
     }
 
-    // The one Box-Muller draw: two uniforms, in order, the first guarded away from zero.
-    private static double Draw(Random random, BoxMullerGuard guard, double floor, BoxMullerBranch branch,
+    // The one Box-Muller draw: two uniforms, in order, the first guarded away from zero. The scale multiplies the radius
+    // before the angle term, as (scale * sqrt(-2 ln u1)) * cos(2 pi u2) in the loops this replaced; scaling the product
+    // instead rounds differently in the last bit.
+    private static double Draw(Random random, double scale, BoxMullerGuard guard, double floor, BoxMullerBranch branch,
         BoxMullerSecondUniform secondUniform)
     {
         double first = random.NextDouble();
@@ -110,7 +112,7 @@ internal static class SeededNoiseTensors
             BoxMullerGuard.FlooredComplement => Math.Max(1.0 - first, floor),
             _ => Math.Max(floor, first),
         };
-        double radius = Math.Sqrt(-2.0 * Math.Log(u1));
+        double radius = scale * Math.Sqrt(-2.0 * Math.Log(u1));
         return branch == BoxMullerBranch.Sine
             ? radius * Math.Sin(2.0 * Math.PI * u2)
             : radius * Math.Cos(2.0 * Math.PI * u2);

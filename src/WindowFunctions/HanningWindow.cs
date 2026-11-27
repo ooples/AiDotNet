@@ -86,14 +86,13 @@ public class HanningWindow<T> : IWindowFunction<T>
             return window;
         }
 
-        // Compute geometry in double: Half cannot represent large indices or the scalar cosine helper's
-        // IConvertible conversion. Cast only the completed coefficients to the requested storage type.
-        using var noGradSource = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        using var noGradDouble = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
-        var engine = AiDotNetEngine.Current;
-        var angles = engine.TensorLinspace(0.0, 2.0 * Math.PI, windowSize);
-        return engine.TensorMultiplyScalar(engine.ScalarMinusTensor(1.0, engine.TensorCos(angles)), 0.5)
-            .Cast<T>().ToVector();
+        // Coefficients in double, converted once: Half cannot represent large indices. A plain loop rather than
+        // engine ops on a double tensor, which JIT-compiled double kernels a float model never uses again - most of
+        // the construction cost of every audio model with a Hann STFT window.
+        var coefficients = new double[windowSize];
+        double step = 2.0 * Math.PI / (windowSize - 1);
+        for (int i = 0; i < windowSize; i++) coefficients[i] = 0.5 * (1.0 - Math.Cos(step * i));
+        return new Vector<T>(ConversionsHelper.FromDoubles<T>(coefficients));
     }
 
     /// <summary>

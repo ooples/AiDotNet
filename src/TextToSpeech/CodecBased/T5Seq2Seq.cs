@@ -847,9 +847,7 @@ internal sealed class T5DecoderOnly<T>
     public Tensor<T> Logits(IReadOnlyList<int> ids, bool training, Random random)
     {
         int length = ids.Count;
-        var tensor = new Tensor<T>(new[] { length });
-        for (int i = 0; i < length; i++) tensor[i] = NumOps.FromDouble(ids[i]);
-        var h = Drop(Embedding.Forward(tensor), training, random);
+        var h = Drop(Embedding.Forward(TtsIdTensors.From<T>(ids)), training, random);
         var bias = T5Seq2Seq<T>.RelativeBias(_engine, Configuration, Bias, length, length, bidirectional: false, causal: true);
         foreach (var block in Blocks) h = block.Forward(h, bias, null, null, training, random);
         h = Drop(FinalNorm.Forward(h), training, random);

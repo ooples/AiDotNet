@@ -192,16 +192,16 @@ internal sealed class MegaTtsContentEncoder<T>
     public Tensor<T> Forward(int[,] tokens)
     {
         int b = tokens.GetLength(0), l = tokens.GetLength(1);
-        var ids = new Tensor<T>(new[] { b * l });
+        var ids = _engine.Reshape(TtsIdTensors.FromGrid<T>(tokens), new[] { b * l });
         var padding = new bool[b, l];
-        var nonPadding = new Tensor<T>(new[] { b, l, 1 });
+        var kept = new int[b * l];
         for (int i = 0; i < b; i++)
             for (int j = 0; j < l; j++)
             {
-                ids[i * l + j] = NumOps.FromDouble(tokens[i, j]);
                 padding[i, j] = tokens[i, j] == 0;
-                if (!padding[i, j]) nonPadding[i, j, 0] = NumOps.One;
+                kept[i * l + j] = padding[i, j] ? 0 : 1;
             }
+        var nonPadding = TtsIdTensors.From<T>(kept, new[] { b, l, 1 });
         var x = _engine.TensorMultiplyScalar(_engine.Reshape(Embedding.Forward(ids), new[] { b, l, Width }), NumOps.FromDouble(Math.Sqrt(Width)));
         x = _engine.TensorAdd(x, MegaTtsPositions.Of<T>(padding, Width));
         if (_embeddingDropout is not null) x = _embeddingDropout.Forward(x);

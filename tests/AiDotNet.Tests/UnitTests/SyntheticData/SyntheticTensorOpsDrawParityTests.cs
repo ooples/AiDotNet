@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.SyntheticData;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -70,7 +71,7 @@ public class SyntheticTensorOpsDrawParityTests
         var expected = ReferenceNormals<T>(length, RandomHelper.CreateSeededRandom(Seed), guard);
         var stream = RandomHelper.CreateSeededRandom(Seed);
 
-        var actual = SyntheticTensorOps<T>.StandardNormalVector(length, stream, guard);
+        var actual = SeededNoiseTensors.StandardNormalVector<T>(length, stream, guard: guard);
 
         AssertSame(expected, actual.ToArray());
         // The helper consumed exactly two uniforms per value: the streams are in step afterwards
@@ -101,8 +102,8 @@ public class SyntheticTensorOpsDrawParityTests
     {
         // Complement and Floored read the first uniform differently (1 - u against u), so their draws differ;
         // the parity cases above would pass vacuously if the guard were ignored
-        var complement = SyntheticTensorOps<double>.StandardNormalVector(16, RandomHelper.CreateSeededRandom(Seed)).ToArray();
-        var floored = SyntheticTensorOps<double>.StandardNormalVector(16, RandomHelper.CreateSeededRandom(Seed), BoxMullerGuard.Floored).ToArray();
+        var complement = SeededNoiseTensors.StandardNormalVector<double>(16, RandomHelper.CreateSeededRandom(Seed)).ToArray();
+        var floored = SeededNoiseTensors.StandardNormalVector<double>(16, RandomHelper.CreateSeededRandom(Seed), guard: BoxMullerGuard.Floored).ToArray();
 
         Assert.NotEqual(complement, floored);
         Assert.All(complement, v => Assert.False(double.IsNaN(v) || double.IsInfinity(v)));
@@ -117,7 +118,7 @@ public class SyntheticTensorOpsDrawParityTests
         // OCTGAN Noise: z[i] over the flat index
         var expected = ReferenceNormals<double>(rows * columns, RandomHelper.CreateSeededRandom(Seed), BoxMullerGuard.Complement);
 
-        var actual = SyntheticTensorOps<double>.StandardNormalTensor(new[] { rows, columns }, RandomHelper.CreateSeededRandom(Seed));
+        var actual = SeededNoiseTensors.StandardNormal<double>(new[] { rows, columns }, RandomHelper.CreateSeededRandom(Seed));
 
         Assert.Equal(new[] { rows, columns }, actual.Shape.ToArray());
         AssertSame(expected, actual.ToArray());
@@ -134,7 +135,7 @@ public class SyntheticTensorOpsDrawParityTests
         var expected = ReferenceNormals<double>(12, RandomHelper.CreateSeededRandom(Seed), guard);
         var target = new Tensor<double>(Enumerable.Repeat(123.0, 12).ToArray(), new[] { 3, 4 });
 
-        SyntheticTensorOps<double>.FillStandardNormal(target, RandomHelper.CreateSeededRandom(Seed), guard);
+        SeededNoiseTensors.FillStandardNormal(target, RandomHelper.CreateSeededRandom(Seed), guard: guard);
 
         Assert.Equal(new[] { 3, 4 }, target.Shape.ToArray());
         AssertSame(expected, target.ToArray());
@@ -147,7 +148,7 @@ public class SyntheticTensorOpsDrawParityTests
         var expected = ReferenceNormals<float>(10, RandomHelper.CreateSeededRandom(Seed), BoxMullerGuard.Complement);
         var target = new Tensor<float>(new[] { 2, 5 });
 
-        SyntheticTensorOps<float>.FillStandardNormal(target, RandomHelper.CreateSeededRandom(Seed));
+        SeededNoiseTensors.FillStandardNormal(target, RandomHelper.CreateSeededRandom(Seed));
 
         AssertSame(expected, target.ToArray());
     }
@@ -170,7 +171,7 @@ public class SyntheticTensorOpsDrawParityTests
                 noiseData[i + 1] = ops.FromDouble(r * Math.Sin(theta));
         }
 
-        var actual = SyntheticTensorOps<T>.StandardNormalPairTensor(shape, RandomHelper.CreateSeededRandom(Seed));
+        var actual = SeededNoiseTensors.StandardNormalPairs<T>(shape, RandomHelper.CreateSeededRandom(Seed));
 
         Assert.Equal(shape, actual.Shape.ToArray());
         AssertSame(noiseData, actual.ToArray());
@@ -192,7 +193,7 @@ public class SyntheticTensorOpsDrawParityTests
     [Fact]
     public void StandardNormalPairTensor_RejectsAnElementCountThatOverflows()
         => Assert.Throws<OverflowException>(
-            () => SyntheticTensorOps<double>.StandardNormalPairTensor(new[] { 70000, 70000, 2 }, RandomHelper.CreateSeededRandom(Seed)));
+            () => SeededNoiseTensors.StandardNormalPairs<double>(new[] { 70000, 70000, 2 }, RandomHelper.CreateSeededRandom(Seed)));
 
     [Theory]
     [InlineData(3, 7)]
@@ -365,8 +366,8 @@ public class SyntheticTensorOpsDrawParityTests
     {
         // u1 = max(1e-10, 0) = 1e-10 and u2 = 0; without the floor ln(0) makes every draw +Infinity.
         double expected = Math.Sqrt(-2.0 * Math.Log(1e-10)) * Math.Cos(2.0 * Math.PI * 0.0);
-        var vector = SyntheticTensorOps<double>.StandardNormalVector(4, new FixedRandom(0.0), BoxMullerGuard.Floored).ToArray();
-        var tensor = SyntheticTensorOps<double>.StandardNormalTensor(new[] { 2, 2 }, new FixedRandom(0.0), BoxMullerGuard.Floored).ToArray();
+        var vector = SeededNoiseTensors.StandardNormalVector<double>(4, new FixedRandom(0.0), guard: BoxMullerGuard.Floored).ToArray();
+        var tensor = SeededNoiseTensors.StandardNormal<double>(new[] { 2, 2 }, new FixedRandom(0.0), guard: BoxMullerGuard.Floored).ToArray();
         foreach (var draws in new[] { vector, tensor })
         {
             Assert.All(draws, v => Assert.False(double.IsInfinity(v) || double.IsNaN(v)));
@@ -385,8 +386,8 @@ public class SyntheticTensorOpsDrawParityTests
         Assert.NotEqual(expected, unfloored);
 
         var target = new Tensor<double>(new[] { 3 });
-        SyntheticTensorOps<double>.FillStandardNormal(target, new FixedRandom(JustBelowOne), BoxMullerGuard.FlooredComplement);
-        var vector = SyntheticTensorOps<double>.StandardNormalVector(3, new FixedRandom(JustBelowOne), BoxMullerGuard.FlooredComplement).ToArray();
+        SeededNoiseTensors.FillStandardNormal(target, new FixedRandom(JustBelowOne), guard: BoxMullerGuard.FlooredComplement);
+        var vector = SeededNoiseTensors.StandardNormalVector<double>(3, new FixedRandom(JustBelowOne), guard: BoxMullerGuard.FlooredComplement).ToArray();
         foreach (var draws in new[] { target.ToArray(), vector })
             Assert.All(draws, v => Assert.Equal(BitConverter.DoubleToInt64Bits(expected), BitConverter.DoubleToInt64Bits(v)));
     }

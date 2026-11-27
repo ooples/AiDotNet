@@ -52,8 +52,8 @@ projects maintained by CrowdTrainer LLC. These are NOT part of the publicly
 distributed AiDotNet package and are not covered by this NOTICE. Their access
 to AiDotNet internals is governed by the BSL 1.1 commercial-tier terms.
 
-  - HarmonicEngine            Private commercial fork; not publicly available.
-  - HarmonicEngine.Tests      Test suite for HarmonicEngine.
+  - Ooples.Internal           Private commercial project; not publicly available.
+  - Ooples.Internal.Tests     Test suite for Ooples.Internal.
   - AiDotNet.ProgramSynthesis.Tooling
                               Internal tooling project; not publicly available.
 

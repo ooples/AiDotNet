@@ -102,7 +102,7 @@ public class Bucket1_TrainingPipelineTests : ConfigureMethodTestBase
 
     /// <summary>
     /// ConfigureOptimizer(Adam) + BuildAsync — the path explicitly broken in the
-    /// HarmonicEngine field-test report (top1=0%, uniform output on Transformer LM).
+    /// Downstream field-test report (top1=0%, uniform output on Transformer LM).
     /// Skipped until upstream fix lands.
     /// </summary>
     [Fact(Timeout = 60000, Skip = "Blocked on AiDotNet BuildAsync+ConfigureOptimizer(Adam) regression — top1=0% uniform output; fix PR in flight")]
@@ -181,7 +181,7 @@ public class Bucket1_TrainingPipelineTests : ConfigureMethodTestBase
 
     /// <summary>
     /// ConfigureFitDetector — verify the default fit detector doesn't break the
-    /// training pipeline. Previously untested per the HarmonicEngine bug list.
+    /// training pipeline. Previously untested per a downstream bug list.
     /// </summary>
     [Fact(Timeout = 60000)]
     [Trait("category", "integration-configure-method")]

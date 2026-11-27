@@ -115,12 +115,9 @@ internal sealed class SonarTextEncoder<T>
     {
         var c = Configuration;
         int length = ids.Count, d = c.Width, heads = c.Heads, e = d / heads;
-        var idTensor = new Tensor<T>(new[] { length });
         for (int i = 0; i < length; i++)
-        {
             if (ids[i] < 0 || ids[i] >= c.VocabSize) throw new ArgumentOutOfRangeException(nameof(ids), $"Token ids lie in [0, {c.VocabSize}).");
-            idTensor[i] = NumOps.FromDouble(ids[i]);
-        }
+        var idTensor = TtsIdTensors.From<T>(ids);
         var positions = new Tensor<T>(new[] { length, d });
         for (int t = 0; t < length; t++)
         {

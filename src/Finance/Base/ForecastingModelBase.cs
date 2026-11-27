@@ -348,6 +348,18 @@ public abstract class ForecastingModelBase<T> : FinancialModelBase<T>, IForecast
     private void RescaleIfOverflowed(
         Tensor<T> flat, int[] reduceAxis, double epsilon, ref Tensor<T> normalized, ref Tensor<T> meanT, ref Tensor<T> stdT)
     {
+        int count = 1;
+        foreach (int axis in reduceAxis) count *= flat.Shape[axis];
+        if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+        {
+            // A compiled plan cannot branch on its own values: the finiteness test reads them on the host
+            // (TensorCountNonzero), which a graph trace refuses, so the whole compiled training step was abandoned and
+            // TimesFM trained on the eager tape (warm step 27 -> 55 ms, 148 -> 221 MB). The rescaled form equals the
+            // direct one wherever the direct one is finite, so a trace takes it unconditionally.
+            (normalized, meanT, stdT) = TensorReductionHelper.StandardizeRescaled(Engine, flat, reduceAxis, epsilon, count);
+            return;
+        }
+
         bool finite;
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
@@ -356,8 +368,6 @@ public abstract class ForecastingModelBase<T> : FinancialModelBase<T>, IForecast
                 return;
         }
 
-        int count = 1;
-        foreach (int axis in reduceAxis) count *= flat.Shape[axis];
         (normalized, meanT, stdT) = TensorReductionHelper.StandardizeRescaled(Engine, flat, reduceAxis, epsilon, count);
     }
 

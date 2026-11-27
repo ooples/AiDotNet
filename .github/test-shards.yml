@@ -25,7 +25,7 @@ shard:
   - name: Unit - 03a Diffusion Core/Schedulers/Encoding
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
-    filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~UnitTests.Encoding|FullyQualifiedName~UnitTests.Diffusion.AudioProcessingTests|FullyQualifiedName~UnitTests.Diffusion.MemoryManagementTests|FullyQualifiedName~UnitTests.Diffusion.SchedulerTests|FullyQualifiedName~UnitTests.Diffusion.Conditioning|FullyQualifiedName~UnitTests.Diffusion.Schedulers|FullyQualifiedName~UnitTests.Diffusion.LatentDiffusionTrainingSampleTests.|FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.MmditReplayTests.|FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.ControlNetEncoderParameterLayoutTests.|FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.PredictorParameterIoDiskFootprintTests.)'
+    filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~UnitTests.Encoding|FullyQualifiedName~UnitTests.Diffusion.AudioProcessingTests|FullyQualifiedName~UnitTests.Diffusion.MemoryManagementTests|FullyQualifiedName~UnitTests.Diffusion.SchedulerTests|FullyQualifiedName~UnitTests.Diffusion.Conditioning|FullyQualifiedName~UnitTests.Diffusion.Schedulers|FullyQualifiedName~UnitTests.Diffusion.LatentDiffusionTrainingSampleTests.|FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.MmditReplayTests.|FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.ControlNetEncoderParameterLayoutTests.|FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.PredictorParameterIoDiskFootprintTests.|FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.NoisePredictorUndeclaredCountTests.)'
   - name: Unit - 03b1 Diffusion Preprocessors
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1476,6 +1476,16 @@ shard:
     # 133 classes, about 344 s of test time measured locally (before ModelInputMeetsFirstLayerTests moved to the survey shard).
     filter: >-
       Category!=GPU&Category!=Stress&Category!=Sweep&(
+      FullyQualifiedName~AiDotNet.Tests.ModelLoading.MoELoadStagingTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelLoading.PretrainedBf16StreamingTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.CheckpointedAuxiliaryLossTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.FrozenSubLayerTrainingTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.GroupedQueryAttentionStepTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.ParameterReadBeforeTrainingTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TrainableParameterCountTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.DistributedTraining.DistributedTapeCoordinatorAgreementTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.DistributedTraining.StochasticBaseSeedTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.DistributedTraining.StreamingTrainingOptionsCopyTests.|
       FullyQualifiedName~AiDotNet.Tests.Video.UnsharpKernelTests.|
       FullyQualifiedName~AiDotNet.Tests.Video.NiqeDomainTests.|
       FullyQualifiedName~AiDotNet.Tests.Video.VideoOptionsCopyTests.|
@@ -1496,6 +1506,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.Diagnostics.BroadcastBackwardRankTests.|
       FullyQualifiedName~AiDotNet.Tests.GateTests.Phase4GateTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.ActivationCacheGuardAnalyzerTests.|
+      FullyQualifiedName~AiDotNet.Tests.Generators.ElementWiseAnalyzerTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.CloneAutomationAnalyzerTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.GeneratedHeavyFixtureRuntimeTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.GeneratedLayerScaffoldPrecisionTests.|
@@ -1655,7 +1666,7 @@ shard:
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.ActivationLayerShapeContractTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.CopyOnWriteCloneDefectRegressionTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.FlashAttentionFusedCompiledTrainingIssue1346Tests.|
-      FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.HrePaperAChainShapeValidatorTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.CustomChainShapeValidatorTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.CustomObjectiveFusedRoutingTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.PreActivationCacheTraceTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.InputLayerMultiDimShapeIssue1325IntegrationTests.|
@@ -1782,6 +1793,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.Performance.Phase1GateTests.|
       FullyQualifiedName~AiDotNet.Tests.Performance.Phase2GateTests.|
       FullyQualifiedName~AiDotNet.Tests.Pruning.PruningStrategyTests.|
+      FullyQualifiedName~AiDotNet.Tests.Pruning.PruningWriteBackParityTests.|
       FullyQualifiedName~AiDotNet.Tests.SelfSupervisedLearning.ContrastiveObjectiveGradientTests.|
       FullyQualifiedName~AiDotNet.Tests.SelfSupervisedLearning.SelfSupervisedLearningMetricsTests.|
       FullyQualifiedName~AiDotNet.Tests.SelfSupervisedLearning.SelfSupervisedTrainingContractTests.|

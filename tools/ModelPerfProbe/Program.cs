@@ -87,7 +87,10 @@ internal static class Program
             throw new DirectoryNotFoundException($"Results directory does not exist: {directory}");
 
         var records = new List<CensusRecord>();
-        foreach (string path in Directory.EnumerateFiles(directory, "*.json", SearchOption.AllDirectories))
+        // Ordinal path order: EnumerateFiles follows the file system, and ext4 orders a directory by a per-volume
+        // hash seed, so the same records loaded in a different order on every runner.
+        foreach (string path in Directory.EnumerateFiles(directory, "*.json", SearchOption.AllDirectories)
+                     .OrderBy(path => path, StringComparer.Ordinal))
         {
             using JsonDocument document = JsonDocument.Parse(File.ReadAllText(path));
             JsonElement root = document.RootElement;
@@ -342,6 +345,19 @@ internal static class Program
                 MetricStability stability = ClassifyMetric(metric);
                 if (stability is MetricStability.Derived or MetricStability.RunnerScoped) continue;
 
+                // A PEAK MEASURED ANOTHER WAY IS NOT A REGRESSION. 250 ms polling saw a one-second fixture four or
+                // five times and missed short peaks (UnifiedMultimodalNetwork: 749 MB on seven nights, 450 MB on
+                // one); the runner's own high-water mark does not. Against a polled baseline the honest reading
+                // is higher, so the first runner-measured peaks start a new series instead of failing the gate.
+                if (stability is MetricStability.Memory
+                    && !string.Equals(prior.PeakSource ?? "", record.PeakSource, StringComparison.Ordinal))
+                {
+                    diagnostics.Add(Diagnostic.Warning(record.Fixture, metric,
+                        $"memory peak source changed ({PeakSourceName(prior.PeakSource)} -> "
+                        + $"{PeakSourceName(record.PeakSource)}); not compared with the prior baseline"));
+                    continue;
+                }
+
                 double limit = stability switch
                 {
                     MetricStability.Exact => 1.0,
@@ -370,7 +386,7 @@ internal static class Program
                 // With too little history this is exactly the old comparison, so nothing loosens
                 // on a repository that has not accumulated a window yet.
                 (string Fixture, string EnvironmentKey, string Metric) seriesKey =
-                    (record.Fixture, SeriesEnvironmentKey(record.Environment, stability), metric);
+                    (record.Fixture, SeriesKey(record.Environment, stability, record.PeakSource), metric);
                 IReadOnlyList<SeriesPoint> series = seriesIndex.TryGetValue(seriesKey, out List<SeriesPoint>? cached)
                     ? cached
                     : Array.Empty<SeriesPoint>();
@@ -821,6 +837,44 @@ internal static class Program
         CompareBaseline([Shaped("512|758240")], ShapedBaseline(null), new Options(), comparisonDiagnostics);
         if (!comparisonDiagnostics.Any(d => d.Severity == "error" && d.Metric == Allocated))
             return Fail("an unknown prior workload must still be compared, so nothing escapes silently");
+
+        // A memory peak measured by the runner is not compared with one the shard script polled every 250 ms
+        // (UnifiedMultimodalNetwork: 749 MB on seven nights, 450 MB polled once); the same source still is.
+        const string Peak = "peakPrivateMemoryBytes";
+        CensusRecord Peaked(string peakSource) => new()
+        {
+            Fixture = Fixture,
+            Model = "Synthetic",
+            Status = "ok",
+            Environment = Environment,
+            Cohort = "System.Single|10^1",
+            Phase = "",
+            Error = "",
+            PeakSource = peakSource,
+            Metrics = new Dictionary<string, double>(StringComparer.Ordinal) { [Peak] = 749_000_000 },
+        };
+        BaselineDocument PeakedBaseline(string? peakSource)
+        {
+            BaselineDocument document = DirectBaseline("base000", (Peak, 450_000_000));
+            document.Entries[0].PeakSource = peakSource;
+            return document;
+        }
+
+        comparisonDiagnostics.Clear();
+        CompareBaseline([Peaked("runner")], PeakedBaseline(null), new Options(), comparisonDiagnostics);
+        if (comparisonDiagnostics.Any(d => d.Severity == "error")
+            || !comparisonDiagnostics.Any(d => d.Severity == "warning" && d.Metric == Peak))
+            return Fail("a runner-measured peak must not be judged against a polled one");
+
+        comparisonDiagnostics.Clear();
+        CompareBaseline([Peaked("runner")], PeakedBaseline("runner"), new Options(), comparisonDiagnostics);
+        if (!comparisonDiagnostics.Any(d => d.Severity == "error" && d.Metric == Peak))
+            return Fail("runner-measured peaks must still be compared with each other");
+
+        comparisonDiagnostics.Clear();
+        CompareBaseline([Peaked("")], PeakedBaseline(null), new Options(), comparisonDiagnostics);
+        if (!comparisonDiagnostics.Any(d => d.Severity == "error" && d.Metric == Peak))
+            return Fail("polled peaks must still be compared with each other");
         var allocationIntent = new[]
         {
             new PerfIntent
@@ -1113,7 +1167,7 @@ internal static class Program
         IReadOnlyList<BaselineDocument> history, string fixture, string environment, string metric)
     {
         MetricStability stability = ClassifyMetric(metric);
-        var key = (Fixture: fixture, EnvironmentKey: SeriesEnvironmentKey(environment, stability), Metric: metric);
+        var key = (Fixture: fixture, EnvironmentKey: SeriesKey(environment, stability, ""), Metric: metric);
         Dictionary<(string Fixture, string EnvironmentKey, string Metric), List<SeriesPoint>> index =
             IndexHistory(history);
         return index.TryGetValue(key, out List<SeriesPoint>? points)
@@ -1141,7 +1195,7 @@ internal static class Program
                     if (value <= 0.0) continue;
                     var key = (
                         Fixture: entry.Fixture,
-                        EnvironmentKey: SeriesEnvironmentKey(entry.Environment, ClassifyMetric(metric)),
+                        EnvironmentKey: SeriesKey(entry.Environment, ClassifyMetric(metric), entry.PeakSource),
                         Metric: metric);
                     if (!seenInDocument.Add(key)) continue;
                     if (!index.TryGetValue(key, out List<SeriesPoint>? points))
@@ -1176,6 +1230,19 @@ internal static class Program
     /// they keep the processor COUNT and drop only the model. Timing keeps everything.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The series key: <see cref="SeriesEnvironmentKey"/>, and for memory peaks also who measured them, so a step
+    /// is never manufactured out of the change from polled to runner-measured peaks.
+    /// </summary>
+    private static string SeriesKey(string environment, MetricStability stability, string? peakSource)
+    {
+        string key = SeriesEnvironmentKey(environment, stability);
+        return stability is MetricStability.Memory && !string.IsNullOrEmpty(peakSource) ? key + "|peaks:" + peakSource : key;
+    }
+
+    private static string PeakSourceName(string? peakSource) =>
+        string.IsNullOrEmpty(peakSource) ? "polled every 250 ms" : peakSource;
+
     private static string SeriesEnvironmentKey(string environment, MetricStability stability)
     {
         if (stability is MetricStability.Timing or MetricStability.VolatileTiming) return environment;
@@ -1518,6 +1585,7 @@ internal static class Program
             Fixture = record.Fixture,
             Environment = record.Environment,
             Workload = record.Workload.Length > 0 ? record.Workload : null,
+            PeakSource = record.PeakSource.Length > 0 ? record.PeakSource : null,
             Metrics = new Dictionary<string, double>(record.Metrics),
         }).OrderBy(entry => entry.Fixture, StringComparer.Ordinal).ToArray(),
     };
@@ -1614,7 +1682,7 @@ internal static class Program
 
             // A fixture the latest run measured on another processor compares with the newest run in the series that
             // measured it on this one, and the regression names that run's commit.
-            string environmentKey = records[0].Environment;
+            string environmentKey = records.First(r => r.Status == "ok").Environment;
             BaselineDocument Measured(string commit, int day, string environment, double peak) => new()
             {
                 SchemaVersion = CurrentBaselineSchemaVersion,
@@ -1824,6 +1892,11 @@ internal static class Program
         public long ParameterCount { get; init; }
         /// <summary>What the fixture measured: input shape without size-1 axes, and parameter count ("2048|623328"), or empty.</summary>
         public string Workload { get; init; } = "";
+        /// <summary>
+        /// Who measured the memory peaks: "runner" (the fixture process's own OS high-water mark and 5 ms private
+        /// sampling) or empty (the shard script's 250 ms polling, which misses short peaks).
+        /// </summary>
+        public string PeakSource { get; init; } = "";
         public required IReadOnlyDictionary<string, double> Metrics { get; init; }
         public double Metric(string name) => Metrics.TryGetValue(name, out double value) ? value : 0.0;
 
@@ -1868,6 +1941,7 @@ internal static class Program
                 Fixture = Text("fixture"),
                 Model = Text("model"),
                 Workload = workload,
+                PeakSource = Text("peakSource"),
                 Status = Text("status"),
                 Environment = environment,
                 Cohort = $"{Text("precision")}|10^{magnitude}",
@@ -1910,6 +1984,8 @@ internal static class Program
         [JsonPropertyName("environment")] public string Environment { get; set; } = "";
         /// <summary>The measured workload (see <see cref="CensusRecord.Workload"/>); absent in older baselines.</summary>
         [JsonPropertyName("workload")] public string? Workload { get; set; }
+        /// <summary>Who measured the memory peaks (see <see cref="CensusRecord.PeakSource"/>); absent means polled.</summary>
+        [JsonPropertyName("peakSource")] public string? PeakSource { get; set; }
         [JsonPropertyName("metrics")] public Dictionary<string, double> Metrics { get; set; } = new();
     }
 

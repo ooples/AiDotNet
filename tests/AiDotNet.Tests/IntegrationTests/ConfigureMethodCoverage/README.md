@@ -4,7 +4,7 @@ End-to-end integration coverage for the `Configure*` methods on `AiModelBuilder`
 
 ## Why this exists
 
-Field-testing in downstream consumers (HarmonicEngine) found several "drop-in"
+Field-testing in downstream consumers found several "drop-in"
 Configure* methods that produce broken behavior with zero existing test coverage:
 
 | Configure* | Bug | Status |

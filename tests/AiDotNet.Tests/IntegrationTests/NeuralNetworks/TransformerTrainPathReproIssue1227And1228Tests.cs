@@ -344,7 +344,7 @@ public class TransformerTrainPathReproIssue1227And1228Tests
 
     /// <summary>
     /// Reporter's exact configuration: 4 encoder layers, the same architecture
-    /// numbers from issue #1227's Phase_A4_TransformerLSweep_1MB run.
+    /// numbers from issue #1227's 1 MB transformer depth sweep.
     ///
     /// <para><b>Why L=4 matters:</b> the L=1 probe above passes with ~76 MB
     /// retention on 200 calls (~360 KB/call) — well under its 2 GB tripwire.

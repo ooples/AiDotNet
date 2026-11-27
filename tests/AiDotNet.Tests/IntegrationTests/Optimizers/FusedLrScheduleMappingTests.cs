@@ -88,7 +88,7 @@ public class FusedLrScheduleMappingTests
     [Fact]
     public void LinearWarmup_Constant_MapsToFused_StepForStepParity()
     {
-        // Warmup-then-constant is the HRE cortex recipe; before the LinearWarmup
+        // Warmup-then-constant is a common downstream recipe; before the LinearWarmup
         // mapping it fell through to the eager tape (no CUDA-graph capture, 14-23x).
         var fused = MapToFused(new LinearWarmupScheduler(
             baseLearningRate: 0.002, warmupSteps: 10,

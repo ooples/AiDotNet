@@ -1291,22 +1291,34 @@ class MnistVAE(nn.Module):
 GAT_NODES, GAT_FEATURES, GAT_CLASSES = 2708, 1433, 7
 
 
-def cora_like_graph(nodes: int = GAT_NODES) -> torch.Tensor:
-    """The C# gat row's graph: a ring plus a chord i -> i+7 from every node, undirected, with self-loops - 5,416 edges
-    against Cora's 5,429. Returned as the additive attention mask AiDotNet's GraphAttentionLayer builds: 0 on an
-    edge, -1e9 elsewhere."""
+def cora_like_adjacency(nodes: int = GAT_NODES) -> torch.Tensor:
+    """The C# gat row's graph as a 0/1 matrix: a ring plus a chord i -> i+7 from every node, undirected, with
+    self-loops - 5,416 undirected edges against Cora's 5,429, 13,540 stored entries with the self-loops."""
     adjacency = torch.eye(nodes)
     index = torch.arange(nodes)
     for step in (1, 7):
         adjacency[index, (index + step) % nodes] = 1
         adjacency[(index + step) % nodes, index] = 1
-    return (1 - adjacency) * -1e9
+    return adjacency
+
+
+def cora_like_graph(nodes: int = GAT_NODES) -> torch.Tensor:
+    """The additive attention mask AiDotNet's GraphAttentionLayer builds from the graph: 0 on an edge, -1e9
+    elsewhere (the dense formulation, which DenseGATLayer takes)."""
+    return (1 - cora_like_adjacency(nodes)) * -1e9
+
+
+def cora_like_edges(nodes: int = GAT_NODES) -> tuple[torch.Tensor, torch.Tensor]:
+    """The graph's stored entries as (row, column) index vectors in row-major order: row i attends to column j."""
+    rows, columns = cora_like_adjacency(nodes).nonzero(as_tuple=True)
+    return rows, columns
 
 
 class DenseGATLayer(nn.Module):
-    """AiDotNet's GraphAttentionLayer on its dense path (and the GAT authors' reference implementation): per head,
+    """The GAT authors' reference implementation (and AiDotNet's GraphAttentionLayer dense fallback): per head,
     Wh = X W, e_ij = LeakyReLU_0.2(a_self . Wh_i + a_neigh . Wh_j) + mask_ij, softmax over j, dropout on the
-    coefficients, then aggregation; heads are concatenated (hidden layer) or averaged (output layer), plus a bias."""
+    coefficients, then aggregation; heads are concatenated (hidden layer) or averaged (output layer), plus a bias.
+    O(nodes^2 * heads). Kept as the reference that test_gat_twin.py checks EdgeGATLayer against."""
 
     def __init__(self, inputs: int, outputs: int, heads: int, concat: bool, dropout: float) -> None:
         super().__init__()
@@ -1328,21 +1340,50 @@ class DenseGATLayer(nn.Module):
         return out + self.bias
 
 
+class EdgeGATLayer(DenseGATLayer):
+    """DenseGATLayer evaluated over the graph's stored entries only, as AiDotNet's layer runs it (its CSR kernel) and
+    as PyG's GATConv does. The parameters and the coefficients are the same: every masked dense entry contributes
+    exp(-1e9 - max) = 0 to its row's softmax. O(edges * heads) work and memory instead of O(nodes^2 * heads).
+    Every row needs an entry (a fully masked dense row softmaxes to 1/N everywhere); the self-loops guarantee it."""
+
+    def forward(self, x: torch.Tensor, edges: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:  # type: ignore[override]
+        rows, columns = edges
+        wh = torch.einsum("bnf,hfo->bhno", x, self.weight)                              # [B, H, N, O]
+        self_scores = torch.einsum("bhno,ho->bhn", wh, self.attention[:, :self.outputs])
+        neighbor_scores = torch.einsum("bhno,ho->bhn", wh, self.attention[:, self.outputs:])
+        scores = F.leaky_relu(self_scores[..., rows] + neighbor_scores[..., columns], 0.2)  # [B, H, E]
+        # Softmax over each row's entries. The row maximum is only a shift (softmax does not depend on it), so it is
+        # taken without a gradient, as torch.softmax's own stabilization.
+        row_max = torch.full_like(self_scores, float("-inf")).scatter_reduce(
+            -1, rows.expand_as(scores), scores.detach(), reduce="amax", include_self=True)
+        weights = torch.exp(scores - row_max[..., rows])
+        totals = torch.zeros_like(self_scores).index_add(-1, rows, weights)
+        coefficients = F.dropout(weights / totals[..., rows], self.dropout, self.training)
+        out = torch.zeros_like(wh).index_add(2, rows, coefficients[..., None] * wh[..., columns, :])
+        out = out.permute(0, 2, 1, 3).flatten(2) if self.concat else out.mean(dim=1)
+        return out + self.bias
+
+
 class CoraGAT(nn.Module):
     """The "gat" row: Velickovic et al.'s Cora GAT as AiDotNet's GraphAttentionNetwork builds it - 1,433 features ->
     8 heads x 8 (ELU, concatenated) -> 1 head x 7 classes, attention dropout 0.6 - trained full-batch for node
     classification on the Cora-sized graph, 92,373 parameters (PyG's GATConv pair on Cora has the same count).
     AiDotNet applies the paper's 0.6 dropout to the attention coefficients only, not also to each layer's input, so
-    this twin does too. One sample is the whole graph: the row runs at batch size 1."""
+    this twin does too. Attention runs over the graph's 13,540 stored entries (EdgeGATLayer), as AiDotNet's sparse
+    kernel does. A dense N x N twin did 2,708^2 / 13,540 = 542x the attention work, which made the row a
+    dense-versus-sparse comparison. One sample is the whole graph: the row runs at batch size 1."""
 
     def __init__(self) -> None:
         super().__init__()
-        self.register_buffer("mask", cora_like_graph())
-        self.gat1 = DenseGATLayer(GAT_FEATURES, 8, 8, concat=True, dropout=0.6)
-        self.gat2 = DenseGATLayer(64, GAT_CLASSES, 1, concat=False, dropout=0.6)
+        rows, columns = cora_like_edges()
+        self.register_buffer("edge_rows", rows)
+        self.register_buffer("edge_columns", columns)
+        self.gat1 = EdgeGATLayer(GAT_FEATURES, 8, 8, concat=True, dropout=0.6)
+        self.gat2 = EdgeGATLayer(64, GAT_CLASSES, 1, concat=False, dropout=0.6)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.gat2(F.elu(self.gat1(x, self.mask)), self.mask)
+        edges = (self.edge_rows, self.edge_columns)
+        return self.gat2(F.elu(self.gat1(x, edges)), edges)
 
     @staticmethod
     def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
@@ -1810,13 +1851,14 @@ class HifiGanV1(nn.Module):
     def forward(self, mel: torch.Tensor) -> torch.Tensor:
         return self.generator(mel)
 
-    def compile_parts(self) -> None:
+    def compile_parts(self, **compile_options: object) -> None:
         """--compile: train_step calls the networks directly, so compile them rather than only forward."""
         # The protocol fixes training to 32 frames and inference to 256 at b1/b8/b16.
         # Automatic dynamic promotion can leave MPD reflection padding symbolic when the
         # frozen discriminator recompiles for generator gradients. Specialize every shape.
-        self.generator = torch.compile(self.generator, dynamic=False)
-        self.discriminators = torch.compile(self.discriminators, dynamic=False)
+        options = {**compile_options, "dynamic": False}
+        self.generator = torch.compile(self.generator, **options)
+        self.discriminators = torch.compile(self.discriminators, **options)
 
     def train_step(self, mel: torch.Tensor, audio: torch.Tensor) -> torch.Tensor:
         if mel.shape[0] != 1:

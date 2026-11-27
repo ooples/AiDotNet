@@ -23,8 +23,8 @@ namespace AiDotNet.Tests.IntegrationTests.Optimizers;
 /// base.UpdateSolution path, its parameter delta would diverge from the
 /// known-good Step contract.
 ///
-/// <para>Mirrors the empirical bar from cheatcountry/HarmonicEngine
-/// Phase_PAPER_A_BuildAsyncDiagnostic_1380Bisect (Test 5: split data
+/// <para>Mirrors the empirical bar from a downstream
+/// BuildAsync bisect for #1380 (Test 5: split data
 /// 800/171/173 — shipped 0.206.0 NaN, after this PR finite ≈ 36-50).</para>
 /// </summary>
 public class Issue1413_UpdateSolutionConsolidationTests
