@@ -37,18 +37,13 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Deep Voice 3 model for fully convolutional TTS
-/// // with monotonic attention and multi-speaker support
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new DeepVoice3&lt;double&gt;(architecture, "deepvoice3.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new DeepVoice3&lt;double&gt;(architecture, new DeepVoice3Options());
+///     inputSize: 200, outputSize: 80);
+/// var model = new DeepVoice3&lt;double&gt;(architecture, new DeepVoice3Options());
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel spectrogram; a vocoder turns it into audio
+/// // Untrained native layers; the DeepVoice3(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

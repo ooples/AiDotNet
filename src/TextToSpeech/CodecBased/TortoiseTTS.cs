@@ -25,18 +25,15 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a TorToise TTS model for high-quality synthesis through scaling
-/// // with multi-voice conditioning and CLVP re-ranking
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new TortoiseTTS&lt;double&gt;(architecture, "tortoisetts.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new TortoiseTTS&lt;double&gt;(architecture, new TortoiseTTSOptions());
+///     inputSize: 1, outputSize: 1);
+/// var model = new TortoiseTTS&lt;double&gt;(architecture, new TortoiseTTSOptions());
+/// var reference = Tensor&lt;double&gt;.CreateRandom(1, 3 * 24000);   // stands in for 3 s of the target voice at 24 kHz
+/// model.Voice = model.CreateVoice(reference);
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// // Untrained native layers; the TortoiseTTS(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

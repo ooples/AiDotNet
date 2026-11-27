@@ -28,18 +28,14 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a WaveRNN vocoder for efficient autoregressive synthesis
-/// // with dual softmax output and subscale sample generation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new WaveRNN&lt;double&gt;(architecture, "wavernn.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new WaveRNN&lt;double&gt;(architecture, new WaveRNNOptions());
+///     inputSize: 80, outputSize: 1);
+/// var model = new WaveRNN&lt;double&gt;(architecture, new WaveRNNOptions());
+/// var mel = Tensor&lt;double&gt;.CreateRandom(model.MelChannels, 100);   // stands in for a [mel bins, frames] spectrogram
+/// Tensor&lt;double&gt; waveform = model.MelToWaveform(mel);
+/// // Untrained native layers; the WaveRNN(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

@@ -37,11 +37,12 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 200, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new Kokoro&lt;double&gt;(architecture, "kokoro.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new Kokoro&lt;double&gt;(architecture, new KokoroOptions());
+/// // Raw text needs a phonemizer: the official Misaki frontend through TextPhonemizer, or (as here) the
+/// // approximate built-in English frontend, which must be selected explicitly.
+/// var model = new Kokoro&lt;double&gt;(architecture, new KokoroOptions { UseNativeEnglishFallback = true });
+/// model.LoadAuthorWeights("Kokoro-82M/kokoro-v1_0.pth", "Kokoro-82M/config.json");   // the released checkpoint
+/// model.LoadVoice("Kokoro-82M/voices/af_heart.pt");   // a released voice bank [length, 1, 256]
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
 /// </code>
 /// </example>
 /// </remarks>

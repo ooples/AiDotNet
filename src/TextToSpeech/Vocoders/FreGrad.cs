@@ -30,18 +30,14 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a FreGrad vocoder for frequency-domain diffusion synthesis
-/// // using discrete wavelet transform (DWT) for faster generation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new FreGrad&lt;double&gt;(architecture, "fregrad.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new FreGrad&lt;double&gt;(architecture, new FreGradOptions());
+///     inputSize: 80, outputSize: 1);
+/// var model = new FreGrad&lt;double&gt;(architecture, new FreGradOptions());
+/// var mel = Tensor&lt;double&gt;.CreateRandom(model.MelChannels, 100);   // stands in for a [mel bins, frames] spectrogram
+/// Tensor&lt;double&gt; waveform = model.MelToWaveform(mel);
+/// // Untrained native layers; the FreGrad(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

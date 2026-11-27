@@ -45,18 +45,13 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Tacotron model for sequence-to-sequence TTS
-/// // with CBHG encoder and autoregressive decoder with attention
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new Tacotron&lt;double&gt;(architecture, "tacotron.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new Tacotron&lt;double&gt;(architecture, new TacotronOptions());
+///     inputSize: 200, outputSize: 80);
+/// var model = new Tacotron&lt;double&gt;(architecture, new TacotronOptions());
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel spectrogram; a vocoder turns it into audio
+/// // Untrained native layers; the Tacotron(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
