@@ -216,7 +216,10 @@ public partial class BLIP3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLan
         // 2 + ...: PatchEmbeddingLayer + pre-norm, then N×vision-block.
         int visionLayerEnd = 2 + _options.NumVisionLayers * blockSize;
         int qfProj = _options.VisionDim != _options.QFormerDim ? 1 : 0;
-        int qFormerLayerEnd = visionLayerEnd + qfProj + _options.NumQFormerLayers * qfBlockSize;
+        // The decoder-width projection that opens the helper's decoder belongs with the resampled visual tokens:
+        // the prompt joins them at the decoder's width.
+        int qFormerLayerEnd = visionLayerEnd + qfProj + _options.NumQFormerLayers * qfBlockSize
+            + (_options.QFormerDim != _options.DecoderDim ? 1 : 0);
 
         var allLayers = LayerHelper<T>.CreateDefaultQFormerGenerativeLayers(
             _options.VisionDim,

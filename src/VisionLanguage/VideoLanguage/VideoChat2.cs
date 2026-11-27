@@ -325,11 +325,13 @@ public partial class VideoChat2<T> : VisionLanguageModelBase<T>, IVideoLanguageM
     {
         // CreateDefaultVideoQFormerVLMLayers: patch(1)+LN(1) + numVisionLayers·(block+optional dropout)
         // + (visionDim!=qFormerDim ? 1 : 0) map + numQFormerLayers·(7 block layers + optional dropout)
-        // before the projection + LLM. The visual segment ends after the Q-Former.
+        // + the projection (Dense + LayerNorm), then the LLM.
         int perBlock = _options.DropoutRate > 0 ? 2 : 1;
         int qfPerBlock = _options.DropoutRate > 0 ? 8 : 7;
         int mapLayers = _options.VisionDim != _options.QFormerDim ? 1 : 0;
-        _encoderLayerEnd = 2 + _options.NumVisionLayers * perBlock + mapLayers + _options.NumQFormerLayers * qfPerBlock;
+        // Through the Q-Former and the MLP projection to the LLM (Dense + LayerNorm), so the visual tokens are
+        // DecoderDim wide where the prompt joins them.
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * perBlock + mapLayers + _options.NumQFormerLayers * qfPerBlock + 2;
     }
 
     private Tensor<T> TokenizeText(string text)

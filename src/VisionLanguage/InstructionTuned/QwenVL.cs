@@ -239,7 +239,10 @@ public partial class QwenVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVL
         int rBlockSize = _options.DropoutRate > 0 ? 8 : 7;
         int visionLayerEnd = 1 + _options.NumVisionLayers * blockSize;
         int rProj = _options.VisionDim != _options.ResamplerDim ? 1 : 0;
-        int resamplerLayerEnd = visionLayerEnd + rProj + _options.NumResamplerLayers * rBlockSize;
+        // The decoder-width projection that opens the helper's decoder belongs with the resampled visual tokens:
+        // the prompt joins them at the decoder's width.
+        int resamplerLayerEnd = visionLayerEnd + rProj + _options.NumResamplerLayers * rBlockSize
+            + (_options.ResamplerDim != _options.DecoderDim ? 1 : 0);
 
         var allLayers = LayerHelper<T>.CreateDefaultPerceiverResamplerLayers(
             _options.VisionDim,

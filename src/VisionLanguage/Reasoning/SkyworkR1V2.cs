@@ -363,7 +363,8 @@ public partial class SkyworkR1V2<T> : VisionLanguageModelBase<T>, IReasoningVLM<
     private void ComputeEncoderDecoderBoundary()
     {
         int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 3;
+        // PatchEmbedding + LayerNorm, the vision blocks, then the connector (Dense, Dense, LayerNorm).
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb + 3;
     }
 
     private Tensor<T> TokenizeText(string text)

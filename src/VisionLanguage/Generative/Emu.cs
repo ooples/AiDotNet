@@ -209,7 +209,8 @@ public partial class Emu<T> : VisionLanguageModelBase<T>, IGenerativeVisionLangu
         }
 
         int blockSize = _options.DropoutRate > 0 ? 6 : 5;
-        int decoderBlockSize = _options.DropoutRate > 0 ? 6 : 5;
+        // Self-attention, LayerNorm, cross-attention, LayerNorm, Dense, Dense, LayerNorm, optional Dropout.
+        int decoderBlockSize = _options.DropoutRate > 0 ? 8 : 7;
         int visionLayerEnd =
             1
             + _options.NumVisionLayers * blockSize

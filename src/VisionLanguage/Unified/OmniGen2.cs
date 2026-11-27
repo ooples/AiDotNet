@@ -313,8 +313,9 @@ public partial class OmniGen2<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
     private void ComputeEncoderDecoderBoundary()
     {
         int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        // PatchEmbedding + LayerNorm, the vision blocks, then the projection to the shared width when it differs.
         _encoderLayerEnd =
-            1
+            2
             + _options.NumVisionLayers * lpb
             + (_options.VisionDim != _options.DecoderDim ? 1 : 0);
     }

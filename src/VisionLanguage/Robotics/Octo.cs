@@ -350,7 +350,8 @@ public partial class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction
         int lpb = _options.DropoutRate > 0 ? 6 : 5;
         // +1 leading input projection, +1 leading vision LayerNorm, + numVisionLayers blocks, + 2 for the
         // MLP projection (Dense + LayerNorm) that bridges the vision encoder to the decoder.
-        _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb + 2;
+        // The input projection (Dense), the vision blocks, then the MLP projection (Dense + LayerNorm).
+        _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 2;
     }
 
     private Tensor<T> TokenizeText(string text)

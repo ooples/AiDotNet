@@ -298,7 +298,9 @@ public partial class VideoLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageM
         // LLM decoder. The vision-encoder segment (what EncodeImage runs to produce visual
         // features, before the LLM projection) ends after the vision blocks.
         int perBlock = _options.DropoutRate > 0 ? 2 : 1;
-        _encoderLayerEnd = 2 + _options.NumVisionLayers * perBlock;
+        // The encoder includes the linear projection to the LLM (Dense + LayerNorm), so its tokens are DecoderDim wide
+        // and the prompt joins them at the decoder's width.
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * perBlock + 2;
     }
 
     private Tensor<T> TokenizeText(string text)

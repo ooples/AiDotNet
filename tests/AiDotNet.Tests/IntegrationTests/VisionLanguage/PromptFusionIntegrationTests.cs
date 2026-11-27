@@ -5,9 +5,11 @@ using System.Threading.Tasks;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.VisionLanguage.Document;
 using AiDotNet.VisionLanguage.Medical;
 using AiDotNet.VisionLanguage.Reasoning;
 using AiDotNet.VisionLanguage.Robotics;
+using AiDotNet.VisionLanguage.Unified;
 using AiDotNet.VisionLanguage.VideoLanguage;
 using Xunit;
 
@@ -21,7 +23,10 @@ namespace AiDotNet.Tests.IntegrationTests.VisionLanguage;
 /// </summary>
 public class PromptFusionIntegrationTests
 {
+    // The decoder width, and a different vision width: with equal widths a boundary that stops before the projection
+    // to the decoder (or one layer into it) goes unnoticed.
     private const int Width = 16;
+    private const int VisionWidth = 24;
 
     private static NeuralNetworkArchitecture<double> Architecture(int size) => new(
         inputType: InputType.ThreeDimensional, taskType: NeuralNetworkTaskType.Regression,
@@ -57,7 +62,7 @@ public class PromptFusionIntegrationTests
         await Task.Yield();
         var model = new DragonflyMed<double>(Architecture(28), new DragonflyMedOptions
         {
-            ImageSize = 28, VisionDim = Width, DecoderDim = Width, NumVisionLayers = 1, NumDecoderLayers = 1,
+            ImageSize = 28, VisionDim = VisionWidth, DecoderDim = Width, NumVisionLayers = 1, NumDecoderLayers = 1,
             NumHeads = 2, VocabSize = 64, MaxSequenceLength = 16, DropoutRate = 0,
         });
         var image = Image(28, 1);
@@ -80,7 +85,7 @@ public class PromptFusionIntegrationTests
         await Task.Yield();
         var model = new KimiVL<double>(Architecture(28), new KimiVLOptions
         {
-            ImageSize = 28, MaxVisualTokens = 4, VisionDim = Width, DecoderDim = Width, NumVisionLayers = 1,
+            ImageSize = 28, MaxVisualTokens = 4, VisionDim = VisionWidth, DecoderDim = Width, NumVisionLayers = 1,
             NumDecoderLayers = 1, NumHeads = 2, VocabSize = 64, MaxSequenceLength = 16, DropoutRate = 0,
         });
 
@@ -97,7 +102,7 @@ public class PromptFusionIntegrationTests
         await Task.Yield();
         var options = new OctoOptions
         {
-            ImageSize = 28, VisionDim = Width, DecoderDim = Width, NumVisionLayers = 1, NumDecoderLayers = 1,
+            ImageSize = 28, VisionDim = VisionWidth, DecoderDim = Width, NumVisionLayers = 1, NumDecoderLayers = 1,
             NumHeads = 2, VocabSize = 64, MaxSequenceLength = 16, DropoutRate = 0,
         };
         var model = new Octo<double>(Architecture(28), options);
@@ -117,7 +122,7 @@ public class PromptFusionIntegrationTests
         await Task.Yield();
         var model = new VideoLLaMA3<double>(Architecture(32), new VideoLLaMA3Options
         {
-            ImageSize = 32, VisionDim = Width, DecoderDim = Width, NumVisionLayers = 1, NumDecoderLayers = 1,
+            ImageSize = 32, VisionDim = VisionWidth, DecoderDim = Width, NumVisionLayers = 1, NumDecoderLayers = 1,
             NumHeads = 2, VocabSize = 64, MaxSequenceLength = 16, MaxFrames = 4, DropoutRate = 0,
         });
         var frames = new List<Tensor<double>> { Image(32, 4), Image(32, 5) };
@@ -138,7 +143,7 @@ public class PromptFusionIntegrationTests
         await Task.Yield();
         var model = new VideoLLaMA3<double>(Architecture(32), new VideoLLaMA3Options
         {
-            ImageSize = 32, VisionDim = Width, DecoderDim = Width, NumVisionLayers = 1, NumDecoderLayers = 1,
+            ImageSize = 32, VisionDim = VisionWidth, DecoderDim = Width, NumVisionLayers = 1, NumDecoderLayers = 1,
             NumHeads = 2, VocabSize = 64, MaxSequenceLength = 16, DropoutRate = 0,
         });
 
@@ -146,5 +151,42 @@ public class PromptFusionIntegrationTests
 
         AssertFinite(answer);
         Assert.Equal(Width, answer.Shape[answer.Rank - 1]);
+    }
+    [Fact(Timeout = 120000)]
+    public async Task SEEDX_GenerateFromImage_JoinsThePromptAtTheDecoderWidth()
+    {
+        await Task.Yield();
+        var model = new SEEDX<double>(Architecture(32), new SEEDXOptions
+        {
+            ImageSize = 32, VisionDim = VisionWidth, DecoderDim = Width, NumVisionLayers = 1, NumDecoderLayers = 2,
+            NumHeads = 2, VocabSize = 64, MaxSequenceLength = 16, DropoutRate = 0,
+        });
+        var image = Image(32, 7);
+
+        var answer = model.GenerateFromImage(image, "Describe this image.");
+        var other = model.GenerateFromImage(image, "What color is the sky?");
+
+        AssertFinite(answer);
+        Assert.Equal(Width, answer.Shape[answer.Rank - 1]);
+        Assert.True(Differ(answer, other));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DocPedia_AnswerDocumentQuestion_JoinsThePromptAtTheDecoderWidth()
+    {
+        await Task.Yield();
+        var model = new DocPedia<double>(Architecture(32), new DocPediaOptions
+        {
+            ImageSize = 32, VisionDim = VisionWidth, DecoderDim = Width, NumVisionLayers = 1, NumDecoderLayers = 1,
+            NumHeads = 2, VocabSize = 64, MaxSequenceLength = 16, DropoutRate = 0,
+        });
+        var page = Image(32, 8);
+
+        var answer = model.AnswerDocumentQuestion(page, "What is the invoice total?");
+        var other = model.AnswerDocumentQuestion(page, "Who signed the letter?");
+
+        AssertFinite(answer);
+        Assert.Equal(Width, answer.Shape[answer.Rank - 1]);
+        Assert.True(Differ(answer, other));
     }
 }

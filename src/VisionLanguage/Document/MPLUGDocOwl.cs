@@ -217,10 +217,13 @@ public partial class MPLUGDocOwl<T> : VisionLanguageModelBase<T>, IDocumentUnder
 
     private void ComputeEncoderDecoderBoundary()
     {
-        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        // PatchEmbedding, one TransformerEncoderLayer (+ Dropout) per vision block, the final LayerNorm, then the
+        // projection to the decoder width when it differs.
+        int lpb = _options.DropoutRate > 0 ? 2 : 1;
         _encoderLayerEnd =
             1
             + _options.NumVisionLayers * lpb
+            + 1
             + (_options.VisionDim != _options.DecoderDim ? 1 : 0);
     }
 

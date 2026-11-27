@@ -226,7 +226,8 @@ public partial class Fuyu<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<
 
     private void ComputeEncoderDecoderBoundary()
     {
-        _encoderLayerEnd = 1;
+        // The patch projection (Dense to DecoderDim) and its LayerNorm; every later layer is the decoder.
+        _encoderLayerEnd = 2;
     }
 
     private Tensor<T> TokenizeText(string text)

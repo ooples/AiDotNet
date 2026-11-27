@@ -210,7 +210,10 @@ public partial class OpenFlamingo<T> : VisionLanguageModelBase<T>, IGenerativeVi
         int pBlockSize = _options.DropoutRate > 0 ? 8 : 7;
         int visionLayerEnd = 1 + _options.NumVisionLayers * blockSize;
         int pProj = _options.VisionDim != _options.PerceiverDim ? 1 : 0;
-        int perceiverLayerEnd = visionLayerEnd + pProj + _options.NumPerceiverLayers * pBlockSize;
+        // The decoder-width projection that opens the helper's decoder belongs with the resampled visual tokens:
+        // the prompt joins them at the decoder's width.
+        int perceiverLayerEnd = visionLayerEnd + pProj + _options.NumPerceiverLayers * pBlockSize
+            + (_options.PerceiverDim != _options.DecoderDim ? 1 : 0);
 
         var allLayers = LayerHelper<T>.CreateDefaultPerceiverResamplerLayers(
             _options.VisionDim,

@@ -225,7 +225,10 @@ public partial class MPLUGOwl<T> : VisionLanguageModelBase<T>, IInstructionTuned
         int aBlockSize = _options.DropoutRate > 0 ? 8 : 7;
         int visionLayerEnd = 1 + _options.NumVisionLayers * blockSize;
         int aProj = _options.VisionDim != _options.AbstractorDim ? 1 : 0;
-        int abstractorLayerEnd = visionLayerEnd + aProj + _options.NumAbstractorLayers * aBlockSize;
+        // The decoder-width projection that opens the helper's decoder belongs with the resampled visual tokens:
+        // the prompt joins them at the decoder's width.
+        int abstractorLayerEnd = visionLayerEnd + aProj + _options.NumAbstractorLayers * aBlockSize
+            + (_options.AbstractorDim != _options.DecoderDim ? 1 : 0);
 
         var allLayers = LayerHelper<T>.CreateDefaultPerceiverResamplerLayers(
             _options.VisionDim,

@@ -230,8 +230,12 @@ public partial class MedFlamingo<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
 
     private void ComputeEncoderDecoderBoundary()
     {
+        // The vision input projection and blocks, the six perceiver blocks (cross-attention, LayerNorm, self-attention,
+        // LayerNorm, Dense, Dense, LayerNorm, optional Dropout), then the decoder-width projection when it differs.
         int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 6 * lpb;
+        int perceiverBlock = _options.DropoutRate > 0 ? 8 : 7;
+        _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 6 * perceiverBlock
+            + (_options.VisionDim != _options.DecoderDim ? 1 : 0);
     }
 
     private Tensor<T> TokenizeText(string text)
