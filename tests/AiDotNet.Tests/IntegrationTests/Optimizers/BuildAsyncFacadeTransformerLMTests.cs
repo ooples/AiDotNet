@@ -32,7 +32,7 @@ namespace AiDotNet.Tests.IntegrationTests.Optimizers;
 /// <see cref="ByteLMV256Issue1380Tests"/>) drive <c>AdamOptimizer.Optimize</c>
 /// or <c>Transformer&lt;float&gt;.Train</c> directly. Neither passes through
 /// <see cref="AiModelBuilder{T,TIn,TOut}.BuildAsync"/> — the surface
-/// HarmonicEngine + every documented sample-code consumer actually uses.
+/// Downstream consumers + every documented sample-code consumer actually uses.
 /// This file pins the contract at that surface so future regressions in
 /// the builder's compose-and-handoff path can't masquerade as "training
 /// works" while the facade silently routes data away from the optimizer.</para>
@@ -148,7 +148,7 @@ public class BuildAsyncFacadeTransformerLMTests
 
         // Facade path: identical fixture, but driven through the public
         // AiModelBuilder.BuildAsync surface. This is what every documented
-        // sample-code consumer uses and what HarmonicEngine's facade
+        // sample-code consumer uses and what a downstream consumer's facade
         // predictors use. The H7 (Vector→Tensor bridge) fix must reach
         // THIS path, not just the bare optimizer.Optimize call the
         // existing reproducers exercise.
@@ -277,7 +277,7 @@ public class BuildAsyncFacadeTransformerLMTests
         // #1382 root cause: passing both `layers:` and `numEncoderLayers > 0`
         // used to silently drop the auto-built encoder block — the custom
         // chain BECAME the entire model. For zero-trainable-parameter
-        // custom chains (HRE substitutions are intentionally zero-param)
+        // custom chains (custom substitutions are intentionally zero-param)
         // this left the consumer with 0 trainable parameters and a
         // non-functioning model. For other custom chains it surfaced
         // as a broadcast/shape mismatch on the very first training
@@ -463,7 +463,7 @@ public class BuildAsyncFacadeTransformerLMTests
 
     /// <summary>
     /// Build a 2-layer chain of zero-trainable-parameter layers shaped
-    /// like the HRE substitution stack: an <see cref="InputLayer{T}"/>
+    /// like a custom substitution stack: an <see cref="InputLayer{T}"/>
     /// declaring the architecture's expected input shape, followed by
     /// an identity-<see cref="ActivationLayer{T}"/> pass-through. Both
     /// are zero-trainable-parameter by design — the substrate-correct

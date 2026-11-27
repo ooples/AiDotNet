@@ -22,7 +22,7 @@ namespace AiDotNet.Tests.IntegrationTests.Optimizers;
 /// parity), and H6 (two-Adam-impl divergence).
 ///
 /// <para>
-/// HarmonicEngine's <c>Phase_PAPER_A_PathB_SingleSeed_Runner</c> consumer
+/// A downstream single-seed runner consumer
 /// reproducer hit <c>top-1 = 0%, perplexity = 256.00 (uniform)</c> on a
 /// V=256 byte-LM Transformer through <c>AiModelBuilder.BuildAsync</c>,
 /// while the per-sample <c>model.Train(x, y)</c> driver reached
@@ -76,7 +76,7 @@ public class ByteLMV256Issue1380Tests
         _output = output;
     }
 
-    // V=256 mirrors the consumer reproducer (HarmonicEngine Phase_PAPER_A):
+    // V=256 mirrors the consumer reproducer (a downstream consumer):
     // the residual collapse is vocab-size dependent, so V=256 stays. To
     // fit CI's per-test budget while still clearing the 0.01-nat
     // learnability floor for the per-sample reference, this fixture uses

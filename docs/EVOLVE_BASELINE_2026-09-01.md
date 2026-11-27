@@ -52,4 +52,4 @@ The existing serialized numeric values are:
 
 ## Private recovery evidence
 
-The private recovered implementation is preserved in HarmonicEngine commit `7596cd7` and annotated tag `hre-evolve-recovery-2026-09-01`. Its existing full-versus-local-ablation result is negative and is not treated as an OpenEvolve comparison.
+The private recovered implementation is preserved in a private repository. Its existing full-versus-local-ablation result is negative and is not treated as an OpenEvolve comparison.
