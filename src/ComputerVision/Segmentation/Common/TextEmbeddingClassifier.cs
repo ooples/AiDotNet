@@ -64,6 +64,10 @@ internal static class TextEmbeddingClassifier
             throw new InvalidOperationException(
                 $"The text encoder returned {encoded.Length} embeddings for {texts.Count} texts.");
 
+        // The normalized vocabulary is kept for the model's lifetime, so it must not come from an ambient
+        // TensorArena: one built inside an arena was recycled by the next Reset, and the training forward then
+        // found a reissued buffer where the [K, D] text embeddings had been.
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         var rows = new Tensor<T>[encoded.Length];
         for (int k = 0; k < encoded.Length; k++)
         {

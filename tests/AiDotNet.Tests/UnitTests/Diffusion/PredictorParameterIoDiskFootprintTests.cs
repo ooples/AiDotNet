@@ -35,7 +35,7 @@ public sealed class PredictorParameterIoDiskFootprintTests : DiffusionUnitTestBa
         long modelBytes = predictor.ParameterCount * sizeof(float);
         scope.CapResidentBytes(modelBytes / 4);
 
-        AssertParameterChunksRoundTrip(predictor.GetParameterChunks, predictor.SetParameterChunks);
+        AssertDetachedChunksRestore(predictor.GetParameterChunks, predictor.SetParameterChunks);
 
         AssertWrittenOnce(modelBytes, TensorCount(predictor.GetParameterChunks()));
     }
@@ -50,7 +50,7 @@ public sealed class PredictorParameterIoDiskFootprintTests : DiffusionUnitTestBa
         long modelBytes = predictor.ParameterCount * sizeof(float);
         scope.CapResidentBytes(modelBytes / 4);
 
-        AssertParameterChunksRoundTrip(predictor.GetParameterChunks, predictor.SetParameterChunks);
+        AssertDetachedChunksRestore(predictor.GetParameterChunks, predictor.SetParameterChunks);
 
         AssertWrittenOnce(modelBytes, TensorCount(predictor.GetParameterChunks()));
     }
@@ -325,6 +325,42 @@ public sealed class PredictorParameterIoDiskFootprintTests : DiffusionUnitTestBa
     private static MMDiTXNoisePredictor<float> NewMMDiTX(int seed) => new(
         MMDiTXVariant.Medium, inputChannels: 4, patchSize: 2, contextDim: 32, seed: seed,
         hiddenSizeOverride: 64, numLayersOverride: 2, numHeadsOverride: 4);
+
+    /// <summary>
+    /// Feeds the setter detached chunks holding values the model does not have, then reads them back. Writing the
+    /// values into the live tensors and handing those same tensors to the setter would let a setter that does nothing
+    /// pass; these reduced-size models can afford the copy the foundation-scale helper avoids.
+    /// </summary>
+    private static void AssertDetachedChunksRestore(
+        Func<System.Collections.Generic.IEnumerable<Tensor<float>>> getChunks,
+        Action<System.Collections.Generic.IEnumerable<Tensor<float>>> setChunks)
+    {
+        static float Expected(long globalIndex) => (float)((globalIndex % 991) * 0.001 - 0.25);
+
+        long gi = 0;
+        var detached = getChunks().Select(chunk =>
+        {
+            var values = new float[chunk.Length];
+            for (int i = 0; i < values.Length; i++) values[i] = Expected(gi + i);
+            gi += values.Length;
+            return new Tensor<float>(chunk.Shape.ToArray(), new Vector<float>(values));
+        }).ToArray();
+        Assert.True(gi > 0, "Model exposed no parameter chunks.");
+        Assert.Contains(getChunks().SelectMany(chunk => chunk.ToArray()).Select((v, i) => v != Expected(i)), changed => changed);
+
+        setChunks(detached);
+
+        long index = 0;
+        foreach (var chunk in getChunks())
+        {
+            var values = chunk.ToArray();
+            for (int i = 0; i < values.Length; i++, index++)
+            {
+                if (values[i] != Expected(index)) Assert.Equal(Expected(index), values[i]);
+            }
+        }
+        Assert.Equal(gi, index);
+    }
 
     private static int TensorCount(System.Collections.Generic.IEnumerable<Tensor<float>> chunks) => chunks.Count();
 

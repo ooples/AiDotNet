@@ -283,12 +283,13 @@ public abstract partial class ObjectDetectorBase<T> : VisionTaskModelBase<T>
     /// </summary>
     protected override Tensor<T> TrainingForward(Tensor<T> input)
     {
+        // No early return for an empty DataOutputIndices: PadRows' padding rows must still leave the loss.
         _rawStepPredictionCount = -1;
-        if (DataOutputIndices.Count == 0) return Predict(input);
         NoteResolvedInput(input);
         var prediction = CvTensorOps<T>.ConcatenateTrainableOutputs(
             Forward(input), DataOutputIndices, RawStepTarget, out int predictionCount);
-        _rawStepPredictionCount = predictionCount;
+        if (predictionCount != prediction.Length)
+            _rawStepPredictionCount = predictionCount;
         return prediction;
     }
 

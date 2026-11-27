@@ -9,19 +9,31 @@ namespace AiDotNet.ActivationFunctions;
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
+/// The classes are the leaves of a balanced binary tree (Morin and Bengio, 2005). Each of the
+/// <c>numClasses - 1</c> internal nodes owns a weight vector <c>w_n</c> and decides between its two subtrees with
+/// <c>sigmoid(w_n . x)</c> (right) and <c>1 - sigmoid(w_n . x)</c> (left). The probability of a class is the product
+/// of the decisions on the path from the root to its leaf. Because every internal node splits its probability mass
+/// between its two children, the class probabilities sum to 1 for any number of classes.
+/// </para>
+/// <para>
+/// The tree is built by halving: a node that covers classes <c>[low, high)</c> sends the first
+/// <c>ceil((high - low) / 2)</c> of them left and the rest right, so no path is longer than
+/// <c>ceil(log2(numClasses))</c>. Internal nodes are numbered in pre-order (a node, then its left subtree, then its
+/// right subtree); node 0 is the root.
+/// </para>
+/// <para>
 /// <b>For Beginners:</b> Hierarchical Softmax is an efficient alternative to the standard Softmax function,
 /// especially when dealing with a large number of output classes (like thousands of words in language models).
-/// 
+///
 /// While regular Softmax calculates probabilities for all possible classes at once (which can be slow
 /// with many classes), Hierarchical Softmax organizes classes in a tree structure:
-/// 
+///
 /// - Think of it like a "20 Questions" game where each question narrows down the possibilities
-/// - Each node in the tree represents a binary decision (left or right)
+/// - Each node in the tree asks its own yes/no question (left or right)
 /// - The final probability is calculated by multiplying probabilities along the path to a class
-/// 
-/// This approach reduces computation from O(N) to O(log N), where N is the number of classes,
-/// making it much faster for problems with many output classes.
-/// 
+///
+/// Finding the probability of one class takes O(log N) questions instead of O(N), where N is the number of classes.
+///
 /// Common uses include:
 /// - Natural language processing (predicting words from vocabularies)
 /// - Classification problems with many categories
@@ -35,306 +47,322 @@ namespace AiDotNet.ActivationFunctions;
 public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>
-    /// The total number of output classes.
+    /// The total number of output classes (the leaves of the tree).
     /// </summary>
     private readonly int _numClasses;
 
     /// <summary>
-    /// The depth of the binary tree used to represent the hierarchical structure.
+    /// The number of internal nodes of the tree: <c>numClasses - 1</c>.
     /// </summary>
-    private readonly int _treeDepth;
+    private readonly int _nodeCount;
 
     /// <summary>
-    /// The weights for each node in the binary tree.
+    /// The longest root-to-leaf path: <c>ceil(log2(numClasses))</c> decisions.
     /// </summary>
-    private Matrix<T> _nodeWeights;
+    private readonly int _depth;
 
     /// <summary>
-    /// The input dimension that the weight matrix was initialized for.
+    /// <c>[numClasses * depth]</c>, row-major by class: the decision at each step of the class's path, as a column of
+    /// <c>concat(right, left, zero)</c> over the nodes: <c>n</c> for a right turn at node <c>n</c>, <c>nodes + n</c>
+    /// for a left turn, and <c>2 * nodes</c> (the zero column) past the end of a shorter path. O(C log C) entries, where
+    /// dense turn tables were C x (C - 1).
+    /// </summary>
+    private readonly Tensor<int> _pathSlots;
+
+    /// <summary>
+    /// <c>[numClasses * depth]</c>: the node at each step of the class's path, or <c>nodes</c> (a zero weight row)
+    /// past its end.
+    /// </summary>
+    private readonly Tensor<int> _pathNodes;
+
+    private Tensor<T> _nodeWeights;
+
+    /// <summary>
+    /// The input dimension that the node weights were initialized for.
     /// </summary>
     private int _weightInputDim;
 
     /// <summary>
     /// Gets the node weights as a tensor.
     /// </summary>
-    /// <value>A tensor containing the node weights with shape [treeDepth, numClasses].</value>
+    /// <value>
+    /// A tensor with shape [numClasses - 1, inputDim]: one weight vector per internal node of the tree, in pre-order
+    /// (row 0 is the root).
+    /// </value>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This property provides access to the internal weights used by the hierarchical
-    /// tree structure, for inspection or export.
+    /// <b>For Beginners:</b> every decision point in the tree has its own set of weights. This property exposes
+    /// all of them so the activation can be traced, exported, or inspected. The tensor is a copy: changing it does
+    /// not change the activation.
     /// </para>
     /// </remarks>
-    public Tensor<T> NodeWeightsTensor => Tensor<T>.FromRowMatrix(_nodeWeights);
+    public Tensor<T> NodeWeightsTensor
+    {
+        get
+        {
+            // Before any forward pass the weights are those for an input as wide as the class count.
+            if (_weightInputDim < 0) EnsureWeights(_numClasses);
+            return new Tensor<T>(_nodeWeights.ToArray(), new[] { _nodeCount, _weightInputDim });
+        }
+    }
 
     /// <summary>
     /// Initializes a new instance of the Hierarchical Softmax activation function.
     /// </summary>
-    /// <param name="numClasses">The number of output classes to support.</param>
+    /// <param name="numClasses">The number of output classes; at least 1.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="numClasses"/> is less than 1.</exception>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This constructor sets up the hierarchical structure needed for efficient probability calculation.
-    /// 
-    /// It creates a binary tree where:
-    /// - The number of levels (tree depth) is calculated based on the number of classes
-    /// - Each node in the tree gets its own set of weights
-    /// - Weights are initialized randomly to start the learning process
-    /// 
-    /// For example, if you have 8 classes, it creates a 3-level tree (because 2³=8),
-    /// allowing the model to make 3 binary decisions to reach any of the 8 classes.
+    /// <b>For Beginners:</b> This constructor sets up the Hierarchical Softmax with the specified number of classes.
+    ///
+    /// When you create a Hierarchical Softmax:
+    /// - It builds a balanced binary tree whose leaves are the classes
+    /// - It gives every decision point in the tree (there are numClasses - 1 of them) its own random weights
+    ///
+    /// For example, with 5 classes the root separates classes 0-2 from classes 3-4, the next decision on the left
+    /// separates classes 0-1 from class 2, and so on until every class sits alone at a leaf. A single class needs
+    /// no decision at all and always has probability 1.
     /// </para>
     /// </remarks>
     public HierarchicalSoftmaxActivation(int numClasses)
     {
+        if (numClasses < 1)
+            throw new ArgumentOutOfRangeException(nameof(numClasses), numClasses, "At least one class is required.");
+
         _numClasses = numClasses;
-        _treeDepth = (int)Math.Ceiling(MathHelper.Log2(numClasses));
-        _weightInputDim = numClasses;
-        _nodeWeights = new Matrix<T>(_treeDepth, numClasses);
-        InitializeWeights();
+        _nodeCount = numClasses - 1;
+        (_depth, _pathSlots, _pathNodes) = BuildPaths(numClasses);
+        // The weights are drawn when the input width is known (the first forward pass, or a read of
+        // NodeWeightsTensor): a draw for numClasses inputs would be replaced as soon as the hidden width differs.
+        _weightInputDim = -1;
+        _nodeWeights = new Tensor<T>(new[] { 0, 0 });
     }
 
     /// <summary>
-    /// Indicates whether this activation function can operate on individual scalar values.
+    /// Indicates whether this activation function supports operations on individual scalar values.
     /// </summary>
     /// <returns>Always returns false as Hierarchical Softmax requires vector operations.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This method tells the neural network that Hierarchical Softmax
+    /// cannot work with single numbers - it needs to process entire vectors (arrays of numbers) at once.
+    /// </para>
+    /// </remarks>
     protected override bool SupportsScalarOperations() => false;
 
     /// <summary>
-    /// Applies the Hierarchical Softmax activation function to transform input vectors into class probabilities.
+    /// Applies the Hierarchical Softmax activation function to an input vector.
     /// </summary>
     /// <param name="input">The input vector to transform.</param>
-    /// <returns>A vector containing probabilities for each output class.</returns>
+    /// <returns>A vector of probabilities for each class; they sum to 1.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This method converts your neural network's raw output (numbers) into probabilities
-    /// that sum to approximately 1, making them suitable for classification tasks.
-    /// 
-    /// For each possible class:
-    /// 1. It traces a unique path through the binary tree
-    /// 2. At each node, it calculates the probability of going left or right
-    /// 3. It multiplies these probabilities to get the final probability for that class
-    /// 
-    /// Unlike standard Softmax which computes all classes at once, this method calculates
-    /// each class probability independently by following its path through the tree.
+    /// <b>For Beginners:</b> This method takes a vector of numbers (like features from previous layers)
+    /// and converts them into probabilities for each possible class. The output values will be between
+    /// 0 and 1, representing how likely each class is, and together they add up to 1.
+    /// </para>
+    /// <para>
+    /// This is the tensor overload applied to the vector, so the two always agree.
     /// </para>
     /// </remarks>
     public override Vector<T> Activate(Vector<T> input)
-    {
-        // Reinitialize weights if input dimension doesn't match
-        if (input.Length != _weightInputDim)
-        {
-            _weightInputDim = input.Length;
-            _nodeWeights = new Matrix<T>(_treeDepth, input.Length);
-            InitializeWeights();
-        }
-
-        Vector<T> output = new Vector<T>(_numClasses);
-        for (int i = 0; i < _numClasses; i++)
-        {
-            output[i] = ComputePathProbability(input, i);
-        }
-
-        return output;
-    }
+        => Activate(Tensor<T>.FromVector(input)).ToVector();
 
     /// <summary>
-    /// Applies HierarchicalSoftmax to a tensor via engine primitives so the gradient
-    /// tape records every step. Computes per-depth sigmoid scores via matmul, then
-    /// builds class path probabilities using a constant "path mask" that selects
-    /// <c>sig</c> or <c>1 - sig</c> at each depth, combined via log-sum-exp instead
-    /// of a product reduction.
+    /// Applies Hierarchical Softmax to a tensor using only engine primitives so the gradient tape records every
+    /// step. Works on any tensor where the trailing dimension is the feature dimension that feeds the tree
+    /// classifier; the output has the same leading dimensions and a trailing dimension of <c>numClasses</c>.
     /// </summary>
+    /// <param name="input">Input tensor. Trailing axis must match the feature dimension.</param>
+    /// <returns>A tensor of class probabilities with trailing axis of size <c>numClasses</c>.</returns>
+    /// <remarks>
+    /// <para>
+    /// With <c>s = x W^T</c> the node scores, the log-probability of class c is
+    /// <c>sum_n right[c, n] * log sigmoid(s_n) + left[c, n] * log sigmoid(-s_n)</c>: two matrix products with the
+    /// constant path matrices. <c>log sigmoid(-s) = log sigmoid(s) - s</c>, and the log-sigmoid is finite for every
+    /// finite score, so a saturated node cannot turn an untaken branch into 0 * infinity.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> this is the batched version of the vector method: every row of the input gets its own
+    /// set of class probabilities.
+    /// </para>
+    /// </remarks>
     public override Tensor<T> Activate(Tensor<T> input)
     {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
         int rank = input.Shape.Length;
         if (rank == 0)
             throw new ArgumentException("HierarchicalSoftmax requires at least a 1D tensor.", nameof(input));
 
         int inputDim = input.Shape[rank - 1];
-        if (inputDim != _weightInputDim)
-        {
-            _weightInputDim = inputDim;
-            _nodeWeights = new Matrix<T>(_treeDepth, inputDim);
-            InitializeWeights();
-        }
+        EnsureWeights(inputDim);
 
         // Flatten leading dims into a single batch dim so we can matmul.
         int batchSize = 1;
         for (int d = 0; d < rank - 1; d++)
             batchSize *= input.Shape[d];
 
-        var input2D = rank == 1
-            ? Engine.Reshape(input, new[] { 1, inputDim })
-            : Engine.Reshape(input, new[] { batchSize, inputDim });
-
-        // Weights as [treeDepth, inputDim] → transpose to [inputDim, treeDepth].
-        var weightsTensor = Tensor<T>.FromRowMatrix(_nodeWeights);
-        var weightsT = Engine.TensorPermute(weightsTensor, new[] { 1, 0 });
-
-        // scores = input @ W^T → [batch, treeDepth]
-        var scores = Engine.TensorMatMul(input2D, weightsT);
-        var sigs = Engine.Sigmoid(scores);
-
-        // Build the constant path mask [1, numClasses, treeDepth]:
-        // mask[c, d] = 1 if class c goes right at depth d, else 0.
-        var mask = new Tensor<T>(new[] { 1, _numClasses, _treeDepth });
-        var maskSpan = mask.Data.Span;
-        for (int c = 0; c < _numClasses; c++)
-        {
-            for (int d = 0; d < _treeDepth; d++)
-            {
-                bool goRight = (c & (1 << (_treeDepth - d - 1))) != 0;
-                maskSpan[c * _treeDepth + d] = goRight ? NumOps.One : NumOps.Zero;
-            }
-        }
-
-        // Expand sigs to [batch, 1, treeDepth] and broadcast-combine with mask.
-        var sigs3D = Engine.Reshape(sigs, new[] { batchSize, 1, _treeDepth });
-        var oneMinusSigs3D = Engine.TensorSubtractScalar(
-            Engine.TensorNegate(sigs3D), NumOps.Negate(NumOps.One));
-        // perPath[b, c, d] = mask[c, d] * sigs[b, d] + (1 - mask[c, d]) * (1 - sigs[b, d])
-        var maskedSigs = Engine.TensorMultiply(sigs3D, mask);
-        var oneMinusMask = Engine.TensorSubtractScalar(
-            Engine.TensorNegate(mask), NumOps.Negate(NumOps.One));
-        var maskedOneMinusSigs = Engine.TensorMultiply(oneMinusSigs3D, oneMinusMask);
-        var perPath = Engine.TensorAdd(maskedSigs, maskedOneMinusSigs);
-
-        // Reduce path product via log-sum-exp on the depth axis.
-        var logPerPath = Engine.TensorLog(perPath);
-        var sumLog = Engine.ReduceSum(logPerPath, new[] { 2 }, keepDims: false);
-        var output2D = Engine.TensorExp(sumLog);
+        var probabilities = PathProbabilities(Engine.Reshape(input, new[] { batchSize, inputDim }));
 
         // Restore original batch shape with numClasses as the trailing axis.
         int[] outShape = new int[rank];
         for (int d = 0; d < rank - 1; d++)
             outShape[d] = input.Shape[d];
         outShape[rank - 1] = _numClasses;
-        if (rank == 1)
-            outShape = new[] { _numClasses };
-        return Engine.Reshape(output2D, outShape);
+        return Engine.Reshape(probabilities, outShape);
     }
 
     /// <summary>
-    /// Calculates the derivative (gradient) of the Hierarchical Softmax function.
+    /// Calculates the derivative (Jacobian matrix) of the Hierarchical Softmax function for an input vector.
     /// </summary>
-    /// <param name="input">The input vector at which to calculate the derivative.</param>
-    /// <returns>A Jacobian matrix containing the partial derivatives.</returns>
+    /// <param name="input">The input vector.</param>
+    /// <returns>A Jacobian matrix [numClasses, inputDim] of partial derivatives.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> The derivative tells us how much the output probabilities change when we slightly
-    /// change each input value. This information is essential during neural network training.
-    /// 
-    /// This method:
-    /// 1. Creates a matrix where each row represents how one output class is affected by changes in each input
-    /// 2. For each class, it calculates how changes to the input affect the probability of that class
-    /// 3. These calculations help the neural network learn by adjusting weights in the right direction
-    /// 
-    /// The "Jacobian matrix" is simply a collection of all these derivatives organized in rows and columns,
-    /// where each row corresponds to an output class and each column to an input dimension.
+    /// For class c, <c>dP_c/dx = P_c * sum_n (right[c, n] * (1 - sigma_n) - left[c, n] * sigma_n) * w_n</c>: the
+    /// derivative of the log of each decision on the path, times the class probability. Every column of the matrix
+    /// sums to zero, because the probabilities always sum to 1.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> The derivative tells us how much each output probability changes when we slightly
+    /// change each input value. Each row represents an output class and each column an input feature.
+    /// This information is crucial during neural network training to determine how to adjust the weights.
     /// </para>
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
     {
-        Matrix<T> jacobian = new Matrix<T>(_numClasses, input.Length);
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
 
-        for (int i = 0; i < _numClasses; i++)
+        int inputDim = input.Length;
+        EnsureWeights(inputDim);
+        if (_nodeCount == 0 || inputDim == 0)
+            return new Matrix<T>(_numClasses, inputDim);
+
+        var row = Engine.Reshape(Tensor<T>.FromVector(input), new[] { 1, inputDim });
+        var scores = NodeScores(row);
+        var takeRight = Engine.Sigmoid(scores);
+        var takeLeft = Engine.Sigmoid(Engine.TensorNegate(scores));
+
+        // d log P_c / d x = sum over the path of slope_n w_n, with slope (1 - sigma_n) on a right turn and -sigma_n on
+        // a left turn. Gathered per step of each path: O(C log C x inputDim), not a C x nodes matmul.
+        var slopes = Engine.TensorConcatenate(new[]
         {
-            Vector<T> pathDerivative = ComputePathDerivative(input, i);
-            jacobian.SetRow(i, pathDerivative);
-        }
-
-        return jacobian;
+            takeLeft, Engine.TensorNegate(takeRight), new Tensor<T>(new[] { 1, 1 }),
+        }, 1);
+        var pathSlopes = Engine.Reshape(Engine.TensorIndexSelect(slopes, _pathSlots, 1), new[] { _numClasses, _depth, 1 });
+        var paddedWeights = Engine.TensorConcatenate(new[] { _nodeWeights, new Tensor<T>(new[] { 1, inputDim }) }, 0);
+        var pathWeights = Engine.Reshape(Engine.TensorIndexSelect(paddedWeights, _pathNodes, 0),
+            new[] { _numClasses, _depth, inputDim });
+        var logGradient = Engine.ReduceSum(Engine.TensorMultiply(pathWeights, pathSlopes), new[] { 1 }, keepDims: false);
+        var probabilities = Engine.Reshape(PathProbabilities(row), new[] { _numClasses, 1 });
+        return Engine.TensorMultiply(logGradient, probabilities).ToMatrix();
     }
 
     /// <summary>
-    /// Calculates the derivative of the path probability for a specific class.
+    /// Class probabilities <c>[batch, numClasses]</c> for input rows <c>[batch, inputDim]</c>.
     /// </summary>
-    /// <param name="input">The input vector.</param>
-    /// <param name="classIndex">The index of the class for which to calculate the derivative.</param>
-    /// <returns>A vector containing the partial derivatives with respect to each input dimension.</returns>
-    private Vector<T> ComputePathDerivative(Vector<T> input, int classIndex)
+    private Tensor<T> PathProbabilities(Tensor<T> rows)
     {
-        Vector<T> derivative = new Vector<T>(input.Length);
-        int node = 1;
+        // A single class has no decision to make: probability 1.
+        if (_nodeCount == 0)
+            return Tensor<T>.CreateDefault(new[] { rows.Shape[0], 1 }, NumOps.One);
 
-        for (int depth = 0; depth < _treeDepth; depth++)
-        {
-            Vector<T> nodeWeights = _nodeWeights.GetRow(depth);
-            T nodeOutput = MathHelper.Sigmoid(input.DotProduct(nodeWeights));
-            bool goRight = (classIndex & (1 << (_treeDepth - depth - 1))) != 0;
-
-            T multiplier = goRight ? nodeOutput : NumOps.Subtract(NumOps.One, nodeOutput);
-            T derivativeFactor = NumOps.Multiply(nodeOutput, NumOps.Subtract(NumOps.One, nodeOutput));
-
-            if (goRight)
-            {
-                derivative = derivative.Add(nodeWeights.Multiply(derivativeFactor));
-            }
-            else
-            {
-                derivative = derivative.Subtract(nodeWeights.Multiply(derivativeFactor));
-            }
-
-            node = node * 2 + (goRight ? 1 : 0);
-            if (node >= _numClasses) break;
-        }
-
-        return derivative;
+        var scores = NodeScores(rows);
+        var logRight = Engine.TensorLogSigmoid(scores);
+        var logLeft = Engine.TensorSubtract(logRight, scores);
+        // log P_c: the sum of the log decisions along the class's path, gathered from concat(right, left, zero) and
+        // summed over the depth. O(rows x C log C), where a matmul by dense turn tables was O(rows x C^2).
+        int batch = rows.Shape[0];
+        var decisions = Engine.TensorConcatenate(new[] { logRight, logLeft, new Tensor<T>(new[] { batch, 1 }) }, 1);
+        var onPaths = Engine.Reshape(Engine.TensorIndexSelect(decisions, _pathSlots, 1), new[] { batch, _numClasses, _depth });
+        return Engine.TensorExp(Engine.ReduceSum(onPaths, new[] { 2 }, keepDims: false));
     }
 
     /// <summary>
-    /// Initializes the weights for all nodes in the binary tree with small random values.
+    /// Node scores <c>x . w_n</c>, <c>[batch, nodes]</c>, for input rows <c>[batch, inputDim]</c>.
     /// </summary>
-    private void InitializeWeights()
+    private Tensor<T> NodeScores(Tensor<T> rows)
+        // With no features every score is the empty dot product, 0.
+        => rows.Shape[1] == 0
+            ? new Tensor<T>(new[] { rows.Shape[0], _nodeCount })
+            : Engine.TensorMatMul(rows, Engine.TensorPermute(_nodeWeights, new[] { 1, 0 }));
+
+    /// <summary>
+    /// Draws new node weights when the input dimension differs from the one the weights were drawn for.
+    /// </summary>
+    private void EnsureWeights(int inputDim)
     {
-        var random = RandomHelper.CreateSecureRandom();
-        int cols = _nodeWeights.Columns;
-        for (int i = 0; i < _treeDepth; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                _nodeWeights[i, j] = NumOps.FromDouble(random.NextDouble() - 0.5);
-            }
-        }
+        if (inputDim == _weightInputDim)
+            return;
+        _weightInputDim = inputDim;
+        _nodeWeights = CreateWeights(_nodeCount, inputDim);
     }
 
     /// <summary>
-    /// Computes the probability of a specific class by traversing the binary tree.
+    /// Node weights <c>[nodes, inputDim]</c> drawn uniformly from [-0.5, 0.5), node by node.
     /// </summary>
-    /// <param name="input">The input vector.</param>
-    /// <param name="classIndex">The index of the class for which to compute the probability.</param>
-    /// <returns>The probability value for the specified class.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This method calculates how likely a specific class is, given the input.
-    /// 
-    /// It works by:
-    /// 1. Starting at the root (top) of the tree
-    /// 2. At each node, deciding whether to go left or right based on the class's binary code
-    /// 3. Calculating the probability of taking that path at each step
-    /// 4. Multiplying all these probabilities together to get the final probability
-    /// 
-    /// The binary code of the class index determines the path through the tree:
-    /// - Each bit in the binary representation tells us whether to go left (0) or right (1)
-    /// - For example, class 5 (binary 101) would go right, then left, then right
-    /// 
-    /// This approach is much more efficient than calculating probabilities for all classes
-    /// when you have thousands or millions of possible outputs.
+    /// <b>For Beginners:</b> before training, every decision point in the tree starts with small random weights.
+    /// Random starting values are important because they break symmetry and allow the network to learn
+    /// different patterns at different nodes.
     /// </para>
     /// </remarks>
-    private T ComputePathProbability(Vector<T> input, int classIndex)
+    private static Tensor<T> CreateWeights(int nodes, int inputDim)
     {
-        T probability = NumOps.One;
-        int node = 1;
-        for (int depth = 0; depth < _treeDepth; depth++)
-        {
-            T nodeOutput = MathHelper.Sigmoid(input.DotProduct(_nodeWeights.GetRow(depth)));
-            bool goRight = (classIndex & (1 << (_treeDepth - depth - 1))) != 0;
-            probability = NumOps.Multiply(probability, goRight ? nodeOutput : NumOps.Subtract(NumOps.One, nodeOutput));
-            node = node * 2 + (goRight ? 1 : 0);
-            if (node >= _numClasses) break;
-        }
-
-        return probability;
+        var random = RandomHelper.CreateSecureRandom();
+        var values = new double[checked(nodes * inputDim)];
+        for (int i = 0; i < values.Length; i++)
+            values[i] = random.NextDouble() - 0.5;
+        return new Tensor<double>(values, new[] { nodes, inputDim }).Cast<T>();
     }
 
+    /// <summary>
+    /// Builds the balanced tree over the classes and returns, per class and internal node, whether the path to the
+    /// class turns right or left there.
+    /// </summary>
+    private static (int Depth, Tensor<int> Slots, Tensor<int> Nodes) BuildPaths(int numClasses)
+    {
+        int nodes = numClasses - 1;
+        // ceil(log2(numClasses)): halving sends ceil(n / 2) left, so the deepest leaf is on the left-most path.
+        int depth = 0;
+        for (int span = numClasses; span > 1; span = (span + 1) / 2) depth++;
+        int width = Math.Max(depth, 1);
+        var slots = new int[checked(numClasses * width)];
+        var pathNodes = new int[slots.Length];
+        slots.AsSpan().Fill(2 * nodes);
+        pathNodes.AsSpan().Fill(nodes);
+
+        // Pre-order: a node covering [low, high) at a given depth is numbered before its left subtree, which comes
+        // before its right.
+        var pending = new Stack<(int Low, int High, int Level)>();
+        pending.Push((0, numClasses, 0));
+        int next = 0;
+        while (pending.Count > 0)
+        {
+            var (low, high, level) = pending.Pop();
+            if (high - low < 2)
+                continue;
+
+            int node = next++;
+            int middle = low + (high - low + 1) / 2;
+            for (int c = low; c < middle; c++)
+            {
+                slots[c * width + level] = nodes + node;
+                pathNodes[c * width + level] = node;
+            }
+            for (int c = middle; c < high; c++)
+            {
+                slots[c * width + level] = node;
+                pathNodes[c * width + level] = node;
+            }
+
+            pending.Push((middle, high, level + 1));
+            pending.Push((low, middle, level + 1));
+        }
+
+        return (width, new Tensor<int>(slots, new[] { slots.Length }), new Tensor<int>(pathNodes, new[] { pathNodes.Length }));
+    }
 }

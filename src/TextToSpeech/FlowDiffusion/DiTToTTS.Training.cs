@@ -9,6 +9,18 @@ public partial class DiTToTTS<T>
         double Time, bool DropText);
     private sealed record LengthExample(Tensor<T> Text, Tensor<T>? Prompt, int[] Labels);
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// A token/mel pair does not carry the supervision this model trains on, and the base step would walk the layers
+    /// on bare token ids (a shape error deep in the stack); Train(TtsTrainingSample) is the entry point. Every stage
+    /// refuses: in Mel-VAE pretraining RequiredSupervision is None, so the shared supervision check would let the pair
+    /// through to the standard step.
+    /// </remarks>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
+        => throw new NotSupportedException(
+            $"{GetType().Name} trains on its {CurrentStage} objective, which a token/mel pair does not drive; " +
+            "use Train(TtsTrainingSample) instead.");
+
     /// <inheritdoc/>
     protected override T TrainOnSample(TtsTrainingSample<T> sample)
     {

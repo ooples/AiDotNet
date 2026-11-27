@@ -849,6 +849,8 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
     {
         if (_analysisWindow is null)
         {
+            // Cached for the model's lifetime, so it must not come from an ambient TensorArena (see EnsureErbMatrices).
+            using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
             // 0.5 - 0.5 cos(2 pi i / max(1, L - 1)): symmetric Hann; a one-sample window is 0.
             int L = FrameLen;
             _analysisWindow = L <= 1
@@ -862,6 +864,11 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
     {
         if (_erbPoolMatrix is not null && _cachedNumFreqs == NumFreqs) return;
         int F = NumFreqs, E = _numErbBands;
+
+        // The matrices are cached across calls, so they must not come from an ambient TensorArena. Built on the first
+        // forward inside one, they were recycled by its next Reset, and the training forward's matmul then read a
+        // reissued buffer (backward failed with ArgumentOutOfRangeException in the GEMM input gradient).
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
 
         // Band membership (every band holds at least its start bin); pooling averages over it.
         var member = new int[F * E];

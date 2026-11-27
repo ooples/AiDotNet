@@ -283,6 +283,51 @@ public class DiffusersGuidanceReferenceTests
             Assert.True((wide[i] != 0) == ((double)half[i] != 0), $"[{i}] double {wide[i]:R}, Half {(double)half[i]:R}");
     }
 
+    [Fact]
+    public void MelFilterbank_MatchesSlaneyNormalizedTriangles()
+    {
+        const int nMels = 40, nFft = 512, rate = 16000;
+        var built = MelFilterbank<double>(nMels, nFft, rate).ToArray();
+        int numFreqs = nFft / 2 + 1;
+        double melMax = AiDotNet.Diffusion.Audio.MelSpectrogram<double>.HzToMel(rate / 2.0);
+        var bins = new int[nMels + 2];
+        for (int i = 0; i < bins.Length; i++)
+            bins[i] = (int)Math.Floor((nFft + 1)
+                * AiDotNet.Diffusion.Audio.MelSpectrogram<double>.MelToHz(melMax * i / (nMels + 1)) / rate);
+
+        for (int mel = 0; mel < nMels; mel++)
+        {
+            var row = new double[numFreqs];
+            for (int f = 0; f < numFreqs; f++)
+            {
+                if (f >= bins[mel] && f < bins[mel + 1]) row[f] = (double)(f - bins[mel]) / (bins[mel + 1] - bins[mel]);
+                else if (f >= bins[mel + 1] && f < bins[mel + 2]) row[f] = (double)(bins[mel + 2] - f) / (bins[mel + 2] - bins[mel + 1]);
+            }
+
+            double sum = row.Sum();
+            for (int f = 0; f < numFreqs; f++)
+                Assert.Equal(sum > 1e-8 ? row[f] / sum : row[f], built[mel * numFreqs + f], 14);
+        }
+    }
+
+    [SkippableFact]
+    public void MelFilterbank_CensusShape_AllocatesAboutItsOwnSize()
+    {
+#if !NETCOREAPP3_0_OR_GREATER
+        // net471 has no per-thread allocation counter, and a process-wide one counts parallel tests too.
+        Skip.If(true, "GC.GetAllocatedBytesForCurrentThread needs .NET Core 3.0 or later.");
+#else
+        // A census audio model's filterbank, built once per construction. Built from engine ops it took about a
+        // dozen [nMels, numFreqs] double temporaries plus kernels only it used, 2.6-3x the construction time of
+        // Tempogram, PANNs, ConformerFP, SpeakerEmbeddingExtractor and PeakNetFP. 128 x 1025 floats are 0.5 MB.
+        MelFilterbank<float>(128, 2048, 16000);
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        MelFilterbank<float>(128, 2048, 16000);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Assert.True(allocated < 3_000_000, $"a 128 x 1025 mel filterbank allocated {allocated:N0} bytes");
+#endif
+    }
+
     private static Tensor<TNum> MelFilterbank<TNum>(int nMels, int nFft, int sampleRate)
     {
         var method = typeof(AiDotNet.Diffusion.Audio.MelSpectrogram<TNum>).GetMethod("CreateMelFilterbank",

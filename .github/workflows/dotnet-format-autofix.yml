@@ -6,9 +6,11 @@ on:
     - cron: '15 3 * * *'
   workflow_dispatch:
 
+# Runs queue instead of cancelling each other: this job pushes a branch and then opens a pull request,
+# and a cancellation between the two would leave the branch without one until the next run.
 concurrency:
   group: dotnet-format-autofix
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -19,6 +21,13 @@ env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
   AUTOFIX_REVIEWERS: ${{ vars.AUTOFIX_REVIEWERS }}
+  FORMAT_BRANCH: automation/dotnet-format-autofix
+  FORMAT_BASE: master
+  # A pull request in this repository holds at most 100 changed files.
+  FORMAT_BATCH_MAX_FILES: 100
+  # With AUTOFIX_PAT the push and the pull request start the normal workflows, so the required CI Gate
+  # check can run. With the job token GitHub starts none (its safeguard against recursive runs).
+  HAS_PAT: ${{ secrets.AUTOFIX_PAT != '' }}
 
 jobs:
   format:
@@ -27,195 +36,89 @@ jobs:
     timeout-minutes: 20
 
     steps:
+      # The batch is formatted from, committed on and compared with master. A manual dispatch on any
+      # other ref would publish that ref's commits under the formatting pull request.
+      - name: Refuse a run from another ref
+        if: github.ref != 'refs/heads/master'
+        run: |
+          echo "::error::This workflow only runs on master; it was dispatched on $GITHUB_REF."
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
+          ref: master
           fetch-depth: 0
+          # checkout persists this token as the credential git sends to github.com; a different token
+          # in a push URL would be overridden by it. So the PAT goes here, and every later git command
+          # talks to plain `origin`: the token is never in a URL or on a command line.
+          token: ${{ secrets.AUTOFIX_PAT || github.token }}
 
-      - name: Setup .NET 8.0
+      - name: Setup .NET 10.0
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
-          dotnet-version: '8.0.x'
-
-      - name: Restore
-        run: dotnet restore AiDotNet.sln
+          # global.json pins a 10.0 SDK; `dotnet format` ships in the SDK, so no separate tool.
+          dotnet-version: '10.0.x'
 
       - name: Run dotnet format
         run: |
-          dotnet tool update -g dotnet-format || dotnet tool install -g dotnet-format
-          export PATH="$PATH:$HOME/.dotnet/tools"
-          dotnet format AiDotNet.sln
-
-      - name: Normalize line endings (.gitattributes)
-        shell: bash
-        run: |
-          # dotnet format does not normalize line endings. Re-apply the .gitattributes EOL policy
-          # to every tracked file so any blob committed with the wrong line endings is corrected,
-          # keeping diffs free of phantom EOL churn.
-          git add --renormalize .
-
-      - name: Detect changes
-        id: changes
-        shell: bash
-        run: |
-          # Consider both unstaged (dotnet format) and staged (renormalize) changes.
-          if git diff --quiet && git diff --cached --quiet; then
-            echo "has_changes=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_changes=true" >> "$GITHUB_OUTPUT"
-          fi
+          # Folder mode formats every .cs file against .editorconfig from syntax alone. The
+          # solution mode this replaced loads the MSBuild workspace and compiles every project
+          # for every target framework to run the style and analyzer passes; that never fit
+          # this job (20-minute timeout each night, then a runner shutdown), and the rules
+          # .editorconfig raises to warning or error (CS15xx docs, ADN/AIDN, CA2000) have no
+          # code fix for those passes to apply.
+          dotnet format whitespace . --folder --verbosity minimal
 
       - name: Configure git
-        if: steps.changes.outputs.has_changes == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Commit changes
-        if: steps.changes.outputs.has_changes == 'true'
-        run: |
-          git add -A
-          git commit -m "chore: apply dotnet format and normalize line endings"
-
-      - name: Push branch
-        if: steps.changes.outputs.has_changes == 'true'
+      - name: Find the open batch pull request
+        id: open
         env:
-          # IMPORTANT:
-          # - If AUTOFIX_PAT is set, we can create a PR that triggers normal CI workflows.
-          # - If not set, pushes/PRs created with GITHUB_TOKEN may not trigger other workflows due to GitHub safeguards.
-          AUTOFIX_PAT: ${{ secrets.AUTOFIX_PAT }}
+          GH_TOKEN: ${{ secrets.AUTOFIX_PAT || github.token }}
         shell: bash
         run: |
-          BRANCH="automation/dotnet-format-autofix"
-          git checkout -B "$BRANCH"
+          number=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$FORMAT_BRANCH" --base "$FORMAT_BASE" --state open \
+            --json number --jq '.[0].number // empty')
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          echo "Open batch pull request: ${number:-none}"
 
-          if [ -n "$AUTOFIX_PAT" ]; then
-            git push "https://x-access-token:${AUTOFIX_PAT}@github.com/${GITHUB_REPOSITORY}.git" "$BRANCH" --force-with-lease
-          else
-            git push origin "$BRANCH" --force-with-lease
-            echo "::warning::AUTOFIX_PAT is not set. The PR may not trigger CI automatically when created by GitHub Actions."
-          fi
-
-      - name: Create or update PR
-        if: steps.changes.outputs.has_changes == 'true'
-        id: pr
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7
-        with:
-          script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const head = `${owner}:automation/dotnet-format-autofix`;
-            const base = 'master';
-
-            const title = 'chore: automated dotnet format + line-ending normalization';
-            const body = [
-              'Automated formatting maintenance PR.',
-              '',
-              '- Runs `dotnet format AiDotNet.sln` on a schedule and opens/updates this PR.',
-              '- Runs `git add --renormalize .` to enforce the `.gitattributes` EOL policy (dotnet format does not normalize line endings).',
-              '- Intended to keep formatting and line-ending drift from accumulating between feature PRs.',
-              '',
-              'If CI does not run automatically, ensure `AUTOFIX_PAT` is configured as a repository secret with `repo` and `workflow` scopes.'
-            ].join('\n');
-
-            const existing = await github.rest.pulls.list({
-              owner,
-              repo,
-              state: 'open',
-              head,
-              base
-            });
-
-            if (existing.data.length > 0) {
-              const pr = existing.data[0];
-              core.info(`Updating existing PR #${pr.number}`);
-              await github.rest.pulls.update({
-                owner,
-                repo,
-                pull_number: pr.number,
-                title,
-                body
-              });
-              core.setOutput('pull_number', String(pr.number));
-              return;
-            }
-
-            core.info('Creating new PR');
-            const created = await github.rest.pulls.create({
-              owner,
-              repo,
-              title,
-              head: 'automation/dotnet-format-autofix',
-              base,
-              body
-            });
-
-            core.setOutput('pull_number', String(created.data.number));
-
-            try {
-              await github.rest.issues.addLabels({
-                owner,
-                repo,
-                issue_number: created.data.number,
-                labels: ['chore', 'autofix', 'formatting']
-              });
-            } catch (e) {
-              core.warning(`Could not apply labels to PR #${created.data.number}: ${e.message}`);
-            }
-
-      - name: Request review and enable auto-merge
-        if: steps.changes.outputs.has_changes == 'true' && steps.pr.outputs.pull_number != ''
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7
+      # One batch of at most FORMAT_BATCH_MAX_FILES files per run, never the whole backlog: the first
+      # run after ten months of drift would otherwise push about 1777 files in one commit. The script
+      # also re-applies the .gitattributes line-ending policy (dotnet format does not), leaves out the
+      # paths in .github/format-autofix-skip.txt, keeps an open batch on the same files, and does not
+      # overwrite a branch somebody else has committed to. See its header for the rules.
+      - name: Commit and push one batch
+        id: batch
         env:
-          PULL_NUMBER: ${{ steps.pr.outputs.pull_number }}
-        with:
-          script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const pull_number = Number(process.env.PULL_NUMBER);
+          FORMAT_OPEN_PR: ${{ steps.open.outputs.number != '' }}
+        shell: bash
+        run: |
+          if [ "$HAS_PAT" != true ]; then
+            echo "::warning::AUTOFIX_PAT is not set. The batch is pushed and opened with the job token, so GitHub starts no workflows for it and the required CI Gate check will not run."
+          fi
+          bash .github/scripts/format-autofix-batch.sh "$FORMAT_BRANCH" "$FORMAT_BATCH_MAX_FILES" origin "origin/$FORMAT_BASE"
 
-            if (!Number.isFinite(pull_number) || pull_number <= 0) {
-              core.warning(`Invalid PULL_NUMBER: ${process.env.PULL_NUMBER}`);
-              return;
-            }
-
-            const reviewers = (process.env.AUTOFIX_REVIEWERS || '')
-              .split(',')
-              .map(s => s.trim())
-              .filter(Boolean);
-
-            const requestedReviewers = reviewers.length > 0 ? reviewers : [owner];
-
-            try {
-              await github.rest.pulls.requestReviewers({
-                owner,
-                repo,
-                pull_number,
-                reviewers: requestedReviewers
-              });
-              core.info(`Requested review from: ${requestedReviewers.join(', ')}`);
-            } catch (e) {
-              core.warning(`Could not request reviewers for PR #${pull_number}: ${e.message}`);
-            }
-
-            try {
-              const pr = await github.rest.pulls.get({ owner, repo, pull_number });
-              const pullRequestId = pr.data.node_id;
-
-              await github.graphql(
-                `mutation EnableAutoMerge($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!) {
-                  enablePullRequestAutoMerge(input: { pullRequestId: $pullRequestId, mergeMethod: $mergeMethod }) {
-                    pullRequest { number }
-                  }
-                }`,
-                { pullRequestId, mergeMethod: 'SQUASH' }
-              );
-
-              core.info(`Enabled auto-merge (SQUASH) for PR #${pull_number}`);
-            } catch (e) {
-              core.warning(`Could not enable auto-merge for PR #${pull_number}: ${e.message}`);
-            }
+      # The pull request is opened for review and is never merged from here: no auto-merge, no approval.
+      # Merging a batch is what releases the next one.
+      - name: Create or update PR
+        if: steps.batch.outputs.has_changes == 'true' || steps.batch.outputs.obsolete == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.AUTOFIX_PAT || github.token }}
+          OPEN_PR_NUMBER: ${{ steps.open.outputs.number }}
+          BRANCH_SHA: ${{ steps.batch.outputs.branch_sha }}
+          BATCH_FILES: ${{ steps.batch.outputs.batch_files }}
+          REMAINING_FILES: ${{ steps.batch.outputs.remaining_files }}
+          TOTAL_FILES: ${{ steps.batch.outputs.total_files }}
+          SKIPPED_FILES: ${{ steps.batch.outputs.skipped_files }}
+          HELD: ${{ steps.batch.outputs.held }}
+          OBSOLETE: ${{ steps.batch.outputs.obsolete }}
+        shell: bash
+        run: bash .github/scripts/format-autofix-pr.sh
 
       - name: No changes
-        if: steps.changes.outputs.has_changes == 'false'
+        if: steps.batch.outputs.has_changes == 'false'
         run: echo "No formatting changes detected."
