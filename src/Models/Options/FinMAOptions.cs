@@ -110,8 +110,6 @@ public class FinMAOptions<T> : FinancialLanguageModelOptions<T>
             throw new ArgumentException("NumLayers must be at least 1.", nameof(NumLayers));
         if (NumClasses < 1)
             throw new ArgumentException("NumClasses must be at least 1.", nameof(NumClasses));
-        if (NumAgents < 1)
-            throw new ArgumentException("NumAgents must be at least 1.", nameof(NumAgents));
         if (DropoutRate < 0 || DropoutRate >= 1)
             throw new ArgumentException("DropoutRate must be between 0 (inclusive) and 1 (exclusive).", nameof(DropoutRate));
     }

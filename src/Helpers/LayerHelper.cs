@@ -267,45 +267,6 @@ public static partial class LayerHelper<T>
         => CreateDefaultInvestLMLayers(maxSequenceLength: maxSequenceLength, vocabularySize: vocabularySize, hiddenSize: hiddenSize, numAttentionHeads: numAttentionHeads, numHiddenLayers: numHiddenLayers, dropoutProbability: dropoutProbability);
 
     /// <summary>
-    /// Creates the default layer configuration for FinMA.
-    /// </summary>
-    /// <param name="maxSequenceLength">Maximum sequence length.</param>
-    /// <param name="vocabularySize">Size of the vocabulary.</param>
-    /// <param name="hiddenSize">Hidden layer size.</param>
-    /// <param name="numAttentionHeads">Number of attention heads.</param>
-    /// <param name="numHiddenLayers">Number of transformer layers.</param>
-    /// <param name="dropoutProbability">Dropout probability.</param>
-    /// <returns>A collection of layers forming FinMA.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> FinMA (Financial Multi-Agent) uses a set of specialized
-    /// transformer models that collaborate. This method initializes the base
-    /// transformer architecture used by the agents.
-    /// </para>
-    /// </remarks>
-    public static IEnumerable<ILayer<T>> CreateDefaultFinMALayers(
-        int maxSequenceLength = 512,
-        int vocabularySize = 32000,
-        int hiddenSize = 768,
-        int numAttentionHeads = 12,
-        int numHiddenLayers = 12,
-        double dropoutProbability = 0.1)
-    => CreateDefaultFinMALayers(vocabularySize: vocabularySize, maxSequenceLength: maxSequenceLength, hiddenDimension: hiddenSize, numAttentionHeads: numAttentionHeads, intermediateDimension: SwiGLUHiddenDim(hiddenSize, 256), numLayers: numHiddenLayers, numClasses: 3, dropoutRate: dropoutProbability);
-
-    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
-    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
-    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
-    public static IEnumerable<ILayer<T>> CreateDefaultFinMALayers(
-        NeuralNetworkArchitecture<T> architecture,
-        int maxSequenceLength = 512,
-        int vocabularySize = 32000,
-        int hiddenSize = 768,
-        int numAttentionHeads = 12,
-        int numHiddenLayers = 12,
-        double dropoutProbability = 0.1)
-        => CreateDefaultFinMALayers(maxSequenceLength: maxSequenceLength, vocabularySize: vocabularySize, hiddenSize: hiddenSize, numAttentionHeads: numAttentionHeads, numHiddenLayers: numHiddenLayers, dropoutProbability: dropoutProbability);
-
-    /// <summary>
     /// Creates the default layer configuration for BloombergGPT.
     /// </summary>
     /// <param name="maxSequenceLength">Maximum sequence length.</param>
@@ -438,92 +399,6 @@ public static partial class LayerHelper<T>
         int numHiddenLayers = 12,
         double dropoutProbability = 0.1)
         => CreateDefaultFinBERTToneLayers(maxSequenceLength: maxSequenceLength, vocabularySize: vocabularySize, numClasses: numClasses, hiddenSize: hiddenSize, numAttentionHeads: numAttentionHeads, numHiddenLayers: numHiddenLayers, dropoutProbability: dropoutProbability);
-
-    /// <summary>
-    /// Creates the default layer configuration for FinancialBERT.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="maxSequenceLength">Maximum sequence length.</param>
-    /// <param name="vocabularySize">Size of the vocabulary.</param>
-    /// <param name="hiddenSize">Hidden layer size.</param>
-    /// <param name="numAttentionHeads">Number of attention heads.</param>
-    /// <param name="numHiddenLayers">Number of transformer layers.</param>
-    /// <param name="dropoutProbability">Dropout probability.</param>
-    /// <returns>A collection of layers forming FinancialBERT.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> FinancialBERT uses the standard BERT architecture but is
-    /// domain-adapted through training on a large corpus of financial text.
-    /// </para>
-    /// </remarks>
-    public static IEnumerable<ILayer<T>> CreateDefaultFinancialBERTLayers(
-        NeuralNetworkArchitecture<T> architecture,
-        int maxSequenceLength = 512,
-        int vocabularySize = 30522,
-        int hiddenSize = 768,
-        int numAttentionHeads = 12,
-        int numHiddenLayers = 12,
-        double dropoutProbability = 0.1)
-    {
-        return CreateDefaultFinancialBERTLayers(
-            vocabularySize: vocabularySize,
-            maxSequenceLength: maxSequenceLength,
-            hiddenDimension: hiddenSize,
-            numAttentionHeads: numAttentionHeads,
-            intermediateDimension: hiddenSize * 4,
-            numLayers: numHiddenLayers,
-            numClasses: Math.Max(1, architecture.OutputSize),
-            dropoutRate: dropoutProbability,
-            taskType: FinancialNLPTaskType.Classification);
-    }
-
-    /// <summary>
-    /// Creates the default layer configuration for SEC-BERT.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="maxSequenceLength">Maximum sequence length.</param>
-    /// <param name="vocabularySize">Size of the vocabulary.</param>
-    /// <param name="hiddenSize">Hidden layer size.</param>
-    /// <param name="numAttentionHeads">Number of attention heads.</param>
-    /// <param name="numHiddenLayers">Number of transformer layers.</param>
-    /// <param name="dropoutProbability">Dropout probability.</param>
-    /// <returns>A collection of layers forming SEC-BERT.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> SEC-BERT is based on the BERT (Bidirectional Encoder
-    /// Representations from Transformers) architecture. It works by:
-    /// </para>
-    /// <para>
-    /// <list type="number">
-    /// <item><b>Embeddings:</b> Converting words into numerical vectors that
-    /// capture their financial meaning from SEC filings.</item>
-    /// <item><b>Transformer Layers:</b> Using attention mechanisms to understand
-    /// the relationships between words in a sentence, regardless of their position.</item>
-    /// <item><b>Task Head:</b> Converting the final representations into predictions
-    /// for specific financial tasks like sentiment analysis or risk classification.</item>
-    /// </list>
-    /// </para>
-    /// </remarks>
-    public static IEnumerable<ILayer<T>> CreateDefaultSECBERTLayers(
-        NeuralNetworkArchitecture<T> architecture,
-        int maxSequenceLength = 512,
-        int vocabularySize = 30522,
-        int hiddenSize = 768,
-        int numAttentionHeads = 12,
-        int numHiddenLayers = 12,
-        double dropoutProbability = 0.1)
-    {
-        return CreateDefaultSECBERTLayers(
-            vocabularySize: vocabularySize,
-            maxSequenceLength: maxSequenceLength,
-            hiddenDimension: hiddenSize,
-            numAttentionHeads: numAttentionHeads,
-            intermediateDimension: hiddenSize * 4,
-            numLayers: numHiddenLayers,
-            numClasses: Math.Max(1, architecture.OutputSize),
-            dropoutRate: dropoutProbability,
-            taskType: FinancialNLPTaskType.Classification);
-    }
 
     /// <summary>
     /// Creates a standard feed-forward neural network with configurable hidden layers.
@@ -16793,22 +16668,6 @@ public static partial class LayerHelper<T>
             pool: taskType == FinancialNLPTaskType.Classification)
             .Concat(CreateFinancialClassificationHeadLayers(numClasses, dropoutRate));
 
-    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
-    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
-    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
-    public static IEnumerable<ILayer<T>> CreateDefaultSECBERTLayers(
-        NeuralNetworkArchitecture<T> architecture,
-        int vocabularySize = 30522,
-        int maxSequenceLength = 512,
-        int hiddenDimension = 768,
-        int numAttentionHeads = 12,
-        int intermediateDimension = 3072,
-        int numLayers = 12,
-        int numClasses = 2,
-        double dropoutRate = 0.1,
-        FinancialNLPTaskType taskType = FinancialNLPTaskType.Classification)
-        => CreateDefaultSECBERTLayers(vocabularySize: vocabularySize, maxSequenceLength: maxSequenceLength, hiddenDimension: hiddenDimension, numAttentionHeads: numAttentionHeads, intermediateDimension: intermediateDimension, numLayers: numLayers, numClasses: numClasses, dropoutRate: dropoutRate, taskType: taskType);
-
     /// <summary>
     /// Creates the default layer configuration for FinancialBERT (domain-adapted financial BERT).
     /// </summary>
@@ -16849,22 +16708,6 @@ public static partial class LayerHelper<T>
     => CreateFinancialBertEncoderLayers(vocabularySize, maxSequenceLength, 2, hiddenDimension, numAttentionHeads, intermediateDimension, numLayers, dropoutRate, dropoutRate, TransformerNormPlacement.PostNorm,
             pool: taskType == FinancialNLPTaskType.Classification)
             .Concat(CreateFinancialClassificationHeadLayers(numClasses, dropoutRate));
-
-    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
-    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
-    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
-    public static IEnumerable<ILayer<T>> CreateDefaultFinancialBERTLayers(
-        NeuralNetworkArchitecture<T> architecture,
-        int vocabularySize = 30522,
-        int maxSequenceLength = 512,
-        int hiddenDimension = 768,
-        int numAttentionHeads = 12,
-        int intermediateDimension = 3072,
-        int numLayers = 12,
-        int numClasses = 3,
-        double dropoutRate = 0.1,
-        FinancialNLPTaskType taskType = FinancialNLPTaskType.Classification)
-        => CreateDefaultFinancialBERTLayers(vocabularySize: vocabularySize, maxSequenceLength: maxSequenceLength, hiddenDimension: hiddenDimension, numAttentionHeads: numAttentionHeads, intermediateDimension: intermediateDimension, numLayers: numLayers, numClasses: numClasses, dropoutRate: dropoutRate, taskType: taskType);
 
     /// <summary>
     /// Creates the default layer configuration for FinBERT-Tone (sentiment-focused FinBERT).
@@ -17001,21 +16844,6 @@ public static partial class LayerHelper<T>
         double dropoutRate = 0.1)
     => CreateLlamaDecoderLayers(vocabularySize, maxSequenceLength, hiddenDimension, numAttentionHeads, intermediateDimension, numLayers, pool: true)
             .Concat(CreateFinancialClassificationHeadLayers(numClasses, dropoutRate));
-
-    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
-    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
-    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
-    public static IEnumerable<ILayer<T>> CreateDefaultFinMALayers(
-        NeuralNetworkArchitecture<T> architecture,
-        int vocabularySize = 32000,
-        int maxSequenceLength = 2048,
-        int hiddenDimension = 768,
-        int numAttentionHeads = 12,
-        int intermediateDimension = 3072,
-        int numLayers = 12,
-        int numClasses = 3,
-        double dropoutRate = 0.1)
-        => CreateDefaultFinMALayers(vocabularySize: vocabularySize, maxSequenceLength: maxSequenceLength, hiddenDimension: hiddenDimension, numAttentionHeads: numAttentionHeads, intermediateDimension: intermediateDimension, numLayers: numLayers, numClasses: numClasses, dropoutRate: dropoutRate);
 
     /// <summary>
     /// Creates the default layer configuration for InvestLM (Investment Language Model).

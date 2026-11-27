@@ -24,8 +24,6 @@ namespace AiDotNet.Finance.Base;
     Note = "Classification: one prediction per input.")]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Classes, Direction = TensorLayoutDirection.Output,
     Note = "Classification: one prediction per input.")]
-[TensorLayout(TensorAxis.Time, TensorAxis.Classes, Direction = TensorLayoutDirection.Output,
-    Note = "Token classification: one prediction per token.")]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Classes,
     Direction = TensorLayoutDirection.Output, Note = "Token classification: one prediction per token.")]
 public abstract partial class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinancialNLPModel<T>, IShapeContract
@@ -300,9 +298,10 @@ public abstract partial class FinancialNLPModelBase<T> : FinancialModelBase<T>, 
         if (defaultHead is null) throw new ArgumentNullException(nameof(defaultHead));
 
         var options = LanguageModelOptions;
-        bool custom = Architecture.Layers is not null && Architecture.Layers.Count > 0;
-        if (custom)
-            Layers.AddRange(Architecture.Layers);
+        var customLayers = Architecture.Layers;
+        bool custom = customLayers is not null && customLayers.Count > 0;
+        if (customLayers is not null && custom)
+            Layers.AddRange(customLayers);
         else
             Layers.AddRange(defaultEncoder());
         _encoderLayerCount = Layers.Count;

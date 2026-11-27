@@ -106,13 +106,14 @@ public class BertEmbeddingLayerTests
             inputSize: 4,
             outputSize: 1);
         var layers = LayerHelper<double>.CreateDefaultSECBERTLayers(
-            architecture,
-            maxSequenceLength: 16,
             vocabularySize: 32,
-            hiddenSize: 8,
+            maxSequenceLength: 16,
+            hiddenDimension: 8,
             numAttentionHeads: 2,
-            numHiddenLayers: 1,
-            dropoutProbability: 0.0).ToList();
+            intermediateDimension: 32,
+            numLayers: 1,
+            numClasses: architecture.OutputSize,
+            dropoutRate: 0.0).ToList();
 
         Assert.IsType<BertEmbeddingLayer<double>>(layers[0]);
         Assert.Single(layers.OfType<BertEmbeddingLayer<double>>());
