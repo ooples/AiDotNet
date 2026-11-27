@@ -337,28 +337,71 @@ public class TrainingMonitoringDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task CheckForIssues_HighMemory_ReportsIssue()
     {
-        var monitor = new TrainingMonitor<double>();
+        // A fixed 1000 MB process budget, so the threshold does not depend on this machine's memory or GC settings.
+        var monitor = new TrainingMonitor<double> { ProcessMemoryBudgetMBOverrideForTest = 1000 };
         var sessionId = monitor.StartSession("Test");
 
-        // Log high memory usage (>90%)
-        monitor.LogResourceUsage(sessionId, cpuUsage: 50, memoryUsage: 95);
-
+        // LogResourceUsage takes memory in MB; above 90% of the process memory budget is an issue.
+        monitor.LogResourceUsage(sessionId, cpuUsage: 50, memoryUsage: 950);
         var issues = monitor.CheckForIssues(sessionId);
-        Assert.Contains(issues, i => i.Contains("memory"));
+        Assert.Contains(issues, i => i.Contains("High memory usage: 950 MB (95.0% of the 1000 MB process memory budget)"));
+
+        // Just above the threshold is an issue; just below it is not, though both are far above 90 MB.
+        monitor.LogResourceUsage(sessionId, cpuUsage: 50, memoryUsage: 901);
+        Assert.Contains(monitor.CheckForIssues(sessionId), i => i.Contains("memory"));
+        monitor.LogResourceUsage(sessionId, cpuUsage: 50, memoryUsage: 899);
+        Assert.DoesNotContain(monitor.CheckForIssues(sessionId), i => i.Contains("memory"));
+        monitor.LogResourceUsage(sessionId, cpuUsage: 50, memoryUsage: 512);
+        Assert.DoesNotContain(monitor.CheckForIssues(sessionId), i => i.Contains("memory"));
     }
 
     [Fact(Timeout = 120000)]
-    public async Task CheckForIssues_CriticalGpuMemory_ReportsIssue()
+    public async Task CheckForIssues_GpuMemoryAbove95PercentOfTheDevice_WarnsWithoutAnIssue()
     {
-        var monitor = new TrainingMonitor<double>();
-        var sessionId = monitor.StartSession("Test");
+        await Task.CompletedTask;
+        // 950 of 1000 MB is exactly 95%: no warning. 951 MB is above it: one warning, and still no issue.
+        var at95 = new GpuWarningListener("GPU memory in use on the device: 950 MB (", "% of 1000 MB).");
+        var above = new GpuWarningListener("GPU memory in use on the device: 951 MB (", "% of 1000 MB).");
+        System.Diagnostics.Trace.Listeners.Add(at95);
+        System.Diagnostics.Trace.Listeners.Add(above);
+        try
+        {
+            var monitor = new TrainingMonitor<double> { GpuDeviceTotalMemoryMBOverrideForTest = 1000 };
+            var sessionId = monitor.StartSession("Test");
 
-        // Log critical GPU memory (>95%)
-        monitor.LogResourceUsage(sessionId, cpuUsage: 50, memoryUsage: 50,
-            gpuUsage: 80, gpuMemory: 98);
+            monitor.LogResourceUsage(sessionId, cpuUsage: 50, memoryUsage: 50, gpuUsage: 80, gpuMemory: 950);
+            Assert.DoesNotContain(monitor.CheckForIssues(sessionId), i => i.Contains("GPU memory"));
+            Assert.Equal(0, at95.Count);
 
-        var issues = monitor.CheckForIssues(sessionId);
-        Assert.Contains(issues, i => i.Contains("GPU memory"));
+            monitor.LogResourceUsage(sessionId, cpuUsage: 50, memoryUsage: 50, gpuUsage: 80, gpuMemory: 951);
+            Assert.DoesNotContain(monitor.CheckForIssues(sessionId), i => i.Contains("GPU memory"));
+            Assert.Equal(1, above.Count);
+        }
+        finally
+        {
+            System.Diagnostics.Trace.Listeners.Remove(at95);
+            System.Diagnostics.Trace.Listeners.Remove(above);
+        }
+    }
+
+    private sealed class GpuWarningListener : System.Diagnostics.TraceListener
+    {
+        private readonly string[] _needles;
+        private int _count;
+        public GpuWarningListener(params string[] needles) => _needles = needles;
+        public int Count => System.Threading.Volatile.Read(ref _count);
+        public override void Write(string? message) => Match(message);
+        public override void WriteLine(string? message) => Match(message);
+        public override void TraceEvent(System.Diagnostics.TraceEventCache? eventCache, string source,
+            System.Diagnostics.TraceEventType eventType, int id, string? message) => Match(message);
+        public override void TraceEvent(System.Diagnostics.TraceEventCache? eventCache, string source,
+            System.Diagnostics.TraceEventType eventType, int id, string? format, params object?[]? args)
+            => Match(args is null || format is null ? format : string.Format(format, args));
+        private void Match(string? message)
+        {
+            if (message is not null && System.Array.TrueForAll(_needles, message.Contains))
+                System.Threading.Interlocked.Increment(ref _count);
+        }
     }
 
     [Fact(Timeout = 120000)]

@@ -68,11 +68,7 @@ public partial class GaussianMixtureClassifierLayer<T> : LayerBase<T>, IShapeCon
     /// <summary>Draws every mean from a standard normal, so the classes differ before any fit.</summary>
     internal void InitializeMeans(Random random)
     {
-        for (int i = 0; i < _means.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            _means[i] = NumOps.FromDouble(Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
-        }
+        SeededNoiseTensors.FillStandardNormal(_means, random);
         Engine.InvalidatePersistentTensor(_means);
     }
 

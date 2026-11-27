@@ -4,6 +4,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
 
+using AiDotNet.Helpers;
+
 namespace AiDotNet.TextToSpeech.FlowDiffusion;
 
 /// <summary>Kaiming-normal initialization and the layer-level SGD step shared by Matcha-TTS's decoder layers.</summary>
@@ -17,12 +19,7 @@ internal static class KaimingInit
             ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed.Value)
             : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
         double std = Math.Sqrt(2.0 / fanIn);
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            tensor[i] = ops.FromDouble(std * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
-        }
+        var tensor = SeededNoiseTensors.StandardNormal<T>(shape, random, std);
         return tensor;
     }
 

@@ -213,11 +213,7 @@ public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRu
             return existing;
         var p = new Tensor<T>(new[] { es, et });
         double scale = 1.0 / Math.Sqrt(es);
-        for (int i = 0; i < p.Length; i++)
-        {
-            double u1 = 1.0 - _random.NextDouble(), u2 = _random.NextDouble();
-            p[i] = Ops.FromDouble(scale * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
-        }
+        SeededNoiseTensors.FillStandardNormal(p, _random, scale);
         if (existing is not null) _projections.Remove(existing);
         _projectionOf[hiddenIndex] = p;
         _projections.Add(p);

@@ -715,6 +715,9 @@ public class ControlNetEncoder<T> : IParameterSource<T>, AiDotNet.Models.Paramet
     private readonly List<ConvolutionalLayer<T>> _downBlocks;
     private readonly List<ConvolutionalLayer<T>> _zeroConvs;
 
+    /// <summary>The zero convolutions: the only weights of a fresh encoder that hold values.</summary>
+    internal IReadOnlyList<ConvolutionalLayer<T>> ZeroConvolutions => _zeroConvs;
+
     /// <summary>
     /// Gets the number of parameters in this encoder.
     /// </summary>
@@ -809,9 +812,6 @@ public class ControlNetEncoder<T> : IParameterSource<T>, AiDotNet.Models.Paramet
     }
 
     /// <summary>
-    /// Initializes a convolutional layer's weights and biases to zero (zero convolution per paper).
-    /// </summary>
-    /// <summary>
     /// Describes the encoder as the one aggregate slot its flat GetParameters/SetParameters carry, with the
     /// readiness its convolutions actually have.
     /// </summary>
@@ -850,6 +850,9 @@ public class ControlNetEncoder<T> : IParameterSource<T>, AiDotNet.Models.Paramet
         return count;
     }
 
+    /// <summary>
+    /// Initializes a convolutional layer's weights and biases to zero (zero convolution per paper).
+    /// </summary>
     private static void ZeroInitializeConv(ConvolutionalLayer<T> layer)
     {
         // Vector<T>(int length) zero-fills the backing storage by default — the underlying

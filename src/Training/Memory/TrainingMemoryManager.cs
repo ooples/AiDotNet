@@ -113,12 +113,18 @@ public class TrainingMemoryManager<T> : IDisposable
         if (!Config.UseGradientCheckpointing)
             return;
 
+        // CheckpointEveryNLayers <= 0 means "auto": sqrt(L) segments, the same rule AiModelBuilder applies when it sets
+        // the network's checkpoint segment size. A zero interval previously threw DivideByZeroException here.
+        int every = Config.CheckpointEveryNLayers > 0
+            ? Config.CheckpointEveryNLayers
+            : Math.Max(1, (int)Math.Sqrt(Math.Max(1, totalLayers)));
+
         for (int i = 0; i < totalLayers; i++)
         {
             bool shouldCheckpoint = false;
 
             // Check by layer interval
-            if (i % Config.CheckpointEveryNLayers == 0)
+            if (i % every == 0)
             {
                 shouldCheckpoint = true;
             }
@@ -189,6 +195,9 @@ public class TrainingMemoryManager<T> : IDisposable
         }
 
         var allLayerInfo = layeredModel.GetAllLayerInfo();
+        int every = Config.CheckpointEveryNLayers > 0
+            ? Config.CheckpointEveryNLayers
+            : Math.Max(1, (int)Math.Sqrt(Math.Max(1, allLayerInfo.Count)));
 
         for (int i = 0; i < allLayerInfo.Count; i++)
         {
@@ -196,7 +205,7 @@ public class TrainingMemoryManager<T> : IDisposable
             bool shouldCheckpoint = false;
 
             // Interval-based checkpointing
-            if (i % Config.CheckpointEveryNLayers == 0)
+            if (i % every == 0)
             {
                 shouldCheckpoint = true;
             }

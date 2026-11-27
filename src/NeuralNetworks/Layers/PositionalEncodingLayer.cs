@@ -362,7 +362,7 @@ public partial class PositionalEncodingLayer<T> : LayerBase<T>, IShapeContract
     /// Its forward caches serve only the next backward and are rewritten by every forward. Only this exact type has been
     /// checked: a derived layer may keep more, so it counts as keeping a result.
     /// </summary>
-    internal override bool KeepsResultsBetweenCalls => GetType() != typeof(PositionalEncodingLayer<T>);
+    protected internal override bool KeepsResultsBetweenCalls => GetType() != typeof(PositionalEncodingLayer<T>);
 
     /// <summary>
     /// Resets the internal state of the positional encoding layer.

@@ -142,6 +142,102 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         _barrierReceiveSlot = new T[1];
     }
 
+    /// <summary>
+    /// The default per-wait timeout: 30 minutes, PyTorch's default for its Gloo process group. A peer may legitimately
+    /// spend minutes outside a collective (rank 0 saving a large checkpoint, a first step's graph capture, validation).
+    /// It is longer than the shared-memory backend's default on purpose: Gloo spans machines, where a slow peer is
+    /// routine, so a dead peer takes up to this long (twice it for a queued send) to surface as an exception.
+    /// </summary>
+    public const int DefaultTimeoutMilliseconds = 1_800_000;
+
+    private int _timeoutMilliseconds = DefaultTimeoutMilliseconds;
+
+    /// <summary>
+    /// Rank 0's address for the TCP rendezvous (PyTorch's <c>init_method="tcp://addr:port"</c>). Null reads
+    /// AIDOTNET_MASTER_ADDR. Set it before <c>Initialize</c>; an explicit value lets several process groups in one
+    /// process rendezvous independently, which a process-wide environment variable cannot.
+    /// </summary>
+    public string? MasterAddress { get; set; }
+
+    /// <summary>The rendezvous base port (each rank listens on it + rank). Null reads AIDOTNET_MASTER_PORT.</summary>
+    public int? MasterPort { get; set; }
+
+    private static int s_environmentRendezvousWarned;
+
+    private string? ResolveMasterAddress() => MasterAddress ?? ReadDeprecatedRendezvousVariable("AIDOTNET_MASTER_ADDR", nameof(MasterAddress));
+
+    private string? ResolveMasterPort()
+        => MasterPort is { } port ? port.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : ReadDeprecatedRendezvousVariable("AIDOTNET_MASTER_PORT", nameof(MasterPort));
+
+    // The process-wide variables are a deprecated fallback: the typed properties win whenever they are set, and a read
+    // of a variable that is set warns once per process.
+    private static string? ReadDeprecatedRendezvousVariable(string variable, string property)
+    {
+        string? value = Environment.GetEnvironmentVariable(variable);
+        if (!string.IsNullOrEmpty(value) && System.Threading.Interlocked.Exchange(ref s_environmentRendezvousWarned, 1) == 0)
+        {
+            string message = $"GlooCommunicationBackend: the rendezvous came from {variable}, which is deprecated; set "
+                + $"{property} (and its pair) on the backend instead.";
+            System.Diagnostics.Trace.TraceWarning(message);
+            Console.Error.WriteLine(message);
+        }
+        return value;
+    }
+
+    /// <summary>Test hook: whether a deprecated rendezvous variable has been read (and warned about) in this process.</summary>
+    internal static bool EnvironmentRendezvousWarned => System.Threading.Volatile.Read(ref s_environmentRendezvousWarned) != 0;
+
+    /// <summary>The rendezvous this backend would use, typed properties first (test hook).</summary>
+    internal (string? Address, string? Port) ResolvedRendezvous => (ResolveMasterAddress(), ResolveMasterPort());
+
+    /// <summary>
+    /// How long any single blocking wait (rendezvous accept, socket send and receive, the background send worker) may
+    /// take before it throws, so a hung or dead peer surfaces as an exception on every rank instead of a hang
+    /// (PyTorch's process-group timeout). Set it before <c>Initialize</c>.
+    /// </summary>
+    public int TimeoutMilliseconds
+    {
+        get => _timeoutMilliseconds;
+        set
+        {
+            if (value <= 0) throw new ArgumentOutOfRangeException(nameof(value), "Timeout must be positive.");
+            if (IsInitialized) throw new InvalidOperationException("Set the timeout before Initialize.");
+            _timeoutMilliseconds = value;
+        }
+    }
+
+    /// <summary>
+    /// A backend whose rank and world size come from <c>AIDOTNET_RANK</c> (or <c>RANK</c>) and
+    /// <c>AIDOTNET_WORLD_SIZE</c> (or <c>WORLD_SIZE</c>), and whose timeout comes from
+    /// <c>AIDOTNET_COLLECTIVE_TIMEOUT_MS</c> when set, the names <see cref="SharedMemoryCommunicationBackend{T}"/> reads.
+    /// </summary>
+    public static GlooCommunicationBackend<T> FromEnvironment()
+    {
+        static int Read(string name, string fallback, int defaultValue)
+        {
+            string? text = Environment.GetEnvironmentVariable(name) ?? Environment.GetEnvironmentVariable(fallback);
+            if (string.IsNullOrEmpty(text)) return defaultValue;
+            if (!int.TryParse(text, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out int value))
+                throw new InvalidOperationException($"{name} is not an integer: '{text}'.");
+            return value;
+        }
+        return new GlooCommunicationBackend<T>(
+            Read("AIDOTNET_RANK", "RANK", 0),
+            Read("AIDOTNET_WORLD_SIZE", "WORLD_SIZE", 1))
+        {
+            TimeoutMilliseconds = Read("AIDOTNET_COLLECTIVE_TIMEOUT_MS", "AIDOTNET_COLLECTIVE_TIMEOUT_MS", DefaultTimeoutMilliseconds),
+        };
+    }
+
+    // Every socket's send and receive give up after the timeout: a read from a peer that hangs throws IOException
+    // (SocketError.TimedOut) instead of blocking forever.
+    private void ApplyTimeouts(TcpClient client)
+    {
+        client.ReceiveTimeout = TimeoutMilliseconds;
+        client.SendTimeout = TimeoutMilliseconds;
+    }
+
     /// <inheritdoc/>
     public override int Rank => _rank;
 
@@ -174,15 +270,10 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                 Console.WriteLine($"GlooCommunicationBackend: Using native Gloo via GlooSharp for collectives, TCP for point-to-point ({_worldSize} processes).");
                 return;
             }
-            catch (SocketException)
+            catch (Exception)
             {
-                // Clean up ALL resources on failure: native Gloo context + TCP connections
-                CleanupOnInitFailure();
-                throw;
-            }
-            catch (InvalidOperationException)
-            {
-                // Clean up ALL resources on failure: native Gloo context + TCP connections
+                // Any failure (a socket error, a rendezvous timeout, a refused handshake) releases ALL resources --
+                // the native Gloo context, the listener and every accepted peer -- so a retry can bind the port again.
                 CleanupOnInitFailure();
                 throw;
             }
@@ -192,7 +283,16 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         _useNativeGloo = false;
         _useNativeTCP = true;
         Console.WriteLine($"GlooCommunicationBackend: Using production-ready TCP implementation for {_worldSize} processes.");
-        InitializeTCPConnections();
+        try
+        {
+            InitializeTCPConnections();
+        }
+        catch (Exception)
+        {
+            // Same release as the native branch: a timed-out rendezvous must not leave the listener bound.
+            CleanupOnInitFailure();
+            throw;
+        }
     }
 
     /// <summary>
@@ -276,8 +376,8 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             }
             else
             {
-                string hostname = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_ADDR") ?? "localhost";
-                string portStr = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_PORT") ?? "29500";
+                string hostname = ResolveMasterAddress() ?? "localhost";
+                string portStr = ResolveMasterPort() ?? "29500";
                 int port = int.TryParse(portStr, out int p) ? p : 29500;
 
                 var createTCP = _glooTransportType?.GetMethod("CreateTCP",
@@ -444,13 +544,13 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     /// </remarks>
     private void InitializeTCPConnections()
     {
-        string? masterAddr = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_ADDR");
-        string? masterPortStr = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_PORT");
+        string? masterAddr = ResolveMasterAddress();
+        string? masterPortStr = ResolveMasterPort();
 
         if (string.IsNullOrEmpty(masterAddr) || string.IsNullOrEmpty(masterPortStr))
         {
             throw new InvalidOperationException(
-                "GlooCommunicationBackend TCP mode requires environment variables:\n" +
+                "GlooCommunicationBackend TCP mode requires MasterAddress/MasterPort or the environment variables:\n" +
                 "- AIDOTNET_MASTER_ADDR: IP address of rank 0 (e.g., 192.168.1.10 or localhost)\n" +
                 "- AIDOTNET_MASTER_PORT: Base port number (e.g., 29500)\n" +
                 "Each rank will use port = MASTER_PORT + rank");
@@ -555,6 +655,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                 {
                     NoDelay = true,
                 };
+                ApplyTimeouts(client);
                 TryConfigureSocketBuffers(client.Client);
                 client.Connect(masterAddr, targetPort);
 
@@ -601,9 +702,18 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new InvalidOperationException("TCP listener not initialized");
         }
 
-        // Accept incoming connection from ANY rank
+        // Accept incoming connection from ANY rank, within the timeout: a rank that never starts fails rendezvous.
+        var acceptDeadline = Stopwatch.StartNew();
+        while (!_tcpListener.Pending())
+        {
+            if (acceptDeadline.ElapsedMilliseconds >= TimeoutMilliseconds)
+                throw new TimeoutException(
+                    $"Rank {_rank}: no connection from a higher rank within {TimeoutMilliseconds} ms during rendezvous.");
+            Thread.Sleep(5);
+        }
         var client = _tcpListener.AcceptTcpClient();
         client.NoDelay = true;
+        ApplyTimeouts(client);
         TryConfigureSocketBuffers(client.Client);
 
         // Read handshake to identify the connecting rank (exact 4 bytes, zero read-ahead buffering)
@@ -1360,7 +1470,20 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             Exception? sendEx;
             try
             {
-                _workCompleted.WaitOne();
+                // The socket send times out on its own; this bound only guards the hand-off to the worker thread.
+                int handOffMs = (int)Math.Min(int.MaxValue, 2L * _owner.TimeoutMilliseconds);
+                if (!_workCompleted.WaitOne(handOffMs))
+                {
+                    // The worker may still be reading the caller's buffer, which the caller returns to a pool (or
+                    // reuses as scratch) as soon as this throws. Abort the peer's transport so the blocked send fails,
+                    // then wait for the worker to finish with the buffer -- which also consumes its completion signal,
+                    // so a later send cannot mistake this one's signal for its own.
+                    _owner.AbortPeerTransport(_destRank);
+                    _workCompleted.WaitOne();
+                    _exception = null;
+                    throw new TimeoutException(
+                        $"Rank {_owner._rank}: a background send to rank {_destRank} did not complete within {handOffMs} ms; its connection was closed.");
+                }
                 sendEx = _exception;
                 _exception = null;
             }
@@ -2214,6 +2337,25 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 
             return client;
         }
+    }
+
+    /// <summary>
+    /// Closes the connection to <paramref name="peerRank"/> so a send blocked on it fails at once. Used when a send
+    /// overran its deadline: the connection is unusable afterwards, and later traffic to that peer fails loudly.
+    /// </summary>
+    private void AbortPeerTransport(int peerRank)
+    {
+        TcpClient? client = null;
+        lock (_connectionLock)
+        {
+            _tcpConnections?.TryGetValue(peerRank, out client);
+        }
+
+        if (client is null) return;
+        try { client.Client?.Close(0); }
+        catch (ObjectDisposedException ex) { Debug.WriteLine($"Rank {_rank}: connection to rank {peerRank} already closed: {ex.Message}"); }
+        try { client.Close(); }
+        catch (ObjectDisposedException ex) { Debug.WriteLine($"Rank {_rank}: connection to rank {peerRank} already closed: {ex.Message}"); }
     }
 
     private void SendArraySlice(int destRank, T[] data, int offset, int count)

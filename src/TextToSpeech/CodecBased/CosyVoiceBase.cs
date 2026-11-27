@@ -454,9 +454,7 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
         int frames = (promptMel?.Shape[0] ?? 0) + flow.MelFrames(tokens.Count);
         // The flow's Gaussian start (ConditionalCFM: randn_like(mu); CausalConditionalCFM: a fixed draw, which a seeded
         // generator stands in for).
-        var noise = new Tensor<T>(new[] { 1, Settings.MelChannels, frames });
-        for (int i = 0; i < noise.Length; i++)
-            noise[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble()));
+        var noise = SeededNoiseTensors.StandardNormal<T>(new[] { 1, Settings.MelChannels, frames }, random);
         var xvector = voice?.SpeakerEmbedding ?? new Tensor<T>(new[] { Settings.SpeakerEmbeddingDim });
         return flow.Inference(tokens, promptTokens, promptMel, xvector, noise);
     }

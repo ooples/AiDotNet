@@ -339,6 +339,8 @@ public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBindin
         if (ids is null) return null;
 
         vocabularySize = _vocabularySize;
+        ((AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)loss).RecordReductionLayout(
+            target.Shape.ToArray(), classIndex: true, classAxis: target.Rank, classes: _vocabularySize);
         return ids;
     }
 

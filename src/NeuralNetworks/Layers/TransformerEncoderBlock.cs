@@ -285,7 +285,7 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
     /// The block itself keeps nothing between calls; it keeps whatever one of its sublayers keeps. A derived block may
     /// keep more, so it counts as keeping a result.
     /// </summary>
-    internal override bool KeepsResultsBetweenCalls =>
+    protected internal override bool KeepsResultsBetweenCalls =>
         GetType() != typeof(TransformerEncoderBlock<T>) || new LayerBase<T>?[] { _attention, _norm1, _ffnUp, _ffnDown, _norm2, _attnDropout, _ffnDropout }
             .Any(layer => layer is not null && layer.KeepsResultsBetweenCalls);
 

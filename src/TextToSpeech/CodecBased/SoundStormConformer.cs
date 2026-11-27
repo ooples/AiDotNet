@@ -80,15 +80,8 @@ internal static class TorchParameters
     /// </summary>
     public static Vector<T> Gaussian<T>(Random random, int count, double std)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
         var v = new Vector<T>(count);
-        for (int i = 0; i < count; i += 2)
-        {
-            double radius = std * Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble()));
-            double angle = 2.0 * Math.PI * random.NextDouble();
-            v[i] = ops.FromDouble(radius * Math.Cos(angle));
-            if (i + 1 < count) v[i + 1] = ops.FromDouble(radius * Math.Sin(angle));
-        }
+        SeededNoiseTensors.WriteStandardNormalPairs(v.AsWritableSpan(), random, std);
         return v;
     }
 

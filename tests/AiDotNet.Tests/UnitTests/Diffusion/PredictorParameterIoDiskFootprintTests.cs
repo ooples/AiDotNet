@@ -116,6 +116,217 @@ public sealed class PredictorParameterIoDiskFootprintTests : DiffusionUnitTestBa
     }
 
     /// <summary>
+    /// Parameter IO unregisters each weight once it is mapped, so a predictor half-way through a parameter
+    /// walk has no registered entry. A second predictor engaging on another thread took that for an idle
+    /// registry and reset it, disposing the pool and the parameter file under the first.
+    /// </summary>
+    [Fact]
+    public void ASecondPredictorEngaging_DoesNotResetTheRegistryUnderOneInTheMiddleOfAParameterWalk()
+    {
+        using var scope = ForceStreaming<float>();
+        var first = NewMMDiTX(seed: 1);
+        long modelBytes = first.ParameterCount * sizeof(float);
+        scope.CapResidentBytes(modelBytes / 4);
+
+        static float Expected(long index) => (float)((index % 997) * 0.001 - 0.5);
+
+        // The start of a walk: the weights seen so far are mapped and hold the ramp, the rest are untouched.
+        const int WalkedFirst = 4;
+        int tensors;
+        long written = 0;
+        using (var walk = first.GetParameterChunks().GetEnumerator())
+        {
+            for (int t = 0; t < WalkedFirst; t++)
+            {
+                Assert.True(walk.MoveNext());
+                var span = walk.Current.Data.Span;
+                for (int i = 0; i < span.Length; i++) span[i] = Expected(written + i);
+                written += span.Length;
+            }
+
+            var poolBefore = WeightRegistry.CurrentStreamingPool;
+            long fileBytesBefore = ParameterFileUsedBytes();
+            Assert.NotNull(poolBefore);
+            Assert.True(fileBytesBefore > 0, "Precondition: the first predictor's weights are in the parameter file.");
+            Assert.Equal(0, WeightRegistry.GetStreamingReport().RegisteredEntryCount);
+
+            // The second predictor walks its parameters on another thread while the first is mid-walk.
+            MMDiTXNoisePredictor<float>? second = null;
+            int secondStreamed = -1;
+            Exception? failure = null;
+            var thread = new System.Threading.Thread(() =>
+            {
+                try
+                {
+                    second = NewMMDiTX(seed: 2);
+                    secondStreamed = second.GetParameterChunks().Count(chunk => chunk.IsWritableMmapAliased);
+                }
+                catch (Exception ex)
+                {
+                    failure = ex;
+                }
+            });
+            thread.Start();
+            thread.Join();
+            Assert.Null(failure);
+
+            Assert.Same(poolBefore, WeightRegistry.CurrentStreamingPool);
+            Assert.True(ParameterFileUsedBytes() >= fileBytesBefore,
+                "The parameter file the first predictor's weights live in was released under it.");
+            Assert.Equal(0, secondStreamed);   // it ran resident: the session belongs to the first
+            GC.KeepAlive(second);
+
+            // The first finishes its walk against the registry it started on.
+            long index = written;
+            tensors = WalkedFirst;
+            while (walk.MoveNext())
+            {
+                var span = walk.Current.Data.Span;
+                for (int i = 0; i < span.Length; i++) span[i] = Expected(index + i);
+                index += span.Length;
+                tensors++;
+            }
+            Assert.True(tensors > WalkedFirst, "The walk was already over when the second predictor engaged.");
+        }
+
+        long verified = 0;
+        foreach (var chunk in first.GetParameterChunks())
+        {
+            var span = chunk.Data.Span;
+            for (int i = 0; i < span.Length; i++)
+            {
+                if (span[i] != Expected(verified + i)) Assert.Equal(Expected(verified + i), span[i]);
+            }
+            verified += span.Length;
+        }
+        Assert.Equal(first.ParameterCount, verified);
+        AssertWrittenOnce(modelBytes, tensors);
+
+        // Disposing the owner gives the session up: the next predictor streams.
+        first.Dispose();
+        var third = NewMMDiTX(seed: 3);
+        Assert.True(third.GetParameterChunks().Count(chunk => chunk.IsWritableMmapAliased) > 0,
+            "The session was not released when its owner was disposed.");
+    }
+
+    /// <summary>
+    /// The same race without choreography: predictors created, round-tripped and disposed on several
+    /// threads at once. Whichever holds the session streams and the others run resident; every one of them
+    /// must read back exactly what it wrote.
+    /// </summary>
+    [Fact]
+    public void PredictorsRoundTrippingConcurrently_EachReadBackWhatTheyWrote()
+    {
+        using var scope = ForceStreaming<float>();
+        scope.CapResidentBytes(256 * 1024);
+        const int Threads = 4, Rounds = 6;
+        var failures = new System.Collections.Concurrent.ConcurrentQueue<Exception>();
+        int streamedRounds = 0;
+        using var start = new System.Threading.Barrier(Threads);
+
+        var threads = Enumerable.Range(0, Threads).Select(worker => new System.Threading.Thread(() =>
+        {
+            try
+            {
+                start.SignalAndWait();
+                for (int round = 0; round < Rounds; round++)
+                {
+                    float bias = worker * 10 + round;
+                    using var predictor = NewMMDiTX(seed: worker * 100 + round);
+                    long index = 0;
+                    bool streamed = false;
+                    // The values to write go into detached chunks: the live weights keep theirs until the setter
+                    // runs, so a setter that wrote nothing would read back the old values and fail below.
+                    var written = new System.Collections.Generic.List<Tensor<float>>();
+                    foreach (var chunk in predictor.GetParameterChunks())
+                    {
+                        streamed |= chunk.IsWritableMmapAliased;
+                        var detached = new Tensor<float>(chunk.Shape.ToArray());
+                        var span = detached.Data.Span;
+                        for (int i = 0; i < span.Length; i++) span[i] = bias + ((index + i) % 997) * 0.001f;
+                        index += span.Length;
+                        written.Add(detached);
+                    }
+                    if (streamed) System.Threading.Interlocked.Increment(ref streamedRounds);
+
+                    predictor.SetParameterChunks(written);
+
+                    index = 0;
+                    foreach (var chunk in predictor.GetParameterChunks())
+                    {
+                        var span = chunk.Data.Span;
+                        for (int i = 0; i < span.Length; i++)
+                        {
+                            float expected = bias + ((index + i) % 997) * 0.001f;
+                            if (span[i] != expected)
+                                throw new Xunit.Sdk.XunitException(
+                                    $"Worker {worker} round {round}: parameter {index + i} read {span[i]}, wrote {expected}.");
+                        }
+                        index += span.Length;
+                    }
+                    if (index != predictor.ParameterCount)
+                        throw new Xunit.Sdk.XunitException(
+                            $"Worker {worker} round {round}: read {index} of {predictor.ParameterCount} parameters.");
+                }
+            }
+            catch (Exception ex)
+            {
+                failures.Enqueue(ex);
+            }
+        })).ToArray();
+        foreach (var thread in threads) thread.Start();
+        foreach (var thread in threads) thread.Join();
+
+        Assert.True(failures.IsEmpty, string.Join(Environment.NewLine, failures.Select(f => f.ToString())));
+        Assert.True(streamedRounds > 0, "No round streamed, so the registry was never contended.");
+    }
+
+    /// <summary>
+    /// A write through the sparse parameter mapping on a volume with no blocks left is SIGBUS on Linux, not
+    /// an exception. The walk is refused up front, with the path and both sizes, and nothing is mapped.
+    /// </summary>
+    [Fact]
+    public void AParameterWalkTheDiskCannotHold_ThrowsBeforeMappingAnything()
+    {
+        using var scope = ForceStreaming<float>();
+        var predictor = NewMMDiTX(seed: 1);
+        long modelBytes = predictor.ParameterCount * sizeof(float);
+        scope.CapResidentBytes(modelBytes / 4);
+        string? probed = null;
+        NoisePredictorBase<float>.AvailableDiskBytesOverride = directory =>
+        {
+            probed = directory;
+            return modelBytes / 2;
+        };
+
+        var refused = Assert.Throws<System.IO.IOException>(() => predictor.GetParameterChunks().Count());
+
+        Assert.NotNull(probed);
+        Assert.Equal(NoisePredictorBase<float>.ParameterFileDirectory, probed);
+        // The registry creates the parameter file in the temp directory, so that is the volume probed.
+        Assert.Equal(System.IO.Path.GetTempPath(), probed);
+        Assert.Contains(probed, refused.Message);
+        Assert.Contains(modelBytes.ToString("N0"), refused.Message);
+        Assert.Contains((modelBytes / 2).ToString("N0"), refused.Message);
+        Assert.Equal(0, ParameterFileUsedBytes());
+        // The session the refused walk engaged is given back: nothing was mapped into it.
+        Assert.Equal(0, WeightStreamingSessions.LiveOwnerCount);
+        Assert.Throws<System.IO.IOException>(() => predictor.GetParameters());
+        Assert.Throws<System.IO.IOException>(() => predictor.SetParameterChunks(Array.Empty<Tensor<float>>()));
+
+        // Room for the model is enough, and once every weight is mapped the volume is not asked again.
+        NoisePredictorBase<float>.AvailableDiskBytesOverride = _ => modelBytes;
+        AssertParameterChunksRoundTrip(predictor.GetParameterChunks, predictor.SetParameterChunks);
+        NoisePredictorBase<float>.AvailableDiskBytesOverride = _ => 0;
+        Assert.Equal(predictor.ParameterCount, predictor.GetParameterChunks().Sum(chunk => (long)chunk.Length));
+        AssertWrittenOnce(modelBytes, TensorCount(predictor.GetParameterChunks()));
+    }
+
+    private static MMDiTXNoisePredictor<float> NewMMDiTX(int seed) => new(
+        MMDiTXVariant.Medium, inputChannels: 4, patchSize: 2, contextDim: 32, seed: seed,
+        hiddenSizeOverride: 64, numLayersOverride: 2, numHeadsOverride: 4);
+
+    /// <summary>
     /// Feeds the setter detached chunks holding values the model does not have, then reads them back. Writing the
     /// values into the live tensors and handing those same tensors to the setter would let a setter that does nothing
     /// pass; these reduced-size models can afford the copy the foundation-scale helper avoids.
@@ -185,6 +396,8 @@ public sealed class PredictorParameterIoDiskFootprintTests : DiffusionUnitTestBa
 
     private static StreamingScope<T> ForceStreaming<T>()
     {
+        // The registry is reset by hand here, so the sessions over it are forgotten with it.
+        WeightStreamingSessions.Clear();
         WeightRegistry.Reset();
         NoisePredictorBase<T>.StreamingThresholdOverride = 1;
         return new StreamingScope<T>();
@@ -199,6 +412,8 @@ public sealed class PredictorParameterIoDiskFootprintTests : DiffusionUnitTestBa
         {
             NoisePredictorBase<T>.StreamingThresholdOverride = null;
             NoisePredictorBase<T>.StreamingResidentCapOverride = null;
+            NoisePredictorBase<T>.AvailableDiskBytesOverride = null;
+            WeightStreamingSessions.Clear();
             WeightRegistry.Reset();
         }
     }

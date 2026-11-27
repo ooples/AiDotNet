@@ -296,26 +296,134 @@ public class StreamingStepTrainingTests : IDisposable
     }
 
     [Fact(Timeout = 180000)]
-    public async Task FusedCheckpoint_ResumedOnTheEagerPath_IsRefusedRatherThanRestartingTheOptimizer()
+    public async Task FusedCheckpoint_ResumedOnTheEagerPath_ContinuesThePlanMomentsExactly()
     {
+        // A checkpoint written by the compiled plan, resumed on the eager path, must continue the plan's Adam moments
+        // and step count: the eager steps match the compiled continuation from the same checkpoint, parameters and
+        // moments, step by step. (It used to refuse; before that it restarted Adam.)
         await Task.Yield();
         var init = InitialWeights();
         var fused = await Train(13, resume: false, Checkpoints("fused-to-eager", saveEvery: 1000), init);
         byte[] optimizerState = fused.Opt.Serialize();
+        var weights = fused.Model.GetParameters();
+        Assert.NotNull(PendingFused(optimizerState));
 
+        var compiled = Restore(weights, optimizerState, fusedEnabled: true);
+        var eager = Restore(weights, optimizerState, fusedEnabled: false);
+        AssertSameTrajectory(compiled, eager, steps: 4, compiledRuns: true);
+    }
+
+    [Fact(Timeout = 180000)]
+    public async Task EagerCheckpoint_ResumedOnTheCompiledPath_ContinuesTheEagerMomentsOnEveryStep()
+    {
+        // The compiled plan must take over the eager moments and step count, on its first step and every one after.
+        // A plan that declined the first step and then started with fresh moments matched an eager continuation for
+        // that one step only, and restarted Adam from the second.
+        await Task.Yield();
+        var (x, y) = Data(1);
+        var bx = Stack(x.Take(BatchSize).ToArray());
+        var by = Stack(y.Take(BatchSize).ToArray());
+
+        var sourceOptimizer = Optimizer(epochs: 100);
+        var source = Model(sourceOptimizer);
+        source.SetParameters(InitialWeights());
+        source.SetBaseTrainOptimizer(sourceOptimizer);
+        source.FusedSession.IsDisabled = true;
+        for (int i = 0; i < 5; i++) source.Train(bx, by);
+        Assert.True(TapeStep(sourceOptimizer) == 5, "the source optimizer did not take five eager steps");
+        byte[] eagerState = sourceOptimizer.Serialize();
+        Assert.Null(PendingFused(eagerState));
+
+        var compiled = Restore(source.GetParameters(), eagerState, fusedEnabled: true);
+        var eager = Restore(source.GetParameters(), eagerState, fusedEnabled: false);
+        AssertSameTrajectory(compiled, eager, steps: 4, compiledRuns: true);
+    }
+
+    /// <summary>How far the CPU compiled step and the eager tape step may round apart over a few steps.</summary>
+    private const double PathRounding = 1e-5;
+
+    private (FeedForwardNeuralNetwork<float> Model, AdamOptimizer<float, Tensor<float>, Tensor<float>> Opt) Restore(
+        Vector<float> weights, byte[] optimizerState, bool fusedEnabled)
+    {
         var optimizer = Optimizer(epochs: 100);
         var model = Model(optimizer);
-        model.SetParameters(fused.Model.GetParameters());
+        model.SetParameters(weights.Clone());
         model.SetBaseTrainOptimizer(optimizer);
         optimizer.Deserialize(optimizerState);
+        if (!fusedEnabled) model.FusedSession.IsDisabled = true;
+        return (model, optimizer);
+    }
 
-        // Force the eager path: the checkpoint's Adam state lives in a compiled-plan payload the eager optimizer
-        // cannot use, so training on would restart Adam silently.
-        model.FusedSession.IsDisabled = true;
+    /// <summary>
+    /// Steps both models on the same batches and requires identical parameters after every step and identical Adam
+    /// moments and step count at the end. The compiled model must run every step on the compiled path.
+    /// </summary>
+    private static void AssertSameTrajectory(
+        (FeedForwardNeuralNetwork<float> Model, AdamOptimizer<float, Tensor<float>, Tensor<float>> Opt) compiled,
+        (FeedForwardNeuralNetwork<float> Model, AdamOptimizer<float, Tensor<float>, Tensor<float>> Opt) eager,
+        int steps,
+        bool compiledRuns)
+    {
         var (x, y) = Data(1);
-        var ex = Assert.Throws<InvalidOperationException>(
-            () => model.Train(Stack(x.Take(BatchSize).ToArray()), Stack(y.Take(BatchSize).ToArray())));
-        Assert.Contains("fused compiled training", ex.Message);
+        for (int step = 0; step < steps; step++)
+        {
+            var bx = Stack(x.Skip(step * BatchSize).Take(BatchSize).ToArray());
+            var by = Stack(y.Skip(step * BatchSize).Take(BatchSize).ToArray());
+            AiDotNet.Training.CompiledTapeTrainingStep<float>.ResetFusedStepCount();
+            compiled.Model.Train(bx, by);
+            long fusedSteps = AiDotNet.Training.CompiledTapeTrainingStep<float>.GetFusedStepCount();
+            eager.Model.Train(bx, by);
+            // The CPU compiled step and the eager tape round differently in the last bits (~1e-7 here, from a fresh
+            // optimizer too); an optimizer restart moves a parameter by about the learning rate (0.02).
+            double diff = MaxAbsDiff(compiled.Model.GetParameters(), eager.Model.GetParameters());
+            Assert.True(diff <= PathRounding, $"step {step}: compiled and eager parameters diverged by {diff}");
+            if (compiledRuns)
+                Assert.True(fusedSteps == 1, $"step {step}: the compiled model did not run on the compiled path");
+        }
+
+        var order = AiDotNet.Training.TapeTrainingStep<float>.CollectParameters(compiled.Model.Layers);
+        var a = MomentsOf(compiled.Opt.Serialize(), order);
+        var b = MomentsOf(eager.Opt.Serialize(), AiDotNet.Training.TapeTrainingStep<float>.CollectParameters(eager.Model.Layers));
+        Assert.Equal(b.Step, a.Step);
+        Assert.Equal(b.Moments.Keys.OrderBy(k => k), a.Moments.Keys.OrderBy(k => k));
+        foreach (var (field, entries) in b.Moments)
+        {
+            Assert.Equal(entries.Keys.OrderBy(k => k), a.Moments[field].Keys.OrderBy(k => k));
+            foreach (var (index, values) in entries)
+            {
+                var other = a.Moments[field][index];
+                Assert.Equal(values.Length, other.Length);
+                double worst = values.Zip(other, (l, r) => (double)Math.Abs(l - r)).Max();
+                double scale = values.Max(v => (double)Math.Abs(v));
+                Assert.True(worst <= PathRounding * Math.Max(1.0, scale), $"{field}[{index}] differs between the paths by {worst}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// The optimizer step count and per-parameter moments a serialized optimizer carries, in eager form whichever path
+    /// wrote it: a compiled-plan payload is moved to the eager layout (by <paramref name="planOrder"/>) first.
+    /// </summary>
+    private static (int Step, Dictionary<string, Dictionary<int, float[]>> Moments) MomentsOf(
+        byte[] serialized, IReadOnlyList<Tensor<float>> planOrder)
+    {
+        var copy = Optimizer(epochs: 100);
+        copy.Deserialize(serialized);
+        copy.MaterializePendingFusedOptimizerStateToEager(planOrder);
+        Assert.Null(copy.PeekPendingFusedOptimizerState());
+        var field = typeof(GradientBasedOptimizerBase<float, Tensor<float>, Tensor<float>>).GetField(
+            "_pendingTapeTensorStates", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        var pending = (Dictionary<string, Dictionary<int, Tensor<float>>>)field.GetValue(copy)!;
+        var moments = pending.ToDictionary(kv => kv.Key, kv => kv.Value.ToDictionary(e => e.Key, e => e.Value.ToArray()));
+        Assert.NotEmpty(moments);
+        return (TapeStep(copy), moments);
+    }
+
+    private static byte[]? PendingFused(byte[] serialized)
+    {
+        var copy = Optimizer(epochs: 100);
+        copy.Deserialize(serialized);
+        return copy.PeekPendingFusedOptimizerState();
     }
 
     [Fact(Timeout = 180000)]
@@ -397,9 +505,9 @@ public class StreamingStepTrainingTests : IDisposable
     [Fact(Timeout = 180000)]
     public async Task EagerCheckpoint_ResumedWithFusedEnabled_ContinuesFromTheRestoredEagerMoments()
     {
-        // The mirror case: moments written on the eager path live in the optimizer, which a fused plan cannot use.
-        // The fused step must decline so the eager path consumes them; the resumed step then matches an eager
-        // continuation from the same checkpoint exactly, instead of restarting Adam inside a fresh plan.
+        // The mirror case: moments written on the eager path live in the optimizer. The fused plan takes them over, so
+        // the resumed step matches an eager continuation from the same checkpoint exactly, instead of restarting Adam
+        // inside a fresh plan.
         await Task.Yield();
         var (x, y) = Data(1);
         var bx = Stack(x.Take(BatchSize).ToArray());
@@ -441,7 +549,8 @@ public class StreamingStepTrainingTests : IDisposable
         eagerContinuation.Train(bx, by);
         var withFusedEnabled = Restore(fused: true);
         withFusedEnabled.Train(bx, by);
-        Assert.True(MaxAbsDiff(withFusedEnabled.GetParameters(), eagerContinuation.GetParameters()) == 0.0,
+        // Within the CPU compiled-vs-eager rounding (see PathRounding); a discarded moment set moves by ~the rate.
+        Assert.True(MaxAbsDiff(withFusedEnabled.GetParameters(), eagerContinuation.GetParameters()) <= PathRounding,
             "resuming an eager checkpoint with fused enabled discarded the restored moments; diverged by " +
             $"{MaxAbsDiff(withFusedEnabled.GetParameters(), eagerContinuation.GetParameters())}");
     }

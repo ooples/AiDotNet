@@ -246,17 +246,16 @@ public abstract class VisionTaskModelBase<T> : ModelBase<T, Tensor<T>, Tensor<T>
     }
 
     /// <summary>Whether Serialize and Deserialize are this base's, so the parameters and declared state are all they carry.</summary>
-    private bool PersistsOnlyTheBaseState
+    private bool PersistsOnlyTheBaseState => PersistsOnlyTheBaseStateByType.GetOrAdd(GetType(), static type =>
     {
-        get
-        {
-            var type = GetType();
-            var serialize = type.GetMethod(nameof(Serialize), Type.EmptyTypes);
-            var deserialize = type.GetMethod(nameof(Deserialize), new[] { typeof(byte[]) });
-            return serialize?.DeclaringType == typeof(VisionTaskModelBase<T>)
-                && deserialize?.DeclaringType == typeof(ModelBase<T, Tensor<T>, Tensor<T>>);
-        }
-    }
+        var serialize = type.GetMethod(nameof(Serialize), Type.EmptyTypes);
+        var deserialize = type.GetMethod(nameof(Deserialize), new[] { typeof(byte[]) });
+        return serialize?.DeclaringType == typeof(VisionTaskModelBase<T>)
+            && deserialize?.DeclaringType == typeof(ModelBase<T, Tensor<T>, Tensor<T>>);
+    });
+
+    // Which method a type inherits never changes, and WithParameters sits inside some trainers' optimizer loops.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, bool> PersistsOnlyTheBaseStateByType = new();
 
     // DeepCopy is deliberately NOT overridden. MemberwiseClone gave a shallow copy that shared every layer with
     // the original, so fine-tuning a clone rewrote the source's weights. ModelBase rebuilds the model from its

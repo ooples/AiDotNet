@@ -242,6 +242,11 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc />
+    /// <remarks>Checked: the forward records only the input's shape; the step state of incremental decoding is created and
+    /// carried by its own API, not by <c>Forward</c>. A subclass is unchecked.</remarks>
+    protected internal override bool KeepsResultsBetweenCalls => GetType() != typeof(MultiLatentAttentionLayer<T>);
+
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;

@@ -67,6 +67,7 @@ public class TrainingMonitor<T> : TrainingMonitorBase<T>
         {
             var session = GetSession(sessionId);
             session.EndTime = DateTime.UtcNow;
+            _gpuMemoryWarnedSessions.Remove(sessionId);
         }
     }
 
@@ -362,6 +363,7 @@ public class TrainingMonitor<T> : TrainingMonitorBase<T>
     public override List<string> CheckForIssues(string sessionId)
     {
         var issues = new List<string>();
+        string? gpuMemoryWarning = null;
 
         lock (SyncLock)
         {
@@ -377,18 +379,41 @@ public class TrainingMonitor<T> : TrainingMonitorBase<T>
                 }
             }
 
-            // Check for high memory usage
+            // Check for high memory usage. LogResourceUsage records memory in MB (the ITrainingMonitor contract, and
+            // what GetResourceUsage reports), so it is compared against the process's memory budget: the container
+            // limit, or physical memory. This previously compared the MB value against 90 as if it were a percentage,
+            // so any process above 90 MB was reported, and the training loops that stop on reported issues stopped.
+            // When the budget is unknown the check does not run: an issue stops a streaming run, so it must not rest
+            // on a guess (the GC heap limit, for example, bounds the managed heap, not the process).
             var latestResource = session.ResourceHistory.LastOrDefault();
             if (latestResource != null)
             {
-                if (latestResource.MemoryUsage > 90)
+                if (TryGetProcessMemoryBudgetMB(out double budgetMb))
                 {
-                    issues.Add($"High memory usage: {latestResource.MemoryUsage:F1}%");
+                    double percent = latestResource.MemoryUsage / budgetMb * 100.0;
+                    if (percent > 90)
+                    {
+                        issues.Add(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                            "High memory usage: {0:F0} MB ({1:F1}% of the {2:F0} MB process memory budget)",
+                            latestResource.MemoryUsage, percent, budgetMb));
+                    }
                 }
 
-                if (latestResource.GpuMemory.HasValue && latestResource.GpuMemory > 95)
+                // GPU memory is in MB too (the same contract), and it is the whole device's: every process on it, and
+                // what a caching allocator holds for reuse. A share near the total is routine for a healthy run, so it
+                // is a warning, not an issue (the streaming loop stops on any issue). It was compared against 95 as a
+                // percentage, so any device memory above 95 MB stopped the run.
+                if (latestResource.GpuMemory is double gpuMemoryMb
+                    && TryGetGpuDeviceTotalMemoryMB(out double gpuTotalMb) && gpuTotalMb > 0)
                 {
-                    issues.Add($"Critical GPU memory usage: {latestResource.GpuMemory:F1}%");
+                    double gpuPercent = gpuMemoryMb / gpuTotalMb * 100.0;
+                    // Once per session: a run that keeps the device full would otherwise warn on every check. Traced
+                    // after the lock is released, so a slow listener does not hold up the monitor.
+                    // An ended session stays inspectable, but its last sample is history: it does not warn again.
+                    if (gpuPercent > 95 && !session.EndTime.HasValue && _gpuMemoryWarnedSessions.Add(sessionId))
+                        gpuMemoryWarning = string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                            "GPU memory in use on the device: {0:F0} MB ({1:F1}% of {2:F0} MB).",
+                            gpuMemoryMb, gpuPercent, gpuTotalMb);
                 }
             }
 
@@ -419,7 +444,132 @@ public class TrainingMonitor<T> : TrainingMonitorBase<T>
             }
         }
 
+        if (gpuMemoryWarning is not null) Trace.TraceWarning(gpuMemoryWarning);
         return issues;
+    }
+
+    // Sessions already warned about a near-full GPU (guarded by SyncLock).
+    private readonly HashSet<string> _gpuMemoryWarnedSessions = new(StringComparer.Ordinal);
+
+    /// <summary>Test seam (this monitor only): the device total in MB to use instead of the current engine's.</summary>
+    internal double? GpuDeviceTotalMemoryMBOverrideForTest { get; set; }
+
+    /// <summary>Total memory of the current GPU engine's device in MB, when the engine is a GPU engine.</summary>
+    private bool TryGetGpuDeviceTotalMemoryMB(out double totalMb)
+    {
+        totalMb = 0;
+        if (GpuDeviceTotalMemoryMBOverrideForTest is double overrideMb)
+        {
+            totalMb = overrideMb;
+            return totalMb > 0;
+        }
+        if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is not AiDotNet.Tensors.Engines.DirectGpuTensorEngine gpu
+            || gpu.GetBackend() is not { } backend)
+            return false;
+        if (AiDotNet.Tensors.Engines.DevicePrimitives.GpuMemoryStats.TryGetDeviceMemory(backend, out _, out long totalBytes))
+            totalMb = totalBytes / (1024.0 * 1024.0);
+        else
+            totalMb = backend.GlobalMemoryBytes / (1024.0 * 1024.0);
+        return totalMb > 0;
+    }
+
+    /// <summary>Test seam (this monitor only): the process memory budget in MB to use instead of the measured one.</summary>
+    internal double? ProcessMemoryBudgetMBOverrideForTest { get; set; }
+
+    private bool TryGetProcessMemoryBudgetMB(out double budgetMb)
+    {
+        if (ProcessMemoryBudgetMBOverrideForTest is double overrideMb)
+        {
+            budgetMb = overrideMb;
+            return budgetMb > 0;
+        }
+        budgetMb = MeasuredProcessMemoryBudgetMB.Value;
+        return budgetMb > 0;
+    }
+
+    // Measured once: neither a container limit nor physical memory changes over a run. Zero means unknown.
+    private static readonly Lazy<double> MeasuredProcessMemoryBudgetMB = new(MeasureProcessMemoryBudgetMB);
+
+    /// <summary>
+    /// The memory the whole process may use, in MB, or 0 when it cannot be measured independently of the GC.
+    /// </summary>
+    /// <remarks>
+    /// The order is: a cgroup memory limit (a container, on Linux), then the runtime's available-memory figure
+    /// (physical memory), but only when no GC heap limit is configured. With a configured heap limit
+    /// (GCHeapHardLimit and its percent or per-heap variants) the runtime reports that limit, which bounds the
+    /// managed heap rather than the process's working set, so it is not used; the budget is then unknown and the
+    /// check is skipped.
+    /// </remarks>
+    private static double MeasureProcessMemoryBudgetMB()
+    {
+        if (TryReadCgroupMemoryLimitBytes(out long cgroupBytes))
+            return cgroupBytes / (1024.0 * 1024.0);
+#if NET5_0_OR_GREATER
+        if (IsGcHeapLimitConfigured()) return 0;
+        return GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024.0 * 1024.0);
+#else
+        return 0;
+#endif
+    }
+
+    private static readonly string[] GcHeapLimitSettings =
+    {
+        "GCHeapHardLimit", "GCHeapHardLimitPercent",
+        "GCHeapHardLimitSOH", "GCHeapHardLimitLOH", "GCHeapHardLimitPOH",
+        "GCHeapHardLimitSOHPercent", "GCHeapHardLimitLOHPercent", "GCHeapHardLimitPOHPercent",
+    };
+
+    // A heap limit set through runtimeconfig.json (AppContext "System.GC.*") or DOTNET_/COMPlus_ variables.
+    private static bool IsGcHeapLimitConfigured()
+    {
+        foreach (var name in GcHeapLimitSettings)
+        {
+            string runtimeConfigName = "System.GC." + name.Substring("GC".Length);
+            if (AppContext.GetData(runtimeConfigName) is { } value && !IsZeroSetting(value.ToString()))
+                return true;
+            if (!IsZeroSetting(Environment.GetEnvironmentVariable("DOTNET_" + name))
+                || !IsZeroSetting(Environment.GetEnvironmentVariable("COMPlus_" + name)))
+                return true;
+        }
+        return false;
+    }
+
+    // Unset, empty and zero settings leave the limit off; any other value configures one.
+    private static bool IsZeroSetting(string? value)
+    {
+        if (value is null || value.Trim().Length == 0) return true;
+        string trimmed = value.Trim();
+        if (trimmed.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) trimmed = trimmed.Substring(2);
+        foreach (char c in trimmed)
+            if (c != '0') return false;
+        return true;
+    }
+
+    // cgroup v2 (memory.max) or v1 (memory.limit_in_bytes). "max" and v1's near-2^63 sentinel mean no limit.
+    private static bool TryReadCgroupMemoryLimitBytes(out long limitBytes)
+    {
+        limitBytes = 0;
+        foreach (var path in new[] { "/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes" })
+        {
+            try
+            {
+                if (!System.IO.File.Exists(path)) continue;
+                string text = System.IO.File.ReadAllText(path).Trim();
+                if (long.TryParse(text, System.Globalization.NumberStyles.None,
+                        System.Globalization.CultureInfo.InvariantCulture, out long bytes)
+                    && bytes > 0 && bytes < long.MaxValue / 2)
+                {
+                    limitBytes = bytes;
+                    return true;
+                }
+            }
+            catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException
+                                           or System.Security.SecurityException)
+            {
+                // An unreadable cgroup file leaves that source unknown; the next one is tried.
+            }
+        }
+        return false;
     }
 
     /// <summary>

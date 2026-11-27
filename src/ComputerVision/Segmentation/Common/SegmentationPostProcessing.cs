@@ -103,8 +103,9 @@ internal static class SegmentationPostProcessing
         var engine = AiDotNetEngine.Current;
         int channels = logits.Shape[0], h = logits.Shape[1], w = logits.Shape[2], hw = h * w;
         var probabilities = SegmentationTensorOps.SoftmaxAlongClassDim(logits);
-        var semanticMap = SegmentationTensorOps.ArgmaxAlongClassDim(logits);
         var (labels, own) = LabelsAndOwnProbability(logits, probabilities);
+        // The semantic map from the same winning labels: one argmax over the logits serves all three maps.
+        var semanticMap = engine.Reshape(CvTensorOps<T>.IndicesAsValues(labels, channels), [h, w]);
 
         int[] classArea = engine.TensorBinCount(labels, channels).ToArray();
         double[] classProbability = engine.TensorScatterAdd(new Tensor<double>([channels]), labels, own, 0).ToArray();
@@ -119,7 +120,8 @@ internal static class SegmentationPostProcessing
         // The panoptic value of each stuff class; thing classes get theirs per instance below. Stuff segments take
         // the ids after the instances', so a thing's SegmentId stays its InstanceMap value.
         var stuffLabel = new int[channels];
-        int stuffEnd = Math.Min(numStuffClasses, channels);
+        // Bounded by numClasses like the thing classes: a class at or above it is left unlabelled on either route.
+        int stuffEnd = Math.Min(numStuffClasses, thingEnd);
         int nextStuffId = instances + 1;
         for (int cls = 0; cls < stuffEnd; cls++)
         {
@@ -452,15 +454,18 @@ internal static class SegmentationPostProcessing
 
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var positive = engine.TensorGreaterThan(mask, numOps.Zero);
         int maskHeight = mask.Shape[0], maskWidth = mask.Shape[1];
-        if (maskHeight == height && maskWidth == width) return positive;
+        if (maskHeight == height && maskWidth == width) return engine.TensorGreaterThan(mask, numOps.Zero);
 
+        // Only the part of the mask over the feature grid can gate it, so that part alone is thresholded: a
+        // full-resolution mask over a small grid would otherwise build a full-resolution comparison to discard.
         var gate = new Tensor<T>([height, width]);
         int coveredHeight = Math.Min(maskHeight, height), coveredWidth = Math.Min(maskWidth, width);
         if (coveredHeight == 0 || coveredWidth == 0) return gate;
-        return engine.TensorSetSlice(
-            gate, engine.TensorSlice(positive, [0, 0], [coveredHeight, coveredWidth]), [0, 0]);
+        var covered = engine.TensorGreaterThan(
+            engine.TensorSlice(mask, [0, 0], [coveredHeight, coveredWidth]), numOps.Zero);
+        if (coveredHeight == height && coveredWidth == width) return covered;
+        return engine.TensorSetSlice(gate, covered, [0, 0]);
     }
 
     /// <summary>
@@ -572,7 +577,8 @@ internal static class SegmentationPostProcessing
         var slotOfClass = new int[channels];
         for (int cls = 0; cls < channels; cls++)
         {
-            bool keep = kept.Count < maxResults && area[cls] >= minArea;
+            // A class with no pixels has no mean confidence, so it is never a result, even when minArea is zero.
+            bool keep = kept.Count < maxResults && area[cls] > 0 && area[cls] >= minArea;
             slotOfClass[cls] = keep ? kept.Count : -1;
             if (keep) kept.Add(cls);
         }

@@ -56,13 +56,7 @@ public class OffsetNoiseSchedule<T>
 
         // Offset noise (Guttenberg; diffusers noise_offset): noise + strength * N(0, 1) per channel. The seeded
         // Box-Muller draws stay one per channel (no engine op consumes a caller Random).
-        var offsets = new Vector<T>(numChannels);
-        for (int c = 0; c < numChannels; c++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = random.NextDouble();
-            offsets[c] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * _offsetStrength);
-        }
+        var offsets = SeededNoiseTensors.StandardNormalVector<T>(numChannels, random, _offsetStrength);
 
         // Every element of channel c gets offset c; elements past numChannels * pixelsPerChannel keep their noise.
         var perElement = engine.TensorBroadcastTo(offsets.AsTensor().Reshape(new[] { numChannels, 1 }),

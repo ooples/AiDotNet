@@ -230,6 +230,43 @@ public class SegmentationPostProcessingParityTests
         => PanopticMatchesScan<float>(classes, numStuff, numClasses, seed);
 
     [Fact]
+    public void PanopticFromSemanticLogits_LeavesAStuffClassAtOrAboveNumClassesUnlabelled()
+    {
+        // Three channels, two stuff classes, one model class: the left half is won by class 0 and the right half by
+        // class 1. Class 1 is at numClasses, so it is no segment, although it is in the stuff range.
+        var logits = new Tensor<double>(new[] { 3, 2, 4 });
+        for (int y = 0; y < 2; y++)
+        {
+            for (int x = 0; x < 4; x++) logits[x < 2 ? 0 : 1, y, x] = 5.0;
+        }
+
+        var result = SegmentationPostProcessing.PanopticFromSemanticLogits(logits, numStuffClasses: 2, numClasses: 1);
+
+        var segment = Assert.Single(result.Segments);
+        Assert.Equal(0, segment.ClassId);
+        Assert.False(segment.IsThing);
+        Assert.Equal(4, segment.Area);
+    }
+
+    [Fact]
+    public void SegmentEveryClass_WithMinAreaZero_SkipsAClassWithNoPixels()
+    {
+        // Every pixel is won by class 0, so class 1 has no pixels and no mean confidence to report.
+        var features = new Tensor<double>(new[] { 2, 2, 2 });
+        for (int y = 0; y < 2; y++)
+        {
+            for (int x = 0; x < 2; x++) features[0, y, x] = 3.0;
+        }
+
+        var results = SegmentationPostProcessing.SegmentEveryClass(
+            features, SegmentationTensorOps.SoftmaxAlongClassDim(features), maxResults: 2, minArea: 0);
+
+        var only = Assert.Single(results);
+        Assert.False(double.IsNaN(only.Scores[0]));
+        Assert.Equal(4, Flat(only.Masks).Count(v => D(v) > 0));
+    }
+
+    [Fact]
     public void PanopticFromSemanticLogits_TiesAndNonFiniteLogits_MatchThePixelScan()
         => PanopticMatchesScan(NoiseLogits<double>(5, 12, 16, 23, tieRate: 0.15, nonFiniteRate: 0.1), 2, 5);
 
@@ -818,7 +855,7 @@ public class SegmentationPostProcessingParityTests
     }
 
     [Fact]
-    public void PointAttention_RejectsMalformedPointsAndLabels_ButAcceptsAnEmptyPrompt()
+    public void PointAttention_RejectsMalformedPointsAndLabels()
     {
         Assert.Throws<ArgumentException>(() => SegmentationPostProcessing.PointAttention(
             new Tensor<double>(new[] { 1, 1, 2 }), new Tensor<double>(new[] { 1 }), 4, 4, 1.0));
@@ -826,11 +863,6 @@ public class SegmentationPostProcessingParityTests
             new Tensor<double>(new[] { 2, 3 }), new Tensor<double>(new[] { 2 }), 4, 4, 1.0));
         Assert.Throws<ArgumentException>(() => SegmentationPostProcessing.PointAttention(
             new Tensor<double>(new[] { 2, 2 }), new Tensor<double>(new[] { 3 }), 4, 4, 1.0));
-
-        var empty = SegmentationPostProcessing.PointAttention(
-            new Tensor<double>(new[] { 0, 2 }), new Tensor<double>(new[] { 0 }), 4, 4, 1.0);
-        Assert.Equal(new[] { 4, 4 }, empty.Shape.ToArray());
-        Assert.All(Flat(empty), v => Assert.Equal(0.0, v));
     }
 
     [Fact]

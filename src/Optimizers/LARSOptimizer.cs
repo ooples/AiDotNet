@@ -662,6 +662,7 @@ public partial class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             (float)_options.InitialMomentum,
             (float)_options.WeightDecay,
             (float)_options.TrustCoefficient,
+            (float)_options.Epsilon,
             parameterCount
         );
     }

@@ -178,13 +178,7 @@ public abstract partial class TabMBase<T>
         int fanOut = tensor.Shape.Length > 1 ? tensor.Shape[1] : 1;
         double stdDev = Math.Sqrt(2.0 / (fanIn + fanOut));
 
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            tensor[i] = NumOps.FromDouble(normal * stdDev);
-        }
+        SeededNoiseTensors.FillStandardNormal(tensor, random, stdDev);
     }
 
     /// <summary>

@@ -1214,13 +1214,22 @@ internal sealed class TapeTrainingStepper<T>
         List<float[]>? mpSnapshots = null;
         List<Tensor<T>>? mpTargets = null;
         bool mpRestored = true;
+        LossFunctions.MeanReductionCapture<T>.Scope? scoring = null;
 
         try
         {
             distNet.PrepareMixedPrecisionWorkingWeights(mpCtx, preParams, out mpSnapshots, out mpTargets, ref mpRestored);
 
-            long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target);
-            if (localTokens <= 0) localTokens = 1L;
+            // Counted after the objective has run, with the reduction of the loss that scored it (reported as it
+            // scored), not the model's default loss: the rank weight must describe the gradient's own denominator. An
+            // all-ignored batch counts zero, and SynchronizeStepMetadata gives it zero weight.
+            var scope = scoring = LossFunctions.MeanReductionCapture<T>.Begin();
+            long CountLocalTokens()
+            {
+                var scored = scope.Captured;
+                scope.Dispose();
+                return DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target, scored);
+            }
 
             if (objectiveTerms is not null)
             {
@@ -1239,7 +1248,7 @@ internal sealed class TapeTrainingStepper<T>
                 }
 
                 double localTermLoss = NumOps.ToDouble(totalLoss);
-                var (termRankWeight, termGlobalLoss, _) = distCoord.SynchronizeStepMetadata(localTokens, localTermLoss);
+                var (termRankWeight, termGlobalLoss, _) = distCoord.SynchronizeStepMetadata(CountLocalTokens(), localTermLoss);
                 T termGlobalLossT = NumOps.FromDouble(termGlobalLoss);
                 distNet.SetLastLossFromStepper(termGlobalLossT);
                 distCoord.BeginBackwardStep(termParameters, termRankWeight);
@@ -1289,7 +1298,7 @@ internal sealed class TapeTrainingStepper<T>
             double localUnscaledLoss = loss.Length > 0 ? NumOps.ToDouble(loss.Data.Span[0]) : 0.0;
             var lossForBackward = distNet.ScaleLossForMixedPrecision(mpCtx, loss);
 
-            var (rankWeight, globalLoss, _) = distCoord.SynchronizeStepMetadata(localTokens, localUnscaledLoss);
+            var (rankWeight, globalLoss, _) = distCoord.SynchronizeStepMetadata(CountLocalTokens(), localUnscaledLoss);
             T globalLossT = NumOps.FromDouble(globalLoss);
             distNet.SetLastLossFromStepper(globalLossT);
             distCoord.BeginBackwardStep(parameters, rankWeight);
@@ -1353,6 +1362,7 @@ internal sealed class TapeTrainingStepper<T>
         }
         finally
         {
+            scoring?.Dispose();
             NeuralNetworks.NeuralNetworkBase<T>.RestoreMixedPrecisionMasterWeights(mpSnapshots, mpTargets, ref mpRestored);
         }
     }

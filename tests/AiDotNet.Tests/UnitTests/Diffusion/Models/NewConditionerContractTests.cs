@@ -173,17 +173,36 @@ public class NewConditionerContractTests : DiffusionUnitTestBase
     {
         var predictor = new SiTPredictor<double>();
 
-        var parameters = predictor.GetParameters();
-        int length = parameters.Length;
+        // What this proves at paper scale: a flat read, a flat write and a second flat read fit the lane's
+        // memory, and the second read is bit-for-bit what was written. The first value is changed before the
+        // fingerprint is taken and the vector written back, so a SetParameters that did nothing leaves the
+        // original first value in place and the fingerprints differ. Only the one vector is ever held.
+        var (length, expected) = ReadChangeFingerprintAndWriteBack(predictor);
         Assert.True(length > 0);
-        var expected = Fingerprint(parameters);
-
-        predictor.SetParameters(parameters);
-        parameters = null!;
 
         var retrieved = predictor.GetParameters();
         Assert.Equal(length, retrieved.Length);
         Assert.Equal(expected, Fingerprint(retrieved));
+    }
+
+    // The first flat vector lives only inside this frame, so it is unreachable by the time the caller
+    // reads the parameters back. Not inlined: an inlined body would keep the vector in the caller's frame.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static (int Length, (double Sum, double Weighted, long Bits) Fingerprint) ReadChangeFingerprintAndWriteBack(
+        SiTPredictor<double> predictor)
+    {
+        var parameters = predictor.GetParameters();
+        Assert.True(parameters.Length > 0, "A paper-scale SiT predictor has parameters to round-trip.");
+        // Every value changes, to a bounded value that depends on its position, so a setter that skips any index
+        // (or moves one) leaves a value the fingerprint below does not match.
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            double target = ((i % 997) - 498) / 1024.0;
+            parameters[i] = parameters[i] == target ? target + 1.0 : target;
+        }
+        var fingerprint = Fingerprint(parameters);
+        predictor.SetParameters(parameters);
+        return (parameters.Length, fingerprint);
     }
 
     // Exact for a bitwise-identical vector (same values, same order, same summation order) and

@@ -580,13 +580,7 @@ public partial class Transfusion<T>
     {
         var noise = new Tensor<T>(like._shape);
         var span = noise.AsWritableSpan();
-        for (int i = 0; i < span.Length; i++)
-        {
-            // Box-Muller: two uniforms in (0, 1] give one standard normal draw.
-            double u1 = Math.Max(rng.NextDouble(), 1e-12);
-            double u2 = rng.NextDouble();
-            span[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
-        }
+        SeededNoiseTensors.WriteStandardNormal(span, rng, guard: BoxMullerGuard.Floored, floor: 1e-12);
         return noise;
     }
 

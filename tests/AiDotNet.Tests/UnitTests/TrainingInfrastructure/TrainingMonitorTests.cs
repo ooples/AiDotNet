@@ -357,6 +357,68 @@ public class TrainingMonitorTests : IDisposable
     }
 
     [Fact(Timeout = 60000)]
+    public async Task CheckForIssues_GpuMemoryInMegabytes_IsNotReadAsAPercentage()
+    {
+        // LogResourceUsage takes GPU memory in MB. 4000 MB was compared against 95 as a percentage and reported as
+        // critical, which stops a streaming run. The figure is the whole device's (every process, and what a caching
+        // allocator holds), so even a full device is a warning, never an issue that stops training.
+        var sessionId = _monitor.StartSession("gpu-memory-mb-test");
+        _monitor.LogResourceUsage(sessionId, cpuUsage: 10, memoryUsage: 100, gpuUsage: 50, gpuMemory: 4000);
+        Assert.DoesNotContain(_monitor.CheckForIssues(sessionId), issue => issue.Contains("GPU memory"));
+
+        _monitor.LogResourceUsage(sessionId, cpuUsage: 10, memoryUsage: 100, gpuUsage: 50, gpuMemory: 10_000_000);
+        Assert.DoesNotContain(_monitor.CheckForIssues(sessionId), issue => issue.Contains("GPU memory"));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task CheckForIssues_NearlyFullGpu_WarnsOncePerSession_WithoutAnIssue()
+    {
+        await Task.CompletedTask;
+        // The message names this test's own figures (990 of 1000 MB), which no other test traces. The percentage is
+        // not matched, so the count does not depend on how a culture formats decimals.
+        var listener = new CountingTraceListener("GPU memory in use on the device: 990 MB (", "% of 1000 MB).");
+        System.Diagnostics.Trace.Listeners.Add(listener);
+        try
+        {
+            var monitor = new AiDotNet.TrainingMonitoring.TrainingMonitor<double> { GpuDeviceTotalMemoryMBOverrideForTest = 1000 };
+            var sessionId = monitor.StartSession("gpu-near-full-test");
+            monitor.LogResourceUsage(sessionId, cpuUsage: 10, memoryUsage: 100, gpuUsage: 50, gpuMemory: 990);
+            for (int i = 0; i < 3; i++)
+                Assert.DoesNotContain(monitor.CheckForIssues(sessionId), issue => issue.Contains("GPU memory"));
+            Assert.Equal(1, listener.Count);
+
+            // Ending the session clears its marker, but inspecting the ended session does not warn again.
+            monitor.EndSession(sessionId);
+            Assert.DoesNotContain(monitor.CheckForIssues(sessionId), issue => issue.Contains("GPU memory"));
+            Assert.Equal(1, listener.Count);
+        }
+        finally
+        {
+            System.Diagnostics.Trace.Listeners.Remove(listener);
+        }
+    }
+
+    private sealed class CountingTraceListener : System.Diagnostics.TraceListener
+    {
+        private readonly string[] _needles;
+        private int _count;
+        public CountingTraceListener(params string[] needles) => _needles = needles;
+        public int Count => System.Threading.Volatile.Read(ref _count);
+        public override void Write(string? message) => Count1(message);
+        public override void WriteLine(string? message) => Count1(message);
+        public override void TraceEvent(System.Diagnostics.TraceEventCache? eventCache, string source,
+            System.Diagnostics.TraceEventType eventType, int id, string? message) => Count1(message);
+        public override void TraceEvent(System.Diagnostics.TraceEventCache? eventCache, string source,
+            System.Diagnostics.TraceEventType eventType, int id, string? format, params object?[]? args)
+            => Count1(args is null || format is null ? format : string.Format(format, args));
+        private void Count1(string? message)
+        {
+            if (message is not null && System.Array.TrueForAll(_needles, message.Contains))
+                System.Threading.Interlocked.Increment(ref _count);
+        }
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task CheckForIssues_WithRecentErrors_ReportsIssue()
     {
         // Arrange
