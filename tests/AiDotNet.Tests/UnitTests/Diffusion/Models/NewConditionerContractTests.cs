@@ -193,8 +193,13 @@ public class NewConditionerContractTests : DiffusionUnitTestBase
     {
         var parameters = predictor.GetParameters();
         Assert.True(parameters.Length > 0, "A paper-scale SiT predictor has parameters to round-trip.");
-        // Differs from the stored value whatever it is, so the write is observable.
-        parameters[0] = parameters[0] + 0.5;
+        // Every value changes, to a bounded value that depends on its position, so a setter that skips any index
+        // (or moves one) leaves a value the fingerprint below does not match.
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            double target = ((i % 997) - 498) / 1024.0;
+            parameters[i] = parameters[i] == target ? target + 1.0 : target;
+        }
         var fingerprint = Fingerprint(parameters);
         predictor.SetParameters(parameters);
         return (parameters.Length, fingerprint);

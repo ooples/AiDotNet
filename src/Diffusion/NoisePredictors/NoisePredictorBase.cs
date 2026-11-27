@@ -1263,6 +1263,12 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     [Scratch]
     private int _parameterFileFullyMapped;
 
+    // Parameter walks admitted on this instance, counted before each one reads _streamingEngaged. A rollback of a
+    // fresh engagement compares it with the count its own walk took: a walk admitted since may already be
+    // allocating through the streaming allocator, so the engagement is kept. Scratch: it counts this process's calls.
+    [Scratch]
+    private long _parameterWalkAdmissions;
+
     /// <summary>
     /// Parameter-count threshold above which <see cref="MaybeEngageWeightStreaming"/>
     /// engages disk-backed weight streaming for the denoising forward loop. 500 M
@@ -1494,41 +1500,32 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
                 // registry itself), and it keeps the registry. Concurrent callers on this instance are
                 // serialized by _streamingEngageGate, so no claim on _streamingEngaged is needed here.
                 WeightRegistry.PruneDeadEntries();
-                return WeightRegistry.GetStreamingReport().RegisteredEntryCount == 0;
-            },
-            configure: () =>
-            {
+                if (WeightRegistry.GetStreamingReport().RegisteredEntryCount != 0) return false;
+
+                // The registry is configured as part of the claim, so a registry that cannot be configured
+                // declines the claim and this predictor runs resident. Configure refuses while the registry
+                // holds something live: GPU offload allocations of another model, or streaming reservations
+                // of a forward in flight. Neither may be reset away -- Reset frees offload allocations and
+                // disposes their allocator, and the registry cannot tell an orphaned reservation from one in
+                // use -- so nothing is reset here; ReleaseIdleParameterFile resets only a registry holding
+                // none of them.
                 try
                 {
-                    try
-                    {
-                        ReleaseIdleParameterFile();
-                        WeightRegistry.Configure(offloadOptions);
-                    }
-                    catch (InvalidOperationException)
-                    {
-                        // Configure also throws on leftover ReservedBytes — orphaned streaming
-                        // reservations from a PRIOR predictor whose first forward reserved weights
-                        // (AllocateStreaming) but never reached RegisterResolvedStreamingWeights
-                        // (its forward threw, or the model was disposed mid-stream). No other predictor
-                        // holds a session (this runs under the session gate) and no entry is registered,
-                        // so the leftover reservations belong to a dead model and are safe to drop.
-                        System.Diagnostics.Trace.TraceWarning(
-                            "NoisePredictorBase.MaybeEngageWeightStreaming: recovering from orphaned " +
-                            "streaming reservations by resetting WeightRegistry and reconfiguring.");
-                        WeightRegistry.Reset();
-                        WeightRegistry.Configure(offloadOptions);
-                    }
+                    ReleaseIdleParameterFile();
+                    WeightRegistry.Configure(offloadOptions);
+                    return true;
                 }
-                catch (Exception ex)
+                catch (InvalidOperationException ex)
                 {
-                    // Not engaged after all: leave the latch open so a later call can try again.
                     System.Diagnostics.Trace.TraceWarning(
-                        "NoisePredictorBase.MaybeEngageWeightStreaming: the streaming registry could not be " +
-                        "configured (" + ex.GetType().Name + "); this predictor is not engaged.");
-                    throw;
+                        "NoisePredictorBase.MaybeEngageWeightStreaming: the streaming registry holds live " +
+                        "allocations it cannot be reconfigured over (" + ex.GetType().Name + "); this predictor " +
+                        "runs resident.");
+                    return false;
                 }
             },
+            // Configured by the claim above.
+            configure: () => { },
             out long refusedAtVersion);
         if (!began)
         {
@@ -1551,6 +1548,7 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         _streamingSessionDeniedAtVersion = -1;
         _streamingRefusalsWithoutCollection = 0;
 
+        List<(LayerBase<T> Layer, bool Previous)>? flagged = null;
         try
         {
             // Walk owned layer fields recursively (including those inside the DiT block list)
@@ -1558,14 +1556,24 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
             // as the walk yields it, BEFORE the walk descends into that layer — the layer's own
             // lazy weight allocation (triggered while descending) reads UseStreamingAllocator, so
             // the flag must be set first. Do NOT materialize this into a list and flag afterwards.
+            // Each layer's previous flag is recorded as it is set, so a walk that fails part-way can put back
+            // what it changed without walking again.
             foreach (var layer in ReflectInstanceLayers(this))
             {
-                if (layer is LayerBase<T> lb) lb.UseStreamingAllocator = true;
+                if (layer is not LayerBase<T> lb) continue;
+                (flagged ??= new List<(LayerBase<T> Layer, bool Previous)>()).Add((lb, lb.UseStreamingAllocator));
+                lb.UseStreamingAllocator = true;
             }
         }
         catch
         {
-            // Not engaged: give the session back so a later call (or another predictor) can take it.
+            // Not engaged: the layers flagged so far would otherwise allocate into a registry whose session this
+            // predictor gives back, so their flags are restored before the session is.
+            if (flagged is not null)
+            {
+                foreach (var (layer, previous) in flagged) layer.UseStreamingAllocator = previous;
+            }
+
             WeightStreamingSessions.End(this);
             throw;
         }
@@ -1584,7 +1592,8 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     /// An engagement that has been used is kept: a weight with a streaming lifetime, a pool handle or a mapping
     /// lives in the session's registry, and giving the session up would let the next predictor reset it.
     /// </remarks>
-    private void RollBackUnusedStreamingEngagement()
+    /// <param name="admission">The <c>_parameterWalkAdmissions</c> value the refused walk took.</param>
+    private void RollBackUnusedStreamingEngagement(long admission)
     {
         lock (_streamingEngageGate)
         {
@@ -1602,12 +1611,23 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
                 }
             }
 
+            // A walk admitted on the engaged fast path does not take this gate. Each walk counts its admission
+            // before it reads _streamingEngaged, and the engagement is withdrawn here before the count is read
+            // (both full fences), so a concurrent walk either sees it withdrawn and engages again under this gate
+            // once the rollback is done, or is counted here; a counted walk may already allocate through the
+            // streaming allocator, so the session stays with this predictor.
+            System.Threading.Interlocked.Exchange(ref _streamingEngaged, 0);
+            if (System.Threading.Interlocked.Read(ref _parameterWalkAdmissions) != admission)
+            {
+                System.Threading.Volatile.Write(ref _streamingEngaged, 1);
+                return;
+            }
+
             foreach (var layer in ReflectInstanceLayers(this))
             {
                 if (layer is LayerBase<T> lb) lb.UseStreamingAllocator = false;
             }
 
-            System.Threading.Volatile.Write(ref _streamingEngaged, 0);
             System.Threading.Volatile.Write(ref _parameterFileFullyMapped, 0);
             WeightStreamingSessions.End(this);
         }
@@ -1663,6 +1683,8 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     /// </summary>
     private void EngageStreamingForParameterIo()
     {
+        // Counted before the engagement is read; see RollBackUnusedStreamingEngagement.
+        long admission = System.Threading.Interlocked.Increment(ref _parameterWalkAdmissions);
         bool engagedNow = TryEngageWeightStreaming();
         try
         {
@@ -1672,7 +1694,7 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         {
             // Nothing has been mapped yet: the session this call took is given back rather than held by a
             // predictor whose walk was refused.
-            RollBackUnusedStreamingEngagement();
+            RollBackUnusedStreamingEngagement(admission);
             throw;
         }
     }
@@ -1684,17 +1706,11 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     internal static System.Func<string, long>? AvailableDiskBytesOverride { get; set; }
 
     /// <summary>
-    /// The directory the registry's parameter file is created in: the streaming backing-store path when one is
-    /// configured, the temp directory otherwise.
+    /// The directory the registry's parameter file is created in. AiDotNet.Tensors creates it in the temp
+    /// directory whatever <see cref="GpuOffloadOptions.StreamingBackingStorePath"/> says (that option moves only
+    /// the pool's backing file), so the temp directory's volume is the one to probe.
     /// </summary>
-    internal static string ParameterFileDirectory
-    {
-        get
-        {
-            string? configured = WeightRegistry.CurrentOptions?.StreamingBackingStorePath;
-            return configured is not null && configured.Length > 0 ? configured : System.IO.Path.GetTempPath();
-        }
-    }
+    internal static string ParameterFileDirectory => System.IO.Path.GetTempPath();
 
     /// <summary>
     /// Refuses a parameter walk the disk cannot hold, before anything is mapped (#2447).
@@ -1721,11 +1737,12 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         // Not counted:
         //  - a weight that was allocated resident (before streaming engaged, or by a layer that does not allocate
         //    lazily): it is never mapped;
-        //  - a weight a forward already registered with the pool: its bytes may be in the pool's file already,
-        //    and whether a walk maps it a second time depends on the registry's mode (it does not in inference).
-        //    Counting it would refuse walks that fit; not counting it leaves that one path unchecked.
+        //  - a weight already mapped writably: the walk reuses its slice.
+        // A weight a forward registered with the pool IS counted. Materializing it maps it writably into the
+        // parameter file as a new slice -- the pool's entry is not that slice -- whenever the registry is not in
+        // inference mode, and AiDotNet never declares that mode (WeightRegistry.SetStreamingExecutionTraining),
+        // so every materialization of a pool-held weight here takes that route.
         long pendingElements = 0;
-        bool heldByThePool = false;
         HashSet<Tensor<T>>? counted = null;
         foreach (var layer in ReflectInstanceLayers(this))
         {
@@ -1740,11 +1757,6 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
             {
                 if (tensor is null || tensor.Length == 0) continue;
                 if (tensor.IsWritableMmapAliased || tensor.Lifetime != WeightLifetime.Streaming) continue;
-                if (tensor.StreamingPoolHandle >= 0)
-                {
-                    heldByThePool = true;
-                    continue;
-                }
 
                 // A container and its child can both list the same tensor.
                 counted ??= new HashSet<Tensor<T>>(TensorReferenceComparer.Instance);
@@ -1756,9 +1768,9 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         long remainingBytes = checked(pendingElements * elementBytes);
         if (remainingBytes <= 0)
         {
-            // Nothing left to ask the volume for, now or later, unless the pool still holds weights a later
-            // walk may map.
-            if (!heldByThePool) System.Threading.Volatile.Write(ref _parameterFileFullyMapped, 1);
+            // Nothing left to ask the volume for until a forward registers more weights with the pool, which
+            // clears this again (RegisterResolvedStreamingWeights).
+            System.Threading.Volatile.Write(ref _parameterFileFullyMapped, 1);
             return;
         }
 
@@ -1768,9 +1780,8 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         {
             throw new System.IO.IOException(
                 $"Not enough free space on '{directory}' for the streamed parameter file of {GetType().Name}: " +
-                $"{remainingBytes:N0} bytes of its {checked(ParameterCount * elementBytes):N0}-byte weight set are " +
-                $"still to be mapped and {freeBytes:N0} bytes are free. Free the space or point " +
-                "GpuOffloadOptions.StreamingBackingStorePath at a larger volume.");
+                $"{remainingBytes:N0} bytes are still to be mapped and {freeBytes:N0} bytes are free. Free space on " +
+                "that volume or point the temp directory (TMPDIR on Linux and macOS, TMP on Windows) at a larger one.");
         }
     }
 
@@ -1814,6 +1825,11 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     protected WeightStreamingForwardScope BeginWeightStreamingForward()
     {
         MaybeEngageWeightStreaming();
+        // A forward materializes pool-held weights by the same writable route a parameter walk does (the registry
+        // is never put in inference mode), so it is checked the same way: a volume that cannot hold the mappings
+        // is an IOException here rather than a fault inside a write through a mapping. After the first check
+        // finds every weight mapped this returns at once until a forward registers more.
+        EnsureParameterFileCapacity();
         return new WeightStreamingForwardScope(this);
     }
 
@@ -1836,6 +1852,7 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         // never wrong.
         if (System.Threading.Volatile.Read(ref _streamingWeightsRegistered) == 1) return;
 
+        bool registeredAny = false;
         foreach (var layer in ReflectInstanceLayers(this))
         {
             if (layer is not LayerBase<T> lb) continue;
@@ -1849,9 +1866,12 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
                 if (tensor.IsWritableMmapAliased) continue;
                 tensor.Lifetime = WeightLifetime.Streaming;
                 WeightRegistry.RegisterWeight(tensor);
+                registeredAny = true;
             }
         }
 
+        // Weights the pool now holds are mapped by the next parameter walk, which must check the disk for them.
+        if (registeredAny) System.Threading.Volatile.Write(ref _parameterFileFullyMapped, 0);
         System.Threading.Volatile.Write(ref _streamingWeightsRegistered, 1);
     }
 

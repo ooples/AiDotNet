@@ -235,16 +235,21 @@ public sealed class PredictorParameterIoDiskFootprintTests : DiffusionUnitTestBa
                     using var predictor = NewMMDiTX(seed: worker * 100 + round);
                     long index = 0;
                     bool streamed = false;
+                    // The values to write go into detached chunks: the live weights keep theirs until the setter
+                    // runs, so a setter that wrote nothing would read back the old values and fail below.
+                    var written = new System.Collections.Generic.List<Tensor<float>>();
                     foreach (var chunk in predictor.GetParameterChunks())
                     {
                         streamed |= chunk.IsWritableMmapAliased;
-                        var span = chunk.Data.Span;
+                        var detached = new Tensor<float>(chunk.Shape.ToArray());
+                        var span = detached.Data.Span;
                         for (int i = 0; i < span.Length; i++) span[i] = bias + ((index + i) % 997) * 0.001f;
                         index += span.Length;
+                        written.Add(detached);
                     }
                     if (streamed) System.Threading.Interlocked.Increment(ref streamedRounds);
 
-                    predictor.SetParameterChunks(predictor.GetParameterChunks());
+                    predictor.SetParameterChunks(written);
 
                     index = 0;
                     foreach (var chunk in predictor.GetParameterChunks())
@@ -298,6 +303,8 @@ public sealed class PredictorParameterIoDiskFootprintTests : DiffusionUnitTestBa
 
         Assert.NotNull(probed);
         Assert.Equal(NoisePredictorBase<float>.ParameterFileDirectory, probed);
+        // The registry creates the parameter file in the temp directory, so that is the volume probed.
+        Assert.Equal(System.IO.Path.GetTempPath(), probed);
         Assert.Contains(probed, refused.Message);
         Assert.Contains(modelBytes.ToString("N0"), refused.Message);
         Assert.Contains((modelBytes / 2).ToString("N0"), refused.Message);
