@@ -22,7 +22,21 @@ def query(gpu_id):
     fields = "clocks.sm,clocks.max.sm,power.draw,temperature.gpu,utilization.gpu"
     line = subprocess.check_output(["nvidia-smi", f"--query-gpu={fields}", "--format=csv,noheader,nounits",
                                     f"--id={gpu_id}"], text=True)
-    return dict(zip(fields.split(","), (float(v) for v in line.splitlines()[0].split(","))))
+    values = [v.strip() for v in line.splitlines()[0].split(",")]
+    row = dict(zip(fields.split(","), (_number(v) for v in values)))
+    # Only the two clocks decide the gate; a GPU may print [N/A] for power, temperature or utilization.
+    missing = [name for name in ("clocks.sm", "clocks.max.sm") if row.get(name) is None]
+    if missing:
+        raise RuntimeError(f"nvidia-smi reports no {', '.join(missing)} for GPU {gpu_id}, so its clock cannot be gated.")
+    return row
+
+
+def _number(text):
+    """A telemetry value, or None for the [N/A] (or any non-numeric) placeholder nvidia-smi prints."""
+    try:
+        return float(text)
+    except ValueError:
+        return None
 
 
 def main():

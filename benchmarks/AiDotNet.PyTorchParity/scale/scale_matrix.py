@@ -133,14 +133,18 @@ def summarize(rows: list[dict]) -> list[dict]:
         torch_sides = {name: dict(v) for name, v in sides.items() if name != "aidotnet"}
         if not ai or not torch_sides:
             continue
-        # The fastest PyTorch configuration by median throughput, when more than one ran.
-        best = max(torch_sides, key=lambda name: statistics.median(r["samples"] / r["seconds"] for r in torch_sides[name].values()))
-        pt = torch_sides[best]
-        launches = sorted(set(ai) & set(pt))
-        if not launches:
-            # Both sides succeeded, but never in the same launch (e.g. AiDotNet launch 1, PyTorch launch 2), so there
-            # is no paired ratio. Skip the row; the failed launches are reported by the caller.
+        # Only a configuration that succeeded in a launch AiDotNet also succeeded in gives a paired ratio. A faster
+        # configuration with no common launch must not displace one that has a pair (the failed launches are reported
+        # by the caller); with none paired, there is no row.
+        paired = {name: sorted(set(ai) & set(v)) for name, v in torch_sides.items()}
+        paired = {name: launches for name, launches in paired.items() if launches}
+        if not paired:
             continue
+        # The fastest paired PyTorch configuration by median throughput over its paired launches.
+        best = max(paired, key=lambda name: statistics.median(
+            torch_sides[name][l]["samples"] / torch_sides[name][l]["seconds"] for l in paired[name]))
+        pt = torch_sides[best]
+        launches = paired[best]
         ratios = [ai[l]["samples"] / ai[l]["seconds"] / (pt[l]["samples"] / pt[l]["seconds"]) for l in launches]
         ai_rate = [ai[l]["samples"] / ai[l]["seconds"] for l in launches]
         pt_rate = [pt[l]["samples"] / pt[l]["seconds"] for l in launches]
@@ -151,6 +155,9 @@ def summarize(rows: list[dict]) -> list[dict]:
         # the README).
         if model not in NONDETERMINISTIC and len({frozenset(ai[l]["trajectory"]) for l in launches}) > 1:
             flags.add("ai-launches-disagree")
+        ai_rss, torch_rss = _median_rss(ai, launches), _median_rss(pt, launches)
+        if ai_rss[1] or torch_rss[1]:
+            flags.add("rss-incomplete")
         if max(ai_rate) / min(ai_rate) > UNSTABLE_SPREAD or max(pt_rate) / min(pt_rate) > UNSTABLE_SPREAD:
             flags.add("unstable")
         summary.append(dict(
@@ -164,10 +171,17 @@ def summarize(rows: list[dict]) -> list[dict]:
             torch_hours=round(statistics.median(pt[l]["seconds"] for l in launches) / 3600, 4),
             ai_test_accuracy=round(statistics.median(ai[l]["accuracy"] for l in launches), 4),
             torch_test_accuracy=round(statistics.median(pt[l]["accuracy"] for l in launches), 4),
-            ai_rss_mb_peak=round(statistics.median(ai[l]["rss"] for l in launches), 1),
-            torch_rss_mb_peak=round(statistics.median(pt[l]["rss"] for l in launches), 1),
+            ai_rss_mb_peak=ai_rss[0], torch_rss_mb_peak=torch_rss[0],
             flags=";".join(sorted(flags))))
     return summary
+
+
+def _median_rss(side: dict, launches: list) -> tuple[float | None, bool]:
+    """The median peak RSS over the launches that recorded one (the monitor records None when it took no sample), and
+    whether any launch lacked it. None when no launch recorded RSS."""
+    values = [side[l]["rss"] for l in launches if side[l]["rss"] is not None]
+    median = round(statistics.median(values), 1) if values else None
+    return median, len(values) < len(launches)
 
 
 def markdown(summary: list[dict]) -> str:

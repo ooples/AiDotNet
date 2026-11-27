@@ -14,6 +14,7 @@ DataLoader worker processes were both slower for PyTorch: see the large-data sec
 from __future__ import annotations
 
 import json
+import math
 import time
 from pathlib import Path
 
@@ -95,6 +96,17 @@ class Normalized(nn.Module):
         return self.inner(x.view(raw.shape[0], *self.model_shape))
 
 
+def _json_loss(value: float | None) -> float | str | None:
+    """A non-finite loss as the string benchmark.json_loss and the C# scale report use; bare NaN is not JSON."""
+    if value is None:
+        return None
+    if math.isnan(value):
+        return "NaN"
+    if math.isinf(value):
+        return "Infinity" if value > 0 else "-Infinity"
+    return value
+
+
 def train(model: nn.Module, model_shape: tuple[int, ...], data: ScaleDataset, device: torch.device, epochs: int,
           batch_size: int, seed: int, optimizer: torch.optim.Optimizer, cuda_graphs: bool, synchronize, begin_step,
           monitor_factory) -> dict[str, object]:
@@ -162,19 +174,20 @@ def train(model: nn.Module, model_shape: tuple[int, ...], data: ScaleDataset, de
             accuracy = evaluate(model, data, device, cuda_graphs, begin_step)
             synchronize(device)
             eval_seconds = time.perf_counter() - eval_start
+            mean_loss = round(sum(losses) / len(losses), 6) if losses else None
             report = dict(epoch=epoch, train_seconds=round(train_seconds, 6),
                           samples_per_second=round(steps * batch_size / train_seconds, 6),
                           data_wait_seconds=round(waited, 6),
-                          train_loss=round(sum(losses) / len(losses), 6) if losses else None,
+                          train_loss=_json_loss(mean_loss),
                           eval_seconds=round(eval_seconds, 6), test_accuracy=round(accuracy, 6),
                           cumulative_train_seconds=round(cumulative, 6))
             epochs_report.append(report)
             print(f"[scale] {data.name} epoch {epoch}: {train_seconds:.1f}s, {report['samples_per_second']:.0f} samples/s, "
-                  f"loss {report['train_loss']:.4f}, test accuracy {accuracy:.2%}", flush=True)
+                  f"loss {'n/a' if mean_loss is None else f'{mean_loss:.4f}'}, test accuracy {accuracy:.2%}", flush=True)
     return dict(dataset=data.name, train_sha256=data.train_sha256, train_samples=data.train_samples,
                 test_samples=data.test_samples, batch_size=batch_size, test_batch_size=TEST_BATCH, steps_per_epoch=steps,
                 warmup_steps=min(WARMUP_STEPS, steps),
-                loss_every=LOSS_EVERY, first_loss=first_loss, epochs=epochs_report, total_train_seconds=round(cumulative, 6),
+                loss_every=LOSS_EVERY, first_loss=_json_loss(first_loss), epochs=epochs_report, total_train_seconds=round(cumulative, 6),
                 resources=monitor.summary())
 
 
