@@ -26753,3 +26753,5 @@ AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.CalculateBatchLoss(AiD
 AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.CurrentTrueLabelBatch.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
 AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.CurrentTrueLabelBatch.set -> void
 AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.Strategy.get -> AiDotNet.Interfaces.IDistillationStrategy<T>!
+AiDotNet.Interfaces.LarsGpuConfig.Epsilon.get -> float
+AiDotNet.Interfaces.LarsGpuConfig.Epsilon.init -> void
