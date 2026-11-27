@@ -1313,7 +1313,14 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         float cfb1 = (float)b1, cfb2 = (float)b2, cf1mb1 = (float)oneMinusB1, cf1mb2 = (float)oneMinusB2;
         float cfbc1 = (float)bc1, cfbc2 = (float)bc2, cflr = (float)lr, cfeps = (float)eps;
 
-        void ProcessParam(Tensor<T> param)
+        var multiAdam = gpuAdam ? Training.GpuMultiTensorAdamBridge.TryAdamMultiTensor : null;
+        List<Tensor<float>>? mtParams = null;
+        List<Tensor<float>>? mtGrads = null;
+        List<Tensor<float>>? mtMs = null;
+        List<Tensor<float>>? mtVs = null;
+        List<Tensor<T>>? mtFallbackParams = null;
+
+        void ProcessParam(Tensor<T> param, bool bypassMultiTensorBatch = false)
         {
             // #3 STEADY-STATE FAST PATH (plain dense fp32, non-AMSGrad, CPU): once a param's
             // backing arrays are cached, skip the two ConcurrentDictionary lookups, the m/v
@@ -1436,6 +1443,15 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 var gf = (Tensor<float>)(object)grad;
                 var mf = (Tensor<float>)(object)m;
                 var vf = (Tensor<float>)(object)v;
+                if (!bypassMultiTensorBatch && multiAdam is not null && pf.Length > 0 && pf.Length == gf.Length)
+                {
+                    (mtParams ??= new List<Tensor<float>>(__params.Count)).Add(pf);
+                    (mtGrads ??= new List<Tensor<float>>(__params.Count)).Add(gf);
+                    (mtMs ??= new List<Tensor<float>>(__params.Count)).Add(mf);
+                    (mtVs ??= new List<Tensor<float>>(__params.Count)).Add(vf);
+                    (mtFallbackParams ??= new List<Tensor<T>>(__params.Count)).Add(param);
+                    return;
+                }
                 if (TryExecuteGpuAdamOrAdamWStep(
                         gpuEngine, gpuBackend, param,
                         pf, gf, mf, vf,
@@ -1731,6 +1747,19 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         else
         {
             for (int __i = 0; __i < __params.Count; __i++) ProcessParam(__params[__i]);
+            if (mtParams is { Count: > 0 }
+                && mtGrads is not null
+                && mtMs is not null
+                && mtVs is not null
+                && mtFallbackParams is not null
+                && multiAdam is not null)
+            {
+                if (!multiAdam(mtParams, mtGrads, mtMs, mtVs, cflr, cfb1, cfb2, cfeps, 0f, _tapeStep))
+                {
+                    for (int __i = 0; __i < mtFallbackParams.Count; __i++)
+                        ProcessParam(mtFallbackParams[__i], bypassMultiTensorBatch: true);
+                }
+            }
         }
         ReportRetainedOutputUpdateAccepted();
 
@@ -2270,6 +2299,11 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 : null;
         IDirectGpuBackend? gpuBackend = gpuEngine?.GetBackend();
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var multiScale = gpuEngine is not null && gpuBackend is not null
+            ? Training.GpuMultiTensorAdamBridge.TryScaleGradientsMultiTensor
+            : null;
+        List<Tensor<float>>? pendingGpuGrads = null;
+        List<Tensor<T>>? pendingGpuOrig = null;
         foreach (var kvp in context.Gradients)
         {
             var grad = kvp.Value;
@@ -2292,7 +2326,21 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 }
                 continue;
             }
+            if (multiScale is not null && grad.HasPendingGpuData)
+            {
+                (pendingGpuGrads ??= new List<Tensor<float>>(context.Gradients.Count)).Add((Tensor<float>)(object)grad);
+                (pendingGpuOrig ??= new List<Tensor<T>>(context.Gradients.Count)).Add(grad);
+                continue;
+            }
             Engine.TensorMultiplyScalarInPlace(grad, scale);
+        }
+        if (pendingGpuGrads is { Count: > 0 } && pendingGpuOrig is not null && multiScale is not null)
+        {
+            if (!multiScale(pendingGpuGrads, (float)scaleFactor))
+            {
+                for (int i = 0; i < pendingGpuOrig.Count; i++)
+                    Engine.TensorMultiplyScalarInPlace(pendingGpuOrig[i], scale);
+            }
         }
     }
 

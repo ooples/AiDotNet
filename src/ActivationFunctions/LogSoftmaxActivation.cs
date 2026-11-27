@@ -66,6 +66,11 @@ public class LogSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Vector<T> Activate(Vector<T> input)
     {
+        if (input.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
         // Use SIMD-optimized Max (8-12Ã— speedup for float)
         T maxInput = TensorPrimitivesHelper<T>.Max(input);
 
@@ -115,29 +120,25 @@ public class LogSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
     {
+        if (input.Length == 0)
+        {
+            return new Matrix<T>(0, 0);
+        }
+
         Vector<T> softmax = input.Transform(NumOps.Exp);
         T sum = softmax.Sum();
         softmax = softmax.Transform(x => NumOps.Divide(x, sum));
 
-        int n = input.Length;
-        Matrix<T> jacobian = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
+        // J[i, i] = 1 - s[i]; J[i, j] = -s[j], so every off-diagonal row is the negated softmax
+        var engine = Engine;
+        if (UseScalarJacobian(input.Length))
         {
-            for (int j = 0; j < n; j++)
-            {
-                if (i == j)
-                {
-                    jacobian[i, j] = NumOps.Subtract(NumOps.One, softmax[i]);
-                }
-                else
-                {
-                    jacobian[i, j] = NumOps.Negate(softmax[j]);
-                }
-            }
+            return ScalarLogSoftmaxJacobian(softmax, NumOps.One);
         }
 
-        return jacobian;
+        var negated = engine.TensorNegate(Tensor<T>.FromVector(softmax));
+        // Every row is -softmax: ones (x) -softmax, with 1 - softmax on the diagonal
+        return OuterWithDiagonal(engine.TensorOnesLike(negated), negated, engine.TensorAddScalar(negated, NumOps.One));
     }
 
 }

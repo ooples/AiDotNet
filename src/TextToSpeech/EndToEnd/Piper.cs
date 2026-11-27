@@ -27,13 +27,10 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///     inputSize: 200, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new Piper&lt;double&gt;(architecture, "piper.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new Piper&lt;double&gt;(architecture, new PiperOptions());
+/// var model = new Piper&lt;double&gt;(architecture, new PiperOptions());
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

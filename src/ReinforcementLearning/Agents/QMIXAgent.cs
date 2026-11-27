@@ -47,7 +47,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.QMIX;
 /// </remarks>
 /// <example>
 /// <code>
-/// var observation = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+/// var observation = new Vector&lt;double&gt;(new double[] { 0.2, 0.0, 1.0, 0.5, 0.0, 0.3, 1.0, 0.0 });   // agent 0's own observation: StateSize (8) values
 /// var agent = new QMIXAgent&lt;double&gt;(new QMIXOptions&lt;double&gt; { NumAgents = 3, StateSize = 8, ActionSize = 4, GlobalStateSize = 12 });
 /// var action = agent.SelectActionForAgent(0, observation);
 /// </code>

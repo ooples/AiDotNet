@@ -342,6 +342,45 @@ public class DenseNetTests
 
     #endregion
 
+    #region Unbatched Input Tests
+
+    /// <summary>
+    /// A single image [C, H, W] gets a unit batch for the forward and loses it again on the way out, as ResNet, VGG and
+    /// MobileNetV2 do. The reshape that adds the batch ran twice, so the branch that records it never ran and the
+    /// output kept the batch the caller did not pass (#2383).
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task DenseNet121_UnbatchedImage_ReturnsUnbatchedLogits_EqualToTheBatchedRow()
+    {
+        await Task.Yield();
+        const int classes = 10, size = 32;
+        using var network = new DenseNetNetwork<float>(
+            new NeuralNetworkArchitecture<float>(
+                inputType: InputType.ThreeDimensional,
+                taskType: NeuralNetworkTaskType.MultiClassClassification,
+                inputHeight: size, inputWidth: size, inputDepth: 3, outputSize: classes),
+            new DenseNetConfiguration(DenseNetVariant.DenseNet121, classes, size, size));
+        var image = new Tensor<float>([3, size, size]);
+        InitializeWithRandomValues(image);
+        var batched = new Tensor<float>([1, 3, size, size]);
+        for (int i = 0; i < image.Length; i++) batched[i] = image[i];
+
+        var batchedLogits = network.Predict(batched);
+        var logits = network.Predict(image);
+
+        Assert.Equal(new[] { 1, classes }, batchedLogits.Shape.ToArray());
+        Assert.Equal(new[] { classes }, logits.Shape.ToArray());
+        bool anyNonZero = false;
+        for (int i = 0; i < classes; i++)
+        {
+            Assert.Equal(batchedLogits[i], logits[i], 5);
+            anyNonZero |= logits[i] != 0f;
+        }
+        Assert.True(anyNonZero, "The logits of a random image must not all be zero.");
+    }
+
+    #endregion
+
     #region Helper Methods
 
     private static void InitializeWithRandomValues(Tensor<float> tensor)

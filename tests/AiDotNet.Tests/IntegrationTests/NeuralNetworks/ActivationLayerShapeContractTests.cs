@@ -21,4 +21,18 @@ public sealed class ActivationLayerShapeContractTests
         Assert.Equal([2], layer.GetInputShape());
         Assert.Equal([2], layer.GetOutputShape());
     }
+
+    [Fact]
+    public void Forward_RankOneInputAfterSampleShapeProbe_ReplacesTheProbedShape()
+    {
+        var layer = new ActivationLayer<float>((IActivationFunction<float>)new ReLUActivation<float>());
+        layer.ResolveShapesOnlyFromSampleShape([1, 4]);
+        Assert.Equal([1, 4], layer.GetOutputShape());
+
+        Tensor<float> output = layer.Forward(new Tensor<float>([1f, -2f, 3f, -4f], [4]));
+
+        Assert.Equal([4], output.Shape.ToArray());
+        Assert.Equal([4], layer.GetInputShape());
+        Assert.Equal([4], layer.GetOutputShape());
+    }
 }

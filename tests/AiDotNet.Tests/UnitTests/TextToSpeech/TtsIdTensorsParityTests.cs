@@ -31,7 +31,15 @@ public class TtsIdTensorsParityTests
         new[] { 16777217, 16777219, 33554433, int.MaxValue, 123456789 },
         new[] { -1, -16777217, int.MinValue },
         Array.Empty<int>(),
+        // A longer list with the same edge values
+        Enumerable.Range(0, 40).Select(i => i % 5 == 0 ? 16777217 + i : i % 7 == 0 ? int.MinValue + i : i * 1009 - 7).ToArray(),
     };
+
+    // Half takes the generic Cast path rather than the typed double and float paths
+    [Theory]
+    [MemberData(nameof(IdLists))]
+    public void From_MatchesTheElementLoop_Half(int[] ids)
+        => Assert.Equal(Reference<Half>(ids).ToArray(), TtsIdTensors.From<Half>(ids).ToArray());
 
     [Theory]
     [MemberData(nameof(IdLists))]

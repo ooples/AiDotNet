@@ -19,7 +19,7 @@ using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
-public sealed class DeepScaleTrack2UpstreamTests
+public sealed class HouseholderAndBlockwiseCreditIntegrationTests
 {
     private static (NeuralNetwork<float> net, Tensor<float> tokens, Tensor<float> targets) BuildLm(
         int blocks,

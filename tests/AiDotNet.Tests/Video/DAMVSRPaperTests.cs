@@ -37,7 +37,7 @@ public class DAMVSRPaperTests
     private static Tensor<double> Pixels(int[] shape, int seed)
     {
         var t = new Tensor<double>(shape);
-        var random = new System.Random(seed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < t.Length; i++) t[i] = 255.0 * random.NextDouble();
         return t;
     }
@@ -51,6 +51,40 @@ public class DAMVSRPaperTests
 
     private static bool Changed(List<double[]> before, IReadOnlyList<Tensor<double>> after)
         => before.Select((values, k) => values.Where((v, i) => v != after[k][i]).Any()).Any(changed => changed);
+
+    [Fact(Timeout = 60000)]
+    public async Task ReferenceUpscaler_OutputIsHeldToTheUnitRange()
+    {
+        await Task.Yield();
+        var model = Small();
+        var frame = Pixels(new[] { 3, Low, Low }, 5);
+        // A caller's upscaler with values outside [0, 1] (a model trained on another range, or overshoot).
+        model.ReferenceUpscaler = f =>
+        {
+            var up = new Tensor<double>(new[] { 3, 2 * Low, 2 * Low });
+            for (int i = 0; i < up.Length; i++) up[i] = i % 3 == 0 ? 5.0 : i % 3 == 1 ? -3.0 : 0.25;
+            return up;
+        };
+
+        var reference = model.UpscaleReference(frame);
+
+        Assert.Equal(new[] { 3, 2 * Low, 2 * Low }, reference.Shape.ToArray());
+        for (int i = 0; i < reference.Length; i++)
+            Assert.Equal(i % 3 == 0 ? 1.0 : i % 3 == 1 ? 0.0 : 0.25, reference[i]);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ReferenceUpscaler_OfTheWrongSizeIsRejected()
+    {
+        await Task.Yield();
+        var model = Small();
+        var frame = Pixels(new[] { 3, Low, Low }, 5);
+        // ScaleFactor is 2: a 4x reference does not line up with the frames DAM-VSR conditions on.
+        model.ReferenceUpscaler = f => new Tensor<double>(new[] { 3, 4 * Low, 4 * Low });
+
+        var error = Assert.Throws<InvalidOperationException>(() => model.UpscaleReference(frame));
+        Assert.Contains($"[3, {2 * Low}, {2 * Low}]", error.Message);
+    }
 
     [Fact(Timeout = 60000)]
     public async Task Defaults_AreThePaperConfiguration()

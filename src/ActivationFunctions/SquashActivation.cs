@@ -145,43 +145,158 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
     {
-        T normSquared = input.DotProduct(input);
-        T norm = NumOps.Sqrt(normSquared);
-        T scale = NumOps.Divide(normSquared, NumOps.Add(NumOps.One, normSquared));
-
         int n = input.Length;
-        Matrix<T> jacobian = new Matrix<T>(n, n);
+        if (n == 0)
+        {
+            return new Matrix<T>(0, 0);
+        }
 
-        // Squash: y = a * x/||x|| where a = ||x||^2 / (1 + ||x||^2)
-        // Jacobian: dy_i/dx_j = a * (delta_ij - x_i*x_j/||x||^2) / ||x||
-        //                     + 2*x_i*x_j / ((1+||x||^2)^2 * ||x||)
-        T normInv = NumOps.GreaterThan(norm, NumOps.FromDouble(1e-10))
-            ? NumOps.Divide(NumOps.One, norm) : NumOps.Zero;
-        T normSqPlusOne = NumOps.Add(NumOps.One, normSquared);
-        T normSqPlusOneSq = NumOps.Multiply(normSqPlusOne, normSqPlusOne);
+        // y = g(r) u with r = |x|, u = x / r and g(r) = r^2 / (1 + r^2), so
+        //   J = a (I - u u^T) + g'(r) u u^T,   a = g(r) / r = r / (1 + r^2),   g'(r) = 2 r / (1 + r^2)^2.
+        // The directional term a (I - u u^T) and the radial term g'(r) u u^T are evaluated apart: folded into one
+        // coefficient of x x^T, the radial term was rounded away against a (for [2^30] the derivative 2^-89
+        // became 0). At x = 0 both terms vanish (y ~ |x| x), and u is taken as 0 there.
+        bool scalar = UseScalarJacobian(n);
+        var engine = Engine;
+        var x = scalar ? null : Tensor<T>.FromVector(input);
+        T normSquared = x is null ? ScalarSumOfSquares(input) : engine.TensorSum(engine.TensorMultiply(x, x));
+        T norm = NumOps.Sqrt(normSquared);
+        T normSqPlusOne = NumOps.Add(normSquared, NumOps.One);
+        T a = NumOps.Divide(norm, normSqPlusOne);
+        T radial = NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(2), norm), NumOps.Multiply(normSqPlusOne, normSqPlusOne));
+        T normInv = NumOps.GreaterThan(norm, NumOps.Zero) ? NumOps.Divide(NumOps.One, norm) : NumOps.Zero;
 
+        if (x is null)
+        {
+            return ScalarDirectionalPlusRadial(input, normInv, a, radial);
+        }
+
+        // Off the diagonal (g' - a) u_i u_j; on it a (1 - u_i^2) + g' u_i^2.
+        var u = engine.TensorMultiplyScalar(x, normInv);
+        var uSquared = engine.TensorMultiply(u, u);
+        var diagonal = engine.TensorAdd(
+            engine.TensorMultiplyScalar(engine.TensorSubtract(engine.TensorOnesLike(uSquared), uSquared), a),
+            engine.TensorMultiplyScalar(uSquared, radial));
+        return OuterWithDiagonal(engine.TensorMultiplyScalar(u, NumOps.Subtract(radial, a)), u, diagonal);
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("host vector in, host matrix out: below the measured break-even length, and on a device engine at any "
+        + "length, the fixed cost of the engine operations exceeds the scalar arithmetic")]
+    private T ScalarSumOfSquares(Vector<T> input)
+    {
+        var x = input.AsSpan();
+        T sum = NumOps.Zero;
+        for (int i = 0; i < x.Length; i++)
+        {
+            sum = NumOps.Add(sum, NumOps.Multiply(x[i], x[i]));
+        }
+
+        return sum;
+    }
+
+    /// <summary>
+    /// <c>a (I - u u^T) + radial u u^T</c> with <c>u = x * normInv</c>, in scalar arithmetic; the diagonal keeps the
+    /// two terms apart so neither is rounded away against the other.
+    /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("host vector in, host matrix out: below the measured break-even length, and on a device engine at any "
+        + "length, the fixed cost of the engine operations exceeds the scalar arithmetic")]
+    private Matrix<T> ScalarDirectionalPlusRadial(Vector<T> input, T normInv, T a, T radial)
+    {
+        int n = input.Length;
+        var x = input.AsSpan();
+        var jacobian = new Matrix<T>(n, n);
+        var cells = jacobian.AsWritableSpan();
+        T offDiagonal = NumOps.Subtract(radial, a);
         for (int i = 0; i < n; i++)
         {
+            T ui = NumOps.Multiply(x[i], normInv);
+            T scaled = NumOps.Multiply(ui, offDiagonal);
+            int row = i * n;
             for (int j = 0; j < n; j++)
             {
-                // Term 1: a * (delta_ij - x_i*x_j/||x||^2) / ||x||
-                T delta_ij = i == j ? NumOps.One : NumOps.Zero;
-                T xiXjOverNormSq = NumOps.GreaterThan(normSquared, NumOps.FromDouble(1e-20))
-                    ? NumOps.Divide(NumOps.Multiply(input[i], input[j]), normSquared)
-                    : NumOps.Zero;
-                T normPart = NumOps.Multiply(scale, NumOps.Multiply(
-                    NumOps.Subtract(delta_ij, xiXjOverNormSq), normInv));
-
-                // Term 2: 2*x_i*x_j / ((1+||x||^2)^2 * ||x||)
-                T daPart = NumOps.Multiply(NumOps.FromDouble(2),
-                    NumOps.Divide(NumOps.Multiply(input[i], input[j]),
-                        NumOps.Multiply(normSqPlusOneSq, norm)));
-
-                jacobian[i, j] = NumOps.Add(normPart, daPart);
+                cells[row + j] = NumOps.Multiply(scaled, NumOps.Multiply(x[j], normInv));
             }
+
+            T uiSquared = NumOps.Multiply(ui, ui);
+            cells[row + i] = NumOps.Add(
+                NumOps.Multiply(a, NumOps.Subtract(NumOps.One, uiSquared)), NumOps.Multiply(radial, uiSquared));
         }
 
         return jacobian;
+    }
+
+    /// <summary>
+    /// The epsilon <c>Engine.TensorSquash</c> adds to the capsule norm: y = x r^2 / ((1 + r^2)(r + eps)).
+    /// </summary>
+    private const double CapsuleSquashEpsilon = 1e-8;
+
+    /// <summary>
+    /// The squash Jacobian of every row of a [batch, n] tensor, as a [batch, n, n] tensor.
+    /// </summary>
+    /// <param name="vectors">The capsule vectors, one per row.</param>
+    /// <returns>For each row x, the matrix dy_i/dx_j of y = squash(x).</returns>
+    /// <remarks>
+    /// <para>
+    /// This differentiates the forward the tensor overload runs, <c>Engine.TensorSquash</c>, which divides by the
+    /// stabilised norm r + eps. Its derivative is J = A I + B x x^T with the coefficients of
+    /// <c>TensorSquashBackward</c>: A = r^2 / ((1 + r^2)(r + eps)) and B = (r + 2 eps - r^3) / ((1 + r^2)^2 (r + eps)^2).
+    /// A zero capsule has A = 0 and a finite B times x x^T = 0, so its Jacobian is zero without a 0 / 0.
+    /// </para>
+    /// <para>
+    /// The per-row coefficients come from engine reductions over [batch] values; the [batch, n, n] result is the
+    /// only result-sized buffer and is written directly, one outer product per row, rather than through tiled
+    /// full-batch operands.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> SquashJacobians(Tensor<T> vectors)
+    {
+        var engine = Engine;
+        int batch = vectors.Shape[0];
+        int n = vectors.Shape[1];
+
+        var normSquared = engine.ReduceSum(engine.TensorMultiply(vectors, vectors), new[] { 1 }, keepDims: false);
+        var norm = engine.TensorSqrt(normSquared);
+        var onePlusNormSquared = engine.TensorAddScalar(normSquared, NumOps.One);
+        var normPlusEpsilon = engine.TensorAddScalar(norm, NumOps.FromDouble(CapsuleSquashEpsilon));
+        var diagonal = engine.TensorDivide(normSquared, engine.TensorMultiply(onePlusNormSquared, normPlusEpsilon));
+        var outerNumerator = engine.TensorAddScalar(
+            engine.TensorSubtract(norm, engine.TensorMultiply(normSquared, norm)),
+            NumOps.FromDouble(2 * CapsuleSquashEpsilon));
+        var outerDenominator = engine.TensorMultiply(
+            engine.TensorMultiply(onePlusNormSquared, onePlusNormSquared),
+            engine.TensorMultiply(normPlusEpsilon, normPlusEpsilon));
+        var outer = engine.TensorDivide(outerNumerator, outerDenominator);
+
+        var result = new Tensor<T>(new[] { batch, n, n });
+        FillJacobians(vectors.Contiguous(), diagonal.Contiguous(), outer.Contiguous(), result, batch, n);
+        return result;
+    }
+
+    /// <summary><c>J_b = A_b I + B_b x_b x_b^T</c> for every row b, written into <paramref name="result"/>.</summary>
+    [AiDotNet.Attributes.ScalarKernel("writes the [batch, n, n] result once, row by row, instead of materialising tiled full-batch "
+        + "operands for an outer product and an identity")]
+    private void FillJacobians(Tensor<T> vectors, Tensor<T> diagonal, Tensor<T> outer, Tensor<T> result, int batch, int n)
+    {
+        var x = vectors.AsSpan();
+        var a = diagonal.AsSpan();
+        var b = outer.AsSpan();
+        var cells = result.AsWritableSpan();
+        for (int row = 0; row < batch; row++)
+        {
+            int xBase = row * n;
+            int jBase = row * n * n;
+            for (int i = 0; i < n; i++)
+            {
+                T scaled = NumOps.Multiply(b[row], x[xBase + i]);
+                int cellRow = jBase + i * n;
+                for (int j = 0; j < n; j++)
+                {
+                    cells[cellRow + j] = NumOps.Multiply(scaled, x[xBase + j]);
+                }
+
+                cells[cellRow + i] = NumOps.Add(cells[cellRow + i], a[row]);
+            }
+        }
     }
 
     /// <summary>
@@ -248,30 +363,6 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
         }
 
         int vectorLength = input.Shape[input.Shape.Length - 1];
-        int batchElements = input.Length / vectorLength;
-
-        var flattenedInput = input.Reshape(new[] { batchElements, vectorLength });
-        var flatOutput = new Tensor<T>(new[] { batchElements, vectorLength, vectorLength });
-
-        for (int i = 0; i < batchElements; i++)
-        {
-            Vector<T> vector = new Vector<T>(vectorLength);
-            for (int j = 0; j < vectorLength; j++)
-            {
-                vector[j] = flattenedInput[i, j];
-            }
-
-            Matrix<T> jacobian = Derivative(vector);
-
-            for (int j = 0; j < vectorLength; j++)
-            {
-                for (int k = 0; k < vectorLength; k++)
-                {
-                    flatOutput[i, j, k] = jacobian[j, k];
-                }
-            }
-        }
-
         var outputShape = new int[input.Shape.Length + 1];
         for (int i = 0; i < input.Shape.Length; i++)
         {
@@ -279,7 +370,16 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
         }
         outputShape[outputShape.Length - 1] = vectorLength;
 
-        return flatOutput.Reshape(outputShape);
+        // An empty batch (or empty capsules) has an empty Jacobian of the same leading shape; the batch size below
+        // would divide by a zero vector length, and the kernel has no row to fill.
+        if (input.Length == 0)
+        {
+            return new Tensor<T>(outputShape);
+        }
+
+        int batchElements = input.Length / vectorLength;
+        var flatOutput = SquashJacobians(Engine.Reshape(input, new[] { batchElements, vectorLength }));
+        return Engine.Reshape(flatOutput, outputShape);
     }
 
 }

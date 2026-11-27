@@ -34,17 +34,25 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// </remarks>
 /// <example>
 /// <code>
-/// var prompt22kHz = Tensor&lt;float&gt;.CreateRandom(1, 16000);
-/// var promptTranscript = "example";
-/// var promptDurations = new int[] { 0, 1, 2 };
+/// var options = new MegaTTSOptions();
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
-/// var model = new MegaTTS&lt;float&gt;(architecture, new MegaTTSOptions());
+/// var model = new MegaTTS&lt;float&gt;(architecture, options);
 /// model.LoadVocoderWeights("generator_v1");   // a HiFi-GAN V1 generator trained on this model's mel spectrograms
+///
+/// // 3 s of the target speaker at the model's sample rate (22.05 kHz), and what the prompt says.
+/// var prompt = Tensor&lt;float&gt;.CreateRandom(1, 3 * options.SampleRate);
+/// var promptTokens = model.TextToTokens("what the prompt recording says");
+///
+/// // Mel frames per token, covering at most the prompt's frames (samples / hop). A forced aligner gives the real
+/// // ones; here the frames are spread evenly over the tokens.
+/// var promptDurations = new int[promptTokens.Length];
+/// for (int i = 0; i &lt; promptDurations.Length; i++) promptDurations[i] = prompt.Length / options.HopSize / promptDurations.Length;
+///
 /// model.Voice = new TtsVoice&lt;float&gt;
 /// {
-///     ReferenceAudio = prompt22kHz,
-///     ReferenceTokens = model.TextToTokens(promptTranscript),
-///     ReferenceDurations = promptDurations,   // frames per token, from a forced aligner
+///     ReferenceAudio = prompt,
+///     ReferenceTokens = promptTokens,
+///     ReferenceDurations = promptDurations,
 /// };
 /// var audio = model.Synthesize("Hello, how are you doing today?");
 /// </code>

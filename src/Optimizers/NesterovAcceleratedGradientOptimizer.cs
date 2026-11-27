@@ -416,6 +416,19 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
     {
         PrepareTapeState(context);
 
+        bool gpuActive = typeof(T) == typeof(float)
+            && Engine is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+        float lrF = (float)NumOps.ToDouble(CurrentLearningRate);
+        float momF = (float)NumOps.ToDouble(CurrentMomentum);
+        var gpuUpdated = gpuActive
+            ? TryExecuteGpuListStep(
+                context,
+                "TryNagStepMultiTensor",
+                stateCount: 1,
+                param => new[] { GetOrCreateShapedOptimizerStateTensor(_tapeVelocity, param, gpuActive) },
+                lrF, momF, 0.0f)
+            : null;
+
         // Nesterov look-ahead (Sutskever et al. 2013 reformulation, as in PyTorch's nesterov=True).
         // This path previously applied v = momentum*v + lr*grad; param -= v, i.e. CLASSICAL momentum —
         // which is why the CUDA nag_update kernel, which does the true look-ahead, was left unwired to
@@ -423,6 +436,9 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
         // the fused SGDMomentum kernel can be reached with nesterov set.
         foreach (var param in context.Parameters)
         {
+            if (gpuUpdated is not null && gpuUpdated.Contains(param))
+                continue;
+
             // No sparse fast path here, deliberately. TryApplySgdSparse applies CLASSICAL momentum
             // (velocity = mu*v + lr*g; param -= v) and has no look-ahead term, so routing embedding
             // parameters through it would run a different algorithm from the dense parameters in the
@@ -434,7 +450,7 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
             if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
-            if (!_tapeVelocity.TryGetValue(param, out var vel)) { vel = new Tensor<T>(param._shape); _tapeVelocity[param] = vel; }
+            var vel = GetOrCreateShapedOptimizerStateTensor(_tapeVelocity, param, gpuActive);
 
             // Nesterov look-ahead, matching UpdateParameters and the fused SGDMomentum kernel's
             // nesterov branch exactly:

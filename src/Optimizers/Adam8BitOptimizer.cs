@@ -551,6 +551,15 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             ? NumOps.FromDouble(weightDecay)
             : NumOps.Zero;
         DirectGpuTensorEngine? gpuEngine = typeof(T) == typeof(float) ? Engine as DirectGpuTensorEngine : null;
+        var multiFn = decoupledWeightDecay
+            ? Training.GpuMultiTensorAdamBridge.TryAdamWMultiTensor
+            : Training.GpuMultiTensorAdamBridge.TryAdamMultiTensor;
+        bool canBatchFp32Gpu = gpuEngine is not null && !_options.UseBFloat16MomentStorage && multiFn is not null;
+        List<Tensor<float>>? mtParams = null;
+        List<Tensor<float>>? mtGrads = null;
+        List<Tensor<float>>? mtMs = null;
+        List<Tensor<float>>? mtVs = null;
+        List<(Tensor<T> Param, Tensor<T> Grad, QuantizedTapeState State)>? mtFallbacks = null;
         int parameterIndex = -1;
         foreach (var param in context.Parameters)
         {
@@ -644,13 +653,52 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 grad = Engine.Reshape(grad, param._shape);
             }
 
+            if (canBatchFp32Gpu && state.FullPrecisionMoments && param.Length > 0 && param.Length == grad.Length)
+            {
+                var paramRef = param;
+                var pFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref paramRef);
+                var gFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref grad);
+                EnsureFullPrecisionMomentsForGpu(param, pFloat, state, out var mFloat, out var vFloat);
+                (mtParams ??= new List<Tensor<float>>()).Add(pFloat);
+                (mtGrads ??= new List<Tensor<float>>()).Add(gFloat);
+                (mtMs ??= new List<Tensor<float>>()).Add(mFloat);
+                (mtVs ??= new List<Tensor<float>>()).Add(vFloat);
+                (mtFallbacks ??= new List<(Tensor<T>, Tensor<T>, QuantizedTapeState)>()).Add((param, grad, state));
+                continue;
+            }
+
+            ApplyResolvedAdam8BitParameter(param, grad, state);
+        }
+
+        if (mtParams is { Count: > 0 }
+            && mtGrads is not null
+            && mtMs is not null
+            && mtVs is not null
+            && mtFallbacks is not null
+            && multiFn is not null)
+        {
+            if (!multiFn(
+                    mtParams, mtGrads, mtMs, mtVs,
+                    (float)lrDouble, (float)beta1Double, (float)beta2Double,
+                    (float)_options.Epsilon, (float)weightDecay, _tapeStep))
+            {
+                for (int i = 0; i < mtFallbacks.Count; i++)
+                {
+                    var fb = mtFallbacks[i];
+                    ApplyResolvedAdam8BitParameter(fb.Param, fb.Grad, fb.State);
+                }
+            }
+        }
+
+        void ApplyResolvedAdam8BitParameter(Tensor<T> param, Tensor<T> grad, QuantizedTapeState state)
+        {
             if (gpuEngine is not null && param.Length > 0 && TryStepParameterOnGpu(
                 gpuEngine, param, grad, state,
                 (float)lrDouble, (float)beta1Double, (float)beta2Double,
                 (float)_options.Epsilon, (float)bc1Double, (float)bc2Double,
                 (float)weightDecay, decoupledWeightDecay))
             {
-                continue;
+                return;
             }
 
             if (state.GpuDirty)
@@ -667,7 +715,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                     param, grad, state, lrDouble, beta1Double, beta2Double, bc1Double, bc2Double,
                     weightDecay, decoupledWeightDecay))
             {
-                continue;
+                return;
             }
 
             if (weightDecay > 0.0)
@@ -715,7 +763,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 var denomB = Engine.TensorAddScalar(Engine.TensorSqrt(vHatB), epsilon);
                 var updateB = Engine.TensorMultiplyScalar(Engine.TensorDivide(mHatB, denomB), CurrentLearningRate);
                 Engine.TensorSubtractInPlace(param, updateB);
-                continue;
+                return;
             }
 
             // Below Min8BitSize: plain Adam on full-precision moments (bitsandbytes' min_8bit_size).
@@ -735,9 +783,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 var denomF = Engine.TensorAddScalar(Engine.TensorSqrt(vHatF), epsilon);
                 Engine.TensorSubtractInPlace(param,
                     Engine.TensorMultiplyScalar(Engine.TensorDivide(mHatF, denomF), CurrentLearningRate));
-                continue;
+                return;
             }
-
             // Dequantize moments into transient Tensors for the math path. These
             // are scoped to this iteration only — when Step returns, the
             // engine's TensorArena reclaims them, leaving only the byte[] state
@@ -1021,6 +1068,51 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         }
     }
 
+    private void EnsureFullPrecisionMomentsForGpu(
+        Tensor<T> param,
+        Tensor<float> pFloat,
+        QuantizedTapeState state,
+        out Tensor<float> mFloat,
+        out Tensor<float> vFloat)
+    {
+        Tensor<T> mRef;
+        if (state.MFullPrecision is null)
+        {
+            var createdM = GpuOptimizer.CreateStateTensor(pFloat._shape);
+            mRef = Unsafe.As<Tensor<float>, Tensor<T>>(ref createdM);
+            state.MFullPrecision = mRef;
+        }
+        else if (!state.MFullPrecision._shape.SequenceEqual(param._shape))
+        {
+            mRef = ShapeMomentLike(state.MFullPrecision, param._shape);
+            state.MFullPrecision = mRef;
+        }
+        else
+        {
+            mRef = state.MFullPrecision;
+        }
+
+        Tensor<T> vRef;
+        if (state.VFullPrecision is null)
+        {
+            var createdV = GpuOptimizer.CreateStateTensor(pFloat._shape);
+            vRef = Unsafe.As<Tensor<float>, Tensor<T>>(ref createdV);
+            state.VFullPrecision = vRef;
+        }
+        else if (!state.VFullPrecision._shape.SequenceEqual(param._shape))
+        {
+            vRef = ShapeMomentLike(state.VFullPrecision, param._shape);
+            state.VFullPrecision = vRef;
+        }
+        else
+        {
+            vRef = state.VFullPrecision;
+        }
+
+        mFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref mRef);
+        vFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref vRef);
+    }
+
     private bool TryStepParameterOnGpu(
         DirectGpuTensorEngine gpuEngine,
         Tensor<T> param,
@@ -1076,42 +1168,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
         if (state.FullPrecisionMoments)
         {
-            Tensor<T> mRef;
-            if (state.MFullPrecision is null)
-            {
-                var createdM = GpuOptimizer.CreateStateTensor(pFloat._shape);
-                mRef = Unsafe.As<Tensor<float>, Tensor<T>>(ref createdM);
-                state.MFullPrecision = mRef;
-            }
-            else if (!state.MFullPrecision._shape.SequenceEqual(param._shape))
-            {
-                mRef = ShapeMomentLike(state.MFullPrecision, param._shape);
-                state.MFullPrecision = mRef;
-            }
-            else
-            {
-                mRef = state.MFullPrecision;
-            }
-
-            Tensor<T> vRef;
-            if (state.VFullPrecision is null)
-            {
-                var createdV = GpuOptimizer.CreateStateTensor(pFloat._shape);
-                vRef = Unsafe.As<Tensor<float>, Tensor<T>>(ref createdV);
-                state.VFullPrecision = vRef;
-            }
-            else if (!state.VFullPrecision._shape.SequenceEqual(param._shape))
-            {
-                vRef = ShapeMomentLike(state.VFullPrecision, param._shape);
-                state.VFullPrecision = vRef;
-            }
-            else
-            {
-                vRef = state.VFullPrecision;
-            }
-
-            var mFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref mRef);
-            var vFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref vRef);
+            EnsureFullPrecisionMomentsForGpu(param, pFloat, state, out var mFloat, out var vFloat);
             return TryExecuteGpuAdamOrAdamWStep(
                 gpuEngine, gpuBackend, param, pFloat, gFloat, mFloat, vFloat,
                 lr, beta1, beta2, epsilon, weightDecay, _tapeStep, decoupledWeightDecay);

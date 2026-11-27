@@ -1,35 +1,19 @@
+using System;
+using System.Linq;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.KnowledgeDistillation;
 
 /// <summary>
-/// Presents an <see cref="IDistillationStrategy{T}"/> as a tape-capable loss so the standard gradient
-/// path can train a student with distillation.
+/// Presents an <see cref="IDistillationStrategy{T}"/> as a tape-capable <see cref="LossFunctionBase{T}"/> so both
+/// reverse-mode autodiff and non-backprop <see cref="ICreditRule{T}"/> trainers can optimize students over mini-batches.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks>
-/// <para>
-/// This is the "tape-aware wrapper around the standard loss" knowledge distillation needs. The
-/// distillation loss combines a soft term against the teacher's logits with a hard term against the
-/// true label; that signal cannot travel through the optimizer's (predicted, actual) loss contract,
-/// which carries no teacher. The strategy already computes the loss and its gradient with respect to
-/// the student output, but on plain matrices — off the autodiff tape.
-/// </para>
-/// <para>
-/// <b>How the gradient reaches the parameters.</b> The gradient-computable path backpropagates through
-/// <see cref="ComputeTapeLoss"/>, so returning the strategy's gradient from <c>CalculateDerivative</c>
-/// is not enough — the fallback builds a tensor disconnected from the tape, whose parameter gradients
-/// are zero. Instead this uses the standard surrogate-loss construction: with the strategy's gradient
-/// <c>g</c> treated as a constant, the scalar <c>L = Σ (g · ŷ)</c> is a genuine tape expression over
-/// the prediction <c>ŷ</c>, and <c>∂L/∂ŷ = g</c> exactly. The tape then carries <c>g</c> back through
-/// the student to real parameter gradients. The scalar's VALUE is meaningless (it is a surrogate, not
-/// the distillation loss); only its gradient matters, which is the point.
-/// </para>
-/// </remarks>
 public sealed class DistillationLossAdapter<T> : LossFunctionBase<T>
 {
     private readonly IDistillationStrategy<T> _strategy;
@@ -40,43 +24,122 @@ public sealed class DistillationLossAdapter<T> : LossFunctionBase<T>
         => _strategy = strategy ?? throw new ArgumentNullException(nameof(strategy));
 
     /// <summary>
-    /// The true label for the sample currently being trained, or null when labels are unavailable.
+    /// Gets the underlying distillation strategy wrapped by this adapter.
     /// </summary>
-    /// <remarks>Set by the training loop before each gradient step; the hard-label term uses it.</remarks>
+    public IDistillationStrategy<T> Strategy => _strategy;
+
+    /// <summary>
+    /// The true label vector for a single sample, or null when labels are unavailable or supplied via <see cref="CurrentTrueLabelBatch"/>.
+    /// </summary>
     public Vector<T>? CurrentTrueLabel { get; set; }
+
+    /// <summary>
+    /// The true label tensor for the current mini-batch (either <c>[batchSize, numClasses]</c> probabilities/one-hot,
+    /// <c>[batchSize, seqLen, numClasses]</c>, or integer class indices of length <c>rows</c>), or null when distilling from teacher logits alone.
+    /// </summary>
+    public Tensor<T>? CurrentTrueLabelBatch { get; set; }
 
     /// <inheritdoc />
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
-        => _strategy.ComputeLoss(ToRow(predicted), ToRow(actual), LabelRow());
+    {
+        using var _ = new NoGradScope<T>();
+        var predRow = ToSingleRow(predicted);
+        var actualRow = ToSingleRow(actual);
+        return _strategy.ComputeLoss(predRow, actualRow, ResolveLabelsMatrix(rows: 1, numClasses: predRow.Columns));
+    }
+
+    /// <summary>
+    /// Computes the true distillation loss over a mini-batch tensor without reshaping multiple rows into one class axis.
+    /// </summary>
+    public T CalculateBatchLoss(Tensor<T> predicted, Tensor<T> teacherOutput)
+    {
+        if (predicted is null) throw new ArgumentNullException(nameof(predicted));
+        if (teacherOutput is null) throw new ArgumentNullException(nameof(teacherOutput));
+
+        using var _ = new NoGradScope<T>();
+        var predMat = ToBatchMatrix(predicted);
+        var teacherMat = ToBatchMatrix(teacherOutput);
+        return _strategy.ComputeLoss(predMat, teacherMat, ResolveLabelsMatrix(predMat.Rows, predMat.Columns));
+    }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// Builds the surrogate <c>Σ (g · ŷ)</c> where <c>g</c> is the strategy's gradient at the current
-    /// prediction values, held as a constant. Differentiating this on the tape yields <c>g</c> as the
-    /// prediction cotangent, which is exactly what distillation needs to propagate.
-    /// </remarks>
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
-        // g = strategy gradient at the CURRENT prediction/teacher values (detached — plain numbers).
-        var predVec = predicted.ToVector();
-        var teacherVec = target.ToVector();
-        var g = _strategy.ComputeGradient(ToRow(predVec), ToRow(teacherVec), LabelRow());
+        if (predicted is null) throw new ArgumentNullException(nameof(predicted));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+
+        Matrix<T> g;
+        using (new NoGradScope<T>())
+        {
+            var predMat = ToBatchMatrix(predicted);
+            var teacherMat = ToBatchMatrix(target);
+            g = _strategy.ComputeGradient(predMat, teacherMat, ResolveLabelsMatrix(predMat.Rows, predMat.Columns));
+        }
 
         var gConst = Engine.Reshape(Tensor<T>.FromMatrix(g), predicted.Shape.ToArray());
-
-
-        // Σ (g · ŷ): a tape expression over `predicted`, so backprop seeds the prediction cotangent
-        // with g and carries it into the student's parameters.
         var product = Engine.TensorMultiply(gConst, predicted);
         var allAxes = Enumerable.Range(0, product.Shape.Length).ToArray();
         return Engine.ReduceSum(product, allAxes, keepDims: false);
     }
 
-    // Null when no true label is set: the strategies then distil from the teacher alone.
-    private Matrix<T>? LabelRow() => CurrentTrueLabel is null ? null : ToRow(CurrentTrueLabel);
-
-    private Matrix<T> ToRow(Vector<T> v)
+    private Matrix<T> ToBatchMatrix(Tensor<T> tensor)
     {
-        return Engine.Reshape(Tensor<T>.FromVector(v), [1, v.Length]).ToMatrix();
+        if (tensor.Shape.Length <= 1)
+        {
+            return Engine.Reshape(tensor, [1, Math.Max(1, tensor.Length)]).ToMatrix();
+        }
+
+        if (tensor.Shape.Length == 2)
+        {
+            return tensor.ToMatrix();
+        }
+
+        int cols = Math.Max(1, tensor.Shape[tensor.Shape.Length - 1]);
+        int rows = Math.Max(1, tensor.Length / cols);
+        return Engine.Reshape(tensor, [rows, cols]).ToMatrix();
     }
+
+    private Matrix<T>? ResolveLabelsMatrix(int rows, int numClasses)
+    {
+        if (CurrentTrueLabelBatch is { Length: > 0 } batchLabels)
+        {
+            if (batchLabels.Length == rows * numClasses)
+            {
+                return batchLabels.Shape.Length == 2 && batchLabels.Shape[0] == rows && batchLabels.Shape[1] == numClasses
+                    ? batchLabels.ToMatrix()
+                    : Engine.Reshape(batchLabels, [rows, numClasses]).ToMatrix();
+            }
+
+            if (numClasses > 1 && batchLabels.Length == rows)
+            {
+                var flatIndices = Engine.Reshape(batchLabels, [rows]).Cast<int>();
+                return Engine.TensorOneHot<T>(flatIndices, numClasses).ToMatrix();
+            }
+        }
+
+        if (CurrentTrueLabel is { Length: > 0 } singleLabel)
+        {
+            var labelTensor = Tensor<T>.FromVector(singleLabel);
+            if (singleLabel.Length == rows * numClasses)
+            {
+                return Engine.Reshape(labelTensor, [rows, numClasses]).ToMatrix();
+            }
+
+            if (numClasses > 1 && singleLabel.Length == rows)
+            {
+                var flatIndices = Engine.Reshape(labelTensor, [rows]).Cast<int>();
+                return Engine.TensorOneHot<T>(flatIndices, numClasses).ToMatrix();
+            }
+
+            if (rows == 1)
+            {
+                return ToSingleRow(singleLabel);
+            }
+        }
+
+        return null;
+    }
+
+    private Matrix<T> ToSingleRow(Vector<T> v)
+        => Engine.Reshape(Tensor<T>.FromVector(v), [1, v.Length]).ToMatrix();
 }

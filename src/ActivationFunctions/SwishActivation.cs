@@ -126,25 +126,29 @@ public class SwishActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivat
     /// <returns>A diagonal matrix containing the derivatives for each input element.</returns>
     public override Matrix<T> Derivative(Vector<T> input)
     {
-        int n = input.Length;
-        Matrix<T> jacobian = new Matrix<T>(n, n);
+        // Diagonal elements are the derivative at each point; off-diagonal elements are zero for
+        // element-wise activation functions
+        return ElementwiseJacobian(input);
+    }
 
-        for (int i = 0; i < n; i++)
+    /// <summary>
+    /// Calculates the derivative of the Swish function for each element in a tensor.
+    /// </summary>
+    /// <param name="input">The input tensor to calculate the derivative for.</param>
+    /// <returns>A tensor holding sigmoid(x) + x * sigmoid(x) * (1 - sigmoid(x)) for each element.</returns>
+    public override Tensor<T> Derivative(Tensor<T> input)
+    {
+        if (input.Length == 0)
         {
-            // Set diagonal elements to the derivative at that point
-            jacobian[i, i] = Derivative(input[i]);
-
-            // Off-diagonal elements are zero for element-wise activation functions
-            for (int j = 0; j < n; j++)
-            {
-                if (i != j)
-                {
-                    jacobian[i, j] = NumOps.Zero;
-                }
-            }
+            // Nothing to compute, and a zero-length device buffer cannot be created on the GPU engine.
+            return new Tensor<T>(input._shape);
         }
 
-        return jacobian;
+        var engine = Engine;
+        var sigmoid = engine.Sigmoid(input);
+        var oneMinusSigmoid = engine.TensorAddScalar(engine.TensorNegate(sigmoid), NumOps.One);
+        return engine.TensorAdd(
+            sigmoid, engine.TensorMultiply(input, engine.TensorMultiply(sigmoid, oneMinusSigmoid)));
     }
 
     /// <summary>

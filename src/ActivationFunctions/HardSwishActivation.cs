@@ -122,15 +122,7 @@ public class HardSwishActivation<T> : ActivationFunctionBase<T>, Fused.IFusedAct
     /// <returns>A diagonal matrix where each diagonal element is the derivative of Hard Swish for the corresponding input element.</returns>
     public override Matrix<T> Derivative(Vector<T> input)
     {
-        int n = input.Length;
-        Matrix<T> jacobian = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
-        {
-            jacobian[i, i] = Derivative(input[i]);
-        }
-
-        return jacobian;
+        return ElementwiseJacobian(input);
     }
 
     /// <summary>
@@ -150,7 +142,24 @@ public class HardSwishActivation<T> : ActivationFunctionBase<T>, Fused.IFusedAct
     /// <returns>A new tensor containing the derivatives of the Hard Swish function for each input element.</returns>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
-        return input.Transform((x, _) => Derivative(x));
+        if (input.Length == 0)
+        {
+            // Nothing to compute, and a zero-length device buffer cannot be created on the GPU engine.
+            return new Tensor<T>(input._shape);
+        }
+
+        // x <= -3: 0; x >= 3: 1; otherwise (2x + 3) / 6
+        var engine = Engine;
+        var middle = engine.TensorMultiplyScalar(
+            engine.TensorAddScalar(engine.TensorMultiplyScalar(input, NumOps.FromDouble(2.0)), _three), _oneSixth);
+        var upper = engine.TensorWhere(
+            engine.TensorGreaterEqual(input, engine.TensorFullLike(input, _three)),
+            engine.TensorOnesLike(input),
+            middle);
+        return engine.TensorWhere(
+            engine.TensorLessEqual(input, engine.TensorFullLike(input, _negThree)),
+            engine.TensorZerosLike(input),
+            upper);
     }
 
     #region GPU Training Support

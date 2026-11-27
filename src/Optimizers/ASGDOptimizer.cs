@@ -411,6 +411,8 @@ public partial class ASGDOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         T muT = NumOps.FromDouble(mu);
         T weightDecay = NumOps.FromDouble(_options.WeightDecay);
 
+        bool gpuState = typeof(T) == typeof(float)
+            && Engine is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
         foreach (var param in context.Parameters)
         {
             if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
@@ -419,7 +421,7 @@ public partial class ASGDOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             // ax seeds from the parameter itself, matching the flat path's Clone() of the initial iterate.
             if (!_tapeAx.TryGetValue(param, out var ax))
             {
-                ax = new Tensor<T>(param._shape);
+                ax = CreateOptimizerStateTensor(param._shape, gpuState);
                 Engine.TensorCopy(param, ax);
                 _tapeAx[param] = ax;
             }

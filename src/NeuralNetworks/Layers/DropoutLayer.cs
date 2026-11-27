@@ -340,7 +340,9 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
         if (!IsTrainingMode || targetMask.Length == 0)
             return;
 
-        ulong counter = AdvanceSeedCounter();
+        // Through StepCounter, so a fused session that may still undo this replay keeps the counter it took: the eager
+        // step of the same batch then reuses it instead of advancing the counter again.
+        ulong counter = AiDotNet.Training.CompiledStepRandom<T>.StepCounter(AdvanceSeedCounter);
         int? perCallSeed = RandomSeed.HasValue
             ? DeriveSeed32(RandomSeed.Value, counter)
             : (int?)null;

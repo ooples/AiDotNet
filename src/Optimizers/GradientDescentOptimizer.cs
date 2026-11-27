@@ -239,8 +239,16 @@ public partial class GradientDescentOptimizer<T, TInput, TOutput> : GradientBase
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
         double learningRate = NumOps.ToDouble(CurrentLearningRate);
 
+        // One whole-parameter-list GPU step for every eligible parameter; the loop below skips the ones it
+        // updated and runs every other parameter (and all of them, when the list step declines) as before.
+        var gpuListUpdated = gpuAdam
+            ? GpuListOptimizerStep<T>.TryApply(context, Engine, "TrySgdStepMultiTensor", 0,
+                p => Array.Empty<Tensor<T>>(),
+                (float)learningRate)
+            : null;
         foreach (var param in context.Parameters)
         {
+            if (gpuListUpdated is not null && gpuListUpdated.Contains(param)) continue;
             // True sparse scatter plain SGD: param -= lr·g at touched indices.
             if (SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
             {

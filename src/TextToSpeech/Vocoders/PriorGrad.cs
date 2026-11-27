@@ -28,18 +28,14 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a PriorGrad vocoder with data-dependent adaptive prior
-/// // using mel-conditioned noise instead of isotropic Gaussian
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new PriorGrad&lt;double&gt;(architecture, "priorgrad.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new PriorGrad&lt;double&gt;(architecture, new PriorGradOptions());
+///     inputSize: 80, outputSize: 1);
+/// var model = new PriorGrad&lt;double&gt;(architecture, new PriorGradOptions());
+/// var mel = Tensor&lt;double&gt;.CreateRandom(model.MelChannels, 100);   // stands in for a [mel bins, frames] spectrogram
+/// Tensor&lt;double&gt; waveform = model.MelToWaveform(mel);
+/// // Untrained native layers; the PriorGrad(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
