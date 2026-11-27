@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet.Audio.MusicGen;
@@ -66,10 +67,27 @@ public class SampleObjectiveFacadeTrainingTests
 
         public List<Vector<double>> ParametersAtEvaluation { get; } = new();
 
+        // State outside the parameters that training changes, as running statistics do: it travels only through the
+        // serialized model, so a parameters-only restore would leave it at the last epoch's value.
+        public int Buffer { get; private set; }
+
         public override double EvaluateTrainingObjective(TtsTrainingSample<double> sample)
         {
+            Buffer++;
             ParametersAtEvaluation.Add(GetParameters().Clone());
             return _script[_evaluations++];
+        }
+
+        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+        {
+            base.SerializeNetworkSpecificData(writer);
+            writer.Write(Buffer);
+        }
+
+        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+        {
+            base.DeserializeNetworkSpecificData(reader);
+            Buffer = reader.ReadInt32();
         }
     }
 
@@ -100,7 +118,32 @@ public class SampleObjectiveFacadeTrainingTests
         var last = model.ParametersAtEvaluation[3].ToArray();
         Assert.NotEqual(best, last);   // training moved the parameters, so the check below can tell them apart
         Assert.Equal(restoreBestModel ? best : last, model.GetParameters().ToArray());
+        Assert.Equal(restoreBestModel ? 2 : 4, model.Buffer);
         Assert.Same(model, result.Model);
+    }
+
+    [Fact(Timeout = 180000)]
+    public async Task Build_EarlyStopping_RestoringTheBestEpoch_KeepsTheTrainingMode()
+    {
+        await Task.Yield();
+        async Task<bool> TrainingModeAfterBuild(bool restoreBestModel)
+        {
+            var model = new ScriptedObjectiveFastSpeech2(new[] { 3.0, 1.0, 2.0, 2.0, 2.0, 2.0 });
+            await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+                .ConfigureModel(model)
+                .ConfigureSampleObjectiveTraining(new SampleObjectiveTrainingOptions
+                {
+                    Epochs = 6,
+                    EarlyStoppingPatience = 2,
+                    RestoreBestModel = restoreBestModel,
+                })
+                .BuildAsync(Enumerable.Range(0, 10).Select(Sample).ToList());
+            return model.IsTrainingMode;
+        }
+
+        // Restoring deserializes the model, which can leave a network in inference mode; the restored model ends in
+        // the mode a build without the restore ends in.
+        Assert.Equal(await TrainingModeAfterBuild(false), await TrainingModeAfterBuild(true));
     }
 
     private static Tensor<double> Recording(double baseHz)
