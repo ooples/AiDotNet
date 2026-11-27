@@ -102,4 +102,15 @@ public abstract partial class PromptableSegmentationBase<T> : SegmentationModelB
                 "No image has been set. Call SetImage() before using prompt-based segmentation methods.");
         }
     }
+
+    /// <summary>
+    /// The embedding of the image passed to <see cref="SetImage"/>, for a prompt method to segment.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown if no image has been set.</exception>
+    private protected Tensor<T> RequireImageEmbedding()
+    {
+        EnsureImageSet();
+        return _imageEmbedding ?? throw new InvalidOperationException(
+            "No image has been set. Call SetImage() before using prompt-based segmentation methods.");
+    }
 }
