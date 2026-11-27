@@ -49,7 +49,8 @@ internal static class ForecastWindowOps
             throw new ArgumentOutOfRangeException(nameof(input), "The input is shorter than the window.");
         if (steps > 0)
         {
-            if (predictions!.Rank != 3)
+            if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+            if (predictions.Rank != 3)
                 throw new ArgumentException("Predictions must be rank 3 [batch, time, features].", nameof(predictions));
             if (predictions.Shape[0] < batch || predictions.Shape[1] < steps || predictions.Shape[2] < features)
                 throw new ArgumentOutOfRangeException(nameof(predictions), "The predictions do not cover the shifted steps.");
@@ -62,7 +63,7 @@ internal static class ForecastWindowOps
         using var noGrad = new NoGradScope<T>();
         if (steps == 0)
             return engine.TensorSlice(input, [0, 0, 0], [batch, length, features]).Contiguous();
-        var newest = engine.TensorSlice(predictions!, [0, 0, 0], [batch, steps, features]);
+        var newest = engine.TensorSlice(predictions ?? throw new ArgumentNullException(nameof(predictions)), [0, 0, 0], [batch, steps, features]);
         if (keep == 0)
             return newest.Contiguous();
         return engine.TensorConcatenate([engine.TensorSlice(input, [0, steps, 0], [batch, keep, features]), newest], 1);
