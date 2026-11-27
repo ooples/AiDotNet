@@ -164,7 +164,9 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
         var eps = Tensor<T>.CreateDefault(sumSquared._shape, NormalizationEpsilon);
         var safeSum = Engine.TensorAdd(sumSquared, eps);
         var norm = Engine.TensorSqrt(safeSum);
-        var normalized = Engine.TensorDivide(input, norm);
+        // The [..., 1] norm is broadcast to the input's shape explicitly: an element-wise divide of two different
+        // shapes is not something every engine shape policy accepts.
+        var normalized = Engine.TensorDivide(input, Engine.TensorBroadcastTo(norm, input.Shape.ToArray()));
         return Engine.Softmax(normalized, axis: lastAxis);
     }
 
@@ -189,13 +191,12 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// 1. How the softmax output changes with respect to the normalized input
     /// 2. How the normalized input changes with respect to the original input
     /// 
-    /// For diagonal elements (when i=j):
-    /// - term1: How the softmax output changes if its own input increases
-    /// - term2: How the normalization affects this relationship
-    /// 
-    /// For off-diagonal elements (when i?j):
-    /// - term1: How one output changes when a different input increases
-    /// - term2: How the normalization creates interdependencies between inputs
+    /// The chain rule multiplies the two: with u = x / ||x|| and y = softmax(u),
+    /// J = (diag(y) - y y^T) * (I - u u^T) / ||x||.
+    /// The first factor is the ordinary softmax Jacobian; the second is the Jacobian of the normalization. With the
+    /// exact norm it removes the part of any input change that points along x, because scaling x does not change
+    /// the output. With the stabilising epsilon in the norm, sqrt(||x||^2 + eps), the output is scale invariant
+    /// only approximately: a change along x is attenuated by eps / (||x||^2 + eps), not removed.
     /// 
     /// Don't worry if the math seems complex - the neural network library handles these calculations automatically.
     /// The important thing to understand is that this function helps the network learn by showing how changes in
@@ -204,29 +205,74 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
     {
-        Vector<T> output = Activate(input);
-        int d = input.Length;
-        Matrix<T> jacobian = new Matrix<T>(d, d);
-
-        T norm = NumOps.Sqrt(input.Transform(x => NumOps.Multiply(x, x)).Sum());
-
-        for (int i = 0; i < d; i++)
+        int n = input.Length;
+        if (n == 0)
         {
-            for (int j = 0; j < d; j++)
+            return new Matrix<T>(0, 0);
+        }
+
+        if (UseScalarJacobian(n))
+        {
+            return ScalarJacobian(input, Activate(input));
+        }
+
+        var engine = Engine;
+        var values = Tensor<T>.FromVector(input);
+        var p = Activate(values);
+
+        // The same stabilised norm as the forward pass: sqrt(sum(x^2) + epsilon)
+        T norm = NumOps.Sqrt(NumOps.Add(engine.TensorSum(engine.TensorMultiply(values, values)), NormalizationEpsilon));
+        var unit = engine.TensorDivideScalar(values, norm);
+
+        // J = S (I - u u^T) / norm with S = diag(p) - p p^T the softmax Jacobian at u = x / norm.
+        // S u = p * u - p (p . u), so J = (diag(p) - p p^T - (S u) u^T) / norm.
+        var pu = engine.TensorMultiply(p, unit);
+        var su = engine.TensorSubtract(pu, engine.TensorMultiplyScalar(p, engine.TensorSum(pu)));
+        var outers = engine.TensorAdd(engine.TensorOuter(p, p), engine.TensorOuter(su, unit));
+        var diagonal = engine.TensorSubtract(
+            p, engine.TensorAdd(engine.TensorMultiply(p, p), engine.TensorMultiply(su, unit)));
+        return SquareWithDiagonal(
+            engine.TensorDivideScalar(engine.TensorNegate(outers), norm), engine.TensorDivideScalar(diagonal, norm));
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("host vector in, host matrix out: below the measured break-even length, and on a device engine at any "
+        + "length, the fixed cost of the engine operations exceeds the scalar arithmetic")]
+    private Matrix<T> ScalarJacobian(Vector<T> input, Vector<T> output)
+    {
+        int n = input.Length;
+        var x = input.AsSpan();
+        var p = output.AsSpan();
+        T sumSquares = NumOps.Zero;
+        for (int i = 0; i < n; i++)
+        {
+            sumSquares = NumOps.Add(sumSquares, NumOps.Multiply(x[i], x[i]));
+        }
+
+        // The same stabilised norm as the forward pass, and the same J = (diag(p) - p p^T - (S u) u^T) / norm
+        T norm = NumOps.Sqrt(NumOps.Add(sumSquares, NormalizationEpsilon));
+        var unit = new T[n];
+        T dot = NumOps.Zero;
+        for (int i = 0; i < n; i++)
+        {
+            unit[i] = NumOps.Divide(x[i], norm);
+            dot = NumOps.Add(dot, NumOps.Multiply(p[i], unit[i]));
+        }
+
+        var jacobian = new Matrix<T>(n, n);
+        var cells = jacobian.AsWritableSpan();
+        for (int i = 0; i < n; i++)
+        {
+            T su = NumOps.Subtract(NumOps.Multiply(p[i], unit[i]), NumOps.Multiply(p[i], dot));
+            int row = i * n;
+            for (int j = 0; j < n; j++)
             {
-                if (i == j)
-                {
-                    T term1 = NumOps.Multiply(output[i], NumOps.Subtract(NumOps.One, output[i]));
-                    T term2 = NumOps.Divide(NumOps.Multiply(input[i], input[i]), NumOps.Multiply(norm, norm));
-                    jacobian[i, j] = NumOps.Divide(NumOps.Subtract(term1, term2), norm);
-                }
-                else
-                {
-                    T term1 = NumOps.Multiply(NumOps.Negate(output[i]), output[j]);
-                    T term2 = NumOps.Divide(NumOps.Multiply(input[i], input[j]), NumOps.Multiply(norm, norm));
-                    jacobian[i, j] = NumOps.Divide(NumOps.Subtract(term1, term2), norm);
-                }
+                T outers = NumOps.Add(NumOps.Multiply(p[i], p[j]), NumOps.Multiply(su, unit[j]));
+                cells[row + j] = NumOps.Divide(NumOps.Negate(outers), norm);
             }
+
+            T diagonal = NumOps.Subtract(
+                p[i], NumOps.Add(NumOps.Multiply(p[i], p[i]), NumOps.Multiply(su, unit[i])));
+            cells[row + i] = NumOps.Divide(diagonal, norm);
         }
 
         return jacobian;
