@@ -38,13 +38,13 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///     inputSize: 200, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new YourTTS&lt;double&gt;(architecture, "yourtts.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new YourTTS&lt;double&gt;(architecture, new YourTTSOptions());
+/// var model = new YourTTS&lt;double&gt;(architecture, new YourTTSOptions());
+/// // Zero-shot: a few seconds of the target speaker at the model's sample rate (16 kHz). Noise stands in for it.
+/// var reference = Tensor&lt;double&gt;.CreateRandom(3 * model.SampleRate);
+/// model.Voice = new TtsVoice&lt;double&gt; { ReferenceAudio = reference };
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

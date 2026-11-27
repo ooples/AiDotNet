@@ -47,11 +47,9 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new Monkey&lt;double&gt;(architecture, "monkey.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new Monkey&lt;double&gt;(architecture, new MonkeyOptions());
+/// var model = new Monkey&lt;double&gt;(architecture, new MonkeyOptions());
+/// var image = Tensor&lt;double&gt;.CreateRandom(3, 224, 224);   // [3, H, W] RGB, the architecture's input size
+/// Tensor&lt;double&gt; caption = model.GenerateFromImage(image, "Describe this image.");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

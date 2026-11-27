@@ -110,11 +110,47 @@ public class KnowledgeDistillationOptions<T, TInput, TOutput> : ModelOptions
     /// <see cref="AiDotNet.KnowledgeDistillation.DistillationStrategyFactory{T}"/> (e.g.
     /// <c>CreateResponseBasedStrategy()</c>, <c>CreateAttentionBasedStrategy()</c>,
     /// <c>CreateHybridStrategy()</c>) or your own <see cref="IDistillationStrategy{T}"/>.</para>
-    /// <para><b>Default:</b> when null, response-based distillation (standard Hinton) is used —
-    /// the industry-standard default (see
-    /// <see cref="AiDotNet.KnowledgeDistillation.DistillationStrategyFactory{T}.ResolveStrategy"/>).</para>
+    /// <para><b>Default:</b> when null, the strategy follows the teacher's output width. Below
+    /// <see cref="SparseTopKMinimumClasses"/> classes it is response-based distillation (standard Hinton). From
+    /// that width up (a language model's vocabulary) it is sparse Top-K distillation with an exact remainder tail
+    /// bucket over the teacher's <see cref="SparseTopK"/> most likely classes, which keeps the full tail mass in the
+    /// loss instead of renormalizing it away (see
+    /// <see cref="AiDotNet.KnowledgeDistillation.DistillationStrategyFactory{T}.ResolveStrategyForOutputWidth"/>).</para>
     /// </remarks>
     public IDistillationStrategy<T>? Strategy { get; set; }
+
+    /// <summary>
+    /// Gets or sets how many of the teacher's most likely classes the default large-vocabulary strategy matches
+    /// exactly (the rest are one tail bucket).
+    /// </summary>
+    /// <value>The number of top teacher classes kept exactly. Default is 64.</value>
+    /// <remarks>
+    /// <para>Used only when <see cref="Strategy"/> is null and the teacher's output has at least
+    /// <see cref="SparseTopKMinimumClasses"/> classes. An explicitly configured <see cref="Strategy"/> always takes
+    /// precedence, and this value is then ignored.</para>
+    /// <para><b>For Beginners:</b> A language model's teacher predicts a probability for every word in a vocabulary
+    /// that can hold tens of thousands of entries. Most of those probabilities are tiny. This setting keeps only the
+    /// teacher's 64 most likely words for the student to copy one by one, and groups everything else into a single
+    /// "other words" bucket. The student still learns how much probability belongs to that bucket, so no mass is lost,
+    /// but training is much cheaper. Larger values copy the teacher more closely and cost more memory and time.</para>
+    /// </remarks>
+    public int SparseTopK { get; set; } = 64;
+
+    /// <summary>
+    /// Gets or sets the output width (number of classes, a vocabulary size) from which the default strategy is sparse
+    /// Top-K tail-bucket distillation rather than response-based distillation.
+    /// </summary>
+    /// <value>The minimum number of output classes that selects the sparse default. Default is 1024.</value>
+    /// <remarks>
+    /// <para>Used only when <see cref="Strategy"/> is null. An explicitly configured <see cref="Strategy"/> always
+    /// takes precedence, and this value is then ignored. Set <see cref="int.MaxValue"/> to always use response-based
+    /// distillation for the default.</para>
+    /// <para><b>For Beginners:</b> Small classifiers (for example 10 image classes) are distilled by matching the
+    /// teacher's full probability list. Models with very many outputs, such as a language model's vocabulary, switch
+    /// to the cheaper sparse Top-K method once the number of outputs reaches this value. You rarely need to change
+    /// it.</para>
+    /// </remarks>
+    public int SparseTopKMinimumClasses { get; set; } = 1024;
 
     /// <summary>
     /// Gets or sets the temperature for softmax scaling.
@@ -365,6 +401,10 @@ public class KnowledgeDistillationOptions<T, TInput, TOutput> : ModelOptions
     {
         if (Temperature <= 0)
             throw new ArgumentException("Temperature must be positive", nameof(Temperature));
+        if (SparseTopK <= 0)
+            throw new ArgumentOutOfRangeException(nameof(SparseTopK), SparseTopK, "SparseTopK must be at least 1.");
+        if (SparseTopKMinimumClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(SparseTopKMinimumClasses), SparseTopKMinimumClasses, "SparseTopKMinimumClasses must be at least 1.");
         if (Alpha < 0 || Alpha > 1)
             throw new ArgumentException("Alpha must be between 0 and 1", nameof(Alpha));
         if (Epochs <= 0)

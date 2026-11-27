@@ -284,10 +284,12 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
         // before the inner-layer Forwards consume their weights.
         if (!IsShapeResolved) OnFirstForward(input);
 
+        // Not while a layer observer is recording: it keeps the dense layers' inputs and outputs to read afterwards.
         if (!IsTrainingMode && !GradientRecording.IsRecording<T>()
             && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
-            && AiDotNetEngine.Current is DirectGpuTensorEngine)
-            return ForwardReleasingLayerIntermediates(input);
+            && AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>.Current is null
+            && AiDotNetEngine.Current is DirectGpuTensorEngine gpu)
+            return ForwardReleasingLayerIntermediates(input, gpu);
 
         // Current feature maps (accumulated)
         var currentFeatures = input;
@@ -307,18 +309,34 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
     /// <summary>
     /// The GPU inference forward: each dense layer runs in its own <see cref="TensorScope"/>, so its intermediates (the
     /// BatchNorm, ReLU and convolution outputs, and its new features once concatenated) free their device memory when the
-    /// layer is done, as PyTorch frees a tensor at its last reference. Held to the end of the call instead, a batch-32
-    /// GPU DenseNet-121 inference kept every dense layer's intermediates alive at once: a 2,097 MB peak, 829 MB with
-    /// these scopes (PyTorch 1,043 MB). Nothing is kept for a backward pass. On the CPU a scope frees nothing.
+    /// layer is done, and the running concatenation a layer consumed is freed as soon as the next one exists, as PyTorch
+    /// frees a tensor at its last reference. Nothing is kept for a backward pass. On the CPU a scope frees nothing.
     /// </summary>
-    private Tensor<T> ForwardReleasingLayerIntermediates(Tensor<T> input)
+    /// <remarks>
+    /// A scope hands a kept result to the scope enclosing it, so keeping each layer's concatenation alone left all of a
+    /// block's concatenations alive until the enclosing Predict ended: for L layers of growth k on c input channels that
+    /// is L*c + k*L*(L+1)/2 channels of feature map, against the c + k*L the block's output needs (#2383).
+    /// </remarks>
+    private Tensor<T> ForwardReleasingLayerIntermediates(Tensor<T> input, DirectGpuTensorEngine gpu)
     {
+        long activationsBefore = gpu.ActivationCacheTimestampSnapshot();
         var currentFeatures = input;
+        Tensor<T>? consumed = null;
         foreach (var layer in _layers)
         {
-            using var scope = TensorScope.Begin();
-            var layerOutput = layer.Forward(currentFeatures);
-            currentFeatures = scope.Keep(ConcatenateChannels(currentFeatures, layerOutput));
+            Tensor<T> concatenated;
+            using (var scope = TensorScope.Begin())
+            {
+                var layerOutput = layer.Forward(currentFeatures);
+                concatenated = scope.Keep(ConcatenateChannels(currentFeatures, layerOutput));
+            }
+
+            // The concatenation this layer read is this block's own result and nothing reads it again: the next layer
+            // reads the new one. The block's input is the caller's and is never released here.
+            if (consumed is not null)
+                DeviceIntermediates.ReleaseConsumed(gpu, consumed, activationsBefore, concatenated, input);
+            consumed = concatenated;
+            currentFeatures = concatenated;
         }
         return currentFeatures;
     }

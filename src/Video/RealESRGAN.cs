@@ -51,7 +51,7 @@ namespace AiDotNet.Video;
 /// var model = new RealESRGAN&lt;double&gt;(
 ///     generatorArch, discriminatorArch,
 ///     InputType.ThreeDimensional,
-///     scaleFactor: 4);
+///     new RealESRGANOptions { ScaleFactor = 4 });
 ///
 /// // Train
 /// var (dLoss, gLoss) = model.TrainStep(lowResImages, highResTargets);

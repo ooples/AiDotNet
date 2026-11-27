@@ -50,7 +50,7 @@ internal class StreamingAdam8Bit<T> : BlockQuantizedStreamingOptimizer<T>, IDisp
         new(TensorReferenceComparer<Tensor<T>>.Instance);
     private readonly Dictionary<Tensor<T>, GpuMomentState> _gpuState =
         new(TensorReferenceComparer<Tensor<T>>.Instance);
-    private readonly Dictionary<Tensor<float>, (Tensor<float> M, Tensor<float> V)> _gpuFp32SmallState =
+    private readonly Dictionary<Tensor<float>, Tensor<float>[]> _gpuFp32SmallState =
         new(TensorReferenceComparer<Tensor<float>>.Instance);
 
     public StreamingAdam8Bit(
@@ -77,106 +77,22 @@ internal class StreamingAdam8Bit<T> : BlockQuantizedStreamingOptimizer<T>, IDisp
         _decoupledWeightDecay = decoupledWeightDecay;
     }
 
-    public override void ApplyBatch(IReadOnlyList<Tensor<T>> parameters, IReadOnlyList<Tensor<T>> gradients)
+    protected override bool TryApplyBatchOnGpu(IReadOnlyList<Tensor<T>> parameters, IReadOnlyList<Tensor<T>> gradients)
     {
-        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
-        if (gradients is null) throw new ArgumentNullException(nameof(gradients));
-        int count = parameters.Count;
-        if (gradients.Count != count)
-            throw new ArgumentException("Parameters and gradients must have identical counts.", nameof(gradients));
-        if (count == 0) return;
-
-        var multiFn = _decoupledWeightDecay
-            ? GpuMultiTensorAdamBridge.TryAdamWMultiTensor
-            : GpuMultiTensorAdamBridge.TryAdamMultiTensor;
-
-        if (typeof(T) != typeof(float)
-            || UseBf16Moments
-            || Min8BitSize <= 0
-            || multiFn is null
-            || AiDotNetEngine.Current is not DirectGpuTensorEngine)
-        {
-            for (int i = 0; i < count; i++)
-            {
-                Apply(parameters[i], gradients[i]);
-            }
-            return;
-        }
-
-        var mtParams = new List<Tensor<float>>(count);
-        var mtGrads = new List<Tensor<float>>(count);
-        var mtMs = new List<Tensor<float>>(count);
-        var mtVs = new List<Tensor<float>>(count);
-        var mtSourceRefs = new List<Tensor<T>>(count);
-        var mtOrigGrads = new List<Tensor<T>>(count);
-        List<int>? deferredIndices = null;
-
-        for (int i = 0; i < count; i++)
-        {
-            var p = parameters[i];
-            var g = gradients[i];
-            if (p is null) throw new ArgumentNullException(nameof(parameters));
-            if (g is null) throw new ArgumentNullException(nameof(gradients));
-            int len = p.Length;
-            bool eligibleForFp32Batch = len > 0
-                && g.Length == len
-                && len < Min8BitSize
-                && (!_keepsMomentsOnGpu.TryGetValue(p, out bool prevOnGpu) || prevOnGpu);
-
-            if (!eligibleForFp32Batch)
-            {
-                (deferredIndices ??= new List<int>()).Add(i);
-                continue;
-            }
-
-            var pFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref p);
-            var gFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref g);
-            if (!_gpuFp32SmallState.TryGetValue(pFloat, out var fp) || fp.M.Length != len)
-            {
-                fp = (GpuOptimizer.CreateStateTensor(pFloat._shape), GpuOptimizer.CreateStateTensor(pFloat._shape));
-                _gpuFp32SmallState[pFloat] = fp;
-            }
-
-            mtParams.Add(pFloat);
-            mtGrads.Add(gFloat);
-            mtMs.Add(fp.M);
-            mtVs.Add(fp.V);
-            mtSourceRefs.Add(p);
-            mtOrigGrads.Add(g);
-        }
-
-        if (mtParams.Count > 0)
-        {
-            float lr = (float)LearningRate;
-            float b1 = (float)_beta1;
-            float b2 = (float)_beta2;
-            float eps = (float)_epsilon;
-            float wd = (float)_weightDecay;
-            int step = Math.Max(1, Step);
-            if (multiFn(mtParams, mtGrads, mtMs, mtVs, lr, b1, b2, eps, wd, step))
-            {
-                for (int i = 0; i < mtSourceRefs.Count; i++)
-                {
-                    _keepsMomentsOnGpu[mtSourceRefs[i]] = true;
-                }
-            }
-            else
-            {
-                for (int i = 0; i < mtSourceRefs.Count; i++)
-                {
-                    Apply(mtSourceRefs[i], mtOrigGrads[i]);
-                }
-            }
-        }
-
-        if (deferredIndices is not null)
-        {
-            for (int i = 0; i < deferredIndices.Count; i++)
-            {
-                int idx = deferredIndices[i];
-                Apply(parameters[idx], gradients[idx]);
-            }
-        }
+        string listMethod = _decoupledWeightDecay ? "TryAdamWStepMultiTensor" : "TryAdamStepMultiTensor";
+        return TryApplySmallParametersGpuListStep(
+            parameters,
+            gradients,
+            _keepsMomentsOnGpu,
+            _gpuFp32SmallState,
+            listMethod,
+            stateCount: 2,
+            (float)LearningRate,
+            (float)_beta1,
+            (float)_beta2,
+            (float)_epsilon,
+            (float)_weightDecay,
+            Math.Max(1, Step));
     }
 
     public override void Apply(Tensor<T> param, Tensor<T> grad)
@@ -229,15 +145,19 @@ internal class StreamingAdam8Bit<T> : BlockQuantizedStreamingOptimizer<T>, IDisp
 
         if (!UseBf16Moments && length < Min8BitSize)
         {
-            if (!_gpuFp32SmallState.TryGetValue(pFloat, out var fp) || fp.M.Length != length)
+            if (!_gpuFp32SmallState.TryGetValue(pFloat, out var fp) || fp.Length < 2 || fp[0].Length != length)
             {
-                fp = (GpuOptimizer.CreateStateTensor(pFloat._shape), GpuOptimizer.CreateStateTensor(pFloat._shape));
+                fp = new[]
+                {
+                    GpuOptimizer.CreateStateTensor(pFloat._shape),
+                    GpuOptimizer.CreateStateTensor(pFloat._shape)
+                };
                 _gpuFp32SmallState[pFloat] = fp;
             }
 
             return _decoupledWeightDecay
-                ? GpuOptimizer.TryAdamWStep(pFloat, gFloat, fp.M, fp.V, lr, b1, b2, eps, wd, step)
-                : GpuOptimizer.TryAdamStep(pFloat, gFloat, fp.M, fp.V, lr, b1, b2, eps, wd, step);
+                ? GpuOptimizer.TryAdamWStep(pFloat, gFloat, fp[0], fp[1], lr, b1, b2, eps, wd, step)
+                : GpuOptimizer.TryAdamStep(pFloat, gFloat, fp[0], fp[1], lr, b1, b2, eps, wd, step);
         }
 
         if (!_gpuState.TryGetValue(param, out var state) || state is null || state.Length != length)
@@ -307,8 +227,8 @@ internal class StreamingAdam8Bit<T> : BlockQuantizedStreamingOptimizer<T>, IDisp
         _gpuState.Clear();
         foreach (var fp in _gpuFp32SmallState.Values)
         {
-            fp.M.Dispose();
-            fp.V.Dispose();
+            for (int s = 0; s < fp.Length; s++)
+                fp[s]?.Dispose();
         }
         _gpuFp32SmallState.Clear();
         _keepsMomentsOnGpu.Clear();

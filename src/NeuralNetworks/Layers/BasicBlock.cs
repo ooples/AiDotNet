@@ -292,6 +292,43 @@ public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
         }
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The block fixes its channel count and applies the 3x3 / pad=1 / stride window to the spatial axes, as a
+    /// convolution does. Declaring it lets a shape walk that pinned an inferred spatial extent on the block leave the
+    /// channel axis as the block's only claim when parameters are materialized before the first real input arrives.
+    /// </remarks>
+    protected internal override ShapeRelationKind OutputShapeRelation => ShapeRelationKind.Convolutional;
+
+    /// <summary>
+    /// Adopts the spatial extent of the first real input when a shape-only walk sized this block from an inferred one.
+    /// </summary>
+    /// <remarks>
+    /// The network's shape walk follows <c>Layers</c> in order from the architecture's input, which is only the real
+    /// path for a plain chain fed at the declared resolution. A detector fed a smaller image than its architecture
+    /// declares (PSENet: 640x640 declared, a 128x128 fixture) reached this block at 159x159 and kept reporting it while
+    /// computing 31x31. Only the spatial extent is replaced: the weights depend on the channel counts alone, and a
+    /// channel count other than the one the walk saw would need a different shortcut, so it stays a hard mismatch.
+    /// </remarks>
+    protected override void ReconcileShapeOnlyResolution(Tensor<T> input)
+    {
+        var s = input._shape;
+        int channels, inputHeight, inputWidth;
+        if (s.Length == 3) { channels = s[0]; inputHeight = s[1]; inputWidth = s[2]; }
+        else if (s.Length == 4) { channels = s[1]; inputHeight = s[2]; inputWidth = s[3]; }
+        else return;
+
+        if (channels != _inChannels || (inputHeight == _inputHeight && inputWidth == _inputWidth)) return;
+
+        _inputHeight = inputHeight;
+        _inputWidth = inputWidth;
+        int outH = (inputHeight - 1) / _stride + 1;
+        int outW = (inputWidth - 1) / _stride + 1;
+        ResolveShapes(
+            new[] { _inChannels, inputHeight, inputWidth },
+            new[] { _outChannels, outH, outW });
+    }
+
     // Constructor args round-trip for serialization. DeserializationHelper
     // reads these to recreate an identically-configured block — without
     // them, downsample blocks (stride=2 in stage 2/3/4) reconstruct with

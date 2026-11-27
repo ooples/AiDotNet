@@ -410,8 +410,19 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         double beta1Value = NumOps.ToDouble(_currentBeta1);
         double beta2Value = NumOps.ToDouble(_currentBeta2);
         bool hasWeightDecay = !NumOps.Equals(weightDecay, NumOps.Zero);
+        // One whole-parameter-list GPU step for every eligible parameter; the loop below skips the ones it
+        // updated and runs every other parameter (and all of them, when the list step declines) as before.
+        var gpuListUpdated = gpuAdam
+            ? GpuListOptimizerStep<T>.TryApply(context, Engine, "TryLionStepMultiTensor", 1,
+                p => new[]
+                {
+                    GpuListOptimizerStep<T>.GetOrAddState(_tapeMomentum, p, q => CreateOptimizerStateTensor(q._shape, gpuAdam))
+                },
+                (float)learningRateValue, (float)beta1Value, (float)beta2Value, (float)_options.WeightDecay)
+            : null;
         foreach (var param in context.Parameters)
         {
+            if (gpuListUpdated is not null && gpuListUpdated.Contains(param)) continue;
             // True sparse scatter Lion: m + param at touched indices only.
             // Existing momentum can still move rows absent from this step; retain the full update in that case.
             if (!_tapeMomentum.ContainsKey(param) && _options.WeightDecay == 0.0 && SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))

@@ -36,6 +36,33 @@ public static class DistillationStrategyFactory<T>
     }
 
     /// <summary>
+    /// Returns <paramref name="strategy"/> when non-null, otherwise the default for a teacher with
+    /// <paramref name="outputClasses"/> output classes: sparse Top-K tail-bucket distillation over the
+    /// <paramref name="sparseTopK"/> most likely classes from <paramref name="sparseTopKMinimumClasses"/> classes up
+    /// (a large vocabulary, where matching every class costs a full-vocabulary softmax per row), response-based
+    /// distillation below that.
+    /// </summary>
+    /// <param name="strategy">The caller-supplied strategy, or null for the default.</param>
+    /// <param name="temperature">Softmax temperature used for the default.</param>
+    /// <param name="alpha">Hard/soft loss weight used for the default.</param>
+    /// <param name="outputClasses">The teacher output's last dimension (classes, or vocabulary size).</param>
+    /// <param name="sparseTopK">Classes the sparse default matches exactly.</param>
+    /// <param name="sparseTopKMinimumClasses">Output width from which the sparse default applies.</param>
+    public static IDistillationStrategy<T> ResolveStrategyForOutputWidth(
+        IDistillationStrategy<T>? strategy,
+        double temperature,
+        double alpha,
+        int outputClasses,
+        int sparseTopK,
+        int sparseTopKMinimumClasses)
+    {
+        if (strategy is not null) return strategy;
+        if (sparseTopK > 0 && outputClasses >= sparseTopKMinimumClasses && sparseTopK < outputClasses)
+            return CreateSparseTopKTailBucketStrategy(sparseTopK, temperature, alpha);
+        return CreateResponseBasedStrategy(temperature, alpha);
+    }
+
+    /// <summary>
     /// Response-based distillation (Hinton et al., 2015) — the industry-standard default.
     /// Matches the teacher's temperature-scaled softmax outputs.
     /// </summary>
@@ -185,6 +212,20 @@ public static class DistillationStrategyFactory<T>
         double alpha = 0.3)
     {
         return new FlowBasedDistillationStrategy<T>(
+            temperature: temperature,
+            alpha: alpha);
+    }
+
+    /// <summary>
+    /// Sparse Top-K distillation with an exact <c>(K + 1)</c>-th remainder tail bucket for large-vocabulary models.
+    /// </summary>
+    public static IDistillationStrategy<T> CreateSparseTopKTailBucketStrategy(
+        int topK = 64,
+        double temperature = 2.0,
+        double alpha = 0.5)
+    {
+        return new SparseTopKTailBucketDistillationStrategy<T>(
+            topK: topK,
             temperature: temperature,
             alpha: alpha);
     }

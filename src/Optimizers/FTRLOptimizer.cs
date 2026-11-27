@@ -285,8 +285,20 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         bool useGpuOptimizer = typeof(T) == typeof(float)
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
+        // One whole-parameter-list GPU step for every eligible parameter; the loop below skips the ones it
+        // updated and runs every other parameter (and all of them, when the list step declines) as before.
+        var gpuListUpdated = useGpuOptimizer
+            ? GpuListOptimizerStep<T>.TryApply(context, Engine, "TryFtrlStepMultiTensor", 2,
+                p => new[]
+                {
+                    GpuListOptimizerStep<T>.GetOrAddState(_tapeZ, p, q => CreateOptimizerStateTensor(q._shape, useGpuOptimizer)),
+                    GpuListOptimizerStep<T>.GetOrAddState(_tapeN, p, q => CreateOptimizerStateTensor(q._shape, useGpuOptimizer))
+                },
+                (float)_options.Alpha, (float)_options.Lambda1, (float)_options.Lambda2, (float)_options.Beta)
+            : null;
         foreach (var param in context.Parameters)
         {
+            if (gpuListUpdated is not null && gpuListUpdated.Contains(param)) continue;
             // True sparse scatter FTRL: z, n accumulators + param at touched indices.
             // FTRL's sqrt(n) schedule is encoded via lr_power = -0.5; pass that
             // explicitly so callers can override if they want a different power.

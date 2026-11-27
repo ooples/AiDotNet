@@ -58,11 +58,25 @@ internal abstract class FullPrecisionStreamingOptimizer<T> : IStreamingOptimizer
         int count = parameters.Count;
         if (gradients.Count != count)
             throw new ArgumentException("Parameters and gradients must have identical counts.", nameof(gradients));
+        if (count == 0) return;
+
+        if (TryApplyBatchOnGpu(parameters, gradients))
+            return;
+
         for (int i = 0; i < count; i++)
         {
             Apply(parameters[i], gradients[i]);
         }
     }
+
+    /// <summary>
+    /// Base-class hook for batched GPU multi-tensor execution across a streaming segment's parameters.
+    /// Returns <c>true</c> when every parameter in the batch has been updated (including any per-parameter fallbacks),
+    /// or <c>false</c> to run the base per-parameter <see cref="Apply"/> loop.
+    /// </summary>
+    protected virtual bool TryApplyBatchOnGpu(
+        IReadOnlyList<Tensor<T>> parameters,
+        IReadOnlyList<Tensor<T>> gradients) => false;
 
     public virtual void Apply(Tensor<T> param, Tensor<T> grad)
     {

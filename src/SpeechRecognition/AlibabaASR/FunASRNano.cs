@@ -39,6 +39,7 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// </remarks>
 /// <example>
 /// <code>
+/// // Your recording: 16 kHz mono samples in [-1, 1], shaped [1, samples]. Noise stands in for it here.
 /// var waveform = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,

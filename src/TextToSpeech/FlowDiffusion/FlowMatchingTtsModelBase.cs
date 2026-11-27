@@ -49,15 +49,7 @@ public abstract class FlowMatchingTtsModelBase<T> : TtsModelBase<T>, ITrainingOb
     protected void SeedTraining(int seed) => _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
 
     private Tensor<T> Gaussian(int[] shape, Random random)
-    {
-        var t = new Tensor<T>(shape);
-        for (int i = 0; i < t.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            t[i] = NumOps.FromDouble(Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
-        }
-        return t;
-    }
+        => AiDotNet.Helpers.SeededNoiseTensors.StandardNormal<T>(shape, random);
 
     // ---------------------------------------------------------------- training
 

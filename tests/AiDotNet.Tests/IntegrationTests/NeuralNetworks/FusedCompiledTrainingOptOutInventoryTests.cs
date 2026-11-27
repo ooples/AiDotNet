@@ -87,10 +87,6 @@ public sealed class FusedCompiledTrainingOptOutInventoryTests
         // - point-cloud transformers whose space-filling-curve serialization and octree pooling indices are
         //   data-dependent per point cloud:
         "PointTransformerV3", "Sonata",
-
-        // - audio models with temporary (#2592) opt-outs for unrecorded log-mel / host-drawn feature-fusion crops
-        //   (CLAPModel) and host-side short-clip receptive-field padding (Wav2Vec2LanguageIdentifier):
-        "CLAPModel", "Wav2Vec2LanguageIdentifier",
     };
 
     [Fact]

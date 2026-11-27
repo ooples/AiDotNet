@@ -365,13 +365,15 @@ public partial class RAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             ? NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(rt))
             : CurrentLearningRate;
 
+        bool gpuState = typeof(T) == typeof(float)
+            && Engine is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
         foreach (var param in context.Parameters)
         {
             if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
-            if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param._shape); _tapeM[param] = m; }
-            if (!_tapeV.TryGetValue(param, out var v)) { v = new Tensor<T>(param._shape); _tapeV[param] = v; }
+            var m = GetOrCreateShapedOptimizerStateTensor(_tapeM, param, gpuState);
+            var v = GetOrCreateShapedOptimizerStateTensor(_tapeV, param, gpuState);
 
             // m = beta1 * m + (1 - beta1) * grad
             Engine.TensorCopy(

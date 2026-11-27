@@ -902,6 +902,12 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
             }
             // One step through the shared training step: the fused plan when it applies, otherwise the shared eager
             // tape step with the same objective. Both encoders and the temperature are trained.
+            // Everything the forward computes per step is in the recorded graph or redrawn with it: the log-mel
+            // front end (AiDotNet.Tensors 0.151.0 and later record the STFT in training traces), the random and
+            // feature-fusion crops, the fusion branch's random row, the SpecAugment stripes, the drop-path masks and
+            // the text dropout are all per-step draws (CompiledStepRandom), and the resampling filters are size-only
+            // constants. The plan therefore needs no graph break and no replay check; the latter would also keep
+            // every model with a stochastic forward on the eager tape.
             LastLoss = AiDotNet.Training.TapeTrainingStepper<T>.ForOwner(this).Step(new AiDotNet.Training.FusedTrainingStepRequest<T>
             {
                 Layers = trainableLayers,
@@ -912,8 +918,6 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
                 Optimizer = optimizer,
                 ExtraParameters = allParams,
                 OnGradients = gradients => PublishParameterGradients(gradients),
-                VerifyReplayAgreement = true,
-                GraphBreakReason = FusedTrainingBreakReason(),
             });
         }
         finally
@@ -923,44 +927,6 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
 
         return true;
     }
-
-    /// <summary>
-    /// Why the training forward cannot be compiled once and replayed. With the pinned AiDotNet.Tensors it never can.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// TEMPORARY OPT-OUT (#2592): remove the front-end clause once the pinned AiDotNet.Tensors contains
-    /// ooples/AiDotNet.Tensors#1750. In 0.150.0 the log-mel front end's STFT has no training-trace graph branch, and
-    /// host-scalar reductions read unrealized lazy buffers inside a training trace. A compiled plan therefore keeps the
-    /// traced step's spectra as constants, and every later step trains on them (a different value per instance, some
-    /// steps with all-zero gradients). The front end runs on every training forward, so this applies whatever the
-    /// options are. It must not be gated on the regularization settings.
-    /// </para>
-    /// <para>
-    /// The feature-fusion crop offsets are drawn on the host every step. That clause stays after #1750 until the crops
-    /// are drawn through <see cref="AiDotNet.Training.CompiledStepRandom{T}"/>. The Swin drop-path masks and the
-    /// SpecAugment stripes already are, so they need no break.
-    /// </para>
-    /// </remarks>
-    /// <seealso cref="SupportsFusedCompiledTraining"/>
-    internal string FusedTrainingBreakReason()
-        => _options.EnableFeatureFusion
-            ? "CLAP's log-mel front end is not recorded in training traces before AiDotNet.Tensors #1750 (#2592), and "
-              + "its feature-fusion crops are drawn on the host each step"
-            : "CLAP's log-mel front end is not recorded in training traces before AiDotNet.Tensors #1750 (#2592)";
-
-    /// <summary>
-    /// TEMPORARY OPT-OUT (#2592): the fused compiled training path is off for every entry point until the pinned
-    /// AiDotNet.Tensors contains ooples/AiDotNet.Tensors#1750 and the feature-fusion crops are drawn through
-    /// <see cref="AiDotNet.Training.CompiledStepRandom{T}"/>. Remove this override then.
-    /// </summary>
-    /// <remarks>
-    /// <see cref="FusedTrainingBreakReason"/> breaks only the contrastive step's own request. The base class's custom
-    /// and declared-objective steps (<c>TrainWithCustomLossFused</c>, <c>TrainObjectiveFused</c>) build their own
-    /// request around <see cref="ForwardForTraining"/>, which runs the same log-mel front end, and consult only this
-    /// flag. With it left on, those steps compiled a plan that kept the traced step's spectra.
-    /// </remarks>
-    protected override bool SupportsFusedCompiledTraining => false;
 
     /// <summary>
     /// The symmetric contrastive loss of paired, L2-normalised embeddings (Radford 2021 Eq. 1; Wu 2023 §3.2):

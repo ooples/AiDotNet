@@ -36,7 +36,7 @@ public sealed class DiTToCodecTrainingOptions
     public int SemanticKeyValueDim { get; set; } = 64;
     /// <summary>Attention heads of the ByT5-base decoder.</summary>
     public int SemanticHeads { get; set; } = 12;
-    /// <summary>Decoder layers of the ByT5-base decoder.</summary>
+    /// <summary>Decoder layers of the ByT5-base decoder (google/byt5-base: 18 encoder and 6 decoder layers).</summary>
     public int SemanticDecoderLayers { get; set; } = 6;
     /// <summary>Byte vocabulary size of the ByT5 decoder.</summary>
     public int SemanticVocabulary { get; set; } = 384;

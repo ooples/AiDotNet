@@ -37,11 +37,9 @@ namespace AiDotNet.VisionLanguage.Foundational;
 ///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new ViLT&lt;double&gt;(architecture, "vilt.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new ViLT&lt;double&gt;(architecture, new ViLTOptions());
+/// var model = new ViLT&lt;double&gt;(architecture, new ViLTOptions());
+/// var image = Tensor&lt;double&gt;.CreateRandom(3, 224, 224);   // [3, H, W] RGB, the architecture's input size
+/// double match = model.ComputeMatchingScore(image, "a photo of a dog");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
