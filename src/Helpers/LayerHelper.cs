@@ -9543,8 +9543,9 @@ public static partial class LayerHelper<T>
         // Global average pooling
         yield return new GlobalPoolingLayer<T>(PoolingType.Average);
 
-        // Classification head
-        yield return new DenseLayer<T>(numClasses, new SoftmaxActivation<T>() as IActivationFunction<T>);
+        // Classification head: logits. The softmax belongs to the loss in training (cross-entropy with logits) and to
+        // SlowFast.Classify at inference; a softmax here made the logits loss train on probabilities.
+        yield return new DenseLayer<T>(numClasses, new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>

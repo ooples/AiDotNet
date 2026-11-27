@@ -244,8 +244,21 @@ public partial class SlowFast<T> : NeuralNetworkBase<T>
         _customFastLayers = customFastLayers;
         _customFusionLayers = customFusionLayers;
 
+        // The head's output is logits: the loss (cross-entropy with logits by default) and Classify each apply the
+        // softmax once. A custom head that applies one itself would have the loss train on probabilities.
+        if (customFusionLayers is { Count: > 0 } && _lossFunction is CrossEntropyWithLogitsLoss<T>
+            && AppliesSoftmax(customFusionLayers[customFusionLayers.Count - 1]))
+            throw new ArgumentException(
+                "The last custom fusion layer applies a softmax, but the loss is CrossEntropyWithLogitsLoss, which applies "
+                + "its own. End the fusion layers with logits (an identity activation); Classify applies the probability "
+                + "activation.", nameof(customFusionLayers));
+
         InitializeLayers();
     }
+
+    private static bool AppliesSoftmax(ILayer<T> layer)
+        => layer is LayerBase<T> withActivation
+            && ((object?)withActivation.VectorActivation ?? withActivation.ScalarActivation) is SoftmaxActivation<T>;
 
     /// <summary>
     /// Creates a SlowFast model using a pretrained ONNX model for inference.
@@ -316,14 +329,20 @@ public partial class SlowFast<T> : NeuralNetworkBase<T>
     #region Public Methods
 
     /// <summary>
-    /// Classifies video frames into action categories.
+    /// Classifies video frames into action categories: the class probabilities, the probability activation (softmax by
+    /// default) of the classification head's logits.
     /// </summary>
+    /// <remarks>
+    /// The head emits logits, which training's loss consumes (cross-entropy with logits by default); the probability
+    /// activation is applied once, here, as in the reference implementation's inference.
+    /// </remarks>
     public Tensor<T> Classify(Tensor<T> videoFrames)
     {
         if (videoFrames is null)
             throw new ArgumentNullException(nameof(videoFrames));
 
-        return _useNativeMode ? Forward(videoFrames) : PredictOnnx(videoFrames);
+        var logits = _useNativeMode ? Forward(videoFrames) : PredictOnnx(videoFrames);
+        return _probabilityActivation.Activate(logits);
     }
 
     /// <summary>
@@ -332,10 +351,15 @@ public partial class SlowFast<T> : NeuralNetworkBase<T>
     /// <param name="videoFrames">Input video frames tensor.</param>
     /// <param name="topK">Number of top predictions to return (default: 5).</param>
     /// <returns>List of (ClassIndex, Probability) tuples sorted by probability descending.</returns>
+    /// <exception cref="ArgumentException">The frames are more than one clip.</exception>
     public List<(int ClassIndex, double Probability)> GetTopKPredictions(Tensor<T> videoFrames, int topK = 5)
     {
-        var logits = Classify(videoFrames);
-        var probabilities = _probabilityActivation.Activate(logits);
+        // Classify already returns probabilities; applying the activation again would flatten them toward uniform.
+        var probabilities = Classify(videoFrames);
+        if (probabilities.Length != _numClasses)
+            throw new ArgumentException(
+                $"GetTopKPredictions ranks the classes of one clip; the frames gave {probabilities.Length / Math.Max(1, _numClasses)} "
+                + "clips. Call Classify for a batch.", nameof(videoFrames));
 
         var results = new List<(int, double)>();
         for (int i = 0; i < probabilities.Length; i++)

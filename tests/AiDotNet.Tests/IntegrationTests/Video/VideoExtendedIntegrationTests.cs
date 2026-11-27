@@ -254,6 +254,37 @@ public class VideoExtendedIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task SlowFast_DefaultHead_EmitsLogitsForTheLogitsLoss()
+    {
+        await Task.Yield();
+        var model = new SlowFast<double>(CreateArch(), options: new SlowFastOptions { NumClasses = 5 });
+
+        // The default loss is cross-entropy with logits, which applies its own softmax: the head must emit logits, or
+        // the loss trains on probabilities (softmax applied twice) and the gradients vanish toward chance.
+        var head = Assert.IsAssignableFrom<LayerBase<double>>(model.Layers[^1]);
+        Assert.Null(head.VectorActivation);
+        Assert.IsType<AiDotNet.ActivationFunctions.IdentityActivation<double>>(head.ScalarActivation);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SlowFast_CustomSoftmaxHead_WithTheLogitsLoss_Throws()
+    {
+        await Task.Yield();
+        var arch = new NeuralNetworkArchitecture<double>(inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification, inputHeight: 32, inputWidth: 32, inputDepth: 3,
+            layers: new List<AiDotNet.Interfaces.ILayer<double>> { new GlobalPoolingLayer<double>(AiDotNet.Enums.PoolingType.Average) });
+        var fast = new List<AiDotNet.Interfaces.ILayer<double>> { new GlobalPoolingLayer<double>(AiDotNet.Enums.PoolingType.Average) };
+        var fusion = new List<AiDotNet.Interfaces.ILayer<double>>
+        {
+            new DenseLayer<double>(5, (AiDotNet.Interfaces.IVectorActivationFunction<double>)new AiDotNet.ActivationFunctions.SoftmaxActivation<double>()),
+        };
+
+        var error = Assert.Throws<ArgumentException>(() =>
+            new SlowFast<double>(arch, options: new SlowFastOptions { NumClasses = 5 }, customFastLayers: fast, customFusionLayers: fusion));
+        Assert.Equal("customFusionLayers", error.ParamName);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task SlowFast_InvalidNumClasses_Throws()
     {
         var arch = CreateArch();
