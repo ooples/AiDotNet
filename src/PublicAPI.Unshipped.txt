@@ -26678,3 +26678,20 @@ override AiDotNet.ActivationFunctions.SwishActivation<T>.Derivative(AiDotNet.Ten
 override AiDotNet.NeuralNetworks.Layers.SqueezeAndExcitationLayer<T>.OnRandomSeedAssigned() -> void
 override AiDotNet.NeuralNetworks.Layers.BasicBlock<T>.ReconcileShapeOnlyResolution(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> void
 override AiDotNet.NeuralNetworks.Layers.BasicBlock<T>.OutputShapeRelation.get -> AiDotNet.NeuralNetworks.Layers.ShapeRelationKind
+AiDotNet.AiModelBuilder<T, TInput, TOutput>.ConfigureGradientCheckpointing(AiDotNet.Models.Options.GradientCheckpointingOptions? options = null) -> AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>!
+AiDotNet.Configuration.YamlModelConfig.GradientCheckpointing.get -> AiDotNet.Models.Options.GradientCheckpointingOptions?
+AiDotNet.Configuration.YamlModelConfig.GradientCheckpointing.set -> void
+AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>.ConfigureGradientCheckpointing(AiDotNet.Models.Options.GradientCheckpointingOptions? options = null) -> AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>!
+AiDotNet.Models.Options.GradientCheckpointingOptions
+AiDotNet.Models.Options.GradientCheckpointingOptions.CheckpointEveryNLayers.get -> int
+AiDotNet.Models.Options.GradientCheckpointingOptions.CheckpointEveryNLayers.set -> void
+AiDotNet.Models.Options.GradientCheckpointingOptions.Enabled.get -> bool
+AiDotNet.Models.Options.GradientCheckpointingOptions.Enabled.set -> void
+AiDotNet.Models.Options.GradientCheckpointingOptions.GradientCheckpointingOptions() -> void
+AiDotNet.Models.Options.GradientCheckpointingOptions.GradientCheckpointingOptions(bool enabled, int checkpointEveryNLayers = 0) -> void
+AiDotNet.Models.Options.GradientCheckpointingOptions.GradientCheckpointingOptions(AiDotNet.Models.Options.GradientCheckpointingOptions! other) -> void
+AiDotNet.Models.Options.GradientCheckpointingOptions.Validate() -> void
+AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.CalculateBatchLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! predicted, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! teacherOutput) -> T
+AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.CurrentTrueLabelBatch.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.CurrentTrueLabelBatch.set -> void
+AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.Strategy.get -> AiDotNet.Interfaces.IDistillationStrategy<T>!

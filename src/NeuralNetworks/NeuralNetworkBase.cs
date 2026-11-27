@@ -16913,6 +16913,38 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
+    /// Executes one teacher-student distillation mini-batch step through the network's full training funnel
+    /// (reverse-mode tape, gradient checkpointing with segment streaming flush, or configured <see cref="ICreditRule{T}"/>)
+    /// while stepping the supplied <see cref="IGradientBasedOptimizer{T, TInput, TOutput}"/> directly on device.
+    /// </summary>
+    internal void TrainDistillationBatch(
+        Tensor<T> input,
+        Tensor<T> teacherOutput,
+        LossFunctions.LossFunctionBase<T> distillationLoss,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (teacherOutput is null) throw new ArgumentNullException(nameof(teacherOutput));
+        if (distillationLoss is null) throw new ArgumentNullException(nameof(distillationLoss));
+
+        var previousLoss = LossFunction;
+        bool previousFusedDisabled = IsFusedTrainingDisabled;
+        try
+        {
+            LossFunction = distillationLoss;
+            // DistillationLossAdapter evaluates teacher-conditioned surrogate cotangents dynamically per batch,
+            // so disable static fused-plan capture while keeping eager/checkpointed/credit-rule GPU execution active.
+            IsFusedTrainingDisabled = true;
+            TrainWithTape(input, teacherOutput, optimizer);
+        }
+        finally
+        {
+            LossFunction = previousLoss;
+            IsFusedTrainingDisabled = previousFusedDisabled;
+        }
+    }
+
+    /// <summary>
     /// Sticky disable for the fused training path on this model instance. Set
     /// when <see cref="TryTrainWithFusedOptimizer"/> falls back BEFORE the
     /// fused path has ever successfully run. Subsequent steps stay on the

@@ -350,19 +350,17 @@ public partial class RpropOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         T initialStep = NumOps.FromDouble(_options.InitialStepSize);
         T negativeOne = NumOps.FromDouble(-1.0);
 
+        bool gpuState = typeof(T) == typeof(float)
+            && Engine is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
         foreach (var param in context.Parameters)
         {
             if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
-            if (!_tapePrevGradient.TryGetValue(param, out var prevGrad))
-            {
-                prevGrad = new Tensor<T>(param._shape);
-                _tapePrevGradient[param] = prevGrad;
-            }
+            var prevGrad = GetOrCreateShapedOptimizerStateTensor(_tapePrevGradient, param, gpuState);
             if (!_tapeStepSize.TryGetValue(param, out var stepSize))
             {
-                stepSize = new Tensor<T>(param._shape);
+                stepSize = CreateOptimizerStateTensor(param._shape, gpuState);
                 stepSize.Fill(initialStep);
                 _tapeStepSize[param] = stepSize;
             }

@@ -76,20 +76,13 @@ internal sealed class FullPrecisionStreamingAdam<T> : FullPrecisionStreamingOpti
         base.Apply(param, grad);
     }
 
-    public override void ApplyBatch(IReadOnlyList<Tensor<T>> parameters, IReadOnlyList<Tensor<T>> gradients)
+    protected override bool TryApplyBatchOnGpu(IReadOnlyList<Tensor<T>> parameters, IReadOnlyList<Tensor<T>> gradients)
     {
-        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
-        if (gradients is null) throw new ArgumentNullException(nameof(gradients));
         int count = parameters.Count;
-        if (gradients.Count != count)
-            throw new ArgumentException("Parameters and gradients must have identical counts.", nameof(gradients));
-        if (count == 0) return;
-
         var multiFn = GpuMultiTensorAdamBridge.TryAdamWMultiTensor;
         if (typeof(T) != typeof(float) || multiFn is null || AiDotNetEngine.Current is not DirectGpuTensorEngine)
         {
-            base.ApplyBatch(parameters, gradients);
-            return;
+            return false;
         }
 
         var mtParams = new List<Tensor<float>>(count);
@@ -149,6 +142,8 @@ internal sealed class FullPrecisionStreamingAdam<T> : FullPrecisionStreamingOpti
                 Apply(parameters[idx], gradients[idx]);
             }
         }
+
+        return true;
     }
 
     private (Tensor<float> M, Tensor<float> V) GetOrCreateGpuMoments(Tensor<T> param, Tensor<float> pFloat, int len)

@@ -598,43 +598,110 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 $"targets); this build supplied {typeof(TInput).Name}/{typeof(TOutput).Name}.");
         }
 
-        var teacherForward = ResolveTeacherForward((kd ?? throw new InvalidOperationException("kd is null where it is required.")));
-        // The default strategy depends on the teacher's output width, known from its first output.
+        var validatedKd = kd ?? throw new InvalidOperationException("kd is null where it is required.");
+        var teacherForward = ResolveTeacherForward(validatedKd);
         KnowledgeDistillation.DistillationLossAdapter<T>? lossAdapterSlot = null;
         KnowledgeDistillation.DistillationLossAdapter<T> AdapterFor(Tensor<T> teacherOutput)
             => lossAdapterSlot ??= new KnowledgeDistillation.DistillationLossAdapter<T>(
                 KnowledgeDistillation.DistillationStrategyFactory<T>.ResolveStrategyForOutputWidth(
-                    kd.Strategy, kd.Temperature, kd.Alpha,
+                    validatedKd.Strategy, validatedKd.Temperature, validatedKd.Alpha,
                     outputClasses: teacherOutput.Shape.Length > 0
                         ? teacherOutput.Shape[teacherOutput.Shape.Length - 1]
                         : teacherOutput.Length,
-                    kd.SparseTopK, kd.SparseTopKMinimumClasses));
+                    validatedKd.SparseTopK, validatedKd.SparseTopKMinimumClasses));
 
         var numOps = MathHelper.GetNumericOperations<T>();
-        int rows = studentInputs.Shape[0];
-        int epochs = optimizer.GetOptions()?.MaxIterations ?? kd.Epochs;
-        var lr = numOps.FromDouble(optimizer.GetOptions()?.InitialLearningRate ?? 0.01);
+        var engine = AiDotNetEngine.Current;
+        int rows = studentInputs.Shape.Length > 0 ? studentInputs.Shape[0] : 0;
+        int targetRows = studentTargets.Shape.Length > 0 ? studentTargets.Shape[0] : 0;
+        int batchSize = Math.Max(1, validatedKd.BatchSize);
+        int epochs = optimizer.GetOptions()?.MaxIterations ?? validatedKd.Epochs;
+        double effectiveLr = optimizer.GetOptions()?.InitialLearningRate ?? validatedKd.LearningRate;
+        T lr = numOps.FromDouble(effectiveLr);
+
+        var nnStudent = student as NeuralNetworks.NeuralNetworkBase<T>;
+        var tensorGradOptimizer = (object?)optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>;
+        var typedGradOptimizer = optimizer as IGradientBasedOptimizer<T, TInput, TOutput>;
+        var fullStudent = student as IFullModel<T, TInput, TOutput>;
 
         for (int epoch = 0; epoch < epochs; epoch++)
         {
-            for (int row = 0; row < rows; row++)
+            T epochLossSum = numOps.Zero;
+            int batchCount = 0;
+
+            for (int start = 0; start < rows; start += batchSize)
             {
-                var inputRow = RowTensor(studentInputs, row);
-                var teacherOutput = teacherForward(inputRow);
+                int count = Math.Min(batchSize, rows - start);
+                Tensor<T> inputBatch = SliceLeadingBatch(engine, studentInputs, start, count);
+                Tensor<T> teacherOutput = teacherForward(inputBatch);
                 var lossAdapter = AdapterFor(teacherOutput);
 
-                // The hard-label term (when the strategy uses it) reads the true label for this row.
-                lossAdapter.CurrentTrueLabel = RowTensor(studentTargets, row).ToVector();
+                lossAdapter.CurrentTrueLabel = null;
+                lossAdapter.CurrentTrueLabelBatch = targetRows == rows
+                    ? SliceLeadingBatch(engine, studentTargets, start, count)
+                    : null;
 
-                // ComputeGradients routes an ILossFunction (not a LossFunctionBase) through its
-                // CalculateDerivative fallback, so the adapter's derivative — the distillation
-                // gradient — is what gets backpropagated. The teacher output is the target. The casts
-                // are safe: xTrain/yTrain were confirmed Tensor<T> above, so TInput/TOutput are too.
-                var gradients = student.ComputeGradients(
-                    (TInput)(object)inputRow, (TOutput)(object)teacherOutput, lossAdapter);
-                student.ApplyGradients(gradients, lr);
+                if (validatedKd.OnEpochComplete is not null && fullStudent is not null)
+                {
+                    if (fullStudent.Predict((TInput)(object)inputBatch) is Tensor<T> predTensor)
+                    {
+                        epochLossSum = AddLossScalars(
+                            epochLossSum,
+                            lossAdapter.CalculateBatchLoss(predTensor, teacherOutput));
+                        batchCount++;
+                    }
+                }
+
+                if (nnStudent is not null && tensorGradOptimizer is not null)
+                {
+                    nnStudent.TrainDistillationBatch(inputBatch, teacherOutput, lossAdapter, tensorGradOptimizer);
+                }
+                else
+                {
+                    var gradients = student.ComputeGradients(
+                        (TInput)(object)inputBatch, (TOutput)(object)teacherOutput, lossAdapter);
+                    if (typedGradOptimizer is not null && fullStudent is not null)
+                    {
+                        typedGradOptimizer.ApplyGradients(gradients, fullStudent);
+                    }
+                    else
+                    {
+                        student.ApplyGradients(gradients, lr);
+                    }
+                }
+            }
+
+            if (validatedKd.OnEpochComplete is not null)
+            {
+                validatedKd.OnEpochComplete(epoch, ResolveEpochDistillationLoss(numOps, epochLossSum, batchCount, nnStudent));
             }
         }
+    }
+
+    private static T ResolveEpochDistillationLoss(
+        INumericOperations<T> numOps,
+        T epochLossSum,
+        int batchCount,
+        NeuralNetworks.NeuralNetworkBase<T>? nnStudent)
+        => batchCount > 0
+            ? numOps.Divide(epochLossSum, numOps.FromDouble(batchCount))
+            : (nnStudent is not null ? nnStudent.GetLastLoss() : numOps.Zero);
+
+    internal static Tensor<T> SliceLeadingBatch(IEngine engine, Tensor<T> tensor, int start, int count)
+    {
+        if (tensor.Shape.Length == 1)
+        {
+            var sliced1D = engine.TensorNarrow(tensor, 0, start, count);
+            return engine.Reshape(sliced1D.IsContiguous ? sliced1D : sliced1D.Contiguous(), [count, 1]);
+        }
+
+        if (start == 0 && count == tensor.Shape[0])
+        {
+            return tensor;
+        }
+
+        var narrowed = engine.TensorNarrow(tensor, 0, start, count);
+        return narrowed.IsContiguous ? narrowed : narrowed.Contiguous();
     }
 
     /// <summary>
