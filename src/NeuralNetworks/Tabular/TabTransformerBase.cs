@@ -245,13 +245,7 @@ public abstract partial class TabTransformerBase<T> : IParameterSource<T>
     /// </summary>
     private void InitializeNormal(Tensor<T> tensor, double scale, Random random)
     {
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            tensor[i] = NumOps.FromDouble(normal * scale);
-        }
+        SeededNoiseTensors.FillStandardNormal(tensor, random, scale);
     }
 
     /// <summary>

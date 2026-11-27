@@ -220,9 +220,7 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingObje
 
     private T SampleStandardNormal(Random rand)
     {
-        double u1 = 1.0 - rand.NextDouble();
-        double u2 = 1.0 - rand.NextDouble();
-        return NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
+        return NumOps.FromDouble(SeededNoiseTensors.NextStandardNormal(rand));
     }
 
     #endregion

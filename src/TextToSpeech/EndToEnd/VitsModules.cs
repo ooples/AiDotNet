@@ -4,6 +4,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.Classic;
 
+using AiDotNet.Helpers;
+
 namespace AiDotNet.TextToSpeech.EndToEnd;
 
 /// <summary>A per-channel affine map <c>y = m + e^{logs} x</c> with m and logs starting at zero (VITS
@@ -241,12 +243,7 @@ internal sealed class VitsStochasticDurationPredictor<T>
         var postCondition = _engine.TensorAdd(x, hw);
 
         // Posterior q(u, ν | d, c): e_q ~ N(0, I) through the posterior flows.
-        var eq = new Tensor<T>(new[] { 1, 2, t });
-        for (int i = 0; i < eq.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            eq[i] = ops.FromDouble(Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
-        }
+        var eq = SeededNoiseTensors.StandardNormal<T>(new[] { 1, 2, t }, random);
         var (zq, logDetQ) = _postAffine.Transform(eq, false);
         foreach (var flow in _postFlows)
         {
@@ -293,12 +290,7 @@ internal sealed class VitsStochasticDurationPredictor<T>
         var ops = MathHelper.GetNumericOperations<T>();
         int t = text.Shape[2];
         var x = Condition(text, speaker, language);
-        var z = new Tensor<T>(new[] { 1, 2, t });
-        for (int i = 0; i < z.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            z[i] = ops.FromDouble(noiseScale * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
-        }
+        var z = SeededNoiseTensors.StandardNormal<T>(new[] { 1, 2, t }, random, noiseScale);
         // Reversed list: [flip, flow_n, ..., flip, flow_1, affine]; the reference removes the first flip/flow pair's
         // flow (flows[:-2] + [flows[-1]] on the reversed list drops the second-to-last module, the first ConvFlow).
         for (int i = _flows.Count - 1; i >= 1; i--)

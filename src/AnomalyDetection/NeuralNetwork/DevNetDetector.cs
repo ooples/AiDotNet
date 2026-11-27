@@ -191,16 +191,7 @@ public partial class DevNetDetector<T> : AnomalyDetectorBase<T>
     private Matrix<T> InitializeMatrix(int rows, int cols, double scale)
     {
         var matrix = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                double u1 = 1.0 - _random.NextDouble();
-                double u2 = 1.0 - _random.NextDouble();
-                double val = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * scale;
-                matrix[i, j] = NumOps.FromDouble(val);
-            }
-        }
+        SeededNoiseTensors.WriteStandardNormal(matrix.AsWritableSpan(), _random, scale);
         return matrix;
     }
 
@@ -233,13 +224,7 @@ public partial class DevNetDetector<T> : AnomalyDetectorBase<T>
 
                 // Reference scores refMean + refStd * z with z ~ N(0, 1) drawn by Box-Muller, one per sample
                 // in batch order (same random draws as the per-sample loop)
-                var gaussian = Tensor<T>.CreateZeros(new[] { actualBatchSize, 1 });
-                for (int b = 0; b < actualBatchSize; b++)
-                {
-                    double u1 = 1.0 - _random.NextDouble();
-                    double u2 = 1.0 - _random.NextDouble();
-                    gaussian[b, 0] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
-                }
+                var gaussian = SeededNoiseTensors.StandardNormal<T>(new[] { actualBatchSize, 1 }, _random);
 
                 var refScores = engine.TensorAddScalar(engine.TensorMultiplyScalar(gaussian, _refStd), _refMean);
 

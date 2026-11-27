@@ -164,9 +164,7 @@ internal sealed class CosyVoice3Flow<T>
         var speaker = ProjectSpeaker(xvector);
         int prompt = random.NextDouble() < 0.5 ? 0 : random.Next((int)(0.3 * frames) + 1);
         var condition = PromptCondition(target, prompt, frames);
-        var noise = new Tensor<T>(new[] { frames, Options.MelChannels });
-        for (int i = 0; i < noise.Length; i++)
-            noise.SetFlat(i, NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble())));
+        var noise = SeededNoiseTensors.StandardNormal<T>(new[] { frames, Options.MelChannels }, random);
         double time = random.NextDouble(), sigma = Options.DiTSigmaMin;
         var y = _engine.TensorAdd(_engine.TensorMultiplyScalar(noise, NumOps.FromDouble(1 - (1 - sigma) * time)),
             _engine.TensorMultiplyScalar(target, NumOps.FromDouble(time)));

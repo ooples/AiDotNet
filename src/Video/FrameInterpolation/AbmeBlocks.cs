@@ -106,11 +106,7 @@ internal static class AbmeOps
         return new LazyWeight<T>(shape, (tensor, random) =>
         {
             double std = Math.Sqrt(gainSquared / fanIn);
-            for (int i = 0; i < tensor.Length; i++)
-            {
-                double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-                tensor[i] = ops.FromDouble(std * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
-            }
+            SeededNoiseTensors.FillStandardNormal(tensor, random, std);
         });
     }
 

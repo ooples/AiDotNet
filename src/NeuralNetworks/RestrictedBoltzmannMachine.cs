@@ -425,21 +425,9 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
     {
         var rng = RandomHelper.CreateSeededRandom(1);
         var w = new Tensor<T>([hiddenSize, visibleSize]);
-        for (int i = 0; i < hiddenSize; i++)
-        {
-            for (int j = 0; j < visibleSize; j++)
-            {
-                // Box-Muller for N(0, 0.01). Two uniforms -> standard normal,
-                // then scale by stddev. Keeps RBM weights tiny so Σ w_ij v_j
-                // stays inside sigmoid's responsive band per Hinton 2010
-                // guide §8 ("start with small random weights, on the order of
-                // 0.01").
-                double u1 = 1.0 - rng.NextDouble();
-                double u2 = rng.NextDouble();
-                double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                w[i, j] = MathHelper.GetNumericOperations<T>().FromDouble(z * 0.01);
-            }
-        }
+        // N(0, 0.01): small random weights keep sum_j w_ij v_j inside the sigmoid's responsive band
+        // (Hinton 2010 guide, section 8).
+        SeededNoiseTensors.WriteStandardNormal(w.AsWritableSpan(), rng, 0.01);
         return w;
     }
 
@@ -467,50 +455,6 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
     {
         // RBM doesn't use layers in the same way as feedforward networks
         // Instead, we'll initialize the weights and biases directly
-    }
-
-    /// <summary>
-    /// Initializes the weights and biases of the RBM with appropriate starting values.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method initializes the RBM parameters with suitable values for training. Biases are set to zero,
-    /// and weights are initialized to small random values, which is a common practice for training RBMs.
-    /// Small initial weight values help prevent saturation of the activation functions and promote better learning.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method sets the starting values for the RBM's weights and biases.
-    /// 
-    /// When initializing parameters:
-    /// - Biases start at zero (neutral)
-    /// - _weights start with small random values (typically between -0.05 and 0.05)
-    /// 
-    /// These starting values are important because:
-    /// - Zero biases don't favor any particular activation state initially
-    /// - Small random weights break symmetry (if all weights were the same, all hidden units would learn the same thing)
-    /// - Small weights prevent the network from getting stuck at extreme activation values
-    /// 
-    /// This creates a good starting point from which the RBM can learn meaningful patterns during training.
-    /// </para>
-    /// </remarks>
-    private void InitializeParameters()
-    {
-        // Xavier initialization: N(0, sqrt(2 / (visibleSize + hiddenSize)))
-        // Standard U(-0.05, 0.05) is too narrow for 128+ units — sigmoid
-        // output becomes indistinguishable for different input magnitudes.
-        double scale = Math.Sqrt(2.0 / (VisibleSize + HiddenSize));
-        _visibleBiases.Fill(NumOps.Zero);
-        _hiddenBiases.Fill(NumOps.Zero);
-        for (int i = 0; i < VisibleSize; i++)
-        {
-            for (int j = 0; j < HiddenSize; j++)
-            {
-                // Box-Muller for Gaussian
-                double u1 = 1.0 - Random.NextDouble();
-                double u2 = Random.NextDouble();
-                double gaussian = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-                _weights[i, j] = NumOps.FromDouble(gaussian * scale);
-            }
-        }
     }
 
     /// <summary>

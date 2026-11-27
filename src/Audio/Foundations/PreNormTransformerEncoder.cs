@@ -69,12 +69,8 @@ internal sealed class PreNormTransformerEncoder<T>
         int channels = v.Shape[0], perGroup = v.Shape[1], kernel = v.Shape[2];
         double std = 2 * Math.Sqrt(1.0 / ((double)kernel * channels));
         var direction = new double[v.Length];
-        for (int i = 0; i < direction.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            direction[i] = std * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
-            v[i] = NumOps.FromDouble(direction[i]);
-        }
+        SeededNoiseTensors.WriteStandardNormal<double>(direction, random, std);
+        new Tensor<double>(direction, v.Shape.ToArray()).Cast<T>().Data.Span.CopyTo(v.AsWritableSpan());
         for (int t = 0; t < kernel; t++)
         {
             double sum = 0;

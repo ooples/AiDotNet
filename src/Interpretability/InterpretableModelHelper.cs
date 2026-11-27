@@ -1536,16 +1536,7 @@ public static class InterpretableModelHelper
 
         var data = new Matrix<T>(numSamples, numFeatures);
 
-        for (int i = 0; i < numSamples; i++)
-        {
-            for (int j = 0; j < numFeatures; j++)
-            {
-                double u1 = rand.NextDouble();
-                double u2 = rand.NextDouble();
-                double gaussian = Math.Sqrt(-2 * Math.Log(Math.Max(1e-10, u1))) * Math.Cos(2 * Math.PI * u2);
-                data[i, j] = numOps.FromDouble(gaussian);
-            }
-        }
+        SeededNoiseTensors.WriteStandardNormal(data.AsWritableSpan(), rand, guard: BoxMullerGuard.Floored);
 
         return data;
     }

@@ -116,4 +116,111 @@ public class SeededNoiseTensorsParityTests
         Assert.Equal(first.ToArray(), again.ToArray());
         Assert.NotEqual(first.ToArray(), other.ToArray());
     }
+
+    /// <summary>Returns a fixed script of uniforms, then repeats the last one.</summary>
+    private sealed class ScriptedRandom : Random
+    {
+        private readonly double[] _values;
+        private int _next;
+
+        public ScriptedRandom(params double[] values) => _values = values;
+
+        public override double NextDouble() => _values[Math.Min(_next++, _values.Length - 1)];
+    }
+
+    [Theory]
+    [InlineData((int)BoxMullerGuard.Complement, 0.25, 0.75)]
+    [InlineData((int)BoxMullerGuard.FlooredComplement, 0.25, 0.75)]
+    [InlineData((int)BoxMullerGuard.Floored, 0.25, 0.25)]
+    public void Guard_DerivesTheFirstUniformAsNamed(int guardValue, double first, double expectedU1)
+    {
+        var guard = (BoxMullerGuard)guardValue;
+        // u2 = 0 makes the cosine exactly 1, so the draw is sqrt(-2 ln u1).
+        double draw = SeededNoiseTensors.NextStandardNormal(new ScriptedRandom(first, 0.0), guard);
+
+        Assert.Equal(Math.Sqrt(-2.0 * Math.Log(expectedU1)), draw);
+    }
+
+    [Theory]
+    [InlineData((int)BoxMullerGuard.FlooredComplement, 1.0)]
+    [InlineData((int)BoxMullerGuard.Floored, 0.0)]
+    public void FlooredGuards_KeepAZeroUniformFinite(int guardValue, double first)
+    {
+        var guard = (BoxMullerGuard)guardValue;
+        double draw = SeededNoiseTensors.NextStandardNormal(new ScriptedRandom(first, 0.0), guard);
+
+        Assert.Equal(Math.Sqrt(-2.0 * Math.Log(1e-10)), draw);
+    }
+
+    [Fact]
+    public void Complement_AtUniformZero_IsZero()
+    {
+        // 1 - 0 = 1, and ln 1 = 0: the complement guard never takes the log of zero.
+        Assert.Equal(0.0, SeededNoiseTensors.NextStandardNormal(new ScriptedRandom(0.0, 0.3)));
+    }
+
+    [Theory]
+    [InlineData((int)BoxMullerGuard.Complement)]
+    [InlineData((int)BoxMullerGuard.FlooredComplement)]
+    [InlineData((int)BoxMullerGuard.Floored)]
+    public void Span_Vector_Tensor_And_Scalar_DrawTheSameSequence(int guardValue)
+    {
+        var guard = (BoxMullerGuard)guardValue;
+        const int n = 11;
+        const double scale = 1.0;
+        var scalarRandom = RandomHelper.CreateSeededRandom(Seed);
+        var expected = new double[n];
+        for (int i = 0; i < n; i++) expected[i] = SeededNoiseTensors.NextStandardNormal(scalarRandom, guard);
+
+        var span = new double[n];
+        SeededNoiseTensors.WriteStandardNormal<double>(span, RandomHelper.CreateSeededRandom(Seed), scale, guard);
+        var vector = SeededNoiseTensors.StandardNormalVector<double>(n, RandomHelper.CreateSeededRandom(Seed), scale, guard);
+        var tensor = SeededNoiseTensors.StandardNormal<double>(new[] { n }, RandomHelper.CreateSeededRandom(Seed), scale, guard);
+        var filled = new Tensor<double>(new[] { n });
+        SeededNoiseTensors.FillStandardNormal(filled, RandomHelper.CreateSeededRandom(Seed), scale, guard);
+
+        Assert.Equal(expected, span);
+        Assert.Equal(expected, vector.ToArray());
+        Assert.Equal(expected, tensor.ToArray());
+        Assert.Equal(expected, filled.ToArray());
+    }
+
+    [Fact]
+    public void Mean_ShiftsEveryDraw()
+    {
+        var unshifted = new Tensor<double>(new[] { 9 });
+        var shifted = new Tensor<double>(new[] { 9 });
+        SeededNoiseTensors.FillStandardNormal(unshifted, RandomHelper.CreateSeededRandom(Seed), 0.02);
+        SeededNoiseTensors.FillStandardNormal(shifted, RandomHelper.CreateSeededRandom(Seed), 0.02, mean: 1.0);
+
+        for (int i = 0; i < 9; i++) Assert.Equal(1.0 + unshifted[i], shifted[i]);
+    }
+
+    [Theory]
+    [InlineData(8, 1.0)]
+    [InlineData(7, 1.0)]
+    [InlineData(7, 0.02)]
+    public void Pairs_MatchTheCosineSineLoop(int count, double scale)
+    {
+        // The loop CompiledStepRandom and SoundStorm carried: one radius per pair, cosine then sine,
+        // and an odd count drops the last sine.
+        var reference = RandomHelper.CreateSeededRandom(Seed);
+        var expected = new double[count];
+        for (int i = 0; i < count; i += 2)
+        {
+            double radius = scale * Math.Sqrt(-2.0 * Math.Log(1.0 - reference.NextDouble()));
+            double angle = 2.0 * Math.PI * reference.NextDouble();
+            expected[i] = radius * Math.Cos(angle);
+            if (i + 1 < count) expected[i + 1] = radius * Math.Sin(angle);
+        }
+
+        var actualRandom = RandomHelper.CreateSeededRandom(Seed);
+        var actual = new double[count];
+        SeededNoiseTensors.WriteStandardNormalPairs<double>(actual, actualRandom, scale);
+
+        Assert.Equal(expected, actual);
+        Assert.Equal(reference.NextDouble(), actualRandom.NextDouble());
+        if (scale == 1.0)
+            Assert.Equal(expected, SeededNoiseTensors.StandardNormalPairs<double>(new[] { count }, RandomHelper.CreateSeededRandom(Seed)).ToArray());
+    }
 }

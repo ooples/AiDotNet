@@ -330,12 +330,11 @@ public partial class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
     public Tensor<T> SampleRandomSpeaker(Random random)
     {
         Guard.NotNull(random);
-        var speaker = new Tensor<T>(new[] { _options.HiddenDim });
-        for (int i = 0; i < speaker.Length; i++)
-        {
-            double z = Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble());
-            speaker[i] = NumOps.FromDouble(_speakerStd is null || _speakerMean is null ? z : z * _speakerStd[i] + _speakerMean[i]);
-        }
+        var draws = new double[_options.HiddenDim];
+        SeededNoiseTensors.WriteStandardNormal<double>(draws, random);
+        if (_speakerStd is not null && _speakerMean is not null)
+            for (int i = 0; i < draws.Length; i++) draws[i] = draws[i] * _speakerStd[i] + _speakerMean[i];
+        var speaker = new Tensor<double>(draws, new[] { _options.HiddenDim }).Cast<T>();
         return speaker;
     }
 
