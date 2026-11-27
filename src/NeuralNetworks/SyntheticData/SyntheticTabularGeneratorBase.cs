@@ -439,7 +439,7 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
     protected void FillStandardNormal(Vector<T> vector)
     {
         // Drawn in element order from the generator stream, then copied in one block.
-        SyntheticTensorOps<T>.StandardNormalVector(vector.Length, Random).CopyTo(vector.AsWritableSpan());
+        SeededNoiseTensors.StandardNormalVector<T>(vector.Length, Random).CopyTo(vector.AsWritableSpan());
     }
 
     /// <summary>

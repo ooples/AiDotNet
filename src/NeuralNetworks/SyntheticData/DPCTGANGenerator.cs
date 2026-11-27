@@ -751,7 +751,7 @@ public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         int embedDim = _options.EmbeddingDimension;
         // Box-Muller from the seeded _random, both outputs of each pair, so the options seed makes the
         // draw reproducible (an engine random fill would bypass _random).
-        return SyntheticTensorOps<T>.StandardNormalPairTensor([batchSize, embedDim], _random);
+        return SeededNoiseTensors.StandardNormalPairs<T>([batchSize, embedDim], _random);
     }
 
     private (Tensor<T> CondBatch, int[] RowIndices) SampleConditionalBatchWithRows(int batchSize)
@@ -967,14 +967,11 @@ public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
     private T SampleStandardNormal()
     {
-        double u1 = 1.0 - _random.NextDouble();
-        double u2 = _random.NextDouble();
-        double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-        return NumOps.FromDouble(z);
+        return NumOps.FromDouble(SeededNoiseTensors.NextStandardNormal(_random));
     }
 
     private Vector<T> CreateStandardNormalVector(int length)
-        => SyntheticTensorOps<T>.StandardNormalVector(length, _random);
+        => SeededNoiseTensors.StandardNormalVector<T>(length, _random);
 
     #endregion
 
