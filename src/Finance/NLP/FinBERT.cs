@@ -396,15 +396,17 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
     /// Tape-aware training forward. FinBERT is an NLP model, not a forecaster,
     /// so the base <see cref="FinancialModelBase{T}.ForwardForTraining"/> (which
     /// routes through <c>Forecast → ForecastNative</c>) throws "ForecastNative
-    /// is not implemented for this model". Route through <see cref="Predict"/>'s
-    /// native path directly instead — it hits the same Layers stack the smoke
-    /// test already validated under inference.
+    /// is not implemented for this model". Run the layer stack through
+    /// <see cref="Forward(Tensor{T})"/> instead, the stack <see cref="Predict"/> uses, but
+    /// without switching the layers to evaluation mode, so dropout stays on.
     /// </summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
-        return ForwardNative(input);
+        // Not ForwardNative: that is the inference path and switches every layer to evaluation mode, which turned
+        // dropout off for the whole of training.
+        return Forward(input);
     }
 
     // UpdateParameters was an empty override, silently dropping every restore. The base
