@@ -114,7 +114,7 @@ public static class LlamaModelBuilder<T>
             taskType: NeuralNetworkTaskType.TextGeneration,
             complexity: NetworkComplexity.Simple,
             inputSize: 1, outputSize: vocab, layers: layers);
-        var network = new NeuralNetwork<T>(architecture);
+        var network = LlamaModelBuilder<T>.CreateImportNetwork(architecture);
 
         // Materialize every lazily-shaped weight (GQA projections, FFN dense matrices, LM head) with a
         // single warmup forward, so the per-layer SetParameters/gamma writes below have real tensors to fill.
@@ -175,6 +175,20 @@ public static class LlamaModelBuilder<T>
         var oT = TransposeOutInToInOut(weights, layerPrefix + "self_attn.o_proj.weight", outDim: hidden, inDim: numHeads * headDim);
         var attnParams = Concat(qT, kT, vT, oT, new T[hidden]); // trailing zeros = output bias
         attn.SetParameters(new Vector<T>(attnParams));
+    }
+
+    /// <summary>
+    /// Creates the network a builder loads checkpoint weights into, with automatic weight streaming off. A builder runs a
+    /// warmup forward to materialize lazy weights and then writes the checkpoint into them; above the auto-streaming
+    /// threshold (500M parameters) that warmup, in inference mode, moved every weight into a read-only bf16 streaming
+    /// store, and the load's first SetParameters threw (a read-only streaming store cannot be written). Imported weights
+    /// stay resident at full precision; a caller that wants streaming configures it explicitly after the load.
+    /// </summary>
+    internal static NeuralNetwork<T> CreateImportNetwork(NeuralNetworkArchitecture<T> architecture)
+    {
+        var network = new NeuralNetwork<T>(architecture);
+        network.DisableAutoStreaming();
+        return network;
     }
 
     // Reads an HF [outDim, inDim] q/k projection, optionally reorders each head's headDim output rows from the
@@ -288,10 +302,20 @@ public static class LlamaModelBuilder<T>
         head.SetQuantizedTableQ8_0(qs, scales);
     }
     internal static void LoadDense(DenseLayer<T> dense, INamedTensorSource weights, string name, int outDim, int inDim)
+        => LoadDense(dense, weights, name, outDim, inDim, scratch: null);
+
+    // The weight, transposed to [in, out], followed by a zero bias. With a scratch buffer the values are decoded
+    // straight into it and copied into the layer, so a load of thousands of weights (an MoE's experts) allocates
+    // nothing per weight; without one, a single exact-size array.
+    internal static void LoadDense(DenseLayer<T> dense, INamedTensorSource weights, string name, int outDim, int inDim,
+        WeightLoadScratch<T>? scratch)
     {
-        var wInOut = TransposeOutInToInOut(weights, name, outDim, inDim);
-        var full = Concat(wInOut, new T[outDim]); // trailing zeros = bias
-        dense.SetParameters(new Vector<T>(full));
+        int weightCount = checked(outDim * inDim);
+        int total = checked(weightCount + outDim);
+        T[] buffer = scratch is null ? new T[total] : scratch.Rent(total);
+        DecodeTransposed(weights, name, outDim, inDim, buffer);
+        Array.Clear(buffer, weightCount, outDim); // bias
+        dense.SetParameters(scratch is null ? new Vector<T>(buffer) : Vector<T>.Wrap(buffer, 0, total));
         InstallQ8IfAvailable(dense, weights, name, outDim, inDim);
     }
 
@@ -375,28 +399,74 @@ public static class LlamaModelBuilder<T>
     }
 
     // Reads a named tensor's values (row-major) as T, verifying the element count.
+    [AiDotNet.Attributes.ScalarKernel("Converts decoded checkpoint values (double) to T once each at load; there is no bulk double-to-T conversion.")]
     internal static T[] ReadTensor(INamedTensorSource weights, string name, int expectedCount)
     {
         if (!HasTensor(weights, name))
             throw new InvalidDataException($"checkpoint is missing required tensor '{name}'.");
+        var result = new T[expectedCount];
+        if (TryDecode(weights, name, expectedCount, (offset, values) =>
+            {
+                for (int i = 0; i < values.Length; i++) result[offset + i] = NumOps.FromDouble(values[i]);
+            }))
+            return result;
         double[] raw = weights.ReadAsDouble(name);
         if (raw.Length != expectedCount)
             throw new InvalidDataException(
                 $"tensor '{name}' has {raw.Length} elements, expected {expectedCount}.");
-        var result = new T[raw.Length];
         for (int i = 0; i < raw.Length; i++)
             result[i] = NumOps.FromDouble(raw[i]);
         return result;
     }
 
+    // Streams a safetensors-backed tensor through the reader's small reused buffer instead of materializing it as a
+    // double[] (twice the fp32 size, and a large-object-heap allocation per tensor). False when the source cannot
+    // stream (GGUF, wrapped sources), in which case the caller reads the whole tensor.
+    private static bool TryDecode(INamedTensorSource weights, string name, int expectedCount, SafetensorsFile.DecodedChunk sink)
+    {
+        SafetensorsFile? file = weights switch
+        {
+            SafetensorsFile single => single,
+            ShardedSafetensorsSource sharded => sharded.FileOf(name),
+            _ => null,
+        };
+        var descriptor = file?.Get(name);
+        if (file is null || descriptor is null) return false;
+        if (descriptor.ElementCount != expectedCount)
+            throw new InvalidDataException(
+                $"tensor '{name}' has {descriptor.ElementCount} elements, expected {expectedCount}.");
+        file.Decode(name, sink);
+        return true;
+    }
+
+    // Reads an HF [outDim, inDim] row-major matrix into destination[0 .. outDim*inDim) as [inDim, outDim] row-major.
+    [AiDotNet.Attributes.ScalarKernel("Converts decoded checkpoint values (double) to T once each at load; there is no bulk double-to-T conversion.")]
+    private static void DecodeTransposed(INamedTensorSource weights, string name, int outDim, int inDim, T[] destination)
+    {
+        if (!HasTensor(weights, name))
+            throw new InvalidDataException($"checkpoint is missing required tensor '{name}'.");
+        int count = checked(outDim * inDim);
+        if (TryDecode(weights, name, count, (offset, values) =>
+            {
+                int o = offset / inDim, i = offset - o * inDim;
+                for (int k = 0; k < values.Length; k++)
+                {
+                    destination[i * outDim + o] = NumOps.FromDouble(values[k]);
+                    if (++i == inDim) { i = 0; o++; }
+                }
+            }))
+            return;
+        var src = ReadTensor(weights, name, count);
+        for (int o = 0; o < outDim; o++)
+            for (int i = 0; i < inDim; i++)
+                destination[i * outDim + o] = src[o * inDim + i];
+    }
+
     // Reads an HF [outDim, inDim] row-major matrix and returns it transposed to [inDim, outDim] row-major.
     internal static T[] TransposeOutInToInOut(INamedTensorSource weights, string name, int outDim, int inDim)
     {
-        var src = ReadTensor(weights, name, outDim * inDim);
-        var dst = new T[inDim * outDim];
-        for (int o = 0; o < outDim; o++)
-            for (int i = 0; i < inDim; i++)
-                dst[i * outDim + o] = src[o * inDim + i];
+        var dst = new T[checked(inDim * outDim)];
+        DecodeTransposed(weights, name, outDim, inDim, dst);
         return dst;
     }
 
@@ -422,3 +492,21 @@ public static class LlamaModelBuilder<T>
         return result;
     }
 }
+
+/// <summary>
+/// One reusable staging buffer for a model load: each weight is decoded into it and copied into its layer, so the
+/// load allocates a buffer the size of its largest weight once instead of several per weight. Scoped to one load and
+/// dropped with it (a pooled buffer would keep the largest weight's size alive for the life of the process).
+/// </summary>
+internal sealed class WeightLoadScratch<T>
+{
+    private T[] _buffer = Array.Empty<T>();
+
+    /// <summary>A buffer of at least <paramref name="length"/> elements; its contents are overwritten by the next call.</summary>
+    public T[] Rent(int length)
+    {
+        if (_buffer.Length < length) _buffer = new T[length];
+        return _buffer;
+    }
+}
+

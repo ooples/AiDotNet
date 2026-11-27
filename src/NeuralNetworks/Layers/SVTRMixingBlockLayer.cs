@@ -29,6 +29,13 @@ public partial class SVTRMixingBlockLayer<T> : LayerBase<T>
     private readonly bool _local;
     private readonly double _dropPathRate;
     private long _dropPathForwardCounter;
+
+    /// <inheritdoc />
+    internal override long? StochasticDrawCounter
+    {
+        get => System.Threading.Interlocked.Read(ref _dropPathForwardCounter);
+        set => System.Threading.Interlocked.Exchange(ref _dropPathForwardCounter, value ?? 0L);
+    }
     private readonly LayerNormalizationLayer<T> _norm1;
     private readonly DenseLayer<T> _query;
     private readonly DenseLayer<T> _key;
@@ -182,8 +189,8 @@ public partial class SVTRMixingBlockLayer<T> : LayerBase<T>
         var mask = AiDotNet.Training.CompiledStepRandom<T>.Draw(branch.Shape.ToArray(), m =>
         {
             long counter = System.Threading.Interlocked.Increment(ref _dropPathForwardCounter);
-            var random = RandomSeed.HasValue
-                ? RandomHelper.CreateSeededRandom(unchecked((int)((uint)RandomSeed.Value * 2654435761u ^ (uint)counter)))
+            var random = StochasticDrawSeed(unchecked((ulong)counter)) is int drawSeed
+                ? RandomHelper.CreateSeededRandom(drawSeed)
                 : RandomHelper.CreateSecureRandom();
             var span = m.AsWritableSpan();
             for (int b = 0; b < batch; b++)

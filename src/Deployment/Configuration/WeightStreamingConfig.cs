@@ -58,4 +58,15 @@ public class WeightStreamingConfig
     /// itself overridden by an explicit value here.</para>
     /// </remarks>
     public long? ThresholdParameters { get; set; }
+
+    /// <summary>
+    /// Gets or sets how the streaming store holds the weights when streaming is forced on
+    /// (<see cref="Enabled"/> = <c>true</c>). <c>null</c> keeps the store's default.
+    /// </summary>
+    /// <remarks>
+    /// <para><see cref="AiDotNet.Tensors.LinearAlgebra.StreamingStoreDtype.Bf16"/> serves a frozen model whose
+    /// checkpoint is bf16 at half its fp32 size with no loss (the fp32 weights are those bf16 values widened); the
+    /// store is read-only, so it is for inference only. A GPU engine keeps such weights bf16 on the device.</para>
+    /// </remarks>
+    public AiDotNet.Tensors.LinearAlgebra.StreamingStoreDtype? StoreDtype { get; set; }
 }

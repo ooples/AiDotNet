@@ -722,6 +722,47 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     private int? _randomSeed;
     private Random? _seededRandom;
 
+    /// <summary>
+    /// The random stream this layer's per-step draws (dropout and drop-path masks) come from: 0 in a single process and
+    /// on rank 0, the rank elsewhere, so each data-parallel rank draws its own masks, deterministically.
+    /// </summary>
+    internal int StochasticStream { get; set; }
+
+    /// <summary>
+    /// The seed per-step draws use when <see cref="RandomSeed"/> is unset: training draws one (rank 0, shared) and
+    /// checkpoints it, so a resumed run draws the masks the uninterrupted one would. Null leaves such draws unseeded.
+    /// </summary>
+    internal int? StochasticFallbackSeed { get; set; }
+
+    /// <summary>
+    /// The draw counter of a layer whose per-step masks are derived from a seed and a counter, or null for a layer that
+    /// draws none. Checkpointed with the training cursor so a resumed run continues the sequence of masks.
+    /// </summary>
+    internal virtual long? StochasticDrawCounter
+    {
+        get => null;
+        set { }
+    }
+
+    /// <summary>
+    /// The seed of per-step draw <paramref name="counter"/>: <see cref="RandomSeed"/> (else
+    /// <see cref="StochasticFallbackSeed"/>) mixed with the counter, then with <see cref="StochasticStream"/> when it is
+    /// not 0, so stream 0 draws exactly the masks a single process does. Null when neither seed is set.
+    /// </summary>
+    private protected int? StochasticDrawSeed(ulong counter)
+    {
+        if ((RandomSeed ?? StochasticFallbackSeed) is not int seed) return null;
+        uint mixed = unchecked(((uint)seed * 2654435761u) ^ (uint)counter);
+        if (StochasticStream != 0)
+        {
+            uint h = unchecked(mixed ^ ((uint)StochasticStream * 0x9E3779B9u));
+            h = unchecked((h ^ (h >> 16)) * 0x85EBCA6Bu);
+            h = unchecked((h ^ (h >> 13)) * 0xC2B2AE35u);
+            mixed = h ^ (h >> 16);
+        }
+        return unchecked((int)mixed);
+    }
+
     public int? RandomSeed
     {
         get => _randomSeed;
@@ -943,6 +984,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         clone._seededRandom = shareRandomState && _seededRandom is not null
             ? LayerCloning.CloneRandom(_seededRandom)
             : null;
+        // A shared-state clone draws the same per-step masks: same stream, same fallback seed. An independent clone
+        // starts on stream 0 with no fallback seed, like a freshly constructed layer.
+        clone.StochasticStream = shareRandomState ? StochasticStream : 0;
+        clone.StochasticFallbackSeed = shareRandomState ? StochasticFallbackSeed : null;
         clone.TakesSeedFromParentOnly = TakesSeedFromParentOnly;
         clone.SetTrainingMode(IsTrainingMode);
     }
@@ -2808,7 +2853,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             // ReserveBytes finds nothing to evict and the full (~25 GB for FLUX) weight set
             // accumulates on the GC heap → OOM. No-op when streaming is inactive
             // (UseStreamingAllocator false) or the weights aren't streaming-backed (idempotent).
-            RegisterStreamingWeightsWithPool();
+            RegisterStreamingWeightsWithPool(releasePoolEntryOnceMapped: true);
         }
     }
 
@@ -3600,6 +3645,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// directly so weight allocation always happens after shape resolution.
     /// </summary>
     /// <param name="input">The input tensor whose shape resolves the deferred dims.</param>
+    /// <summary>
+    /// Resolves and initializes this layer from <paramref name="input"/> as its first forward would, without running
+    /// the forward: for a caller that computes the layer's result another way (a fused readout loss) and needs its
+    /// weights to exist first.
+    /// </summary>
+    internal void InitializeFromInputWithoutForward(Tensor<T> input) => EnsureInitializedFromInput(input);
+
     protected void EnsureInitializedFromInput(Tensor<T> input)
     {
         lock (InitializationLock)
@@ -3711,7 +3763,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// idempotent via the already-registered handle gate.
     /// </para>
     /// </remarks>
-    private void RegisterStreamingWeightsWithPool()
+    private void RegisterStreamingWeightsWithPool(bool releasePoolEntryOnceMapped = false)
     {
         if (!UseStreamingAllocator) return;
         foreach (var tensor in GetTrainableParameters())
@@ -3720,6 +3772,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             // Only streaming-allocated tensors carry Lifetime.Streaming; skip
             // resident tensors that are not managed by the streaming pool.
             if (tensor.Lifetime != WeightLifetime.Streaming) continue;
+
+            // A weight whose storage is already a writable file mapping is resident by definition and
+            // its mapping is the only copy (see below). Registering it again would serialize it into the
+            // pool and drop the mapping, and the next Materialize would map a SECOND slice of the
+            // parameter file -- every parameter walk would then grow the file by the whole model.
+            if (tensor.IsWritableMmapAliased)
+            {
+                // Mapped earlier by a path that keeps the pool entry (a first forward); the parameter
+                // path still owes the release described below.
+                if (releasePoolEntryOnceMapped && tensor.StreamingPoolHandle >= 0)
+                    WeightRegistry.UnregisterWeight(tensor);
+                continue;
+            }
+
             if (tensor.StreamingPoolHandle < 0)
                 WeightRegistry.RegisterWeight(tensor);
 
@@ -3729,6 +3795,23 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             // correct residency boundary: make all of its managed weights resident immediately
             // before its computation, while the next layer remains free to evict them.
             WeightRegistry.Materialize(tensor);
+
+            // #2447: on the parameter path (GetParameterChunks / SetParameterChunks / GetParameters /
+            // Clone) Materialize maps the weight writably into the registry's parameter file, so the
+            // mapping is the weight's canonical storage and writes land in place. The pool entry it was
+            // copied from is then a stale duplicate -- and the pool's backing file is append-only: a
+            // dirty entry is appended on every eviction and its old slice is never reused. Kept, that
+            // entry put a second copy of the model on disk (and, through the owner write-back that
+            // preceded the mapping, one more per parameter walk): a FLUX round-trip wrote ~5.9x its
+            // 48 GB weight set and filled the CI runner's 76 GB /tmp. Releasing it here leaves exactly one
+            // on-disk copy of a weight that parameter IO is the first to touch: it is mapped while still
+            // resident and its pool entry was never written. A weight that a FORWARD registered and the
+            // pool has already paged out is different: its slice of the append-only pool file is not
+            // reclaimed by unregistering, so forward-then-parameter-IO can hold that weight on disk twice
+            // (once in the pool file, once in the parameter file) until the pool is reset. It no longer
+            // grows with every walk, which was the defect.
+            if (releasePoolEntryOnceMapped && tensor.IsWritableMmapAliased && tensor.StreamingPoolHandle >= 0)
+                WeightRegistry.UnregisterWeight(tensor);
         }
     }
 
@@ -6583,6 +6666,39 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     }
 
     /// <summary>
+    /// Gets the number of values the optimizer trains in this layer and its sub-layers: the summed
+    /// <c>Length</c> of the distinct (by reference) tensors reachable through
+    /// <see cref="GetTrainableParameters"/> and, recursively, <see cref="GetSubLayers"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This differs from <see cref="ParameterCount"/> in two ways. <see cref="ParameterCount"/> is the length of the
+    /// <see cref="GetParameters"/> / <see cref="SetParameters"/> state vector, so it also counts buffers registered with
+    /// <see cref="RegisterBuffer"/> (state that is saved and restored but never learned), and it sums each layer's
+    /// listed tensors plus its sub-layers' tensors, so a tensor listed both by a layer and by one of its sub-layers is
+    /// counted twice. This count excludes buffers and counts each tensor once.
+    /// </para>
+    /// <para>
+    /// It runs the same walk the tape training step uses to collect the tensors it updates, so it equals what
+    /// PyTorch reports as <c>sum(p.numel() for p in module.parameters() if p.requires_grad)</c>. Tensors that are not
+    /// materialized yet (lazy layers before their first forward) have length zero and contribute nothing.
+    /// </para>
+    /// <para><b>For Beginners:</b> the number of weights training actually adjusts in this layer.</para>
+    /// </remarks>
+    public long TrainableParameterCount
+    {
+        get
+        {
+            var tensors = new List<Tensor<T>>();
+            var seen = new HashSet<Tensor<T>>(global::AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            global::AiDotNet.Training.TapeTrainingStep<T>.CollectLayerParameters(this, tensors, seen, materializedOnly: true);
+            long total = 0;
+            foreach (var tensor in tensors) total += tensor.Length;
+            return total;
+        }
+    }
+
+    /// <summary>
     /// True iff every registered sub-layer has finished its lazy-shape
     /// resolution (and thus has a stable trainable-parameter set). Used by
     /// <see cref="ParameterCount"/> to gate cache reuse: a sub-layer's
@@ -7199,7 +7315,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 sparse.IncrementVersion();
                 return;
             }
-            AiDotNet.Training.TensorCheckpoint<T>.CopyValues(source, _tensor);
+            // A chunk stream fed back into the model it came from hands each slot its own tensor. The values
+            // are already in place, so copying would only page the weight in and dirty it -- for a streamed
+            // foundation model that is a full read + write of every weight on disk for no change.
+            if (!ReferenceEquals(source, _tensor))
+                AiDotNet.Training.TensorCheckpoint<T>.CopyValues(source, _tensor);
             // Writes through the slot must invalidate version-keyed caches, as the sparse and half paths above do.
             _tensor.IncrementVersion();
         }
@@ -8507,9 +8627,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// recurrent state, a buffer reused across calls. A <see cref="AiDotNet.Tensors.Engines.TensorScope"/> around a
     /// model's Predict frees every GPU result the call creates, so a model scopes its calls only when no layer keeps one.
     /// True unless the layer has been checked; a layer that caches its last forward only for backward rewrites that cache
-    /// on its next forward, so it keeps nothing between calls.
+    /// on its next forward, so it keeps nothing between calls. A layer that returns false also lets an inference call free
+    /// its intermediates as soon as its forward returns. A layer defined outside this library may override it once its
+    /// forward has been checked; a lazily built device tensor it keeps can be detached with
+    /// <see cref="AiDotNet.Tensors.Engines.TensorScope.Detach{T}"/>.
     /// </summary>
-    internal virtual bool KeepsResultsBetweenCalls => true;
+    protected internal virtual bool KeepsResultsBetweenCalls => true;
 
     /// <summary>
     /// Gets diagnostic information about this layer's state and behavior.
@@ -9061,6 +9184,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 return true;
         return false;
     }
+
+    /// <summary>
+    /// True when <paramref name="child"/> is a sub-layer of <paramref name="parent"/> frozen with
+    /// <see cref="FreezeSubLayerParameters"/>: the walks that collect what an optimizer updates skip it, as they skip
+    /// it in <see cref="ParameterCount"/>.
+    /// </summary>
+    internal static bool IsFrozenChildOf(ILayer<T> parent, ILayer<T>? child)
+        => parent is LayerBase<T> owner && owner.IsSubLayerParameterFrozen(child);
 
     /// <summary>
     /// Children whose parameters are excluded from this layer's surface. Null until something is

@@ -178,6 +178,38 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
     /// </summary>
     public bool UsesProjectionBias => _useProjectionBias;
 
+    // OLMoE's RMSNorm over the whole query and key projections (q_norm, k_norm), before the heads split and the
+    // rotary embedding. Frozen pretrained constants: not trainable parameters, so they are absent from the
+    // parameter vector; a layer carrying them is not rebuilt by the KV-cache or tensor-parallel rewrites.
+    private Tensor<T>? _queryProjectionNorm;
+    private Tensor<T>? _keyProjectionNorm;
+    private double _projectionNormEpsilon;
+
+    /// <summary>
+    /// Gets whether the query and key projections pass through an RMSNorm over their full width before the heads
+    /// split (OLMoE's <c>q_norm</c> and <c>k_norm</c>).
+    /// </summary>
+    public bool UsesProjectionNorm => _queryProjectionNorm is not null;
+
+    /// <summary>
+    /// Normalizes the query projection [N, heads * headDim] and the key projection [N, kvHeads * headDim] with an
+    /// RMSNorm over the whole projection, scaled by the given weights, before the heads split and the rotary
+    /// embedding (OLMoE: <c>q_norm(q_proj(x))</c>, <c>k_norm(k_proj(x))</c>). The weights are frozen.
+    /// </summary>
+    public void ConfigureProjectionNorm(Tensor<T> queryNormWeight, Tensor<T> keyNormWeight, double epsilon)
+    {
+        Guard.NotNull(queryNormWeight);
+        Guard.NotNull(keyNormWeight);
+        if (queryNormWeight.Length != _numHeads * _headDimension)
+            throw new ArgumentException($"Query norm weight has {queryNormWeight.Length} values; expected {_numHeads * _headDimension}.", nameof(queryNormWeight));
+        if (keyNormWeight.Length != _numKVHeads * _headDimension)
+            throw new ArgumentException($"Key norm weight has {keyNormWeight.Length} values; expected {_numKVHeads * _headDimension}.", nameof(keyNormWeight));
+        if (!(epsilon > 0)) throw new ArgumentOutOfRangeException(nameof(epsilon));
+        _queryProjectionNorm = Engine.Reshape(queryNormWeight, new[] { _numHeads * _headDimension });
+        _keyProjectionNorm = Engine.Reshape(keyNormWeight, new[] { _numKVHeads * _headDimension });
+        _projectionNormEpsilon = epsilon;
+    }
+
     /// <summary>
     /// Gets the dimension of each attention head.
     /// </summary>
@@ -486,6 +518,12 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
             Q_flat = Engine.TensorAdd(Q_flat, Engine.Reshape(_queryBias, new[] { 1, _numHeads * _headDimension }));
             K_flat = Engine.TensorAdd(K_flat, Engine.Reshape(_keyBias, new[] { 1, _numKVHeads * _headDimension }));
             V_flat = Engine.TensorAdd(V_flat, Engine.Reshape(_valueBias, new[] { 1, _numKVHeads * _headDimension }));
+        }
+
+        if (_queryProjectionNorm is not null && _keyProjectionNorm is not null)
+        {
+            Q_flat = Engine.RMSNorm(Q_flat, _queryProjectionNorm, _projectionNormEpsilon, out _);
+            K_flat = Engine.RMSNorm(K_flat, _keyProjectionNorm, _projectionNormEpsilon, out _);
         }
 
         // Reshape Q: [batch, seq, numHeads, headDim] -> [batch, numHeads, seq, headDim]

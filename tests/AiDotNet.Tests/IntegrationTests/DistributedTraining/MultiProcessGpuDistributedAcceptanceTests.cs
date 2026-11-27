@@ -184,6 +184,12 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
         public int TimedSteps { get; set; } = 30;
         public int[] BenchmarkSeeds { get; set; } = new[] { 101, 202, 303 };
         public bool DisableFusedSession { get; set; } = false;
+        // A CUDA_VISIBLE_DEVICES value (a GPU UUID) for the worker in place of PhysicalGpuIndex.
+        public string? CudaVisibleDevicesOverride { get; set; }
+        // Runs the DDP optimizer update inside the compiled plan (DataParallelUpdateInCompiledPlan in the worker).
+        public bool CompiledUpdate { get; set; }
+        // Mixed precision (the library default: FP16 matmuls, dynamic loss scaling).
+        public bool MixedPrecision { get; set; }
         public string ResultPath { get; set; } = string.Empty;
     }
 
@@ -219,6 +225,13 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
         public string? ExceptionChainTypes { get; set; }
         public string? ExceptionMessage { get; set; }
         public List<BenchmarkSeedRecord> BenchmarkRecords { get; set; } = new();
+        public long CompiledUpdateSteps { get; set; }
+        public string? FusedMissReason { get; set; }
+        public float LossScale { get; set; }
+        public long OverflowSteps { get; set; }
+        public long GradientExchanges { get; set; }
+        public long UpdateGraphLaunches { get; set; }
+        public bool SplitStepGraph { get; set; }
     }
 
     #endregion
@@ -333,9 +346,7 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
 
         if (spec.BackendKind == "GlooTcp")
         {
-            Environment.SetEnvironmentVariable("AIDOTNET_MASTER_ADDR", "127.0.0.1");
-            Environment.SetEnvironmentVariable("AIDOTNET_MASTER_PORT", spec.MasterPort.ToString(CultureInfo.InvariantCulture));
-            return new GlooCommunicationBackend<float>(spec.Rank, spec.WorldSize);
+            return new GlooCommunicationBackend<float>(spec.Rank, spec.WorldSize) { MasterAddress = "127.0.0.1", MasterPort = spec.MasterPort };
         }
 
         return new SharedMemoryCommunicationBackend<float>(
@@ -458,7 +469,10 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
                     Seed = spec.DataSeed,
                     MaxSteps = spec.MaxSteps,
                     ResumeFromLatestCheckpoint = spec.ResumeFromCheckpoint,
+                    DataParallelUpdateInCompiledPlan = spec.CompiledUpdate,
                 });
+
+            if (spec.MixedPrecision) builder.ConfigureMixedPrecision();
 
             if (!string.IsNullOrWhiteSpace(spec.CheckpointDir))
             {
@@ -488,6 +502,18 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
             result.FinalWeights = model.GetParameters().ToArray();
             result.FinalMse = EvaluateDatasetMse(model, inputs, targets);
             result.FinalLearningRate = optimizer.GetCurrentLearningRate();
+            var (updateSteps, exchanges, updateLaunches, split) = AiDotNet.Training.CompiledTapeTrainingStep<float>.DistributedCompiledUpdateDiagnostics;
+            result.CompiledUpdateSteps = updateSteps;
+            if (AiDotNet.Training.CompiledTapeTrainingStep<float>.ConfiguredPlanIdentity is AiDotNet.Tensors.Engines.Compilation.ICompiledTrainingPlanLossScaling scaledPlan
+                && scaledPlan.ReadLossScaleState() is { } scaleState)
+            {
+                result.LossScale = scaleState.Scale;
+                result.OverflowSteps = scaleState.OverflowSteps;
+            }
+            result.FusedMissReason = "route: " + model.LastTrainingRoute + " | gate: " + model.LastFusedGateMissReason + " | session: " + model.FusedSession.LastMissReason;
+            result.GradientExchanges = exchanges;
+            result.UpdateGraphLaunches = updateLaunches;
+            result.SplitStepGraph = split;
         }
         finally
         {
@@ -1011,7 +1037,8 @@ public static class Program
         psi.Environment["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID";
         if (spec.UseGpu)
         {
-            psi.Environment["CUDA_VISIBLE_DEVICES"] = spec.PhysicalGpuIndex.ToString(CultureInfo.InvariantCulture);
+            psi.Environment["CUDA_VISIBLE_DEVICES"] = spec.CudaVisibleDevicesOverride
+                ?? spec.PhysicalGpuIndex.ToString(CultureInfo.InvariantCulture);
             psi.Environment.Remove("AIDOTNET_DISABLE_GPU");
         }
         else
@@ -1271,8 +1298,36 @@ public static class Program
         var singleGpuMses = new List<double>();
         var twoGpuMses = new List<double>();
 
+        // Acceptance across the two card models (measured 2026-11-25, deterministic mode): the same run is bit-identical
+        // on the same card, but the RTX 3080 and RTX 3090 differ. A per-op probe with identical inputs on each card
+        // (raw float32 outputs, two reruns per card) found every elementwise, softmax, layer-norm and most GEMM
+        // outputs bit-identical across the cards, and one GEMM shape (512x128x384) different in 171,719 of 196,608
+        // elements (max 2.15e-6): the GEMM algorithm is chosen per device (the cards differ in SM count), so the summation order
+        // differs. Bit-identity across card models is therefore not the contract. The 2-GPU run must instead stay
+        // within the cross-device spread this test measures: the same 1-process run on each card.
         foreach (int seed in seeds)
         {
+            WorkerResult otherCardRes;
+            using (var otherCard = StartWorkerProcess(new WorkerSpec
+            {
+                Mode = "StreamingTrain",
+                BackendKind = "SingleProcess",
+                Rank = 0,
+                WorldSize = 1,
+                UseGpu = true,
+                PhysicalGpuIndex = 1,
+                SampleCount = 32,
+                LocalBatchSize = 16,
+                MaxSteps = 8,
+                DataSeed = seed,
+                InitWeightSeed = seed + 50,
+            }))
+            {
+                otherCardRes = RequireSucceededResult(
+                    await WaitForWorkerAsync(otherCard, TimeSpan.FromSeconds(90)),
+                    $"1-process GPU 1 seed {seed}");
+            }
+
             WorkerResult singleGpuRes;
             using (var singleGpu = StartWorkerProcess(new WorkerSpec
             {
@@ -1339,9 +1394,16 @@ public static class Program
             Assert.True(MaxAbsDiff(res0.FinalWeights, res1.FinalWeights) < 1e-6,
                 $"Rank 0 and Rank 1 GPU weights diverged on seed {seed}: {MaxAbsDiff(res0.FinalWeights, res1.FinalWeights)}.");
             double diffVsSingle = MaxAbsDiff(singleGpuRes.FinalWeights, res0.FinalWeights);
-            _output.WriteLine($"Seed {seed}: 1-GPU FinalMSE={singleGpuRes.FinalMse:F6}, 2-GPU FinalMSE={res0.FinalMse:F6}, MaxWeightDiff={diffVsSingle:E3}");
-            Assert.True(diffVsSingle < 1e-3,
-                $"2-GPU (RTX 3080 + RTX 3090) diverged from 1-GPU on seed {seed} by {diffVsSingle}.");
+            double crossDevice = MaxAbsDiff(singleGpuRes.FinalWeights, otherCardRes.FinalWeights);
+            _output.WriteLine($"Seed {seed}: 1-GPU FinalMSE={singleGpuRes.FinalMse:F6}, 2-GPU FinalMSE={res0.FinalMse:F6}, "
+                + $"MaxWeightDiff 2-GPU vs GPU 0 = {diffVsSingle:E3}, GPU 0 vs GPU 1 (same run) = {crossDevice:E3}");
+            // The 2-GPU step also runs its GEMMs at the half batch (8, not 16), a second summation-order change of the
+            // same kind, hence twice the measured cross-device spread (and an FP32 floor when the cards happen to
+            // agree on this seed).
+            double bound = Math.Max(2.0 * crossDevice, 1e-6);
+            Assert.True(diffVsSingle <= bound,
+                $"2-GPU (RTX 3080 + RTX 3090) diverged from 1-GPU on seed {seed} by {diffVsSingle}, beyond twice the "
+                + $"cross-device spread {crossDevice}.");
 
             singleGpuMses.Add(singleGpuRes.FinalMse);
             twoGpuMses.Add(res0.FinalMse);
@@ -1351,6 +1413,182 @@ public static class Program
         double meanMseDiff = Math.Abs(singleGpuMses.Average() - twoGpuMses.Average());
         Assert.True(meanMseDiff <= Math.Max(1e-5, seedSpread),
             $"Mean MSE diff ({meanMseDiff:E3}) exceeded 3-seed spread ({seedSpread:E3}).");
+    }
+
+    #endregion
+
+    #region Compiled DDP update (fused optimizer in the plan) vs the eager DDP reference and one process
+
+    /// <summary>
+    /// Two processes on one GPU (named by <c>AIDOTNET_TEST_DDP_GPU</c>, a CUDA_VISIBLE_DEVICES value) train the same
+    /// streaming run three ways: one process on the full batch, DDP with the reference update (the optimizer instance
+    /// steps on the reduced gradients), and DDP with the update in the compiled plan (gradient all-reduce between the
+    /// backward graph and the fused-optimizer graph). All three must end at the same weights within fp32 tolerance, and
+    /// the compiled run must actually have run its update in the plan as a graph.
+    /// </summary>
+    [SkippableFact(Timeout = 400000)]
+    public async Task TwoProcessDdp_CompiledUpdate_MatchesEagerDdpAndOneProcess()
+    {
+        string? device = Environment.GetEnvironmentVariable("AIDOTNET_TEST_DDP_GPU");
+        Skip.If(string.IsNullOrWhiteSpace(device), "AIDOTNET_TEST_DDP_GPU (a CUDA_VISIBLE_DEVICES value) is not set.");
+        const int samples = 32, steps = 12, initSeed = 151, dataSeed = 2027;
+        WorkerSpec Spec(string backend, int rank, int world, int batch, string session, bool compiled) => new()
+        {
+            Mode = "StreamingTrain", BackendKind = backend, Rank = rank, WorldSize = world, SessionName = session,
+            UseGpu = true, CudaVisibleDevicesOverride = device, SampleCount = samples, LocalBatchSize = batch,
+            MaxSteps = steps, DataSeed = dataSeed, InitWeightSeed = initSeed, CompiledUpdate = compiled,
+        };
+
+        WorkerResult single;
+        using (var w = StartWorkerProcess(Spec("SingleProcess", 0, 1, 16, "unused", compiled: false)))
+        {
+            var outcome = await WaitForWorkerAsync(w, TimeSpan.FromSeconds(120));
+            foreach (var line in (outcome.Stderr ?? string.Empty).Split('\n'))
+                if (line.Contains("[FUSED-STEP]")) _output.WriteLine("1 process " + line.TrimEnd());
+            single = RequireSucceededResult(outcome, "1 process, batch 16");
+        }
+
+        async Task<(WorkerResult R0, WorkerResult R1)> Ddp(bool compiled)
+        {
+            string session = "mp_cu_" + Guid.NewGuid().ToString("N");
+            using var r0 = StartWorkerProcess(Spec("SharedMemory", 0, 2, 8, session, compiled));
+            using var r1 = StartWorkerProcess(Spec("SharedMemory", 1, 2, 8, session, compiled));
+            var (o0, o1) = await WaitForWorkerPairAsync(r0, r1, TimeSpan.FromSeconds(150));
+            foreach (var line in (o0.Stderr ?? string.Empty).Split('\n'))
+                if (line.Contains("[FUSED-")) _output.WriteLine($"rank 0 (compiled={compiled}) " + line.TrimEnd());
+            if (compiled && o0.Result is { CompiledUpdateSteps: 0 })
+                _output.WriteLine("rank 0 (compiled update never ran): fused miss = " + o0.Result.FusedMissReason
+                    + Environment.NewLine + o0.Stdout + Environment.NewLine + o0.Stderr);
+            return (RequireSucceededResult(o0, $"DDP rank 0 (compiled={compiled})"),
+                RequireSucceededResult(o1, $"DDP rank 1 (compiled={compiled})"));
+        }
+
+        var eager = await Ddp(compiled: false);
+        var fused = await Ddp(compiled: true);
+
+        double ranksEager = MaxAbsDiff(eager.R0.FinalWeights, eager.R1.FinalWeights);
+        double ranksFused = MaxAbsDiff(fused.R0.FinalWeights, fused.R1.FinalWeights);
+        double fusedVsEager = MaxAbsDiff(eager.R0.FinalWeights, fused.R0.FinalWeights);
+        double fusedVsSingle = MaxAbsDiff(single.FinalWeights, fused.R0.FinalWeights);
+        double eagerVsSingle = MaxAbsDiff(single.FinalWeights, eager.R0.FinalWeights);
+        double moved = MaxAbsDiff(single.FinalWeights, InitialWorkerWeights(single.FinalWeights.Length, initSeed));
+        _output.WriteLine($"device={device} params={single.FinalWeights.Length} steps={steps}");
+        _output.WriteLine($"compiled DDP: updateSteps r0={fused.R0.CompiledUpdateSteps} r1={fused.R1.CompiledUpdateSteps} "
+            + $"exchanges={fused.R0.GradientExchanges} updateGraphLaunches={fused.R0.UpdateGraphLaunches} split={fused.R0.SplitStepGraph}");
+        _output.WriteLine($"eager DDP: updateSteps r0={eager.R0.CompiledUpdateSteps}");
+        _output.WriteLine($"max|w| diffs: rank0-rank1 eager={ranksEager:E3} compiled={ranksFused:E3}; compiled-eager={fusedVsEager:E3}; "
+            + $"compiled-1proc={fusedVsSingle:E3}; eager-1proc={eagerVsSingle:E3}; training moved the weights by {moved:E3}");
+        _output.WriteLine($"MSE: 1proc {single.InitialMse:F6}->{single.FinalMse:F6}, eager DDP ->{eager.R0.FinalMse:F6}, compiled DDP ->{fused.R0.FinalMse:F6}");
+
+        Assert.Equal(0, eager.R0.CompiledUpdateSteps);
+        Assert.True(fused.R0.CompiledUpdateSteps > 0 && fused.R0.CompiledUpdateSteps == fused.R1.CompiledUpdateSteps,
+            $"the compiled update ran {fused.R0.CompiledUpdateSteps} / {fused.R1.CompiledUpdateSteps} steps on the ranks");
+        Assert.True(fused.R0.SplitStepGraph, "the compiled DDP step did not run as a backward graph and an update graph");
+        Assert.True(fused.R0.UpdateGraphLaunches > 0, "the update graph never launched");
+        Assert.True(moved > 1e-2, "training must move the weights");
+        Assert.True(ranksFused < 1e-6, $"compiled DDP ranks diverged by {ranksFused}");
+        Assert.True(fusedVsEager < 1e-4, $"compiled DDP diverged from eager DDP by {fusedVsEager}");
+        Assert.True(fusedVsSingle < 1e-4, $"compiled DDP diverged from one process by {fusedVsSingle}");
+    }
+
+    /// <summary>
+    /// The compiled data-parallel update needs every rank to have a batch. A tail step that leaves one rank empty (9
+    /// samples over a global batch of 8: the tail's one sample goes to rank 0) fails on both ranks with the same error,
+    /// agreed before either enters the plan's gradient exchange, instead of one rank throwing alone while the other
+    /// waits in the all-reduce until the collective timeout.
+    /// </summary>
+    [SkippableFact(Timeout = 400000)]
+    public async Task TwoProcessDdp_CompiledUpdate_TailStepWithAnEmptyRank_FailsOnBothRanks()
+    {
+        string? device = Environment.GetEnvironmentVariable("AIDOTNET_TEST_DDP_GPU");
+        Skip.If(string.IsNullOrWhiteSpace(device), "AIDOTNET_TEST_DDP_GPU (a CUDA_VISIBLE_DEVICES value) is not set.");
+        string session = "mp_tail_" + Guid.NewGuid().ToString("N");
+        WorkerSpec Spec(int rank) => new()
+        {
+            Mode = "StreamingTrain", BackendKind = "SharedMemory", Rank = rank, WorldSize = 2, SessionName = session,
+            UseGpu = true, CudaVisibleDevicesOverride = device, SampleCount = 9, LocalBatchSize = 4, MaxSteps = 4,
+            DataSeed = 2027, InitWeightSeed = 151, CompiledUpdate = true,
+        };
+        using var r0 = StartWorkerProcess(Spec(0));
+        using var r1 = StartWorkerProcess(Spec(1));
+        var (o0, o1) = await WaitForWorkerPairAsync(r0, r1, TimeSpan.FromSeconds(150));
+        foreach (var (outcome, rank) in new[] { (o0, 0), (o1, 1) })
+        {
+            Assert.True(outcome.Result is { Succeeded: false },
+                $"rank {rank}: expected the tail step to be refused (exit={outcome.ExitCode}): {outcome.Result?.ExceptionMessage ?? outcome.Stderr}");
+            Assert.Contains("received no samples", outcome.Result!.ExceptionMessage ?? string.Empty);
+        }
+    }
+
+    /// <summary>
+    /// DDP + mixed precision with the update in the plan: two processes on one GPU against one process on the full
+    /// batch, both with the library's default mixed precision (FP16 matmuls, dynamic loss scaling in the plan). The
+    /// loss scaler checks the reduced gradient, so the ranks' scales and skipped steps agree. Autocast converts the
+    /// GEMM operands to FP16 element by element and accumulates in FP32, so splitting the batch changes only the FP32
+    /// summation order (and the GEMM algorithm each shape gets) -- measured 5.1e-5 after 12 steps against FP16's own
+    /// 4.2e-3 effect, so the bound is 1e-4 -- provided both shapes' GEMMs autocast at all: measured
+    /// 2026-11-24, a one-process batch-8 run of this model moves only 6.4e-5 under FP16 (batch 16: 4.1e-3), so the
+    /// local batch here is 16 (global 32) and the test also checks that FP16 changed the result.
+    /// </summary>
+    [SkippableFact(Timeout = 400000)]
+    public async Task TwoProcessDdp_CompiledUpdateWithMixedPrecision_MatchesOneProcessMixedPrecision()
+    {
+        string? device = Environment.GetEnvironmentVariable("AIDOTNET_TEST_DDP_GPU");
+        Skip.If(string.IsNullOrWhiteSpace(device), "AIDOTNET_TEST_DDP_GPU (a CUDA_VISIBLE_DEVICES value) is not set.");
+        const int samples = 64, steps = 12, initSeed = 151, dataSeed = 2027;
+        WorkerSpec Spec(string backend, int rank, int world, int batch, string session, bool mixed = true) => new()
+        {
+            Mode = "StreamingTrain", BackendKind = backend, Rank = rank, WorldSize = world, SessionName = session,
+            UseGpu = true, CudaVisibleDevicesOverride = device, SampleCount = samples, LocalBatchSize = batch,
+            MaxSteps = steps, DataSeed = dataSeed, InitWeightSeed = initSeed, CompiledUpdate = world > 1,
+            MixedPrecision = mixed,
+        };
+
+        WorkerResult single, singleFp32;
+        using (var w = StartWorkerProcess(Spec("SingleProcess", 0, 1, 32, "unused")))
+            single = RequireSucceededResult(await WaitForWorkerAsync(w, TimeSpan.FromSeconds(120)), "1 process MP, batch 32");
+        using (var w = StartWorkerProcess(Spec("SingleProcess", 0, 1, 32, "unused", mixed: false)))
+            singleFp32 = RequireSucceededResult(await WaitForWorkerAsync(w, TimeSpan.FromSeconds(120)), "1 process FP32, batch 32");
+        string session = "mp_cumx_" + Guid.NewGuid().ToString("N");
+        using var r0 = StartWorkerProcess(Spec("SharedMemory", 0, 2, 16, session));
+        using var r1 = StartWorkerProcess(Spec("SharedMemory", 1, 2, 16, session));
+        var (o0, o1) = await WaitForWorkerPairAsync(r0, r1, TimeSpan.FromSeconds(150));
+        foreach (var line in (o0.Stderr ?? string.Empty).Split('\n'))
+            if (line.Contains("[FUSED-MISS]")) _output.WriteLine("rank 0 " + line.TrimEnd());
+        var d0 = RequireSucceededResult(o0, "DDP MP rank 0");
+        var d1 = RequireSucceededResult(o1, "DDP MP rank 1");
+
+        double ranks = MaxAbsDiff(d0.FinalWeights, d1.FinalWeights);
+        double vsSingle = MaxAbsDiff(single.FinalWeights, d0.FinalWeights);
+        double moved = MaxAbsDiff(single.FinalWeights, InitialWorkerWeights(single.FinalWeights.Length, initSeed));
+        double precisionEffect = MaxAbsDiff(single.FinalWeights, singleFp32.FinalWeights);
+        _output.WriteLine($"MP device={device}: updateSteps r0={d0.CompiledUpdateSteps} r1={d1.CompiledUpdateSteps} "
+            + $"updateGraphLaunches={d0.UpdateGraphLaunches} split={d0.SplitStepGraph}");
+        _output.WriteLine($"MP loss scale: 1proc {single.LossScale} (overflow steps {single.OverflowSteps}), "
+            + $"rank0 {d0.LossScale} ({d0.OverflowSteps}), rank1 {d1.LossScale} ({d1.OverflowSteps})");
+        _output.WriteLine($"MP max|w| diffs: rank0-rank1={ranks:E3} compiled DDP-1proc={vsSingle:E3}; moved {moved:E3}; "
+            + $"MSE 1proc {single.FinalMse:F6}, DDP {d0.FinalMse:F6}, 1proc FP32 {singleFp32.FinalMse:F6}; "
+            + $"FP16 effect (1proc MP - 1proc FP32) {precisionEffect:E3}; DDP MP - 1proc FP32 {MaxAbsDiff(d0.FinalWeights, singleFp32.FinalWeights):E3}");
+
+        Assert.True(d0.CompiledUpdateSteps == steps && d1.CompiledUpdateSteps == steps,
+            $"the in-plan update ran {d0.CompiledUpdateSteps} / {d1.CompiledUpdateSteps} of {steps} steps");
+        Assert.True(d0.SplitStepGraph && d0.UpdateGraphLaunches > 0, "the update did not run as the captured update graph");
+        Assert.True(d0.LossScale > 0 && single.LossScale > 0, "no loss scaler state was read");
+        Assert.Equal(d0.LossScale, d1.LossScale);
+        Assert.Equal(d0.OverflowSteps, d1.OverflowSteps);
+        Assert.Equal(single.LossScale, d0.LossScale);
+        Assert.True(moved > 1e-2, "training must move the weights");
+        Assert.True(ranks < 1e-6, $"MP DDP ranks diverged by {ranks}");
+        Assert.True(precisionEffect > 1e-3, $"FP16 moved the one-process run by only {precisionEffect}: its GEMMs did not autocast");
+        Assert.True(vsSingle < 1e-4, $"MP DDP diverged from one MP process by {vsSingle}");
+    }
+
+    private static float[] InitialWorkerWeights(int length, int seed)
+    {
+        var rng = RandomHelper.CreateSeededRandom(seed);
+        var w = new float[length];
+        for (int i = 0; i < length; i++) w[i] = (float)(rng.NextDouble() * 0.6 - 0.3);
+        return w;
     }
 
     #endregion

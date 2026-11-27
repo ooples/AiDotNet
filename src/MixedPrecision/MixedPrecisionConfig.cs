@@ -115,6 +115,21 @@ public class MixedPrecisionConfig
     public bool Fp32BatchNorm { get; set; } = true;
 
     /// <summary>
+    /// How matrix products reach FP16/BF16 on a GPU's fused compiled path (default:
+    /// <see cref="AiDotNet.Tensors.Engines.Gpu.MatMulAutocastMode.CastOperands"/>).
+    /// </summary>
+    /// <remarks>
+    /// <para><see cref="AiDotNet.Tensors.Engines.Gpu.MatMulAutocastMode.CastOperands"/> is PyTorch's autocast: both
+    /// operands of every matrix product are rounded to 16 bits before it, so every product is a 16-bit one whatever its
+    /// shape. <see cref="AiDotNet.Tensors.Engines.Gpu.MatMulAutocastMode.FastComputeType"/> skips the cast and lets cuBLAS
+    /// use 16-bit tensor cores where it chooses to; it keeps FP32 kernels for some (typically small) shapes, so results can
+    /// depend on the batch size and the GPU.</para>
+    /// <para><b>For Beginners:</b> leave the default unless you have measured the fast mode helps your model.</para>
+    /// </remarks>
+    public AiDotNet.Tensors.Engines.Gpu.MatMulAutocastMode MatMulAutocastMode { get; set; }
+        = AiDotNet.Tensors.Engines.Gpu.MatMulAutocastMode.CastOperands;
+
+    /// <summary>
     /// Whether to keep loss computation in FP32 (default: true).
     /// </summary>
     /// <remarks>

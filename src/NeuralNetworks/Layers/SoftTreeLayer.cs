@@ -162,13 +162,7 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
         var random = RandomHelper.ThreadSafeRandom;
 
         // Initialize split weights using Gaussian initialization
-        for (int i = 0; i < _splitWeights.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            _splitWeights[i] = NumOps.FromDouble(normal * scale);
-        }
+        SeededNoiseTensors.FillStandardNormal(_splitWeights, random, scale);
 
         // Initialize split biases to small values
         for (int i = 0; i < _splitBiases.Length; i++)
@@ -177,13 +171,7 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
         }
 
         // Initialize leaf values
-        for (int i = 0; i < _leafValues.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            _leafValues[i] = NumOps.FromDouble(normal * scale);
-        }
+        SeededNoiseTensors.FillStandardNormal(_leafValues, random, scale);
 
         // Register after initialization so tensor references are final
         RegisterTrainableParameter(_splitWeights, PersistentTensorRole.Weights);

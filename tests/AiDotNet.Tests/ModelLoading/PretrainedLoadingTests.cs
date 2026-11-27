@@ -435,6 +435,63 @@ namespace AiDotNet.Tests.ModelLoading
             Assert.Equal(new[] { 1, 2, vocab }, net.Predict(tokens).Shape.ToArray());
         }
 
+        /// <summary>
+        /// A builder warms the network up (inference) and then writes the checkpoint into its weights. Above the
+        /// auto-streaming threshold that warmup moved the weights into a read-only bf16 streaming store and the load
+        /// threw (OLMoE-1B-7B, 6.9B parameters). The failure mode, reproduced with a 1-parameter threshold, and the
+        /// builders' networks, which keep auto-streaming off so the load can write.
+        /// </summary>
+        [Fact]
+        public void Builders_load_weights_into_networks_that_do_not_auto_stream()
+        {
+            var config = HuggingFaceConfig.Parse(@"{ ""architectures"": [""MixtralForCausalLM""],
+                ""model_type"": ""mixtral"", ""hidden_size"": 8, ""intermediate_size"": 16,
+                ""num_hidden_layers"": 1, ""num_attention_heads"": 2, ""num_key_value_heads"": 2,
+                ""vocab_size"": 6, ""num_local_experts"": 4, ""num_experts_per_tok"": 2,
+                ""tie_word_embeddings"": false }");
+            var disabled = typeof(NeuralNetworkBase<double>).GetField("_streamingAutoDetectDisabled",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+
+            // The failure mode: a warmed-up network over the threshold rejects the load's write.
+            var embedding = new EmbeddingLayer<double>(6, 8);
+            var head = new DenseLayer<double>(6, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<double>());
+            var architecture = new NeuralNetworkArchitecture<double>(
+                inputType: AiDotNet.Enums.InputType.OneDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration,
+                complexity: AiDotNet.Enums.NetworkComplexity.Simple, inputSize: 1, outputSize: 6,
+                layers: new List<AiDotNet.Interfaces.ILayer<double>> { embedding, head });
+            var streamed = new NeuralNetwork<double>(architecture);
+            streamed.ApplyAutoDetectThresholdOverride(1);
+            // The warmup forward latches the weights into the streaming store (for a model this size in inference, a
+            // read-only bf16 store, which a load's later write cannot go through).
+            streamed.Predict(new Tensor<double>(new[] { 1, 2 }));
+            Assert.Equal(WeightLifetime.Streaming, head.GetWeights().Lifetime);
+
+            // The builders' networks keep auto-streaming off.
+            int h = 8, ffn = 16, vocab = 6, heads = 2, headDim = 4, E = 4;
+            var t = new Dictionary<string, double[]>
+            {
+                ["model.embed_tokens.weight"] = Fill(vocab * h, 50),
+                ["model.layers.0.input_layernorm.weight"] = Fill(h, 51),
+                ["model.layers.0.post_attention_layernorm.weight"] = Fill(h, 52),
+                ["model.layers.0.self_attn.q_proj.weight"] = Fill(heads * headDim * h, 53),
+                ["model.layers.0.self_attn.k_proj.weight"] = Fill(heads * headDim * h, 54),
+                ["model.layers.0.self_attn.v_proj.weight"] = Fill(heads * headDim * h, 55),
+                ["model.layers.0.self_attn.o_proj.weight"] = Fill(h * heads * headDim, 56),
+                ["model.layers.0.block_sparse_moe.gate.weight"] = Fill(E * h, 57),
+                ["model.norm.weight"] = Fill(h, 90),
+                ["lm_head.weight"] = Fill(vocab * h, 91),
+            };
+            for (int e = 0; e < E; e++)
+            {
+                string ep = $"model.layers.0.block_sparse_moe.experts.{e}.";
+                t[ep + "w1.weight"] = Fill(ffn * h, 60 + e);
+                t[ep + "w3.weight"] = Fill(ffn * h, 70 + e);
+                t[ep + "w2.weight"] = Fill(h * ffn, 80 + e);
+            }
+            var built = MoEModelBuilder<double>.Build(config, new InMemorySource(t));
+            Assert.True((bool)disabled.GetValue(built)!);
+        }
+
         [Fact]
         public void Builder_Mixtral_MoE_BuildsAndForwards()
         {
@@ -478,8 +535,142 @@ namespace AiDotNet.Tests.ModelLoading
             var block = Assert.IsType<MoEDecoderBlock<double>>(net.Layers[1]);
             Assert.Equal(4, block.Moe.NumExperts);
             Assert.Equal(2, block.Moe.TopK);
+            Assert.True(block.Moe.NormalizeTopK); // Mixtral always renormalizes
 
             Assert.True(PretrainedArchitectures<double>.TryResolve(config, null, out _));
+        }
+
+        /// <summary>
+        /// OLMoE: the built network's logits equal an independent float64 forward written in the Hugging Face layout
+        /// (half-split rotary, RMSNorm over the whole q and k projections, top-k probabilities renormalized only when
+        /// norm_topk_prob is true).
+        /// </summary>
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public void Builder_Olmoe_MatchesAReferenceForward(bool normTopKProb)
+        {
+            int h = 8, ffn = 6, vocab = 7, heads = 2, kvHeads = 2, hd = 4, E = 4, topK = 2, L = 2;
+            double eps = 1e-5, theta = 10000;
+            var config = HuggingFaceConfig.Parse("{ \"architectures\": [\"OlmoeForCausalLM\"], \"model_type\": \"olmoe\","
+                + " \"hidden_size\": 8, \"intermediate_size\": 6, \"num_hidden_layers\": 2, \"num_attention_heads\": 2,"
+                + " \"num_key_value_heads\": 2, \"vocab_size\": 7, \"num_experts\": 4, \"num_experts_per_tok\": 2,"
+                + " \"rms_norm_eps\": 1e-5, \"rope_theta\": 10000, \"norm_topk_prob\": " + (normTopKProb ? "true" : "false") + ","
+                + " \"tie_word_embeddings\": false }");
+            Assert.Equal(normTopKProb, config.NormTopKProb);
+
+            double[] R(int n, int seed, double scale = 0.5, double offset = 0)
+            {
+                var r = new Random(seed);
+                return Enumerable.Range(0, n).Select(_ => offset + scale * (2 * r.NextDouble() - 1)).ToArray();
+            }
+            var t = new Dictionary<string, double[]>
+            {
+                ["model.embed_tokens.weight"] = R(vocab * h, 1, 1.0),
+                ["model.norm.weight"] = R(h, 2, 0.3, 1),
+                ["lm_head.weight"] = R(vocab * h, 3),
+            };
+            for (int l = 0; l < L; l++)
+            {
+                string p = $"model.layers.{l}.";
+                t[p + "input_layernorm.weight"] = R(h, 10 + l, 0.3, 1);
+                t[p + "post_attention_layernorm.weight"] = R(h, 12 + l, 0.3, 1);
+                t[p + "self_attn.q_proj.weight"] = R(heads * hd * h, 14 + l);
+                t[p + "self_attn.k_proj.weight"] = R(kvHeads * hd * h, 16 + l);
+                t[p + "self_attn.v_proj.weight"] = R(kvHeads * hd * h, 18 + l);
+                t[p + "self_attn.o_proj.weight"] = R(h * heads * hd, 20 + l);
+                t[p + "self_attn.q_norm.weight"] = R(heads * hd, 22 + l, 0.5, 1);
+                t[p + "self_attn.k_norm.weight"] = R(kvHeads * hd, 24 + l, 0.5, 1);
+                t[p + "mlp.gate.weight"] = R(E * h, 26 + l, 1.0);
+                for (int e = 0; e < E; e++)
+                {
+                    t[p + $"mlp.experts.{e}.gate_proj.weight"] = R(ffn * h, 100 + 10 * l + e);
+                    t[p + $"mlp.experts.{e}.up_proj.weight"] = R(ffn * h, 200 + 10 * l + e);
+                    t[p + $"mlp.experts.{e}.down_proj.weight"] = R(h * ffn, 300 + 10 * l + e);
+                }
+            }
+            var reference = new Dictionary<string, double[]>(t);
+            var net = MoEModelBuilder<double>.Build(config, new InMemorySource(t));
+            int[] ids = { 3, 0, 6, 2, 5 };
+            int S = ids.Length;
+            var tokens = new Tensor<double>(new[] { 1, S });
+            for (int s = 0; s < S; s++) tokens[0, s] = ids[s];
+            var logits = net.Predict(tokens);
+
+            // ---- reference (Hugging Face modeling_olmoe, float64) ----
+            double[] Rms(double[] x, double[] g)
+            {
+                double inv = 1 / Math.Sqrt(x.Sum(v => v * v) / x.Length + eps);
+                return x.Select((v, i) => v * inv * g[i]).ToArray();
+            }
+            double[] Mv(double[] w, double[] x, int outDim) // [out, in] row-major
+                => Enumerable.Range(0, outDim).Select(o => Enumerable.Range(0, x.Length).Sum(i => w[o * x.Length + i] * x[i])).ToArray();
+            double[] Rope(double[] v, int nHeads, int pos)
+            {
+                var r = (double[])v.Clone();
+                int half = hd / 2;
+                for (int hh = 0; hh < nHeads; hh++)
+                    for (int i = 0; i < half; i++)
+                    {
+                        double ang = pos * Math.Pow(theta, -2.0 * i / hd), c = Math.Cos(ang), sn = Math.Sin(ang);
+                        double a = v[hh * hd + i], b = v[hh * hd + i + half];
+                        r[hh * hd + i] = a * c - b * sn;
+                        r[hh * hd + i + half] = b * c + a * sn;
+                    }
+                return r;
+            }
+            double Silu(double x) => x / (1 + Math.Exp(-x));
+            var xs = ids.Select(id => reference["model.embed_tokens.weight"].Skip(id * h).Take(h).ToArray()).ToArray();
+            for (int l = 0; l < L; l++)
+            {
+                string p = $"model.layers.{l}.";
+                var n1 = xs.Select(x => Rms(x, reference[p + "input_layernorm.weight"])).ToArray();
+                var q = n1.Select((x, s) => Rope(Rms(Mv(reference[p + "self_attn.q_proj.weight"], x, heads * hd), reference[p + "self_attn.q_norm.weight"]), heads, s)).ToArray();
+                var k = n1.Select((x, s) => Rope(Rms(Mv(reference[p + "self_attn.k_proj.weight"], x, kvHeads * hd), reference[p + "self_attn.k_norm.weight"]), kvHeads, s)).ToArray();
+                var v = n1.Select(x => Mv(reference[p + "self_attn.v_proj.weight"], x, kvHeads * hd)).ToArray();
+                for (int s = 0; s < S; s++)
+                {
+                    var ctx = new double[heads * hd];
+                    for (int hh = 0; hh < heads; hh++)
+                    {
+                        var sc = Enumerable.Range(0, s + 1).Select(j => Enumerable.Range(0, hd).Sum(d => q[s][hh * hd + d] * k[j][hh * hd + d]) / Math.Sqrt(hd)).ToArray();
+                        double mx = sc.Max();
+                        var w = sc.Select(z => Math.Exp(z - mx)).ToArray();
+                        double z0 = w.Sum();
+                        for (int j = 0; j <= s; j++)
+                            for (int d = 0; d < hd; d++) ctx[hh * hd + d] += w[j] / z0 * v[j][hh * hd + d];
+                    }
+                    var o = Mv(reference[p + "self_attn.o_proj.weight"], ctx, h);
+                    xs[s] = xs[s].Select((a, i) => a + o[i]).ToArray();
+                }
+                for (int s = 0; s < S; s++)
+                {
+                    var n2 = Rms(xs[s], reference[p + "post_attention_layernorm.weight"]);
+                    var lg = Mv(reference[p + "mlp.gate.weight"], n2, E);
+                    double mx = lg.Max();
+                    var pr = lg.Select(z => Math.Exp(z - mx)).ToArray();
+                    double z0 = pr.Sum();
+                    pr = pr.Select(z => z / z0).ToArray();
+                    var top = Enumerable.Range(0, E).OrderByDescending(e => pr[e]).Take(topK).ToArray();
+                    double norm = normTopKProb ? top.Sum(e => pr[e]) : 1.0;
+                    var y = new double[h];
+                    foreach (var e in top)
+                    {
+                        var g = Mv(reference[p + $"mlp.experts.{e}.gate_proj.weight"], n2, ffn);
+                        var u = Mv(reference[p + $"mlp.experts.{e}.up_proj.weight"], n2, ffn);
+                        var d = Mv(reference[p + $"mlp.experts.{e}.down_proj.weight"], g.Select((gv, i) => Silu(gv) * u[i]).ToArray(), h);
+                        for (int i = 0; i < h; i++) y[i] += pr[e] / norm * d[i];
+                    }
+                    xs[s] = xs[s].Select((a, i) => a + y[i]).ToArray();
+                }
+            }
+            double worst = 0;
+            for (int s = 0; s < S; s++)
+            {
+                var expected = Mv(reference["lm_head.weight"], Rms(xs[s], reference["model.norm.weight"]), vocab);
+                for (int c = 0; c < vocab; c++) worst = Math.Max(worst, Math.Abs(expected[c] - logits[0, s, c]));
+            }
+            Assert.True(worst < 1e-9, $"OLMoE logits differ from the reference forward by {worst}");
         }
 
         [Fact]
@@ -834,6 +1025,9 @@ namespace AiDotNet.Tests.ModelLoading
             var net = Qwen2MoEModelBuilder<double>.Build(config, new InMemorySource(t));
             var block = Assert.IsType<MoEDecoderBlock<double>>(net.Layers[1]);
             Assert.True(block.Moe.HasSharedExpert);
+            // Qwen2MoeConfig.norm_topk_prob defaults to false: the kept top-k probabilities are not renormalized.
+            Assert.Null(config.NormTopKProb);
+            Assert.False(block.Moe.NormalizeTopK);
 
             var tokens = new Tensor<double>(new[] { 1, 3 });
             tokens[0, 0] = 1; tokens[0, 1] = 4; tokens[0, 2] = 2;

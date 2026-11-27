@@ -148,11 +148,7 @@ internal sealed class MgldDiscriminator<T> : LazyWeightModule<T>
             var ops = MathHelper.GetNumericOperations<T>();
             gamma.Add(new LazyWeight<T>(new[] { next }, (tensor, random) =>
             {
-                for (int i = 0; i < tensor.Length; i++)
-                {
-                    double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-                    tensor[i] = ops.FromDouble(1.0 + 0.02 * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
-                }
+                SeededNoiseTensors.FillStandardNormal(tensor, random, 0.02, mean: 1.0);
             }));
             beta.Add(LazyWeight<T>.Constant(new[] { next }, 0.0));
             previous = next;

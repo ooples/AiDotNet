@@ -364,6 +364,8 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         if (ids is null) return null;
 
         vocabularySize = outputSize;
+        ((AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)loss).RecordReductionLayout(
+            target.Shape.ToArray(), classIndex: true, classAxis: target.Rank, classes: outputSize);
         return ids;
     }
 
@@ -1717,7 +1719,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// any open <see cref="AiDotNet.Tensors.Engines.TensorScope"/> each time it is written. Only this exact type has been
     /// checked: a derived layer may keep more, so it counts as keeping a result.
     /// </summary>
-    internal override bool KeepsResultsBetweenCalls => GetType() != typeof(DenseLayer<T>);
+    protected internal override bool KeepsResultsBetweenCalls => GetType() != typeof(DenseLayer<T>);
 
     /// <summary>
     /// Resets the internal state of the layer.

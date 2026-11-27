@@ -70,6 +70,13 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
     // same step (mirrors DropoutLayer's determinism contract).
     private long _dropPathForwardCounter;
 
+    /// <inheritdoc />
+    internal override long? StochasticDrawCounter
+    {
+        get => System.Threading.Interlocked.Read(ref _dropPathForwardCounter);
+        set => System.Threading.Interlocked.Exchange(ref _dropPathForwardCounter, value ?? 0L);
+    }
+
     // Pre-norm layer normalizations
     // Pre-norm Swin: every child reads the block width except the MLP contraction, which reads the
     // expanded one. Chained sizing got _outProj wrong -- it handed it the QKV projection's 3*dim
@@ -603,8 +610,8 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
     private void FillDropPathMask(Tensor<T> mask, int batch, int perSample, T scale)
     {
         long counter = System.Threading.Interlocked.Increment(ref _dropPathForwardCounter);
-        var rng = RandomSeed.HasValue
-            ? RandomHelper.CreateSeededRandom(unchecked((int)((uint)RandomSeed.Value * 2654435761u ^ (uint)counter)))
+        var rng = StochasticDrawSeed(unchecked((ulong)counter)) is int drawSeed
+            ? RandomHelper.CreateSeededRandom(drawSeed)
             : RandomHelper.CreateSecureRandom();
         var span = mask.AsWritableSpan();
         for (int b = 0; b < batch; b++)

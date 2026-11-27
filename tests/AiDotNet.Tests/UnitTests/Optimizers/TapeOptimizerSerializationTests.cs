@@ -429,6 +429,76 @@ public class TapeOptimizerSerializationTests
         Assert.Contains("truncated tape-state payload after the tape-step header", exception.Message);
     }
 
+    [Fact]
+    public void AdamWSerializeDeserialize_RestoresTheBatchAndEpochCounters()
+    {
+        // A checkpoint is the optimizer's full state. The batch counter (CurrentStep, advanced by OnBatchEnd) and the
+        // epoch counter (CurrentEpoch, advanced by OnEpochEnd) were not in the payload, so a resumed optimizer reported
+        // step 0 while its scheduler, moments and data cursor were at step 20.
+        var source = new AdamWOptimizer<double, Tensor<double>, Tensor<double>>(
+            null,
+            Common(new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                WeightDecay = 0.0,
+                LearningRateScheduler = new WarmupStableDecayScheduler(0.01, 5, 15, 10),
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch
+            }));
+        for (int i = 0; i < 20; i++) source.OnBatchEnd();
+        for (int i = 0; i < 3; i++) source.OnEpochEnd();
+        Assert.Equal(20, source.CurrentStep);
+        Assert.Equal(3, source.CurrentEpoch);
+
+        var restored = new AdamWOptimizer<double, Tensor<double>, Tensor<double>>(
+            null,
+            Common(new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>> { WeightDecay = 0.0 }));
+        restored.Deserialize(source.Serialize());
+
+        Assert.Equal(20, restored.CurrentStep);
+        Assert.Equal(3, restored.CurrentEpoch);
+        // The counters keep counting from the restored position.
+        restored.OnBatchEnd();
+        Assert.Equal(21, restored.CurrentStep);
+    }
+
+    [Fact]
+    public void AdamWDeserialize_PayloadWithoutTheCounterSection_KeepsTheTargetCounters()
+    {
+        // A checkpoint written before the counter section existed ends after the fused-plan section. It must still load,
+        // and it carries no counters, so the target's own counters are left as they were.
+        var source = new AdamWOptimizer<double, Tensor<double>, Tensor<double>>(
+            null, Common(new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>> { WeightDecay = 0.0 }));
+        for (int i = 0; i < 4; i++) source.OnBatchEnd();
+        byte[] payload = source.Serialize();
+        byte[] legacy = StripCounterSection(payload);
+
+        var restored = new AdamWOptimizer<double, Tensor<double>, Tensor<double>>(
+            null, Common(new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>> { WeightDecay = 0.0 }));
+        restored.OnBatchEnd();
+        restored.Deserialize(legacy);
+        Assert.Equal(1, restored.CurrentStep);
+    }
+
+    // The counter section is the payload's last record: marker string, step (int32), epoch (int32). Removing it gives
+    // the byte layout a checkpoint had before the section was added. Any envelope after the optimizer body is kept.
+    private static byte[] StripCounterSection(byte[] payload)
+    {
+        var marker = System.Text.Encoding.UTF8.GetBytes("AiDotNet.OptimizerCounters.v1");
+        int at = -1;
+        for (int i = payload.Length - marker.Length; i >= 0 && at < 0; i--)
+        {
+            bool match = true;
+            for (int j = 0; j < marker.Length && match; j++) match = payload[i + j] == marker[j];
+            if (match) at = i;
+        }
+        Assert.True(at > 0, "the serialized optimizer has no counter section");
+        int start = at - 1;                        // the 7-bit length prefix of the marker string (one byte here)
+        int end = at + marker.Length + 8;          // marker + step + epoch
+        var result = new byte[payload.Length - (end - start)];
+        Array.Copy(payload, 0, result, 0, start);
+        Array.Copy(payload, end, result, start, payload.Length - end);
+        return result;
+    }
+
     private static TOptions Common<TOptions>(TOptions options)
         where TOptions : GradientBasedOptimizerOptions<double, Tensor<double>, Tensor<double>>
     {

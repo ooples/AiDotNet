@@ -42,6 +42,13 @@ public partial class HtsatFusionPatchEmbeddingLayer<T> : LayerBase<T>, IShapeCon
     private readonly int _embedDim;
     private long _forwardCounter;
 
+    /// <inheritdoc />
+    internal override long? StochasticDrawCounter
+    {
+        get => System.Threading.Interlocked.Read(ref _forwardCounter);
+        set => System.Threading.Interlocked.Exchange(ref _forwardCounter, value ?? 0L);
+    }
+
     [SubLayerInput("1, _patchSize, _patchSize")]
     private readonly ConvolutionalLayer<T> _projection;
     [SubLayerInput("_patchSize * _patchSize * 3")]
@@ -245,8 +252,8 @@ public partial class HtsatFusionPatchEmbeddingLayer<T> : LayerBase<T>, IShapeCon
     private int NextRandomLongerRow(int batch)
     {
         long counter = System.Threading.Interlocked.Increment(ref _forwardCounter);
-        var rng = RandomSeed.HasValue
-            ? RandomHelper.CreateSeededRandom(unchecked((int)((uint)RandomSeed.Value * 2654435761u ^ (uint)counter)))
+        var rng = StochasticDrawSeed(unchecked((ulong)counter)) is int drawSeed
+            ? RandomHelper.CreateSeededRandom(drawSeed)
             : RandomHelper.CreateSecureRandom();
         return rng.Next(batch);
     }

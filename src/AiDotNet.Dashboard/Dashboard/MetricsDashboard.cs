@@ -139,6 +139,32 @@ public class MetricsDashboard : IDisposable
     }
 
     /// <summary>
+    /// Creates a training monitor and starts its local web page (see
+    /// <see cref="TrainingMonitorDashboard{T}.StartWebServer"/>), for training that runs without a console.
+    /// </summary>
+    /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <param name="runName">Name for the training run.</param>
+    /// <param name="port">The port to serve on; <c>0</c> (the default) picks a free port.</param>
+    /// <param name="host">The host to bind; the default serves this machine only.</param>
+    /// <returns>The monitor; its <see cref="TrainingMonitorDashboard{T}.WebServerUrl"/> is the page address.
+    /// Disposing it stops the server.</returns>
+    public static TrainingMonitorDashboard<T> CreateWebTrainingMonitor<T>(
+        string runName = "Training", int port = 0, string host = "127.0.0.1")
+    {
+        var monitor = new TrainingMonitorDashboard<T>(runName);
+        try
+        {
+            monitor.StartWebServer(port, host);
+            return monitor;
+        }
+        catch
+        {
+            monitor.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Starts the dashboard display.
     /// </summary>
     public void Start()

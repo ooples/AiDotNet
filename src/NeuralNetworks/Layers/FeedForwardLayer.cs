@@ -842,7 +842,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
     /// any open <see cref="AiDotNet.Tensors.Engines.TensorScope"/> each time it is written. Only this exact type has been
     /// checked: a derived layer may keep more, so it counts as keeping a result.
     /// </summary>
-    internal override bool KeepsResultsBetweenCalls => GetType() != typeof(FeedForwardLayer<T>);
+    protected internal override bool KeepsResultsBetweenCalls => GetType() != typeof(FeedForwardLayer<T>);
 
     /// <inheritdoc />
     public override void ResetState()

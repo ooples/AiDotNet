@@ -162,9 +162,7 @@ public class RobustnessEngine<T>
             {
                 double originalValue = NumOps.ToDouble(features[i, j]);
                 // Box-Muller transform for Gaussian noise
-                double u1 = 1.0 - random.NextDouble();
-                double u2 = random.NextDouble();
-                double noise = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+                double noise = SeededNoiseTensors.NextStandardNormal(random);
                 double noisyValue = originalValue + noise * noiseLevel * stds[j];
                 result[i, j] = NumOps.FromDouble(noisyValue);
             }

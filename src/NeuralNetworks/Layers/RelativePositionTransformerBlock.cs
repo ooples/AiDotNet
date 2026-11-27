@@ -150,11 +150,7 @@ public partial class RelativePositionTransformerBlock<T> : LayerBase<T>
         _relativeKeys = new Tensor<T>(new[] { span, dk });
         _relativeValues = new Tensor<T>(new[] { span, dk });
         foreach (var table in new[] { _relativeKeys, _relativeValues })
-            for (int i = 0; i < table.Length; i++)
-            {
-                double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-                table[i] = NumOps.FromDouble(std * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
-            }
+            SeededNoiseTensors.FillStandardNormal(table, random, std);
         RegisterTrainableParameter(_relativeKeys, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_relativeValues, PersistentTensorRole.Weights);
     }
