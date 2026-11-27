@@ -46,16 +46,22 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 /// </remarks>
 /// <example>
 /// <code>
-/// var waveform = Tensor&lt;double&gt;.CreateRandom(1, 16000);   // 1 s at 16 kHz
-/// var transcriptTokenIds = new Tensor&lt;double&gt;(new[] { 4 }, new Vector&lt;double&gt;(new double[] { 17, 402, 9, 2 }));
+/// // The builder splits and shuffles along the first axis, so it must be recordings:
+/// // waveforms [recordings, 1, samples] at 16 kHz, transcripts [recordings, tokens]. Noise stands in for the audio.
+/// var waveforms = Tensor&lt;double&gt;.CreateRandom(new[] { 8, 1, 16000 });
+/// var transcriptTokenIds = new Tensor&lt;double&gt;(new[] { 8, 4 },
+///     new Vector&lt;double&gt;(Enumerable.Repeat(new double[] { 17, 402, 9, 2 }, 8).SelectMany(ids =&gt; ids).ToArray()));
+/// var waveform = Tensor&lt;double&gt;.CreateRandom(1, 16000);   // a recording to transcribe
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputSize: 16000, outputSize: 6002);
+/// var model = new CodeSwitchingASR&lt;double&gt;(architecture);
 /// var result = new AiModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
-///     .ConfigureModel(new CodeSwitchingASR&lt;double&gt;(architecture))
-///     .Build(waveform, transcriptTokenIds);
-/// var logits = result.Predict(waveform);   // per-frame token logits over the mixed-language vocabulary
+///     .ConfigureModel(model)
+///     .Build(waveforms, transcriptTokenIds);
+/// var transcription = model.Transcribe(waveform);
+/// var language = model.DetectLanguage(waveform);   // from the learned LID decoder
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

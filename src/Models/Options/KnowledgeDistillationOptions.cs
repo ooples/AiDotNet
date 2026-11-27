@@ -401,6 +401,10 @@ public class KnowledgeDistillationOptions<T, TInput, TOutput> : ModelOptions
     {
         if (Temperature <= 0)
             throw new ArgumentException("Temperature must be positive", nameof(Temperature));
+        if (SparseTopK <= 0)
+            throw new ArgumentOutOfRangeException(nameof(SparseTopK), SparseTopK, "SparseTopK must be at least 1.");
+        if (SparseTopKMinimumClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(SparseTopKMinimumClasses), SparseTopKMinimumClasses, "SparseTopKMinimumClasses must be at least 1.");
         if (Alpha < 0 || Alpha > 1)
             throw new ArgumentException("Alpha must be between 0 and 1", nameof(Alpha));
         if (Epochs <= 0)

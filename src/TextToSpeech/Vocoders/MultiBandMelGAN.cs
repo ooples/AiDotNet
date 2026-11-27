@@ -29,18 +29,14 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Multi-band MelGAN vocoder for parallel sub-band synthesis
-/// // decomposing target waveform into sub-bands for faster generation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new MultiBandMelGAN&lt;double&gt;(architecture, "multibandmelgan.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new MultiBandMelGAN&lt;double&gt;(architecture, new MultiBandMelGANOptions());
+///     inputSize: 80, outputSize: 1);
+/// var model = new MultiBandMelGAN&lt;double&gt;(architecture, new MultiBandMelGANOptions());
+/// var mel = Tensor&lt;double&gt;.CreateRandom(model.MelChannels, 100);   // stands in for a [mel bins, frames] spectrogram
+/// Tensor&lt;double&gt; waveform = model.MelToWaveform(mel);
+/// // Untrained native layers; the MultiBandMelGAN(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

@@ -123,10 +123,119 @@ internal abstract class BlockQuantizedStreamingOptimizer<T> : IStreamingOptimize
         int count = parameters.Count;
         if (gradients.Count != count)
             throw new ArgumentException("Parameters and gradients must have identical counts.", nameof(gradients));
+        if (count == 0) return;
+
+        if (TryApplyBatchOnGpu(parameters, gradients))
+            return;
+
         for (int i = 0; i < count; i++)
         {
             Apply(parameters[i], gradients[i]);
         }
+    }
+
+    /// <summary>
+    /// Base-class hook for batched GPU multi-tensor execution across a streaming segment's parameters.
+    /// Returns <c>true</c> when every parameter in the batch has been updated (including deferred quantized tensors),
+    /// or <c>false</c> to run the base per-parameter <see cref="Apply"/> loop.
+    /// </summary>
+    protected virtual bool TryApplyBatchOnGpu(
+        IReadOnlyList<Tensor<T>> parameters,
+        IReadOnlyList<Tensor<T>> gradients) => false;
+
+    /// <summary>
+    /// Shared base-class multi-tensor GPU dispatcher for parameters shorter than <see cref="Min8BitSize"/> that keep
+    /// FP32 moments on device, deferring quantized or ineligible parameters cleanly to <see cref="Apply"/>.
+    /// </summary>
+    protected bool TryApplySmallParametersGpuListStep(
+        IReadOnlyList<Tensor<T>> parameters,
+        IReadOnlyList<Tensor<T>> gradients,
+        Dictionary<Tensor<T>, bool> keepsMomentsOnGpu,
+        Dictionary<Tensor<float>, Tensor<float>[]> gpuFp32SmallState,
+        string listStepName,
+        int stateCount,
+        params object[] scalarArguments)
+    {
+        if (typeof(T) != typeof(float)
+            || UseBf16Moments
+            || Min8BitSize <= 0
+            || AiDotNet.Tensors.Engines.AiDotNetEngine.Current is not AiDotNet.Tensors.Engines.DirectGpuTensorEngine)
+        {
+            return false;
+        }
+
+        var method = Optimizers.GpuListStepBridge.Resolve(listStepName, stateCount, scalarArguments);
+        if (method is null) return false;
+
+        int count = parameters.Count;
+        var mtParams = new List<Tensor<float>>(count);
+        var mtGrads = new List<Tensor<float>>(count);
+        var mtStates = new List<Tensor<float>>[stateCount];
+        for (int s = 0; s < stateCount; s++) mtStates[s] = new List<Tensor<float>>(count);
+        var mtSourceRefs = new List<Tensor<T>>(count);
+        var mtOrigGrads = new List<Tensor<T>>(count);
+        List<int>? deferredIndices = null;
+
+        for (int i = 0; i < count; i++)
+        {
+            var p = parameters[i];
+            var g = gradients[i];
+            if (p is null) throw new ArgumentNullException(nameof(parameters));
+            if (g is null) throw new ArgumentNullException(nameof(gradients));
+            int len = p.Length;
+            bool eligible = len > 0
+                && g.Length == len
+                && len < Min8BitSize
+                && (!keepsMomentsOnGpu.TryGetValue(p, out bool prevOnGpu) || prevOnGpu);
+            if (!eligible)
+            {
+                (deferredIndices ??= new List<int>()).Add(i);
+                continue;
+            }
+
+            var pFloat = System.Runtime.CompilerServices.Unsafe.As<Tensor<T>, Tensor<float>>(ref p);
+            var gFloat = System.Runtime.CompilerServices.Unsafe.As<Tensor<T>, Tensor<float>>(ref g);
+            if (!gpuFp32SmallState.TryGetValue(pFloat, out var stateArr)
+                || stateArr.Length != stateCount
+                || stateArr[0].Length != len)
+            {
+                stateArr = new Tensor<float>[stateCount];
+                for (int s = 0; s < stateCount; s++)
+                    stateArr[s] = AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.CreateStateTensor(pFloat._shape);
+                gpuFp32SmallState[pFloat] = stateArr;
+            }
+
+            mtParams.Add(pFloat);
+            mtGrads.Add(gFloat);
+            for (int s = 0; s < stateCount; s++) mtStates[s].Add(stateArr[s]);
+            mtSourceRefs.Add(p);
+            mtOrigGrads.Add(g);
+        }
+
+        if (mtParams.Count > 0)
+        {
+            if (Optimizers.GpuListStepBridge.TryInvokeLists(method, mtParams, mtGrads, mtStates, scalarArguments))
+            {
+                for (int i = 0; i < mtSourceRefs.Count; i++)
+                    keepsMomentsOnGpu[mtSourceRefs[i]] = true;
+            }
+            else
+            {
+                for (int i = 0; i < mtSourceRefs.Count; i++)
+                    Apply(mtSourceRefs[i], mtOrigGrads[i]);
+            }
+        }
+
+        if (deferredIndices is not null)
+        {
+            for (int i = 0; i < deferredIndices.Count; i++)
+            {
+                int idx = deferredIndices[i];
+                Apply(parameters[idx], gradients[idx]);
+            }
+        }
+
+        return true;
     }
 
     public virtual void Apply(Tensor<T> param, Tensor<T> grad)

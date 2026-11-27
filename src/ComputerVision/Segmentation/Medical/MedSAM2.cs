@@ -34,14 +34,15 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 /// </remarks>
 /// <example>
 /// <code>
-/// var volume = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
+/// // 64 CT slices of 512 x 512: [1, D, H, W] with values in 0..1 (windowed to 0..255, then divided by 255)
+/// var volume = Tensor&lt;float&gt;.CreateRandom(1, 64, 512, 512);
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 1, outputSize: 1);
 /// var model = new MedSAM2&lt;float&gt;(architecture);
 /// model.LoadPretrainedWeights("MedSAM2/model.safetensors");
-/// // volume [1, D, H, W] with values in 0..1 (CT windowed to 0..255, then divided by 255)
+/// // prompt the key slice 42 with a box in its pixel coordinates; the masks propagate to the other slices
 /// var result = model.SegmentVolume(volume, keySlice: 42, box: new float[] { 120, 140, 210, 230 });
 /// </code>
 /// </example>

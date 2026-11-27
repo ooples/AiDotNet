@@ -23,18 +23,13 @@ namespace AiDotNet.TextToSpeech.Classic;
 ///. This model converts text input into speech audio output.</para>
 /// <example>
 /// <code>
-/// // Create a FastSpeech model for non-autoregressive parallel speech synthesis
-/// // with knowledge-distilled duration predictor for fast generation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 200, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new FastSpeech&lt;double&gt;(architecture, "fastspeech.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new FastSpeech&lt;double&gt;(architecture, new FastSpeechOptions());
+/// var model = new FastSpeech&lt;double&gt;(architecture, new FastSpeechOptions());
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel spectrogram; a vocoder turns it into audio
+/// // Untrained native layers; the FastSpeech(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 /// </remarks>

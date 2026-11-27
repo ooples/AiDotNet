@@ -33,18 +33,14 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a HiFi-GAN vocoder for high-fidelity parallel waveform generation
-/// // with multi-receptive field fusion and multi-period discriminator
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new HiFiGAN&lt;double&gt;(architecture, "hifigan.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new HiFiGAN&lt;double&gt;(architecture, new HiFiGANOptions());
+///     inputSize: 80, outputSize: 1);
+/// var model = new HiFiGAN&lt;double&gt;(architecture, new HiFiGANOptions());
+/// var mel = Tensor&lt;double&gt;.CreateRandom(model.MelChannels, 100);   // stands in for a [mel bins, frames] spectrogram
+/// Tensor&lt;double&gt; waveform = model.MelToWaveform(mel);
+/// // Untrained native layers; the HiFiGAN(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
