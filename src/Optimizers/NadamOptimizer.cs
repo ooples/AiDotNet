@@ -454,8 +454,20 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         double learningRateValue = NumOps.ToDouble(CurrentLearningRate);
+        // One whole-parameter-list GPU step for every eligible parameter; the loop below skips the ones it
+        // updated and runs every other parameter (and all of them, when the list step declines) as before.
+        var gpuListUpdated = gpuAdam
+            ? GpuListOptimizerStep<T>.TryApply(context, Engine, "TryNadamStepMultiTensor", 2,
+                p => new[]
+                {
+                    GpuListOptimizerStep<T>.GetOrAddState(_tapeM, p, q => CreateOptimizerStateTensor(q._shape, gpuAdam)),
+                    GpuListOptimizerStep<T>.GetOrAddState(_tapeV2, p, q => CreateOptimizerStateTensor(q._shape, gpuAdam))
+                },
+                (float)learningRateValue, (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon, 0f, _tapeStep)
+            : null;
         foreach (var param in context.Parameters)
         {
+            if (gpuListUpdated is not null && gpuListUpdated.Contains(param)) continue;
             // True sparse scatter NAdam: m + v + param at touched indices only.
             // Existing momentum can still move rows absent from this step; retain the full update in that case.
             if (!_tapeM.ContainsKey(param) && SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))

@@ -182,25 +182,7 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>, Fused.IFusedAct
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
     {
-        int size = input.Length;
-        Matrix<T> jacobian = new Matrix<T>(size, size);
-
-        for (int i = 0; i < size; i++)
-        {
-            for (int j = 0; j < size; j++)
-            {
-                if (i == j)
-                {
-                    jacobian[i, j] = Derivative(input[i]);
-                }
-                else
-                {
-                    jacobian[i, j] = NumOps.Zero;
-                }
-            }
-        }
-
-        return jacobian;
+        return ElementwiseJacobian(input);
     }
 
     /// <summary>
@@ -220,12 +202,12 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>, Fused.IFusedAct
     /// <returns>A new tensor containing the derivatives of the Leaky ReLU function for each input element.</returns>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
-        Tensor<T> output = new Tensor<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            output[i] = Derivative(input[i]);
-        }
-        return output;
+        // x > 0: 1; otherwise alpha
+        var engine = Engine;
+        return engine.TensorWhere(
+            engine.TensorGreaterThan(input, NumOps.Zero),
+            engine.TensorOnesLike(input),
+            engine.TensorFullLike(input, _alpha));
     }
 
     #region GPU Training Support

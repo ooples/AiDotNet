@@ -93,15 +93,7 @@ public class ReLUActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivati
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
     {
-        int n = input.Length;
-        Matrix<T> jacobian = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
-        {
-            jacobian[i, i] = NumOps.GreaterThan(input[i], NumOps.Zero) ? NumOps.One : NumOps.Zero;
-        }
-
-        return jacobian;
+        return ElementwiseJacobian(input);
     }
 
     /// <summary>

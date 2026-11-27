@@ -240,6 +240,22 @@ public static class CompiledTapeTrainingStep<T>
         }
     }
 
+    /// <summary>
+    /// The plans currently configured for <paramref name="owner"/>, one per layer set it has trained. A plan holds
+    /// its optimizer moments, so the same instance from one step to the next is what shows the moments carried over.
+    /// </summary>
+    internal static IReadOnlyList<object> ConfiguredPlansOf(object owner)
+    {
+        if (owner is null) throw new System.ArgumentNullException(nameof(owner));
+        var plans = new List<object>();
+        foreach (var state in SnapshotStates(owner))
+        {
+            if (state.configuredPlan is { } plan) plans.Add(plan);
+        }
+
+        return plans;
+    }
+
     /// <summary>Drops every compiled plan, optimizer moment and step counter of <paramref name="owner"/>.</summary>
     /// <param name="owner">The model (or, for owner-less callers, the first layer) the state belongs to.</param>
     internal static void Invalidate(object owner)
@@ -1435,7 +1451,10 @@ public static class CompiledTapeTrainingStep<T>
         bool verifyDistributedReplay = false,
         double? distributedEagerReplayLoss = null,
         double distributedReplayTolerance = 0.0,
-        Func<Tensor<T>>? closureObjective = null)
+        Func<Tensor<T>>? closureObjective = null,
+        // Re-collects the trainable layers after the lazy-initialization forward; see
+        // FusedTrainingStepRequest.LayersAfterLazyInitialization. Null = layers is final.
+        Func<IReadOnlyList<ITrainableLayer<T>>>? layersAfterLazyInitialization = null)
     {
         // A replay updates weights on the device without advancing their versions; derived caches must rebuild.
         AiDotNet.NeuralNetworks.Layers.DerivedTensorCacheGeneration.Advance();
@@ -1487,7 +1506,8 @@ public static class CompiledTapeTrainingStep<T>
                 verifyDistributedReplay: verifyDistributedReplay,
                 distributedEagerReplayLoss: distributedEagerReplayLoss,
                 distributedReplayTolerance: distributedReplayTolerance,
-                closureObjective: closureObjective);
+                closureObjective: closureObjective,
+                layersAfterLazyInitialization: layersAfterLazyInitialization);
         }
         finally
         {
@@ -1782,7 +1802,10 @@ public static class CompiledTapeTrainingStep<T>
         bool verifyDistributedReplay = false,
         double? distributedEagerReplayLoss = null,
         double distributedReplayTolerance = 0.0,
-        Func<Tensor<T>>? closureObjective = null)
+        Func<Tensor<T>>? closureObjective = null,
+        // Re-collects the trainable layers after the lazy-initialization forward; see
+        // FusedTrainingStepRequest.LayersAfterLazyInitialization. Null = layers is final.
+        Func<IReadOnlyList<ITrainableLayer<T>>>? layersAfterLazyInitialization = null)
     {
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
         if (deferredLoss is not null) deferredLoss.Value = null;
@@ -2012,6 +2035,15 @@ public static class CompiledTapeTrainingStep<T>
                     // are kept.
                     using var sizingScope = AiDotNet.Tensors.Engines.TensorScope.Begin();
                     forward(LazyInitializationSample(_persistentInput, _persistentTarget, t_leadingAxisIsBatch));
+                    // The forward may have built child layers (a composite sized from its first input). From here on
+                    // the step trains, remembers and compares the set that includes them, which is the set every
+                    // later step arrives with.
+                    if (layersAfterLazyInitialization is not null
+                        && layersAfterLazyInitialization() is { Count: > 0 } sizedLayers)
+                    {
+                        layers = sizedLayers;
+                    }
+
                     foreach (var sized in CollectDeduplicatedParametersWithExtras(layers, extraTensors, trainableSelection))
                         sizingScope.Keep(sized);
                     // The rest of what a layer keeps between forwards: a parameter the selection above leaves out (a

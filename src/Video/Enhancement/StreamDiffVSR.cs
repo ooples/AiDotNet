@@ -283,15 +283,7 @@ public partial class StreamDiffVSR<T> : VideoSuperResolutionBase<T>, ITrainingOb
     private Random InferenceRandom() => RandomHelper.CreateSeededRandom(_options.Seed ?? 42);
 
     private Tensor<T> Gaussian(int[] shape, Random random)
-    {
-        var t = new Tensor<T>(shape);
-        for (int i = 0; i < t.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            t[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
-        }
-        return t;
-    }
+        => AiDotNet.Helpers.SeededNoiseTensors.StandardNormal<T>(shape, random);
 
     private Tensor<T> Scaled(Tensor<T> x, double factor) => Engine.TensorMultiplyScalar(x, NumOps.FromDouble(factor));
 

@@ -1997,6 +1997,8 @@ override AiDotNet.Audio.Generation.SoundStream<T>.SampleTrainingBandwidth(System
 AiDotNet.Audio.Generation.SoundStream<T>.TrainDenoising(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, bool denoise) -> void
 AiDotNet.Audio.LanguageIdentification.Wav2Vec2LidOptions.ClassifierProjectionSize.get -> int
 AiDotNet.Audio.LanguageIdentification.Wav2Vec2LidOptions.ClassifierProjectionSize.set -> void
+AiDotNet.Audio.LanguageIdentification.Wav2Vec2LidOptions.LayerDrop.get -> double
+AiDotNet.Audio.LanguageIdentification.Wav2Vec2LidOptions.LayerDrop.set -> void
 static AiDotNet.Audio.Pitch.WorldPitchDetector<T>.GetSamplesForHarvest(int fs, int xLength, double framePeriod) -> int
 override AiDotNet.Audio.Generation.SoundStream<T>.GeneratorObjective(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! real, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generated, int bandwidth) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.Audio.Generation.SoundStream<T>.DiscriminatorObjective(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! real, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generated, int bandwidth) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
@@ -26230,7 +26232,6 @@ AiDotNet.Models.Options.TabROptions<T>.NumericEmbeddingDimension.set -> void
 AiDotNet.Enums.TabRNumericEmbedding
 AiDotNet.Enums.TabRNumericEmbedding.None = 0 -> AiDotNet.Enums.TabRNumericEmbedding
 AiDotNet.Enums.TabRNumericEmbedding.PeriodicLinearReLU = 1 -> AiDotNet.Enums.TabRNumericEmbedding
-override AiDotNet.Audio.LanguageIdentification.Wav2Vec2LanguageIdentifier<T>.SupportsFusedCompiledTraining.get -> bool
 *REMOVED*AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.FetchSGDCompressor(int sketchRows = 5, int sketchCols = 10000, int topK = 1000, int seed = 42) -> void
 *REMOVED*AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.MergeSketches(System.Collections.Generic.IReadOnlyList<double[,]!>! sketches) -> double[,]!
 *REMOVED*AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.RecoverTopK(double[,]! mergedSketch, int gradientLength) -> T[]!
@@ -26610,7 +26611,6 @@ override AiDotNet.Diffusion.ThreeD.ShapEModel<T>.ImageTo3D(AiDotNet.Tensors.Line
 override AiDotNet.Diffusion.ThreeD.Magic3DModel<T>.ImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
 override AiDotNet.Diffusion.ThreeD.Instant3DModel<T>.ImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
 override AiDotNet.Diffusion.ThreeD.PointEModel<T>.ImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
-override AiDotNet.Audio.Fingerprinting.CLAPModel<T>.SupportsFusedCompiledTraining.get -> bool
 override AiDotNet.Audio.SpeechRecognition.Wav2Vec2Model<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 AiDotNet.Diffusion.StyleTransfer.TimestepDependentLora<T>.GetParameterStateChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>!>!
 AiDotNet.Diffusion.StyleTransfer.TimestepDependentLora<T>.GetParameters() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
@@ -26634,6 +26634,15 @@ override AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.Bu
 AiDotNet.Finance.Trading.Agents.FinancialPPOAgent<T>.StoreExperienceWithPrivilegedCritic(AiDotNet.Tensors.LinearAlgebra.Vector<T>! state, AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, T reward, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextState, bool done, AiDotNet.Tensors.LinearAlgebra.Vector<T>! privileged, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextPrivileged) -> void
 AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.PrivilegedCriticInputSize.get -> int
 AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.PrivilegedCriticInputSize.set -> void
+static AiDotNet.KnowledgeDistillation.DistillationStrategyFactory<T>.CreateSparseTopKTailBucketStrategy(int topK = 64, double temperature = 2, double alpha = 0.5) -> AiDotNet.Interfaces.IDistillationStrategy<T>!
+AiDotNet.KnowledgeDistillation.Strategies.SparseTopKTailBucketDistillationStrategy<T>
+AiDotNet.KnowledgeDistillation.Strategies.SparseTopKTailBucketDistillationStrategy<T>.SparseTopKTailBucketDistillationStrategy(int topK = 64, double temperature = 2, double alpha = 0.5) -> void
+AiDotNet.KnowledgeDistillation.Strategies.SparseTopKTailBucketDistillationStrategy<T>.TopK.get -> int
+override AiDotNet.KnowledgeDistillation.Strategies.SparseTopKTailBucketDistillationStrategy<T>.ComputeLoss(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! studentBatchOutput, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! teacherBatchOutput, AiDotNet.Tensors.LinearAlgebra.Matrix<T>? trueLabelsBatch = null) -> T
+override AiDotNet.KnowledgeDistillation.Strategies.SparseTopKTailBucketDistillationStrategy<T>.ComputeGradient(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! studentBatchOutput, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! teacherBatchOutput, AiDotNet.Tensors.LinearAlgebra.Matrix<T>? trueLabelsBatch = null) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.KnowledgeDistillation.Strategies.SparseTopKTailBucketDistillationStrategy<T>.ExtractTopKTargets(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! teacherBatchOutput, out AiDotNet.Tensors.LinearAlgebra.Tensor<int>! topIndices, out AiDotNet.Tensors.LinearAlgebra.Matrix<T>! topProbabilities) -> void
+AiDotNet.KnowledgeDistillation.Strategies.SparseTopKTailBucketDistillationStrategy<T>.ComputeLossFromSparseTargets(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! studentBatchOutput, AiDotNet.Tensors.LinearAlgebra.Tensor<int>! topIndices, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! topProbabilities, AiDotNet.Tensors.LinearAlgebra.Matrix<T>? trueLabelsBatch = null) -> T
+AiDotNet.KnowledgeDistillation.Strategies.SparseTopKTailBucketDistillationStrategy<T>.ComputeGradientFromSparseTargets(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! studentBatchOutput, AiDotNet.Tensors.LinearAlgebra.Tensor<int>! topIndices, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! topProbabilities, AiDotNet.Tensors.LinearAlgebra.Matrix<T>? trueLabelsBatch = null) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
 AiDotNet.AiModelBuilder<T, TInput, TOutput>.Build<TSample>(System.Collections.Generic.IReadOnlyList<TSample>! samples) -> AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>!
 AiDotNet.AiModelBuilder<T, TInput, TOutput>.BuildAsync<TSample>(System.Collections.Generic.IReadOnlyList<TSample>! samples) -> System.Threading.Tasks.Task<AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>!>!
 AiDotNet.AiModelBuilder<T, TInput, TOutput>.BuildAsync<TSample>(System.Collections.Generic.IReadOnlyList<TSample>! samples, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>!>!
@@ -26659,3 +26668,30 @@ AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ShuffleEachEpoch.get -> b
 AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ShuffleEachEpoch.set -> void
 AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ValidationFraction.get -> double
 AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ValidationFraction.set -> void
+AiDotNet.Models.Options.KnowledgeDistillationOptions<T, TInput, TOutput>.SparseTopK.get -> int
+AiDotNet.Models.Options.KnowledgeDistillationOptions<T, TInput, TOutput>.SparseTopK.set -> void
+AiDotNet.Models.Options.KnowledgeDistillationOptions<T, TInput, TOutput>.SparseTopKMinimumClasses.get -> int
+AiDotNet.Models.Options.KnowledgeDistillationOptions<T, TInput, TOutput>.SparseTopKMinimumClasses.set -> void
+static AiDotNet.KnowledgeDistillation.DistillationStrategyFactory<T>.ResolveStrategyForOutputWidth(AiDotNet.Interfaces.IDistillationStrategy<T>? strategy, double temperature, double alpha, int outputClasses, int sparseTopK, int sparseTopKMinimumClasses) -> AiDotNet.Interfaces.IDistillationStrategy<T>!
+override AiDotNet.ActivationFunctions.ELUActivation<T>.Derivative(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.ActivationFunctions.SwishActivation<T>.Derivative(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.NeuralNetworks.Layers.SqueezeAndExcitationLayer<T>.OnRandomSeedAssigned() -> void
+override AiDotNet.NeuralNetworks.Layers.BasicBlock<T>.ReconcileShapeOnlyResolution(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> void
+override AiDotNet.NeuralNetworks.Layers.BasicBlock<T>.OutputShapeRelation.get -> AiDotNet.NeuralNetworks.Layers.ShapeRelationKind
+AiDotNet.AiModelBuilder<T, TInput, TOutput>.ConfigureGradientCheckpointing(AiDotNet.Models.Options.GradientCheckpointingOptions? options = null) -> AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>!
+AiDotNet.Configuration.YamlModelConfig.GradientCheckpointing.get -> AiDotNet.Models.Options.GradientCheckpointingOptions?
+AiDotNet.Configuration.YamlModelConfig.GradientCheckpointing.set -> void
+AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>.ConfigureGradientCheckpointing(AiDotNet.Models.Options.GradientCheckpointingOptions? options = null) -> AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>!
+AiDotNet.Models.Options.GradientCheckpointingOptions
+AiDotNet.Models.Options.GradientCheckpointingOptions.CheckpointEveryNLayers.get -> int
+AiDotNet.Models.Options.GradientCheckpointingOptions.CheckpointEveryNLayers.set -> void
+AiDotNet.Models.Options.GradientCheckpointingOptions.Enabled.get -> bool
+AiDotNet.Models.Options.GradientCheckpointingOptions.Enabled.set -> void
+AiDotNet.Models.Options.GradientCheckpointingOptions.GradientCheckpointingOptions() -> void
+AiDotNet.Models.Options.GradientCheckpointingOptions.GradientCheckpointingOptions(bool enabled, int checkpointEveryNLayers = 0) -> void
+AiDotNet.Models.Options.GradientCheckpointingOptions.GradientCheckpointingOptions(AiDotNet.Models.Options.GradientCheckpointingOptions! other) -> void
+AiDotNet.Models.Options.GradientCheckpointingOptions.Validate() -> void
+AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.CalculateBatchLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! predicted, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! teacherOutput) -> T
+AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.CurrentTrueLabelBatch.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.CurrentTrueLabelBatch.set -> void
+AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.Strategy.get -> AiDotNet.Interfaces.IDistillationStrategy<T>!

@@ -3347,6 +3347,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         context = WithSparseLeavesAsValueViews(context);
         var learningRateGroups = CaptureLearningRateGroups(context);
         _stepNoGrad = new NoGradScope<T>();
+        using var gpuStepBatch = GradientBasedOptimizerGpuStepBatch.Begin(
+            typeof(T) == typeof(float)
+                ? AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine
+                : null);
         try
         {
             // The clip (here or in StepCore) scales the gradients in place; a layer that published one by reference
@@ -3356,6 +3360,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             if (!ClipsGradientsInStepCore && !GradientsClippedAhead) ApplyConfiguredTapeGradientClipping(context);
             StepCore(context);
             ApplyLearningRateGroups(learningRateGroups);
+            gpuStepBatch.Commit();
         }
         finally
         {
@@ -4430,6 +4435,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         AiDotNet.Tensors.Engines.DirectGpuTensorEngine? gpuEngine =
             typeof(T) == typeof(float) ? AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine : null;
         IDirectGpuBackend? gpuBackend = gpuEngine?.GetBackend();
+        List<Tensor<float>>? syncedGpuGrads = null;
         foreach (var grad in grads)
         {
             if (!grad.HasPendingGpuData && TryScaleHostSimd(grad, scale))
@@ -4443,9 +4449,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                         && syncedGpuBuf.Size >= gf.Length
                         && gf._gpuBufferVersion == gf.Version)
                     {
-                        using var __gpuOp = gpuEngine.EnterGpuOp();
-                        gpuBackend.Scale(syncedGpuBuf, syncedGpuBuf, (float)scale, gf.Length);
-                        gf._gpuBufferVersion = gf.Version;
+                        (syncedGpuGrads ??= new List<Tensor<float>>(grads.Count)).Add(gf);
                     }
                 }
                 continue;
@@ -4453,6 +4457,24 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             var span = grad.Data.Span;
             for (int i = 0; i < span.Length; i++)
                 span[i] = numOps.FromDouble(numOps.ToDouble(span[i]) * scale);
+        }
+
+        if (syncedGpuGrads is { Count: > 0 } && gpuEngine is not null && gpuBackend is not null)
+        {
+            float scaleF = (float)scale;
+            if (Training.GpuMultiTensorAdamBridge.TryScaleGradientsMultiTensor is not { } multiScale
+                || !multiScale(syncedGpuGrads, scaleF))
+            {
+                using var __gpuOp = gpuEngine.EnterGpuOp();
+                foreach (var gf in syncedGpuGrads)
+                {
+                    if (gf._gpuBuffer is { } syncedGpuBuf)
+                    {
+                        gpuBackend.Scale(syncedGpuBuf, syncedGpuBuf, scaleF, gf.Length);
+                        gf._gpuBufferVersion = gf.Version;
+                    }
+                }
+            }
         }
 
         TapeClipNormThreadCache.LastPostClipNormSq = globalNormSq * scale * scale;
@@ -4963,27 +4985,27 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     }
 
     private static void MarkGpuTensorUpdated(IDirectGpuBackend backend, Tensor<float> tensor)
-    {
-        tensor.MarkModified(CreateGpuWriteSyncPoint(backend));
-        tensor._gpuBufferVersion = tensor.Version;
-    }
+        => GradientBasedOptimizerGpuStepBatch.RecordTensorUpdated(backend, tensor);
 
     private static void CommitGpuParameterUpdated(
         AiDotNet.Tensors.Engines.DirectGpuTensorEngine gpuEngine,
         IDirectGpuBackend gpuBackend,
         Tensor<float> pf,
         IGpuBuffer buffer)
-    {
-        if (pf._gpuBuffer is not null ||
-            (pf.OffloadDevicePointer == IntPtr.Zero && pf.GetBackingArrayForCacheLookupUnsafe() is not null))
-        {
-            gpuEngine.CommitParameterUpdatedOnDevice(pf, buffer, gpuBackend, CreateGpuWriteSyncPoint(gpuBackend));
-        }
-        else
-        {
-            MarkGpuTensorUpdated(gpuBackend, pf);
-        }
-    }
+        => GradientBasedOptimizerGpuStepBatch.RecordParameterUpdated(gpuEngine, gpuBackend, pf, buffer);
+
+    /// <summary>
+    /// Executes a whole-parameter-list ("foreach") GPU update for all eligible parameters in <paramref name="context"/>,
+    /// returning the updated parameter set so the subclass's fallback loop skips them, or <c>null</c> if unavailable.
+    /// </summary>
+    private protected HashSet<Tensor<T>>? TryExecuteGpuListStep(
+        TapeStepContext<T> context,
+        string listStepName,
+        int stateCount,
+        GpuListOptimizerStep<T>.StateResolver resolveStates,
+        params object[] scalarArguments)
+        => GpuListOptimizerStep<T>.TryApply(
+            context, Engine, listStepName, stateCount, resolveStates, scalarArguments);
 
     private static IGpuBuffer EnsureGpuMomentResident(
         AiDotNet.Tensors.Engines.DirectGpuTensorEngine gpuEngine,

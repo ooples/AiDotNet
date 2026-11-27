@@ -349,6 +349,417 @@ public class CompiledStepRedrawTests
         Assert.InRange(keptCount, 1, draws - 1);
     }
 
+    /// <summary>
+    /// Wav2Vec2 language identification with LayerDrop off: the waveform standardization, the dropouts and the
+    /// SpecAugment time mask all run inside the training forward. The 300-sample clips are shorter than the feature
+    /// encoder's 400-sample receptive field and are zero-padded to it, which used to be a host copy of the traced
+    /// batch (#2592).
+    /// </summary>
+    [Theory(Timeout = 300000)]
+    [InlineData(8000)]
+    [InlineData(300)]
+    public async Task Wav2Vec2_language_identification_follows_the_eager_tape_on_every_compiled_step(int samples)
+    {
+        await Task.Yield();
+        var data = RandomHelper.CreateSeededRandom(5);
+        var eagerLosses = TrainModelsSideBySide(
+            LanguageIdentifierWithoutLayerDrop,
+            model => model.FusedSession,
+            step => (Random(data, 2, samples), LanguageTargets(step)));
+        Assert.True(eagerLosses.Distinct().Count() == eagerLosses.Count, "the eager steps should differ.");
+    }
+
+    /// <summary>
+    /// Two identically seeded language identifiers trained on the compiled plan end at the same weights: the plan
+    /// redraws the dropouts and the time mask from the model's seeded streams, in the order the eager tape draws them
+    /// (#2592).
+    /// </summary>
+    [Theory(Timeout = 300000)]
+    [InlineData(8000)]
+    [InlineData(300)]
+    public async Task Wav2Vec2_language_identification_is_reproducible_on_the_compiled_plan(int samples)
+    {
+        await Task.Yield();
+        double[] Trained()
+        {
+            var data = RandomHelper.CreateSeededRandom(5);
+            using var model = LanguageIdentifierWithoutLayerDrop();
+            for (int step = 0; step < Steps; step++)
+            {
+                model.Train(Random(data, 2, samples), LanguageTargets(step));
+                Assert.True(model.FusedSession.IsCommitted && !model.FusedSession.LastStepRanOutsidePlan,
+                    $"step {step}: fused path did not engage ({model.FusedSession.LastMissReason ?? model.LastFusedGateMissReason}).");
+            }
+            return model.GetParameters().ToArray();
+        }
+
+        var first = Trained();
+        using var untrained = LanguageIdentifierWithoutLayerDrop();
+        Assert.NotEqual(untrained.GetParameters().ToArray(), first);
+        Assert.Equal(first, Trained());
+    }
+
+    /// <summary>
+    /// Vocos' inverse STFT overlap-adds its frames with a scatter-add through sample positions. Those positions were
+    /// computed in the forward with integer engine arithmetic, which a compiled trace records as nodes the scatter-add
+    /// does not wait for: the plan's first step scattered every window square onto sample 0 (loss 0.0850 against the
+    /// eager 0.2476) and only the replays were right. The positions are host indices now, and the compiled step
+    /// follows the eager one from the first step.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task Vocos_overlap_add_follows_the_eager_tape_from_the_first_compiled_step()
+    {
+        await Task.Yield();
+        const int batch = 2, mels = 8, frames = 6;
+        VocosGeneratorLayer<double> Build() => new(numMels: mels, hiddenDim: 16, numBackboneBlocks: 1,
+            intermediateDim: 32, nFft: 16, hopLength: 4);
+        var fused = Build();
+        var eager = Build();
+        var warm = Random(RandomHelper.CreateSeededRandom(2), batch, mels, frames);
+        int[] outputShape = fused.Forward(warm)._shape;
+        eager.Forward(warm);
+        eager.SetParameters(fused.GetParameters());
+        fused.SetTrainingMode(true);
+        eager.SetTrainingMode(true);
+
+        var eagerLosses = TrainSideBySide(
+            new ITrainableLayer<double>[] { fused }, fused.Forward,
+            new ITrainableLayer<double>[] { eager }, eager.Forward,
+            data => (Random(data, batch, mels, frames), Random(data, outputShape)));
+        Assert.True(eagerLosses.Distinct().Count() == eagerLosses.Count, "the eager steps should differ.");
+    }
+
+    /// <summary>
+    /// HTS-AT's fusion patch embedding fuses the local views of the rows its <c>longer</c> mask marks. The rows were
+    /// read from the mask on the host while tracing, so a compiled plan kept fusing the traced batch's rows whatever
+    /// the later masks said. They are selected by recorded operations on the mask now: with a different mask on every
+    /// step (the same number of longer rows, in other positions) the compiled steps follow the eager ones.
+    /// </summary>
+    [Theory(Timeout = 120000)]
+    [InlineData(2, 1)]
+    [InlineData(3, 2)]
+    [InlineData(3, 3)]
+    public async Task Htsat_fusion_follows_the_longer_mask_of_every_compiled_step(int batch, int longerRows)
+    {
+        await Task.Yield();
+        const int size = 24, patch = 4, width = 8;
+        var engine = AiDotNetEngine.Current;
+        HtsatFusionPatchEmbeddingLayer<double> Build() => new(patch, width);
+        var fused = Build();
+        var eager = Build();
+        // The mask rides in the batch (the first pixel of each row's global view), so it is the plan's input.
+        Func<Tensor<double>, Tensor<double>> Forward(HtsatFusionPatchEmbeddingLayer<double> layer) => images =>
+            layer.Forward(images, engine.Reshape(
+                engine.TensorSlice(images, new[] { 0, 0, 0, 0 }, new[] { batch, 1, 1, 1 }), new[] { batch }));
+        Tensor<double> Batch(System.Random data, int step)
+        {
+            var images = Random(data, batch, 4, size, size);
+            for (int b = 0; b < batch; b++)
+                images[b, 0, 0, 0] = (b + step) % batch < longerRows ? 1.0 : 0.0;
+            return images;
+        }
+
+        var warm = Batch(RandomHelper.CreateSeededRandom(2), 0);
+        fused.SetTrainingMode(false);
+        eager.SetTrainingMode(false);
+        int[] outputShape = Forward(fused)(warm)._shape;
+        Forward(eager)(warm);
+        eager.SetParameters(fused.GetParameters());
+        fused.SetTrainingMode(true);
+        eager.SetTrainingMode(true);
+
+        int step = 0;
+        var masks = new List<string>();
+        var eagerLosses = TrainSideBySide(
+            new ITrainableLayer<double>[] { fused }, Forward(fused),
+            new ITrainableLayer<double>[] { eager }, Forward(eager),
+            data =>
+            {
+                var images = Batch(data, step++);
+                masks.Add(string.Concat(Enumerable.Range(0, batch).Select(b => images[b, 0, 0, 0] > 0.5 ? '1' : '0')));
+                return (images, Random(data, outputShape));
+            });
+        Assert.True(eagerLosses.Distinct().Count() == eagerLosses.Count, "the eager steps should differ.");
+        if (longerRows < batch) Assert.NotEqual(masks[0], masks[1]);
+    }
+
+    /// <summary>
+    /// The fusion embedding's graph is built for the traced batch's number of longer rows. A later batch with another
+    /// number cannot run on it; rather than fusing the wrong rows unseen, the compiled step's loss is not a number.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task Htsat_fusion_does_not_train_on_a_mask_its_plan_was_not_built_for()
+    {
+        await Task.Yield();
+        const int batch = 3, size = 24, patch = 4, width = 8;
+        var engine = AiDotNetEngine.Current;
+        var layer = new HtsatFusionPatchEmbeddingLayer<double>(patch, width);
+        Tensor<double> Forward(Tensor<double> images) => layer.Forward(images, engine.Reshape(
+            engine.TensorSlice(images, new[] { 0, 0, 0, 0 }, new[] { batch, 1, 1, 1 }), new[] { batch }));
+        var data = RandomHelper.CreateSeededRandom(5);
+        Tensor<double> Batch(int longerRows)
+        {
+            var images = Random(data, batch, 4, size, size);
+            for (int b = 0; b < batch; b++) images[b, 0, 0, 0] = b < longerRows ? 1.0 : 0.0;
+            return images;
+        }
+
+        layer.SetTrainingMode(false);
+        int[] outputShape = Forward(Batch(1))._shape;
+        layer.SetTrainingMode(true);
+        var stepper = new TapeTrainingStepper<double>(new object());
+        var optimizer = Sgd();
+        var layers = new ITrainableLayer<double>[] { layer };
+        double first = stepper.Step(Request(layers, Forward, Batch(1), Random(data, outputShape), optimizer));
+        Assert.True(stepper.LastStepFused, $"fused path did not engage ({stepper.Session.LastMissReason}).");
+        Assert.False(double.IsNaN(first));
+        // The trained tensors only: the batch-norm running statistics are buffers the forward updates on any step.
+        var beforeSecond = layer.GetTrainableParameters().Select(t => t.ToArray()).ToList();
+        double second = stepper.Step(Request(layers, Forward, Batch(2), Random(data, outputShape), optimizer));
+        if (stepper.LastStepFused)
+        {
+            // The plan's NaN is the mismatch signal: the step must fail visibly and leave the weights untouched.
+            Assert.True(double.IsNaN(second), $"a batch with two longer rows trained on a plan built for one (loss {second:R}).");
+            var afterSecond = layer.GetTrainableParameters().Select(t => t.ToArray()).ToList();
+            Assert.Equal(beforeSecond.Count, afterSecond.Count);
+            for (int i = 0; i < beforeSecond.Count; i++)
+                Assert.Equal(beforeSecond[i], afterSecond[i]);
+        }
+        else
+        {
+            Assert.True(!double.IsNaN(second) && !double.IsInfinity(second),
+                $"the eager step on a batch with two longer rows did not produce a finite loss ({second:R}).");
+        }
+    }
+
+    /// <summary>
+    /// Wav2Vec2 language identification with its default options, LayerDrop 0.1 included (#2592): the layer skip is a
+    /// per-step gate inside the graph, so the model trains on the fused compiled plan and every compiled step follows
+    /// the eager tape, which draws the same gates.
+    /// </summary>
+    [Fact(Timeout = 300000)]
+    public async Task Wav2Vec2_language_identification_with_default_layer_drop_trains_on_the_compiled_plan()
+    {
+        await Task.Yield();
+        Assert.Equal(0.1, new AiDotNet.Audio.LanguageIdentification.Wav2Vec2LidOptions().LayerDrop);
+        var data = RandomHelper.CreateSeededRandom(5);
+        var eagerLosses = TrainModelsSideBySide(
+            () => LanguageIdentifier(layerDrop: null),
+            model => model.FusedSession,
+            step => (Random(data, 2, 8000), LanguageTargets(step)));
+        Assert.True(eagerLosses.Distinct().Count() == eagerLosses.Count, "the eager steps should differ.");
+    }
+
+    /// <summary>
+    /// With LayerDrop on (the default 0.1, and one half so that layers are dropped within a few steps), two identically
+    /// seeded language identifiers trained on the compiled plan end at the same weights, every step on the plan.
+    /// </summary>
+    [Theory(Timeout = 300000)]
+    [InlineData(null)]
+    [InlineData(0.5)]
+    public async Task Wav2Vec2_language_identification_with_layer_drop_is_reproducible_on_the_compiled_plan(double? layerDrop)
+    {
+        await Task.Yield();
+        double[] Trained()
+        {
+            var data = RandomHelper.CreateSeededRandom(5);
+            using var model = LanguageIdentifier(layerDrop);
+            int fusedSteps = 0, eagerSteps = 0;
+            for (int step = 0; step < Steps; step++)
+            {
+                model.Train(Random(data, 2, 8000), LanguageTargets(step));
+                if (model.FusedSession.IsCommitted && !model.FusedSession.LastStepRanOutsidePlan) fusedSteps++;
+                else eagerSteps++;
+            }
+            Assert.True(fusedSteps == Steps && eagerSteps == 0,
+                $"{fusedSteps} fused and {eagerSteps} eager steps of {Steps} ({model.FusedSession.LastMissReason ?? model.LastFusedGateMissReason}).");
+            return model.GetParameters().ToArray();
+        }
+
+        var first = Trained();
+        using var untrained = LanguageIdentifier(layerDrop);
+        Assert.NotEqual(untrained.GetParameters().ToArray(), first);
+        Assert.DoesNotContain(first, double.IsNaN);
+        Assert.Equal(first, Trained());
+    }
+
+    /// <summary>
+    /// The gate drops layers at the configured rate: over 300 training forwards of a 4-layer encoder at LayerDrop 0.25
+    /// a dropped layer hands its input on unchanged, and the number of such layers is within five standard deviations
+    /// of the 300 expected (1200 Bernoulli(0.25) draws, standard deviation 15). Evaluation drops none.
+    /// </summary>
+    [Fact(Timeout = 300000)]
+    public async Task Wav2Vec2_step_gate_drops_layers_at_the_configured_rate()
+    {
+        await Task.Yield();
+        const int forwards = 300, layerCount = 4;
+        const double rate = 0.25;
+        var configuration = new Wav2Vec2Configuration
+        {
+            ConvDims = new[] { 8, 8, 8 }, ConvKernels = new[] { 10, 3, 2 }, ConvStrides = new[] { 5, 2, 2 },
+            HiddenSize = 16, Layers = layerCount, Heads = 2, IntermediateSize = 32, PositionalConvKernel = 8,
+            PositionalConvGroups = 4, LayerDrop = rate, LayerDropPolicy = LayerDropPolicy.StepGate,
+            HiddenDropout = 0.0, AttentionDropout = 0.0, ActivationDropout = 0.0, MaskTimeProbability = 0.0,
+        };
+        var network = new Wav2Vec2Network<double>(AiDotNetEngine.Current, new List<LayerBase<double>>(), configuration);
+        network.InitializeLikeReference(RandomHelper.CreateSeededRandom(3));
+        var random = RandomHelper.CreateSeededRandom(29);
+        var audio = Random(RandomHelper.CreateSeededRandom(5), 2, 400);
+
+        int Dropped(bool training)
+        {
+            var states = network.Forward(audio, training, random).LayerStates;
+            Assert.Equal(layerCount + 1, states.Count);
+            int dropped = 0;
+            for (int layer = 0; layer < layerCount; layer++)
+                if (states[layer].ToArray().SequenceEqual(states[layer + 1].ToArray())) dropped++;
+            return dropped;
+        }
+
+        int total = 0;
+        var perForward = new int[layerCount + 1];
+        for (int i = 0; i < forwards; i++)
+        {
+            int dropped = Dropped(training: true);
+            total += dropped;
+            perForward[dropped]++;
+        }
+
+        double expected = forwards * layerCount * rate;
+        double deviation = Math.Sqrt(forwards * layerCount * rate * (1.0 - rate));
+        Assert.True(Math.Abs(total - expected) <= 5.0 * deviation,
+            $"{total} layers were dropped in {forwards} forwards; expected {expected} +/- {5.0 * deviation:F0}.");
+        Assert.True(perForward[0] > 0 && perForward[1] > 0 && perForward[2] > 0,
+            $"dropped-layer counts per forward: {string.Join(", ", perForward)}.");
+        Assert.Equal(0, Dropped(training: false));
+    }
+
+    /// <summary>LayerDrop is a probability below 1: 1 would skip every encoder layer on every training step.</summary>
+    [Theory]
+    [InlineData(-0.1)]
+    [InlineData(1.0)]
+    [InlineData(1.5)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void Wav2Vec2_language_identification_rejects_a_layer_drop_outside_zero_to_one(double layerDrop)
+    {
+        var options = new AiDotNet.Audio.LanguageIdentification.Wav2Vec2LidOptions();
+        Assert.Throws<ArgumentOutOfRangeException>(() => options.LayerDrop = layerDrop);
+        Assert.Equal(0.1, options.LayerDrop);
+        options.LayerDrop = 0.0;
+        options.LayerDrop = 0.999;
+        Assert.Equal(0.999, options.LayerDrop);
+    }
+
+    private static AiDotNet.Audio.LanguageIdentification.Wav2Vec2LanguageIdentifier<double> LanguageIdentifierWithoutLayerDrop()
+        => LanguageIdentifier(layerDrop: 0.0);
+
+    // layerDrop null: the options' default.
+    private static AiDotNet.Audio.LanguageIdentification.Wav2Vec2LanguageIdentifier<double> LanguageIdentifier(double? layerDrop)
+    {
+        var options = new AiDotNet.Audio.LanguageIdentification.Wav2Vec2LidOptions
+        {
+            HiddenSize = 16, NumLayers = 2, NumAttentionHeads = 2, IntermediateSize = 32, FeatureEncoderDim = 16,
+            HiddenDropout = 0.2, FeatureProjectionDropout = 0.2,
+        };
+        if (layerDrop is { } rate) options.LayerDrop = rate;
+        return new(
+            new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+                inputType: AiDotNet.Enums.InputType.TwoDimensional,
+                taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification,
+                inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4),
+            new[] { "en", "es", "fr", "de" },
+            options);
+    }
+
+    private static Tensor<double> LanguageTargets(int step)
+    {
+        var target = new Tensor<double>(new[] { 2, 4 });
+        target[0, step % 4] = 1.0;
+        target[1, (step + 2) % 4] = 1.0;
+        return target;
+    }
+
+    /// <summary>
+    /// CLAP's contrastive step (#2592). Everything its training forward does per step has to be recomputed or redrawn
+    /// by the compiled plan: the log-mel front end, the random crop of a clip longer than the clip length (12,000
+    /// samples against 8,192), the three feature-fusion crops of such a clip (20,000 samples), the fusion branch's
+    /// random row when no clip is longer (6,000 samples with fusion), SpecAugment, drop-path, the text dropout, and
+    /// the text tower's position ids and padding mask, which follow each batch's captions.
+    /// The first compiled step is held to the eager step like every other: HTS-AT's patch merging used to gather
+    /// through indices a trace had not computed yet, so the traced step alone merged token 0 into every patch.
+    /// </summary>
+    [Theory(Timeout = 300000)]
+    [InlineData(false, 6000)]
+    [InlineData(false, 12000)]
+    [InlineData(true, 6000)]
+    [InlineData(true, 20000)]
+    public async Task Clap_follows_the_eager_tape_on_every_compiled_step(bool featureFusion, int samples)
+    {
+        await Task.Yield();
+        var eagerLosses = TrainModelsSideBySide(
+            () => AiDotNet.Tests.Audio.ClapReferenceTests.Build(featureFusion),
+            model => TapeTrainingStepper<double>.ForOwner(model).Session,
+            step =>
+            {
+                var audio = new Tensor<double>(new[] { 2, samples });
+                var span = audio.AsWritableSpan();
+                for (int b = 0; b < 2; b++)
+                {
+                    double frequency = b == 0 ? 600.0 + 150.0 * step : 4200.0 - 300.0 * step;
+                    for (int i = 0; i < samples; i++)
+                        span[b * samples + i] = (0.4 + 0.1 * step) * Math.Sin(2 * Math.PI * frequency * i / 48000.0);
+                }
+                // Captions of a different length each step (1 is the padding id): RoBERTa's position ids and its
+                // attention mask follow the padding, so a plan that kept the traced batch's would embed and attend
+                // the later captions as if they were padded like the first.
+                var captions = new Tensor<double>(new[] { 2, 6 }, new Vector<double>(step % 2 == 0
+                    ? new double[] { 0, 5 + step, 9, 2, 1, 1, 0, 33, 41 - step, 17, 2, 1 }
+                    : new double[] { 0, 5 + step, 2, 1, 1, 1, 0, 33, 41 - step, 17, 23, 2 }));
+                return (audio, captions);
+            });
+        Assert.True(eagerLosses.Distinct().Count() == eagerLosses.Count, "the eager steps should differ.");
+    }
+
+    /// <summary>
+    /// Trains two identically seeded models through their own <c>Train</c>, one on the compiled plan and one with its
+    /// session disabled, on the same fresh batch each step. Returns the eager losses, after requiring the compiled arm
+    /// to engage and to follow them step for step.
+    /// </summary>
+    private static List<double> TrainModelsSideBySide<TModel>(Func<TModel> build,
+        Func<TModel, FusedTrainingSession<double>> sessionOf,
+        Func<int, (Tensor<double> Input, Tensor<double> Target)> batchOf)
+        where TModel : AiDotNet.NeuralNetworks.NeuralNetworkBase<double>
+    {
+        using var fused = build();
+        using var eager = build();
+        var fusedSession = sessionOf(fused);
+        var eagerSession = sessionOf(eager);
+        eagerSession.IsDisabled = true;
+        var eagerLosses = new List<double>();
+        for (int step = 0; step < Steps; step++)
+        {
+            var (input, target) = batchOf(step);
+            fused.Train(input, target);
+            Assert.True(fusedSession.IsCommitted && !fusedSession.LastStepRanOutsidePlan,
+                $"step {step}: fused path did not engage ({fusedSession.LastMissReason ?? fused.LastFusedGateMissReason}).");
+            eager.Train(input, target);
+            Assert.False(eagerSession.IsCommitted, $"step {step}: the eager arm ran on a compiled plan.");
+            double fusedLoss = fused.GetLastLoss(), eagerLoss = eager.GetLastLoss();
+            Assert.True(
+                Math.Abs(fusedLoss - eagerLoss) <= Tolerance * Math.Max(1.0, Math.Abs(eagerLoss)),
+                $"step {step}: fused loss {fusedLoss:R} differs from eager loss {eagerLoss:R}; the plan replays stale per-step state.");
+            double[] fusedParameters = fused.GetParameters().ToArray(), eagerParameters = eager.GetParameters().ToArray();
+            Assert.Equal(eagerParameters.Length, fusedParameters.Length);
+            for (int i = 0; i < eagerParameters.Length; i++)
+                Assert.True(
+                    Math.Abs(fusedParameters[i] - eagerParameters[i]) <= Tolerance * Math.Max(1.0, Math.Abs(eagerParameters[i])),
+                    $"step {step}: fused parameter {i} ({fusedParameters[i]:R}) differs from eager ({eagerParameters[i]:R}).");
+            eagerLosses.Add(eagerLoss);
+        }
+        return eagerLosses;
+    }
+
     /// <summary>The eager losses, after requiring the fused arm to engage and to follow them step for step.</summary>
     private static List<double> TrainSideBySide(
         IReadOnlyList<ITrainableLayer<double>> fusedLayers, Func<Tensor<double>, Tensor<double>> fusedForward,

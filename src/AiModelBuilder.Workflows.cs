@@ -1969,7 +1969,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         _memoryConfig = _trainingCore.MemoryConfig;
         return this;
     }
-
+    /// <inheritdoc />
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureGradientCheckpointing(
+        GradientCheckpointingOptions? options = null)
+    {
+        var resolved = options ?? new GradientCheckpointingOptions();
+        resolved.Validate();
+        var config = _memoryConfig ?? new Training.Memory.TrainingMemoryConfig();
+        config.UseGradientCheckpointing = resolved.Enabled;
+        config.CheckpointEveryNLayers = resolved.CheckpointEveryNLayers;
+        return ConfigureMemoryManagement(config);
+    }
     /// <summary>
     /// Configures training monitoring for real-time visibility into training progress.
     /// </summary>

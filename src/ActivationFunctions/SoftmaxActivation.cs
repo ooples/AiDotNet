@@ -106,26 +106,18 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Matrix<T> Derivative(Vector<T> input)
     {
-        Vector<T> softmaxOutput = Activate(input);
-        int size = softmaxOutput.Length;
-        Matrix<T> jacobian = new Matrix<T>(size, size);
-
-        for (int i = 0; i < size; i++)
+        if (input.Length == 0)
         {
-            for (int j = 0; j < size; j++)
-            {
-                if (i == j)
-                {
-                    jacobian[i, j] = NumOps.Multiply(softmaxOutput[i], NumOps.Subtract(NumOps.One, softmaxOutput[i]));
-                }
-                else
-                {
-                    jacobian[i, j] = NumOps.Multiply(NumOps.Negate(softmaxOutput[i]), softmaxOutput[j]);
-                }
-            }
+            return new Matrix<T>(0, 0);
         }
 
-        return jacobian;
+        // J[i, i] = s[i] * (1 - s[i]); J[i, j] = -(s[i] * s[j])
+        if (UseScalarJacobian(input.Length))
+        {
+            return ScalarSoftmaxJacobian(Activate(input), NumOps.One);
+        }
+
+        return SoftmaxJacobian(Tensor<T>.FromVector(Activate(input)));
     }
 
     /// <summary>

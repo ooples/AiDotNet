@@ -760,6 +760,15 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                 : null;
         IDirectGpuBackend? gpuBackend = gpuEngine?.GetBackend();
         bool gpuAdam = gpuEngine is not null && gpuBackend is not null;
+        var multiAdamW = gpuAdam && !_options.UseAMSGrad
+            ? Training.GpuMultiTensorAdamBridge.TryAdamWMultiTensor
+            : null;
+        Dictionary<(float Lr, float Wd), (
+            List<Tensor<float>> Params,
+            List<Tensor<float>> Grads,
+            List<Tensor<float>> Ms,
+            List<Tensor<float>> Vs,
+            List<(Tensor<T> Param, Tensor<T> Grad, Tensor<T> M, Tensor<T> V, int MaskOffset, bool UniformMasks, double EffLr, double EffWd)> Fallbacks)>? mtBuckets = null;
 
         int maskOffset = 0;
         double learningRateValue = NumOps.ToDouble(CurrentLearningRate);
@@ -840,17 +849,79 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             if (uniformParameterMasks &&
                 gpuEngine is not null &&
                 gpuBackend is not null &&
-                param.Length == grad.Length &&
-                TryExecuteGpuAdamOrAdamWStep(
-                    gpuEngine, gpuBackend, param,
-                    (Tensor<float>)(object)param, (Tensor<float>)(object)grad,
-                    (Tensor<float>)(object)m, (Tensor<float>)(object)v,
-                    (float)effectiveLr, (float)_options.Beta1, (float)_options.Beta2,
-                    (float)_options.Epsilon, (float)effectiveWeightDecay, _tapeStep,
-                    decoupledWeightDecay: true))
+                param.Length > 0 &&
+                param.Length == grad.Length)
             {
-                continue;
+                if (multiAdamW is not null)
+                {
+                    var key = ((float)effectiveLr, (float)effectiveWeightDecay);
+                    mtBuckets ??= new();
+                    if (!mtBuckets.TryGetValue(key, out var bucket))
+                    {
+                        bucket = (new(), new(), new(), new(), new());
+                        mtBuckets[key] = bucket;
+                    }
+                    bucket.Params.Add((Tensor<float>)(object)param);
+                    bucket.Grads.Add((Tensor<float>)(object)grad);
+                    bucket.Ms.Add((Tensor<float>)(object)m);
+                    bucket.Vs.Add((Tensor<float>)(object)v);
+                    bucket.Fallbacks.Add((param, grad, m, v, parameterMaskOffset, uniformParameterMasks, effectiveLr, effectiveWeightDecay));
+                    continue;
+                }
+
+                if (TryExecuteGpuAdamOrAdamWStep(
+                        gpuEngine, gpuBackend, param,
+                        (Tensor<float>)(object)param, (Tensor<float>)(object)grad,
+                        (Tensor<float>)(object)m, (Tensor<float>)(object)v,
+                        (float)effectiveLr, (float)_options.Beta1, (float)_options.Beta2,
+                        (float)_options.Epsilon, (float)effectiveWeightDecay, _tapeStep,
+                        decoupledWeightDecay: true))
+                {
+                    continue;
+                }
             }
+
+            ApplyHostAdamWParameter(param, grad, m, v, parameterMaskOffset, uniformParameterMasks, effectiveLr, effectiveWeightDecay);
+        }
+
+        if (mtBuckets is not null && multiAdamW is not null)
+        {
+            foreach (var kvp in mtBuckets)
+            {
+                var (keyLr, keyWd) = kvp.Key;
+                var bkt = kvp.Value;
+                if (!multiAdamW(
+                        bkt.Params, bkt.Grads, bkt.Ms, bkt.Vs,
+                        keyLr, (float)_options.Beta1, (float)_options.Beta2,
+                        (float)_options.Epsilon, keyWd, _tapeStep))
+                {
+                    for (int i = 0; i < bkt.Fallbacks.Count; i++)
+                    {
+                        var fb = bkt.Fallbacks[i];
+                        if (gpuEngine is not null && gpuBackend is not null && TryExecuteGpuAdamOrAdamWStep(
+                                gpuEngine, gpuBackend, fb.Param,
+                                (Tensor<float>)(object)fb.Param, (Tensor<float>)(object)fb.Grad,
+                                (Tensor<float>)(object)fb.M, (Tensor<float>)(object)fb.V,
+                                (float)fb.EffLr, (float)_options.Beta1, (float)_options.Beta2,
+                                (float)_options.Epsilon, (float)fb.EffWd, _tapeStep,
+                                decoupledWeightDecay: true))
+                        {
+                            continue;
+                        }
+                        ApplyHostAdamWParameter(fb.Param, fb.Grad, fb.M, fb.V, fb.MaskOffset, fb.UniformMasks, fb.EffLr, fb.EffWd);
+                    }
+                }
+            }
+        }
+
+        ReportRetainedOutputUpdateAccepted();
+        return;
+
+        void ApplyHostAdamWParameter(
+            Tensor<T> param, Tensor<T> grad, Tensor<T> m, Tensor<T> v,
+            int parameterMaskOffset, bool uniformParameterMasks,
+            double effectiveLr, double effectiveWeightDecay)
+        {
 
             // Host fast path: one fused pass per parameter (m, v and the decayed parameter updated in place),
             // chunked across the pool. Per-tensor uniform masks (e.g. 0 on embeddings/LayerNorm/biases, 1 on 2D weights)
@@ -859,7 +930,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                 && TryFusedHostAdamWStep(param, grad, m, v, effectiveLr, effectiveWeightDecay,
                     1.0 - Math.Pow(_options.Beta1, _tapeStep), 1.0 - Math.Pow(_options.Beta2, _tapeStep)))
             {
-                continue;
+                return;
             }
 
             // m = beta1 * m + (1 - beta1) * grad
@@ -926,7 +997,6 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             Engine.TensorSubtractInPlace(param, adamUpdate);
             Engine.TensorSubtractInPlace(param, decayTerm);
         }
-        ReportRetainedOutputUpdateAccepted();
     }
 
     /// <summary>

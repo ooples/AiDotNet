@@ -1,33 +1,21 @@
+using System;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet;
 
-/// <content>
-/// Knowledge distillation on the streaming supervised path.
-/// </content>
 public partial class AiModelBuilder<T, TInput, TOutput>
 {
     /// <summary>
-    /// Builds the per-batch distillation step for a streaming run, or returns <c>null</c> when distillation is not
-    /// configured.
+    /// Builds the per-batch training step for a streaming run configured with
+    /// <see cref="ConfigureKnowledgeDistillation"/>, or returns <c>null</c> when distillation is not configured.
     /// </summary>
-    /// <returns>
-    /// A function that trains the student on every sample of a batch against the teacher and returns the mean
-    /// distillation loss of the batch, each sample's loss measured before its update.
-    /// </returns>
-    /// <remarks>
-    /// This is the update <see cref="RunKnowledgeDistillationTraining"/> runs over the rows of an in-memory set:
-    /// the teacher's output for the sample is the target, the true label feeds the hard-label term, and the
-    /// strategy's gradient is applied through the student's own gradient surface at the optimizer's configured
-    /// initial learning rate. Nothing in it needs more than the sample at hand, so it runs on a stream unchanged.
-    /// </remarks>
     /// <exception cref="NotSupportedException">The student does not expose its gradient.</exception>
     private Func<TInput[], TOutput[], T>? CreateStreamingDistillationStep()
     {
-        // A strategy configured without ConfigureKnowledgeDistillation still expresses intent to distill; engage
-        // distillation (which fails clearly if no teacher was supplied), as the in-memory path does.
         if (_configuredDistillationStrategy is not null && _knowledgeDistillationOptions is null)
         {
             _knowledgeDistillationOptions = new KnowledgeDistillationOptions<T, TInput, TOutput>
@@ -53,45 +41,102 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         var teacherForward = ResolveTeacherForward(kd);
-        var strategy = kd.Strategy is { } configuredStrategy
-            ? configuredStrategy
-            : KnowledgeDistillation.DistillationStrategyFactory<T>.CreateResponseBasedStrategy(
-                kd.Temperature, kd.Alpha);
-        var lossAdapter = new KnowledgeDistillation.DistillationLossAdapter<T>(strategy);
+        KnowledgeDistillation.DistillationLossAdapter<T>? lossAdapterSlot = null;
+        KnowledgeDistillation.DistillationLossAdapter<T> AdapterFor(Tensor<T> teacherOutput)
+            => lossAdapterSlot ??= new KnowledgeDistillation.DistillationLossAdapter<T>(
+                KnowledgeDistillation.DistillationStrategyFactory<T>.ResolveStrategyForOutputWidth(
+                    kd.Strategy, kd.Temperature, kd.Alpha,
+                    outputClasses: teacherOutput.Shape.Length > 0
+                        ? teacherOutput.Shape[teacherOutput.Shape.Length - 1]
+                        : teacherOutput.Length,
+                    kd.SparseTopK, kd.SparseTopKMinimumClasses));
+
         var numOps = MathHelper.GetNumericOperations<T>();
-        T learningRate = numOps.FromDouble(_optimizer?.GetOptions()?.InitialLearningRate ?? 0.01);
+        double effectiveLr = _optimizer?.GetOptions()?.InitialLearningRate ?? kd.LearningRate;
+        T learningRate = numOps.FromDouble(effectiveLr);
+        int maxSubBatchSize = Math.Max(1, kd.BatchSize);
+
+        var nnStudent = student as NeuralNetworks.NeuralNetworkBase<T>;
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? tensorGradOptimizer =
+            (object?)_optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>;
+        if (nnStudent is not null && _optimizer is null)
+        {
+            tensorGradOptimizer = new Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                nnStudent,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = effectiveLr,
+                    UseAMSGrad = false,
+                });
+        }
+
+        var typedGradOptimizer = _optimizer as IGradientBasedOptimizer<T, TInput, TOutput>;
 
         return (inputs, targets) =>
         {
-            T lossSum = numOps.Zero;
-            for (int i = 0; i < inputs.Length; i++)
+            if (inputs.Length == 0)
             {
-                if (inputs[i] is not Tensor<T> sampleInput || targets[i] is not Tensor<T> sampleTarget)
-                {
-                    throw new NotSupportedException(
-                        "Knowledge distillation requires tensor-shaped training data (Tensor<T> inputs and " +
-                        $"targets); this build supplied {typeof(TInput).Name}/{typeof(TOutput).Name}.");
-                }
-
-                // One row with a leading batch dimension, the shape the in-memory loop hands the student.
-                Tensor<T> inputRow = TryStackTensorBatch(new[] { sampleInput }, out var stacked) && stacked is not null
-                    ? stacked
-                    : sampleInput;
-                Tensor<T> teacherOutput = teacherForward(inputRow);
-                lossAdapter.CurrentTrueLabel = sampleTarget.ToVector();
-
-                var typedInput = (TInput)(object)inputRow;
-                lossSum = AddLossScalars(
-                    lossSum,
-                    lossAdapter.CalculateLoss(
-                        ConversionsHelper.ConvertToVector<T, TOutput>(model.Predict(typedInput)),
-                        teacherOutput.ToVector()));
-
-                var gradients = student.ComputeGradients(typedInput, (TOutput)(object)teacherOutput, lossAdapter);
-                student.ApplyGradients(gradients, learningRate);
+                return numOps.Zero;
             }
 
-            return inputs.Length > 0 ? numOps.Divide(lossSum, numOps.FromDouble(inputs.Length)) : numOps.Zero;
+            T lossSum = numOps.Zero;
+            int lossBatches = 0;
+
+            for (int start = 0; start < inputs.Length; start += maxSubBatchSize)
+            {
+                int count = Math.Min(maxSubBatchSize, inputs.Length - start);
+                var sampleInputs = new Tensor<T>[count];
+                var sampleTargets = new Tensor<T>[count];
+                for (int j = 0; j < count; j++)
+                {
+                    if (inputs[start + j] is not Tensor<T> si || targets[start + j] is not Tensor<T> st)
+                    {
+                        throw new NotSupportedException(
+                            "Knowledge distillation requires tensor-shaped training data (Tensor<T> inputs and " +
+                            $"targets); this build supplied {typeof(TInput).Name}/{typeof(TOutput).Name}.");
+                    }
+                    sampleInputs[j] = si;
+                    sampleTargets[j] = st;
+                }
+
+                Tensor<T> inputBatch = TryStackTensorBatch(sampleInputs, out var stackedInputs) && stackedInputs is not null
+                    ? stackedInputs
+                    : sampleInputs[0];
+                Tensor<T>? targetBatch = TryStackTensorBatch(sampleTargets, out var stackedTargets) && stackedTargets is not null
+                    ? stackedTargets
+                    : (count == 1 ? sampleTargets[0] : null);
+
+                Tensor<T> teacherOutput = teacherForward(inputBatch);
+                var lossAdapter = AdapterFor(teacherOutput);
+                lossAdapter.CurrentTrueLabel = null;
+                lossAdapter.CurrentTrueLabelBatch = targetBatch;
+
+                var typedInput = (TInput)(object)inputBatch;
+                if (model.Predict(typedInput) is Tensor<T> predictedBatch)
+                {
+                    lossSum = AddLossScalars(lossSum, lossAdapter.CalculateBatchLoss(predictedBatch, teacherOutput));
+                    lossBatches++;
+                }
+
+                if (nnStudent is not null && tensorGradOptimizer is not null)
+                {
+                    nnStudent.TrainDistillationBatch(inputBatch, teacherOutput, lossAdapter, tensorGradOptimizer);
+                }
+                else
+                {
+                    var gradients = student.ComputeGradients(typedInput, (TOutput)(object)teacherOutput, lossAdapter);
+                    if (typedGradOptimizer is not null)
+                    {
+                        typedGradOptimizer.ApplyGradients(gradients, model);
+                    }
+                    else
+                    {
+                        student.ApplyGradients(gradients, learningRate);
+                    }
+                }
+            }
+
+            return lossBatches > 0 ? numOps.Divide(lossSum, numOps.FromDouble(lossBatches)) : numOps.Zero;
         };
     }
 }
