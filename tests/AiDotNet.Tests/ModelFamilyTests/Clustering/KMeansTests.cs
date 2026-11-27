@@ -159,6 +159,32 @@ public class KMeansTests : ClusteringModelTestBase
         Assert.Throws<ArgumentOutOfRangeException>(() => model.Train(x, new Vector<double>(4)));
     }
 
+    /// <summary>
+    /// The k-means++ workspace does not grow with rows * trials: 65,536 rows times 32,768 candidates is 2^31, which
+    /// wrapped to a negative array length in int, so Train threw before seeding. Scoring the candidates one at a time
+    /// keeps the workspace at O(rows + trials), and the greedy pick still separates two well-apart groups.
+    /// </summary>
+    [Fact]
+    public void Train_LocalTrialsTimesRowsPastIntRange_StillSeeds()
+    {
+        const int rows = 1 << 16;
+        var x = new Matrix<double>(rows, 1);
+        for (int i = 0; i < rows; i++) x[i, 0] = (i % 2 == 0 ? 0.0 : 100.0) + (i % 97) * 1e-3;
+
+        var model = new KMeans<double>(new KMeansOptions<double>
+        {
+            NumClusters = 2, NumInitializations = 1, Seed = 4, MaxIterations = 2,
+            KMeansPlusPlusLocalTrials = 1 << 15
+        });
+        model.Train(x, new Vector<double>(rows));
+
+        var labels = model.Labels ?? new Vector<double>(0);
+        Assert.Equal(rows, labels.Length);
+        Assert.NotEqual(labels[0], labels[1]);
+        for (int i = 2; i < rows; i++)
+            Assert.Equal(labels[i % 2], labels[i]);
+    }
+
     /// <summary>Euclidean distance under another type, which routes training through the generic metric path.</summary>
     private sealed class SubclassedEuclidean : EuclideanDistance<double>
     {

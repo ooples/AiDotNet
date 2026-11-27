@@ -73,8 +73,8 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </para>
     /// <para>
     /// The norm is <c>sqrt(sum(x^2) + 1e-12)</c>, the same stabilised norm the tensor overload uses, so the zero
-    /// vector gives the uniform distribution instead of 0 / 0. This overload is the tensor overload applied to the
-    /// vector, so the two always return the same values.
+    /// vector gives the uniform distribution instead of 0 / 0. It is computed directly rather than through the engine,
+    /// so it agrees with the tensor overload to rounding, not bit for bit.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This method transforms a vector of numbers (like scores for different classes) into 
@@ -106,7 +106,45 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
         if (input.Length == 0)
             return new Vector<T>(0);
 
-        return Activate(Tensor<T>.FromVector(input)).ToVector();
+        return ActivateDirect(input);
+    }
+
+    /// <summary>
+    /// The vector overload, computed directly: the same stabilised norm and softmax as the tensor overload, without
+    /// a rank-1 tensor through the engine. A vector activation is called once per sample, where the engine's fixed
+    /// per-call cost (2-6 us on the CPU engine, more on a GPU engine) is many times the arithmetic.
+    /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("Per-sample vector activation: one pass for the norm, one for the exponentials and "
+        + "one to normalize, over a vector usually too short for an engine dispatch to pay off.")]
+    private static Vector<T> ActivateDirect(Vector<T> input)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var x = input.AsSpan();
+        T sumSquared = ops.Zero;
+        for (int i = 0; i < x.Length; i++)
+            sumSquared = ops.Add(sumSquared, ops.Multiply(x[i], x[i]));
+        T norm = ops.Sqrt(ops.Add(sumSquared, NormalizationEpsilon));
+
+        // Shift by the largest normalized value before exponentiating, as a softmax does; mathematically a no-op.
+        T max = ops.Divide(x[0], norm);
+        for (int i = 1; i < x.Length; i++)
+        {
+            T scaled = ops.Divide(x[i], norm);
+            if (ops.GreaterThan(scaled, max)) max = scaled;
+        }
+
+        var result = new Vector<T>(x.Length);
+        var r = result.AsWritableSpan();
+        T sum = ops.Zero;
+        for (int i = 0; i < x.Length; i++)
+        {
+            r[i] = ops.Exp(ops.Subtract(ops.Divide(x[i], norm), max));
+            sum = ops.Add(sum, r[i]);
+        }
+
+        for (int i = 0; i < r.Length; i++)
+            r[i] = ops.Divide(r[i], sum);
+        return result;
     }
 
     /// <summary>

@@ -12,10 +12,10 @@ namespace AiDotNet.Classification.Trees;
 /// reads the original values back from <see cref="DistinctValues"/> only to form split thresholds, in T.
 /// </para>
 /// <para>
-/// The ranking is engine work: each feature column is sorted, a new rank starts wherever the sorted value changes, and
-/// the ranks are put back in row order through the inverse permutation. All NaNs of a feature share one rank,
-/// <see cref="NanRank"/>, which is <see cref="Rows"/>: above every numeric rank, so a NaN is never taken for a genuine
-/// <c>MinValue</c> (the value NaN is sorted as).
+/// Each feature column is sorted with its row indices, a new rank starts wherever the sorted value changes, and each
+/// row's rank is written back through the sort order; features rank in parallel. All NaNs of a feature share one
+/// rank, <see cref="NanRank"/>, which is <see cref="Rows"/>: above every numeric rank, so a NaN is never taken for a
+/// genuine <c>MinValue</c> (the value NaN is sorted as).
 /// </para>
 /// </remarks>
 internal sealed class DenseTreeData<T>
@@ -27,7 +27,7 @@ internal sealed class DenseTreeData<T>
     /// Every feature's distinct values in ascending order, one after another: feature <c>f</c>'s value of rank
     /// <c>r</c> is at <c>ValueOffsets[f] + r</c>.
     /// </summary>
-    public Tensor<T> DistinctValues { get; }
+    public T[] DistinctValues { get; }
 
     /// <summary>Where each feature's distinct values start in <see cref="DistinctValues"/>.</summary>
     public int[] ValueOffsets { get; }
@@ -51,68 +51,110 @@ internal sealed class DenseTreeData<T>
         if (rows == 0 || features == 0)
         {
             Ranks = new int[0];
-            DistinctValues = new Tensor<T>(new[] { 0 });
+            DistinctValues = new T[0];
             ValueOffsets = new int[features];
             NanRank = Enumerable.Repeat(-1, features).ToArray();
             RankBits = 0;
             return;
         }
 
-        var engine = AiDotNetEngine.Current;
-        var numOps = MathHelper.GetNumericOperations<T>();
+        // Row-major copy of the data; each worker reads its feature's column out of it.
+        var data = Tensor<T>.FromMatrix(x).ToArray();
+        var ranks = new int[rows * features];
+        var distinct = new T[features][];
+        var nanRank = new int[features];
+        var comparer = ValueComparer();
+        // Honors the CPU thread limit (AIDOTNET_CPU_THREADS): at degree 1 or a small workload the features rank inline.
+        AiDotNet.Tensors.Helpers.CpuParallelSettings.ParallelForOrSerial(0, features, (long)rows * features,
+            () => (Keys: new T[rows], Order: new int[rows]),
+            (f, _, buffers) =>
+            {
+                RankFeature(data, f, features, rows, buffers.Keys, buffers.Order, comparer, ranks, out distinct[f],
+                    out nanRank[f]);
+                return buffers;
+            },
+            _ => { });
 
-        // [features, rows]; NaN becomes the smallest value so it sorts first, flagged by a 1/0 mask.
-        var columns = engine.TensorTranspose(Tensor<T>.FromMatrix(x));
-        var isNan = engine.TensorIsNan(columns);
-        var nanMask = engine.TensorWhere(isNan, engine.TensorOnesLike(columns), engine.TensorZerosLike(columns)).Cast<int>();
-        var keys = engine.TensorWhere(isNan, engine.TensorFullLike(columns, numOps.MinValue), columns);
-        var (sorted, order) = engine.TensorSort(keys, 1, false);
-
-        // A rank starts at the first sorted value and wherever the value changes.
-        Tensor<int> starts;
-        if (rows > 1)
-        {
-            var changed = engine.TensorNotEquals(
-                engine.TensorSlice(sorted, new[] { 0, 1 }, new[] { features, rows - 1 }),
-                engine.TensorSlice(sorted, new[] { 0, 0 }, new[] { features, rows - 1 })).Cast<int>();
-            var first = new Tensor<int>(Enumerable.Repeat(1, features).ToArray(), new[] { features, 1 });
-            starts = engine.TensorConcatenate(new[] { first, changed }, 1);
-        }
-        else
-        {
-            starts = new Tensor<int>(Enumerable.Repeat(1, features).ToArray(), new[] { features, 1 });
-        }
-
-        var sortedRanks = engine.TensorSubtractScalar(engine.TensorCumSum(starts, 1), 1);
-        var ranks = engine.TensorTakeAlongDim(sortedRanks, engine.TensorArgsort(order, 1, false), 1);
-        // NaN sorted as MinValue and so shares its rank with a genuine MinValue; give the NaNs their own rank, rows,
-        // which no numeric rank reaches.
-        ranks = engine.TensorWhere(nanMask, engine.TensorFullLike(ranks, rows), ranks);
-        Ranks = ranks.ToArray();
-
-        // The distinct values are the sorted values at the rank starts, feature after feature.
-        var startFlags = starts.ToArray();
-        var distinctPositions = Enumerable.Range(0, startFlags.Length).Where(i => startFlags[i] == 1).ToArray();
-        DistinctValues = engine.TensorTake(
-            engine.Reshape(sorted, new[] { features * rows }),
-            new Tensor<int>(distinctPositions, new[] { distinctPositions.Length }));
-        var distinctCounts = engine.ReduceSum(starts, new[] { 1 }, false).ToArray();
+        Ranks = ranks;
+        NanRank = nanRank;
         ValueOffsets = new int[features];
         int offset = 0;
+        int maxRank = 0;
         for (int f = 0; f < features; f++)
         {
             ValueOffsets[f] = offset;
-            offset += distinctCounts[f];
+            offset += distinct[f].Length;
+            maxRank = Math.Max(maxRank, Math.Max(distinct[f].Length - 1, nanRank[f]));
         }
 
-        // A NaN row's rank, or -1: rank * isNaN + isNaN - 1 is the rank on NaN rows and -1 elsewhere.
-        NanRank = engine.ReduceMax(
-            engine.TensorSubtractScalar(engine.TensorAdd(engine.TensorMultiply(ranks, nanMask), nanMask), 1),
-            new[] { 1 }, false).ToArray();
+        DistinctValues = new T[offset];
+        for (int f = 0; f < features; f++)
+            Array.Copy(distinct[f], 0, DistinctValues, ValueOffsets[f], distinct[f].Length);
 
-        int maxRank = Math.Max(distinctCounts.Max() - 1, NanRank.Max());
         int bits = 0;
         while (bits < 31 && (maxRank >> bits) != 0) bits++;
         RankBits = bits;
+    }
+
+    /// <summary>
+    /// Ranks feature <paramref name="feature"/>: writes each row's rank into its column of <paramref name="ranks"/> and
+    /// returns the distinct values ascending and the NaN rank (<paramref name="rows"/>, or -1 without NaNs). A NaN sorts
+    /// as <c>MinValue</c>, so a feature with NaNs keeps <c>MinValue</c> among its distinct values.
+    /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("Sorts one feature column with its row indices and walks it once; the engine form cast and masked the whole matrix and took 0.8 s on 20,000 x 20.")]
+    private static void RankFeature(T[] data, int feature, int features, int rows, T[] keys, int[] order,
+        IComparer<T> comparer, int[] ranks, out T[] distinct, out int nanRank)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T lowest = numOps.MinValue;
+        bool hasNaN = false;
+        for (int i = 0; i < rows; i++)
+        {
+            T value = data[i * features + feature];
+            bool isNaN = numOps.IsNaN(value);
+            hasNaN |= isNaN;
+            keys[i] = isNaN ? lowest : value;
+            order[i] = i;
+        }
+
+        Array.Sort(keys, order, 0, rows, comparer);
+
+        var values = new List<T>();
+        int column = feature * rows;
+        int rank = -1;
+        for (int i = 0; i < rows; i++)
+        {
+            if (rank < 0 || comparer.Compare(keys[i], values[rank]) != 0)
+            {
+                values.Add(keys[i]);
+                rank++;
+            }
+
+            ranks[column + order[i]] = rank;
+        }
+
+        distinct = values.ToArray();
+        nanRank = -1;
+        if (!hasNaN)
+            return;
+
+        // NaN sorted as MinValue and so shares its rank with a genuine MinValue; give the NaNs their own rank, rows,
+        // which no numeric rank reaches.
+        nanRank = rows;
+        for (int i = 0; i < rows; i++)
+        {
+            if (numOps.IsNaN(data[i * features + feature]))
+                ranks[column + i] = rows;
+        }
+    }
+
+    /// <summary>Ascending order of T: the type's own comparison for double and float, NumOps.Compare otherwise.</summary>
+    private static IComparer<T> ValueComparer()
+    {
+        if (typeof(T) == typeof(double) || typeof(T) == typeof(float))
+            return Comparer<T>.Default;
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        return Comparer<T>.Create((a, b) => numOps.Compare(a, b));
     }
 }

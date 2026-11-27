@@ -1,6 +1,6 @@
 # AiDotNet ⇄ PyTorch parity benchmark
 
-## Run all 11 model families
+## Run the model families
 
 This command builds this checkout in Release and runs its models against Python PyTorch: MLP, CNN, LSTM, Transformer, GRU, ResNet-18, ResNet-50, VGG-11, MobileNetV2, DenseNet-121 and ViT, on CPU and on an NVIDIA GPU.
 
@@ -11,7 +11,7 @@ python -m pip install torch==2.14.1 torchvision==0.29.1 --index-url https://down
 python -m pip install psutil==7.2.2 numpy==2.5.4
 ```
 
-PyTorch publishes Triton, which compiles its GPU kernels, only for Linux. On Windows with CUDA, also install the community build: `python -m pip install triton-windows==3.9.0.post30`. For a machine without an NVIDIA GPU, install from `https://download.pytorch.org/whl/cpu` and pass `--devices cpu`. From the repository root, run:
+PyTorch publishes Triton, which compiles its GPU kernels, only for Linux. On Windows with CUDA, also install the community build: `python -m pip install triton-windows==3.9.0.post30`. For a machine without an NVIDIA GPU, install from `https://download.pytorch.org/whl/cpu` and pass `--devices cpu`. The A-6 family rows also need `python -m pip install transformers` (the whisper-tiny twin), and `--classical` needs `python -m pip install scikit-learn xgboost lightgbm`. From the repository root, run:
 
 ```shell
 python benchmarks/AiDotNet.PyTorchParity/run_matrix.py
@@ -21,7 +21,7 @@ The full run takes several hours on a laptop. For a quick execution check, run `
 
 ### What it measures
 
-- **Separate processes.** Each model, device and launch runs AiDotNet and every PyTorch configuration in a new process. The default is five launches. The order rotates each launch, so no framework always runs first or last.
+- **Separate processes.** Each model, device and launch runs AiDotNet and every PyTorch configuration in a new process. The default is nine launches, and every row reports the median and interquartile range (IQR) over them. The order rotates each launch, so no framework always runs first or last.
 - **The fastest PyTorch configuration.** PyTorch runs in every configuration below that applies to the device and model. Every configuration uses `torch.compile` with static shapes, so each inference batch size gets its own specialized graph. Each training row and each inference batch size is compared with the PyTorch configuration that has the lowest median time for that row.
 
   | Configuration | Devices | Setup |
@@ -63,6 +63,81 @@ The printed run directory contains the following:
 In both CSVs, `torch_over_ai` is PyTorch's time divided by AiDotNet's, so a value above 1 means AiDotNet took less time. Failed processes are listed in `completion.json`, and the runner exits nonzero. To rebuild the CSVs and table from the raw reports of any run directory or extracted archive, run `python benchmarks/AiDotNet.PyTorchParity/run_matrix.py --summarize RUN_DIR`. The output goes to `RUN_DIR/regenerated`.
 
 By default the build uses the AiDotNet.Tensors NuGet package pinned in `Directory.Packages.props`. To test a source build, pass `--tensors /path/to/AiDotNet.Tensors`. The runner then checks that the loaded assembly is that build's.
+
+### A-6 family rows (#2395)
+
+`--models families` (or `all`, or any of the row names) adds eight rows. Each runs at its paper's input shape, so it carries its own batch sizes; the heavy rows time fewer updates and inference calls per launch:
+
+| Row | Family | Training batch | Inference batches | Updates per epoch | Inference calls |
+| --- | --- | ---: | --- | ---: | ---: |
+| `ddpm` | diffusion (Ho et al. CIFAR-10 U-Net, one DDPM step) | 4 | 1, 4 | 5 | 10 |
+| `decoder-lm` | decoder-only (GPT-style) language model | 64 | 1, 8, 16 | 20 | 100 |
+| `whisper-tiny` | ASR, encoder-decoder (vs transformers' Whisper) | 4 | 1, 4 | 5 | 10 |
+| `wav2vec2-base` | ASR, CTC | 4 | 1, 4 | 5 | 10 |
+| `hifigan-v1` | TTS vocoder (GAN) | 1 | 1 | 5 | 10 |
+| `faster-rcnn` | detection (ResNet-50 FPN, vs torchvision) | 1 | 1 | 10 | 10 |
+| `gcn` | GNN, graph convolution | 64 | 1, 8, 16 | 20 | 100 |
+| `gat` | GNN, graph attention (Cora-sized graph) | 1 | 1 | 20 | 100 |
+
+Every row's table entry carries both parameter counts and the median first and last training loss of both sides. The summary flags `parameters-differ` and `loss-not-falling`. One family twin differs by design: faster-rcnn's RPN objectness is Ren et al.'s 2k-way softmax in AiDotNet and torchvision's k sigmoid scores (771 parameters).
+
+### Locked GPU clocks
+
+A CUDA launch samples the GPU every 0.5 s with `nvidia-smi -lms 500` into `<launch>.clocks.csv`. Its receipt records the SM and memory clocks under load (samples at 50% utilization or more). A launch is flagged `clock-varied` when the loaded SM clock moved more than 3%, and `clock-unlocked` when it missed a requested lock by more than 3%. From an elevated prompt, `--lock-gpu-clock MHZ` and `--lock-memory-clock MHZ` run `nvidia-smi -lgc MHZ,MHZ` and `-lmc MHZ,MHZ` before the launches and `-rgc` / `-rmc` after them. A laptop driver can refuse a lock. The refusal is then recorded in `protocol.json`, the run continues, the per-launch clocks show what ran, and a launch whose clock missed the requested value is still flagged `clock-unlocked`. Only locks that were taken are reset; a failed reset is reported and makes the run exit nonzero. An invocation that locks clocks holds a per-GPU lock file from the lock to the reset, so a second invocation on the same GPU waits instead of resetting clocks under the first. Clocks are sampled only on the benchmark GPU (by UUID); when it cannot be identified on a multi-GPU machine, launches record no clocks and `protocol.json` says why. `--resume` reuses the run's recorded lock request (including no lock) and rejects different `--lock-*` values.
+
+```shell
+python benchmarks/AiDotNet.PyTorchParity/run_matrix.py --models all --devices cuda --lock-gpu-clock 1800 --lock-memory-clock 7001
+```
+
+### Classical ML (`--classical`)
+
+`run_matrix.py --classical` runs `ClassicalBench.cs` against `pytorch/classical.py` (scikit-learn, XGBoost and LightGBM) for nine launches, alternating which side goes first. Both sides fit the same 20,000 x 20 CSV, scored on 5,000 held-out rows. Each launch fits every row `--classical-repeats` times (default 3) and reports the median. The summary gives the median and IQR of those per-launch medians, and the fastest Python library's fit time divided by AiDotNet's. The all-core rows use every core on both sides and the `_1job` rows use one thread. Classical ML runs on the CPU only.
+
+### A-6 CPU results (2026-11-25)
+
+Intel Core i7-13850HX, 8 threads, PyTorch 2.14.1 with `torch.compile`. Nine launches each, unlocked laptop (no CI job during any launch). Most rows carry the `unstable` flag, which either side triggers when its slowest launch is over 1.5x its fastest. On most flagged rows the spread is AiDotNet's (for example ddpm, decoder-lm and whisper-tiny, where PyTorch's quartiles stay within a few percent), but PyTorch triggers it too: gcn batch-1 and batch-8 inference have PyTorch quartiles of 0.062–0.14 ms and 0.083–0.161 ms, so PyTorch's slowest launch there was at least 2.26x and 1.9x its fastest. `summary.csv` gives both sides' minimum and maximum for every row. faster-rcnn's `parameters-differ` is the RPN objectness difference above. The CUDA table waits for a locked-clock run.
+
+**CPU**: milliseconds per training update or inference call, median (interquartile range) over 9 launches. The ratio is PyTorch time ÷ AiDotNet time (IQR of the per-launch ratios); above 1 means AiDotNet took less time. PyTorch is the fastest configuration for each row. ⚑ marks a row with a flag in summary.csv.
+
+| Model | Operation | Batch | AiDotNet ms | PyTorch ms | PyTorch ÷ AiDotNet | Parameters (AiDotNet / PyTorch) | Loss first → last (AiDotNet; PyTorch) |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| ddpm | train | 4 | 296 (231–304) | 486 (475–505) torch-compile-fused | 1.64 (1.58–2.13) ⚑ | 30,734,851 / 30,734,851 | 0.9907 → 0.2891; 0.9812 → 0.4611 |
+| ddpm | inference | 1 | 35.6 (24.9–39.1) | 41.9 (41.6–43.7) torch-compile | 1.18 (1.12–1.69) ⚑ | 30,734,851 / 30,734,851 |  |
+| ddpm | inference | 4 | 88.5 (57.5–93.1) | 141 (138–153) torch-compile | 1.60 (1.55–2.36) ⚑ | 30,734,851 / 30,734,851 |  |
+| decoder-lm | train | 64 | 63 (60.3–84) | 60.5 (59.8–61.5) torch-compile-fused | 0.96 (0.73–1.00) ⚑ | 526,976 / 526,976 | 6.383 → 0.0559; 6.358 → 0.105 |
+| decoder-lm | inference | 1 | 0.558 (0.526–1.08) | 0.716 (0.579–0.749) torch-compile | 1.28 (0.67–1.34) ⚑ | 526,976 / 526,976 |  |
+| decoder-lm | inference | 8 | 2.09 (2.01–3.7) | 2.58 (2.49–2.65) torch-compile | 1.24 (0.71–1.24) ⚑ | 526,976 / 526,976 |  |
+| decoder-lm | inference | 16 | 4 (3.87–7.09) | 4.49 (4.31–4.63) torch-compile | 1.12 (0.65–1.16) ⚑ | 526,976 / 526,976 |  |
+| whisper-tiny | train | 4 | 1,840 (1,232–1,986) | 2,055 (2,038–2,065) torch-compile-fused | 1.12 (1.04–1.65) ⚑ | 37,184,640 / 37,184,640 | 10.92 → 7.305; 10.97 → 7.367 |
+| whisper-tiny | inference | 1 | 118 (112–185) | 168 (165–172) torch-compile | 1.42 (0.94–1.52) ⚑ | 37,184,640 / 37,184,640 |  |
+| whisper-tiny | inference | 4 | 660 (451–721) | 649 (643–659) torch-compile | 0.98 (0.87–1.45) ⚑ | 37,184,640 / 37,184,640 |  |
+| wav2vec2-base | train | 4 | 1,488 (1,239–1,596) | 1,352 (1,329–1,365) torch-compile-fused | 0.91 (0.84–1.09) | 90,197,410 / 90,197,410 | 284.5 → 85.33; 258.9 → 86.4 |
+| wav2vec2-base | inference | 1 | 195 (140–221) | 123 (122–130) torch-compile-fused | 0.63 (0.56–0.89) ⚑ | 90,197,410 / 90,197,410 |  |
+| wav2vec2-base | inference | 4 | 614 (500–730) | 415 (406–416) torch-compile-fused | 0.68 (0.57–0.80) | 90,197,410 / 90,197,410 |  |
+| hifigan-v1 | train | 1 | 2,276 (1,580–2,363) | 2,144 (2,120–2,175) torch-compile | 0.94 (0.93–1.36) ⚑ | 84,660,721 / 84,660,721 | 133.2 → 45.99; 339.6 → 55.65 |
+| hifigan-v1 | inference | 1 | 387 (363–596) | 1,017 (975–1,036) torch-compile-fused | 2.63 (1.62–2.85) ⚑ | 84,660,721 / 84,660,721 |  |
+| faster-rcnn | train | 1 | 522 (453–536) | 1,162 (1,155–1,206) torch-compile | 2.23 (2.21–2.85) ⚑ | 41,809,177 / 41,808,406 | 6.393 → 0.903; 5.42 → 1.804 |
+| faster-rcnn | inference | 1 | 209 (143–213) | 355 (343–376) torch-compile | 1.70 (1.67–2.47) ⚑ | 41,809,177 / 41,808,406 |  |
+| gcn | train | 64 | 1.28 (1.26–1.34) | 1.87 (1.65–1.89) torch-compile-fused | 1.46 (1.28–1.50) | 5,898 / 5,898 | 2.313 → 2.195; 2.306 → 2.227 |
+| gcn | inference | 1 | 0.019 (0.019–0.02) | 0.062 (0.062–0.14) torch-compile | 3.26 (3.26–7.30) ⚑ | 5,898 / 5,898 |  |
+| gcn | inference | 8 | 0.067 (0.065–0.071) | 0.084 (0.083–0.161) torch-compile-fused | 1.25 (1.24–2.27) ⚑ | 5,898 / 5,898 |  |
+| gcn | inference | 16 | 0.128 (0.075–0.13) | 0.178 (0.101–0.181) torch-compile | 1.39 (1.33–1.44) ⚑ | 5,898 / 5,898 |  |
+| gat | train | 1 | 16 (15.7–16.3) | 11.1 (10.9–11.2) torch-compile-fused | 0.70 (0.68–0.70) ⚑ | 92,373 / 92,373 | 2.154 → 1.922; 1.958 → 1.88 |
+| gat | inference | 1 | 2.54 (2.44–2.85) | 3.9 (3.82–4.36) torch-compile-fused | 1.53 (1.36–1.61) ⚑ | 92,373 / 92,373 |  |
+
+**CPU, classical ML**: fit and predict milliseconds, median (interquartile range) over 9 launches of each launch's median. The ratio is the fastest Python library's fit time ÷ AiDotNet's; above 1 means AiDotNet fit faster. Quality is held-out accuracy, R² or k-means inertia. ⚑ marks a row with a flag in classical_summary.csv.
+
+| Row | AiDotNet fit | scikit-learn fit | XGBoost fit | LightGBM fit | Fastest ÷ AiDotNet | AiDotNet predict | scikit-learn predict | Quality (AiDotNet / scikit-learn / XGBoost / LightGBM) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| random_forest | 41,471 (41,003–41,548) | 4,183 (4,154–4,195) | – | – | 0.10 (scikit-learn) | 70.2 (69.7–71) | 53.2 (52.5–53.4) | accuracy: 0.8176 / 0.816 / – / – |
+| random_forest_all_cores | 14,828 (14,700–15,162) | 384 (383–392) | – | – | 0.03 (scikit-learn) | 24.6 (24.5–25.7) | 32.1 (31.3–32.4) | accuracy: 0.8176 / 0.816 / – / – |
+| hist_gradient_boosting | 286 (271–318) | 245 (235–255) | 126 (124–129) | 129 (128–132) | 0.44 (xgboost) | 5.22 (4.6–6.51) | 2.83 (2.73–2.84) | accuracy: 0.8252 / 0.8246 / 0.8274 / 0.8316 |
+| hist_gradient_boosting_1job | 289 (283–292) | 331 (330–334) | 424 (422–427) | 216 (213–219) | 0.75 (lightgbm) | 10.9 (10.6–11.2) | 13.3 (13.2–13.6) | accuracy: 0.8252 / 0.8246 / 0.8274 / 0.8316 |
+| logistic_regression | 3.55 (3.35–3.65) | 4.4 (4.15–4.64) | – | – | 1.24 (scikit-learn) | 0.173 (0.172–0.176) | 0.222 (0.214–0.226) | accuracy: 0.642 / 0.642 / – / – |
+| ridge | 2.8 (2.8–2.91) | 2.45 (2.37–2.47) | – | – | 0.87 (scikit-learn) ⚑ | 0.0872 (0.0849–0.0922) | 0.155 (0.145–0.158) | r2: 0.997 / 0.997 / – / – |
+| kmeans | 660 (633–668) | 60.2 (59.5–63.2) | – | – | 0.09 (scikit-learn) | – | – | inertia: 3.502e+05 / 3.502e+05 / – / – |
+
+By default the build uses the Tensors package pinned by this checkout. Use `--tensors /path/to/AiDotNet.Tensors` to test a source build and verify the loaded assembly's hash.
 
 ### Results from November 21–26, 2026
 
@@ -351,7 +426,7 @@ Four more rows wrap shipped model classes (`MoreFamilyRows.cs`), each against a 
 | `gat` | `GraphAttentionNetwork` | Cora-sized graph: 2,708 nodes, 1,433 features, 8x8 heads, 7 classes | 92,373 |
 | `dcgan` | `DCGAN` | 64x64 images, latent 100, one D + one G update per step | 6,350,852 |
 
-`gat` treats the whole graph as one sample: run it with `--batch-size 1 --inference-batches 1` on both sides. Under
+`gat` treats the whole graph as one sample: run it with `--batch-size 1 --inference-batches 1` on both sides. Both sides evaluate attention over the graph's 13,540 stored entries: AiDotNet's layer through its CSR kernel, the twin through `EdgeGATLayer` (gather, per-row softmax by scatter, aggregation by `index_add`, as PyG's `GATConv`). `test_gat_twin.py` checks the edge layer's outputs and gradients against the dense masked reference. The first A-6 run used that dense reference as the twin, which computed every one of the 2,708² node pairs (542x the attention work), and reported a 45.5x training ratio that measured dense against sparse. The gat rows above are a re-run on 2026-11-25 with the edge twin (flagged `busy-cpu`: other processes held the CPU during some launches; no CI job ran). Under
 `--compile`, a twin with its own objective (`training_loss`, or the GAN's `train_step` networks) is compiled too, so
 compiled training is what gets timed.
 

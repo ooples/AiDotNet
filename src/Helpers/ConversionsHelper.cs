@@ -14,6 +14,31 @@
 public static class ConversionsHelper
 {
     /// <summary>
+    /// Converts coefficients computed in double (windows, filterbanks and other construction-time tables) to
+    /// <typeparamref name="T"/> without going through a <c>Tensor&lt;double&gt;</c>.
+    /// </summary>
+    /// <remarks>
+    /// A double tensor cast JIT-compiles the double tensor, storage and engine instantiations, which a float model
+    /// otherwise never uses; for a table built once per model that compilation was most of its construction cost.
+    /// </remarks>
+    [AiDotNet.Attributes.ScalarKernel("Converts a construction-time table once; float and double take direct loops.")]
+    internal static T[] FromDoubles<T>(double[] values)
+    {
+        if (typeof(T) == typeof(double)) return (T[])(object)values.Clone();
+        if (typeof(T) == typeof(float))
+        {
+            var singles = new float[values.Length];
+            for (int i = 0; i < values.Length; i++) singles[i] = (float)values[i];
+            return (T[])(object)singles;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new T[values.Length];
+        for (int i = 0; i < values.Length; i++) result[i] = numOps.FromDouble(values[i]);
+        return result;
+    }
+
+    /// <summary>
     /// Converts an input of generic type to a Matrix.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
