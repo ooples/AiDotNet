@@ -251,12 +251,8 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
 
         InitializeLayers();
 
-        // A loss that applies its own softmax would normalize a softmax head's probabilities a second time.
-        if (_headEmitsProbabilities && LossFunction is CrossEntropyWithLogitsLoss<T>)
-            throw new ArgumentException(
-                "The custom classification head applies a softmax, so it cannot be trained with CrossEntropyWithLogitsLoss, " +
-                "which applies its own. Give the head an identity activation, or use CategoricalCrossEntropyLoss.",
-                nameof(lossFunction));
+        // The head and the loss must agree: logits for the logits loss, probabilities for a probability loss.
+        ClassificationHeadContract.Validate(_headEmitsProbabilities, LossFunction, nameof(lossFunction));
     }
 
     /// <summary>

@@ -85,6 +85,7 @@ public partial class Fuyu<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -110,6 +111,7 @@ public partial class Fuyu<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -167,7 +169,7 @@ public partial class Fuyu<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<
         if (prompt is not null)
         {
             var promptTokens = TokenizeText(prompt);
-            fusedInput = patchOut.ConcatenateTensors(promptTokens);
+            fusedInput = FusePromptTokens(patchOut, promptTokens);
         }
         else
         {

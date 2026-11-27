@@ -87,6 +87,7 @@ public partial class IDEFICS<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -114,6 +115,7 @@ public partial class IDEFICS<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -183,7 +185,7 @@ public partial class IDEFICS<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
         // Step 4: Concatenate perceiver output with prompt tokens
         var decoderInput = perceiverOut;
         if (promptTokens is not null)
-            decoderInput = perceiverOut.ConcatenateTensors(promptTokens);
+            decoderInput = FusePromptTokens(perceiverOut, promptTokens);
 
         // Step 5: LLaMA decoder
         var output = decoderInput;

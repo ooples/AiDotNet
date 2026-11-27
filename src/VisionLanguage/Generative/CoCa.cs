@@ -94,6 +94,7 @@ public partial class CoCa<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -120,6 +121,7 @@ public partial class CoCa<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -178,7 +180,7 @@ public partial class CoCa<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
         // Concatenate encoder output with prompt tokens for multimodal decoder
         var decoderInput = encoderOut;
         if (promptTokens is not null)
-            decoderInput = encoderOut.ConcatenateTensors(promptTokens);
+            decoderInput = FusePromptTokens(encoderOut, promptTokens);
 
         // Step 5: Multimodal decoder generates text (cross-attends to encoder output)
         var output = decoderInput;

@@ -89,6 +89,7 @@ public partial class InstructBLIP<T> : VisionLanguageModelBase<T>, IGenerativeVi
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -116,6 +117,7 @@ public partial class InstructBLIP<T> : VisionLanguageModelBase<T>, IGenerativeVi
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -187,7 +189,7 @@ public partial class InstructBLIP<T> : VisionLanguageModelBase<T>, IGenerativeVi
         // InstructBLIP routes instruction to both Q-Former and LLM decoder
         var decoderInput = qFormerOut;
         if (promptTokens is not null)
-            decoderInput = qFormerOut.ConcatenateTensors(promptTokens);
+            decoderInput = FusePromptTokens(qFormerOut, promptTokens);
 
         // Step 5: LLM decoder generates text conditioned on visual + instruction
         var output = decoderInput;

@@ -88,6 +88,7 @@ public partial class MedFlamingo<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -121,6 +122,7 @@ public partial class MedFlamingo<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -174,12 +176,12 @@ public partial class MedFlamingo<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
 
-        // Fuse visual features with prompt tokens via ConcatenateTensors
+        // Embed the prompt tokens and append them to the visual token sequence
         Tensor<T> fusedInput;
         if (prompt is not null)
         {
             var promptTokens = TokenizeText(prompt);
-            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
+            fusedInput = FusePromptTokens(visualFeatures, promptTokens);
         }
         else
         {

@@ -86,6 +86,7 @@ public partial class MPLUGDocOwl2<T> : VisionLanguageModelBase<T>, IDocumentUnde
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -112,6 +113,7 @@ public partial class MPLUGDocOwl2<T> : VisionLanguageModelBase<T>, IDocumentUnde
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -171,7 +173,7 @@ public partial class MPLUGDocOwl2<T> : VisionLanguageModelBase<T>, IDocumentUnde
         // DocCompressor compresses per-page features via cross-attention; decoder cross-attends
         var decoderInput = visualFeatures;
         if (promptTokens is not null)
-            decoderInput = visualFeatures.ConcatenateTensors(promptTokens);
+            decoderInput = FusePromptTokens(visualFeatures, promptTokens);
 
         // Step 4: LLM decoder
         var output = decoderInput;

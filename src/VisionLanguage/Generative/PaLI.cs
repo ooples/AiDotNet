@@ -95,6 +95,7 @@ public partial class PaLI<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -120,6 +121,7 @@ public partial class PaLI<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -180,7 +182,7 @@ public partial class PaLI<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
         // PaLI prepends visual tokens to text and feeds through mT5 encoder-decoder
         var decoderInput = encoderOut;
         if (promptTokens is not null)
-            decoderInput = encoderOut.ConcatenateTensors(promptTokens);
+            decoderInput = FusePromptTokens(encoderOut, promptTokens);
 
         // Step 4: mT5 encoder-decoder generates output
         var output = decoderInput;

@@ -80,6 +80,7 @@ public partial class MPLUGDocOwl<T> : VisionLanguageModelBase<T>, IDocumentUnder
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -104,6 +105,7 @@ public partial class MPLUGDocOwl<T> : VisionLanguageModelBase<T>, IDocumentUnder
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -163,7 +165,7 @@ public partial class MPLUGDocOwl<T> : VisionLanguageModelBase<T>, IDocumentUnder
         // Visual Abstractor compresses features via cross-attention; decoder cross-attends to result
         var decoderInput = visualFeatures;
         if (promptTokens is not null)
-            decoderInput = visualFeatures.ConcatenateTensors(promptTokens);
+            decoderInput = FusePromptTokens(visualFeatures, promptTokens);
 
         // Step 4: LLM decoder for text generation
         var output = decoderInput;

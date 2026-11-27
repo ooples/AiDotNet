@@ -68,34 +68,47 @@ public class VisionTransformerHeadContractTests
             Build(new DenseLayer<float>(Classes, (IActivationFunction<float>)new ReLUActivation<float>())));
 
     [Fact]
+    public void LogitsHead_WithAProbabilityLoss_IsRejected()
+        // CategoricalCrossEntropyLoss takes the log of its predictions: on logits it computes -log(1e-7) for five zero
+        // logits instead of log 5.
+        => Assert.Throws<ArgumentException>(() => Build(loss: new CategoricalCrossEntropyLoss<float>()));
+
+    [Fact]
+    public void SoftmaxHead_WithAProbabilityLoss_IsAccepted()
+        => Assert.IsType<CategoricalCrossEntropyLoss<float>>(Build(SoftmaxHead(), new CategoricalCrossEntropyLoss<float>()).DefaultLossFunction);
+
+    [Fact]
     public void SoftmaxHead_PredictIsNotNormalizedTwice()
     {
-        // Softmax of a probability vector over 5 classes is confined to [1/(4+e), e/(4+e)], about [0.15, 0.40]. A head
-        // normalized once can leave that band: scaling its weights up makes its softmax peaked.
+        // Zero weights and biases [10, 0, 0, 0, 0] fix the head's logits whatever reaches it, so Predict must return
+        // exactly softmax(logits). A second softmax would give about [0.40, 0.15, 0.15, 0.15, 0.15].
         var head = SoftmaxHead();
         var vit = Build(head);
         var input = new Tensor<float>(new[] { 1, Channels, Size, Size });
         var random = RandomHelper.CreateSeededRandom(7);
         for (int i = 0; i < input.Length; i++)
             input[i] = (float)(random.NextDouble() * 2 - 1);
-        // Size the head on its own, not through vit.Predict, so no compiled plan captures the unscaled weights.
+        // Size the head on its own, not through vit.Predict, so no compiled plan captures the initial weights.
         head.Forward(new Tensor<float>(new[] { 1, Small.HiddenDim }));
 
         var parameters = head.GetParameters();
-        Assert.True(parameters.Length > 0);
-        var scaled = new Vector<float>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-            scaled[i] = parameters[i] * 50f;
-        head.SetParameters(scaled);
-        var output = vit.Predict(input);
+        Assert.Equal(Small.HiddenDim * Classes + Classes, parameters.Length);
+        var fixedLogits = new Vector<float>(parameters.Length);   // weights first, then the biases
+        fixedLogits[parameters.Length - Classes] = 10f;
+        head.SetParameters(fixedLogits);
 
-        float sum = 0f, max = 0f;
-        for (int i = 0; i < output.Length; i++)
-        {
-            sum += output[i];
-            max = Math.Max(max, output[i]);
-        }
-        Assert.Equal(1f, sum, 3);
-        Assert.True(max > 0.5f, $"The largest probability {max} is inside the band a second softmax confines it to.");
+        double denominator = Math.Exp(10) + (Classes - 1);
+        var expected = new double[Classes];
+        expected[0] = Math.Exp(10) / denominator;
+        for (int c = 1; c < Classes; c++) expected[c] = 1 / denominator;
+
+        var headOutput = head.Forward(new Tensor<float>(new[] { 1, Small.HiddenDim }));
+        for (int c = 0; c < Classes; c++)
+            Assert.Equal(expected[c], headOutput[c], 5);   // the parameter layout gives the intended logits
+
+        var output = vit.Predict(input);
+        Assert.Equal(Classes, output.Length);
+        for (int c = 0; c < Classes; c++)
+            Assert.Equal(expected[c], output[c], 5);
     }
 }

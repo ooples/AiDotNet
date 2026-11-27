@@ -26659,3 +26659,4 @@ AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ShuffleEachEpoch.get -> b
 AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ShuffleEachEpoch.set -> void
 AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ValidationFraction.get -> double
 AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ValidationFraction.set -> void
+override AiDotNet.VisionLanguage.VisionLanguageModelBase<T>.RegisterComponents() -> void

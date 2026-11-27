@@ -142,6 +142,8 @@ public partial class SlowFast<T> : NeuralNetworkBase<T>
     /// Custom fusion layers provided by user (null = use default).
     /// </summary>
     private IReadOnlyList<ILayer<T>>? _customFusionLayers;
+    // Whether the custom fusion head ends in a softmax, so Forward already returns probabilities.
+    private bool _headEmitsProbabilities;
 
     #endregion
 
@@ -244,21 +246,16 @@ public partial class SlowFast<T> : NeuralNetworkBase<T>
         _customFastLayers = customFastLayers;
         _customFusionLayers = customFusionLayers;
 
-        // The head's output is logits: the loss (cross-entropy with logits by default) and Classify each apply the
-        // softmax once. A custom head that applies one itself would have the loss train on probabilities.
-        if (customFusionLayers is { Count: > 0 } && _lossFunction is CrossEntropyWithLogitsLoss<T>
-            && AppliesSoftmax(customFusionLayers[customFusionLayers.Count - 1]))
-            throw new ArgumentException(
-                "The last custom fusion layer applies a softmax, but the loss is CrossEntropyWithLogitsLoss, which applies "
-                + "its own. End the fusion layers with logits (an identity activation); Classify applies the probability "
-                + "activation.", nameof(customFusionLayers));
+        // The default head emits logits: the loss (cross-entropy with logits by default) and Classify each apply the
+        // softmax once. A custom head ending in a softmax emits probabilities instead; Classify then returns them as
+        // they are, and the loss must consume probabilities. Either mismatch is rejected.
+        _headEmitsProbabilities = customFusionLayers is { Count: > 0 }
+            && ClassificationHeadContract.AppliesSoftmax(customFusionLayers[customFusionLayers.Count - 1]);
+        ClassificationHeadContract.Validate(_headEmitsProbabilities, _lossFunction,
+            _headEmitsProbabilities ? nameof(customFusionLayers) : nameof(lossFunction));
 
         InitializeLayers();
     }
-
-    private static bool AppliesSoftmax(ILayer<T> layer)
-        => layer is LayerBase<T> withActivation
-            && ((object?)withActivation.VectorActivation ?? withActivation.ScalarActivation) is SoftmaxActivation<T>;
 
     /// <summary>
     /// Creates a SlowFast model using a pretrained ONNX model for inference.
@@ -341,8 +338,9 @@ public partial class SlowFast<T> : NeuralNetworkBase<T>
         if (videoFrames is null)
             throw new ArgumentNullException(nameof(videoFrames));
 
-        var logits = _useNativeMode ? Forward(videoFrames) : PredictOnnx(videoFrames);
-        return _probabilityActivation.Activate(logits);
+        var output = _useNativeMode ? Forward(videoFrames) : PredictOnnx(videoFrames);
+        // A custom softmax head has normalized already, and softmax is not idempotent.
+        return _useNativeMode && _headEmitsProbabilities ? output : _probabilityActivation.Activate(output);
     }
 
     /// <summary>

@@ -285,6 +285,41 @@ public class VideoExtendedIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task SlowFast_CustomSoftmaxHead_IsNormalizedOnce()
+    {
+        await Task.Yield();
+        var arch = new NeuralNetworkArchitecture<double>(inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification, inputHeight: 32, inputWidth: 32, inputDepth: 3,
+            layers: new List<AiDotNet.Interfaces.ILayer<double>> { new GlobalPoolingLayer<double>(AiDotNet.Enums.PoolingType.Average) });
+        var fast = new List<AiDotNet.Interfaces.ILayer<double>> { new GlobalPoolingLayer<double>(AiDotNet.Enums.PoolingType.Average) };
+        var fusion = new List<AiDotNet.Interfaces.ILayer<double>>
+        {
+            new DenseLayer<double>(5, (AiDotNet.Interfaces.IVectorActivationFunction<double>)new AiDotNet.ActivationFunctions.SoftmaxActivation<double>()),
+        };
+        // A sigmoid probability activation: were Classify to apply it to the head's probabilities, the row would sum
+        // to well above 1 (each sigmoid(p) is at least 0.5).
+        var model = new SlowFast<double>(arch, probabilityActivation: new AiDotNet.ActivationFunctions.SigmoidActivation<double>(),
+            options: new SlowFastOptions { NumClasses = 5 }, lossFunction: new AiDotNet.LossFunctions.CategoricalCrossEntropyLoss<double>(),
+            customFastLayers: fast, customFusionLayers: fusion);
+
+        var probabilities = model.Classify(Tensor<double>.CreateRandom(1, 3, 32, 32));
+
+        double sum = 0;
+        for (int i = 0; i < probabilities.Length; i++) sum += probabilities[i];
+        Assert.Equal(1.0, sum, 9);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SlowFast_DefaultLogitsHead_WithAProbabilityLoss_Throws()
+    {
+        await Task.Yield();
+        // The default head emits logits; CategoricalCrossEntropyLoss would take the log of raw scores.
+        var error = Assert.Throws<ArgumentException>(() => new SlowFast<double>(CreateArch(),
+            options: new SlowFastOptions { NumClasses = 5 }, lossFunction: new AiDotNet.LossFunctions.CategoricalCrossEntropyLoss<double>()));
+        Assert.Equal("lossFunction", error.ParamName);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task SlowFast_InvalidNumClasses_Throws()
     {
         var arch = CreateArch();

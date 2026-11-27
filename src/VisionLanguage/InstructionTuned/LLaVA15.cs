@@ -101,6 +101,7 @@ public partial class LLaVA15<T> : VisionLanguageModelBase<T>, IInstructionTunedV
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -128,6 +129,7 @@ public partial class LLaVA15<T> : VisionLanguageModelBase<T>, IInstructionTunedV
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
+        PromptVocabularySize = _options.VocabSize;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
@@ -182,7 +184,7 @@ public partial class LLaVA15<T> : VisionLanguageModelBase<T>, IInstructionTunedV
         if (prompt is not null)
         {
             var promptTokens = TokenizeText(prompt);
-            fusedInput = visualFeatures.ConcatenateTensors(promptTokens);
+            fusedInput = FusePromptTokens(visualFeatures, promptTokens);
         }
         else
         {

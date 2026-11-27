@@ -121,6 +121,80 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// </summary>
     public int EmbeddingDim { get; protected set; } = 512;
 
+    /// <summary>
+    /// The vocabulary size of the learned prompt-token embedding, or 0 for a model that does not fuse a text prompt
+    /// with its visual tokens. A model that calls <see cref="FusePromptTokens"/> sets it in its constructor.
+    /// </summary>
+    /// <remarks>
+    /// The embedding table is <c>[PromptVocabularySize, EmbeddingDim]</c>. It is part of the native model's
+    /// parameters (training, <c>GetParameters</c>, checkpoints and clones), not a fixed function of the token ids.
+    /// </remarks>
+    private protected int PromptVocabularySize { get; set; }
+
+    private EmbeddingLayer<T>? _promptEmbedding;
+
+    /// <summary>
+    /// The learned prompt-token embedding, created on first use (after the constructor has set
+    /// <see cref="PromptVocabularySize"/> and <see cref="EmbeddingDim"/>); null for a model without prompt fusion or
+    /// in ONNX mode, where the weights belong to the loaded graph.
+    /// </summary>
+    private EmbeddingLayer<T>? PromptEmbedding
+    {
+        get
+        {
+            if (PromptVocabularySize <= 0 || EmbeddingDim <= 0 || IsOnnxMode)
+                return null;
+            return _promptEmbedding ??= new EmbeddingLayer<T>(PromptVocabularySize, EmbeddingDim);
+        }
+    }
+
+    /// <summary>
+    /// Joins a prompt to the visual token sequence as the decoder's input: each prompt token id goes through the
+    /// learned prompt embedding to an <see cref="EmbeddingDim"/>-wide vector, and the text tokens follow the visual
+    /// tokens along the sequence axis (the visual stream's second-to-last axis; leading axes are batch axes the
+    /// prompt is shared across).
+    /// </summary>
+    /// <param name="visualTokens">The encoder's output, <c>[..., tokens, EmbeddingDim]</c>; a rank-1
+    /// <c>[EmbeddingDim]</c> vector is one token.</param>
+    /// <param name="promptTokenIds">The prompt's token ids, read flattened.</param>
+    /// <returns><c>[..., tokens + promptLength, EmbeddingDim]</c>; the visual tokens unchanged for an empty
+    /// prompt.</returns>
+    /// <exception cref="InvalidOperationException">The model declared no prompt vocabulary, or the visual width is not
+    /// <see cref="EmbeddingDim"/>.</exception>
+    private protected Tensor<T> FusePromptTokens(Tensor<T> visualTokens, Tensor<T> promptTokenIds)
+    {
+        if (visualTokens is null) throw new ArgumentNullException(nameof(visualTokens));
+        if (promptTokenIds is null) throw new ArgumentNullException(nameof(promptTokenIds));
+        if (promptTokenIds.Length == 0)
+            return visualTokens;
+        var embedding = PromptEmbedding ?? throw new InvalidOperationException(
+            $"{GetType().Name} has no prompt embedding: set PromptVocabularySize in its constructor (native mode).");
+
+        var visual = visualTokens.Rank == 1 ? visualTokens.Reshape([1, visualTokens.Length]) : visualTokens;
+        int width = visual.Shape[visual.Rank - 1];
+        if (width != EmbeddingDim)
+            throw new InvalidOperationException(
+                $"{GetType().Name}'s visual tokens are {width} wide, but its prompt embedding is {EmbeddingDim} wide "
+                + "(EmbeddingDim); the two streams cannot share the decoder's sequence.");
+
+        int promptLength = promptTokenIds.Length;
+        var text = embedding.Forward(promptTokenIds.Reshape([promptLength]));   // [promptLength, EmbeddingDim]
+        if (visual.Rank > 2)
+        {
+            var textShape = new int[visual.Rank];
+            var viewShape = new int[visual.Rank];
+            for (int axis = 0; axis < visual.Rank - 2; axis++)
+            {
+                textShape[axis] = visual.Shape[axis];
+                viewShape[axis] = 1;
+            }
+            textShape[visual.Rank - 2] = viewShape[visual.Rank - 2] = promptLength;
+            textShape[visual.Rank - 1] = viewShape[visual.Rank - 1] = width;
+            text = Engine.TensorBroadcastTo(text.Reshape(viewShape), textShape);
+        }
+        return Engine.TensorConcatenate([visual, text], visual.Rank - 2);
+    }
+
     /// <inheritdoc/>
     protected override string? TrainingUnavailableReason =>
         IsOnnxMode ? OnnxTrainingUnavailableReason : base.TrainingUnavailableReason;
@@ -1058,6 +1132,17 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// </remarks>
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
         => EnumerateAllAuxiliaryTrainableLayers();
+
+    /// <summary>
+    /// Registers the learned prompt embedding of a model that fuses prompts (<see cref="PromptVocabularySize"/>), so
+    /// it trains and is saved with the model. A subclass that overrides this calls the base first.
+    /// </summary>
+    protected override void RegisterComponents()
+    {
+        base.RegisterComponents();
+        if (PromptEmbedding is { } promptEmbedding)
+            RegisterParameterComponent("prompt-embedding", promptEmbedding);
+    }
 
     /// <summary>
     /// Disposes of resources used by this model.
