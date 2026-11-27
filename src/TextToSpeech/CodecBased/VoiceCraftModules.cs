@@ -20,11 +20,7 @@ internal static class VoiceCraftOps<T>
     }
 
     internal static Tensor<T> Ids(IReadOnlyList<int> values)
-    {
-        var result = new Tensor<T>(new[] { values.Count });
-        for (int i = 0; i < values.Count; i++) result[i] = NumOps.FromDouble(values[i]);
-        return result;
-    }
+        => TtsIdTensors.From<T>(values);
 
     internal static int[] IdsOf(Tensor<T> values)
     {

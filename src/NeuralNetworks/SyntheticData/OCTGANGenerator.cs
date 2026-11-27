@@ -748,16 +748,7 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     }
 
     private Tensor<T> Noise(int batch)
-    {
-        var z = new Tensor<T>(new[] { batch, _options.EmbeddingDimension });
-        for (int i = 0; i < z.Length; i++)
-        {
-            double u1 = 1.0 - _random.NextDouble();
-            double u2 = _random.NextDouble();
-            z[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
-        }
-        return z;
-    }
+        => SyntheticTensorOps<T>.StandardNormalTensor(new[] { batch, _options.EmbeddingDimension }, _random);
 
     // Standard Gumbel noise −log(−log U).
     private Tensor<T> GumbelNoise(int batch, int width)

@@ -943,17 +943,7 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
     #region Helpers
 
     private Vector<T> CreateStandardNormalVector(int size)
-    {
-        var v = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
-        {
-            double u1 = Math.Max(1e-10, _random.NextDouble());
-            double u2 = _random.NextDouble();
-            double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            v[i] = NumOps.FromDouble(z);
-        }
-        return v;
-    }
+        => SyntheticTensorOps<T>.StandardNormalVector(size, _random, BoxMullerGuard.Floored);
 
     private static Tensor<T> VectorToTensor(Vector<T> v) => Tensor<T>.FromVector(v);
 
