@@ -524,9 +524,12 @@ public class TrainingMonitor<T> : TrainingMonitorBase<T>
     {
         foreach (var name in GcHeapLimitSettings)
         {
+#if NETCOREAPP
+            // runtimeconfig.json settings exist only on .NET (Core); .NET Framework has no AppContext.GetData there.
             string runtimeConfigName = "System.GC." + name.Substring("GC".Length);
             if (AppContext.GetData(runtimeConfigName) is { } value && !IsZeroSetting(value.ToString()))
                 return true;
+#endif
             if (!IsZeroSetting(Environment.GetEnvironmentVariable("DOTNET_" + name))
                 || !IsZeroSetting(Environment.GetEnvironmentVariable("COMPlus_" + name)))
                 return true;
