@@ -28,18 +28,14 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create an iSTFTNet vocoder for fast mel-to-waveform conversion
-/// // using inverse short-time Fourier transform for reconstruction
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new ISTFTNet&lt;double&gt;(architecture, "istftnet.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new ISTFTNet&lt;double&gt;(architecture, new ISTFTNetOptions());
+///     inputSize: 80, outputSize: 1);
+/// var model = new ISTFTNet&lt;double&gt;(architecture, new ISTFTNetOptions());
+/// var mel = Tensor&lt;double&gt;.CreateRandom(model.MelChannels, 100);   // stands in for a [mel bins, frames] spectrogram
+/// Tensor&lt;double&gt; waveform = model.MelToWaveform(mel);
+/// // Untrained native layers; the ISTFTNet(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

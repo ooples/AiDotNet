@@ -509,6 +509,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         SparsityWeight = NumOps.FromDouble(0.0001);
 
         InitializeWeights();
+        NoteConstructorInitialization(_weights1, _weights2, _bias1, _bias2);
     }
 
     /// <summary>
@@ -559,6 +560,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         SparsityWeight = NumOps.FromDouble(0.0001);
 
         InitializeWeights();
+        NoteConstructorInitialization(_weights1, _weights2, _bias1, _bias2);
     }
 
     /// <summary>
@@ -582,16 +584,48 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     /// </remarks>
     private void InitializeWeights()
     {
-        T scale = NumOps.FromDouble(0.1);
-        InitializeTensor2D(_weights1, scale);
-        InitializeTensor2D(_weights2, scale);
-        InitializeTensor1D(_bias1, scale);
-        InitializeTensor1D(_bias2, scale);
+        DrawInitialWeights();
 
         RegisterTrainableParameter(_weights1, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_bias1, PersistentTensorRole.Biases);
         RegisterTrainableParameter(_weights2, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_bias2, PersistentTensorRole.Biases);
+    }
+
+    private void DrawInitialWeights()
+    {
+        T scale = NumOps.FromDouble(0.1);
+        InitializeTensor2D(_weights1, scale);
+        InitializeTensor2D(_weights2, scale);
+        InitializeTensor1D(_bias1, scale);
+        InitializeTensor1D(_bias2, scale);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The weights are drawn in the constructor. An inverted-residual block builds this layer on its first input, after
+    /// its model was constructed, so that draw used whatever seed the thread's construction scope held then: two
+    /// identically seeded MobileNetV3 models built before either was forwarded differed in every one of these layers.
+    /// The seed the block hands down redoes the draw while the weights are still exactly what construction drew.
+    /// </remarks>
+    protected override void OnRandomSeedAssigned()
+    {
+        // Runs from the base constructor too, before these fields exist.
+        if (_weights1 is null || _weights2 is null || _bias1 is null || _bias2 is null) return;
+        // A strategy InitializeLayerWeights runs as configured even under a pinned seed (one that loads external
+        // weights, such as FromFile, or a custom strategy outside InitializationStrategyBase) cannot be re-seeded:
+        // a redraw would not use the seed, and a FromFile strategy would advance its per-instance cursor and
+        // overwrite this layer's loaded tensors with another layer's payloads.
+        if (InitializationStrategy is { IsLazy: false } configured
+            && (configured.LoadFromExternal || configured is not Initialization.InitializationStrategyBase<T>))
+            return;
+        var drawn = new[] { _weights1, _weights2, _bias1, _bias2 };
+        if (TryBeginSeededReinitialization(drawn, out _))
+        {
+            RestartSeededInitializationSequence();
+            DrawInitialWeights();
+            CompleteSeededReinitialization(drawn);
+        }
     }
 
     /// <summary>

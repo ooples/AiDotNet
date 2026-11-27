@@ -50,10 +50,33 @@ internal sealed record Wav2Vec2Configuration
     public double ActivationDropout { get; init; } = 0.1;
     public double LayerDrop { get; init; } = 0.1;
 
+    /// <summary>How a dropped layer leaves the training step (see <see cref="LayerDropPolicy"/>).</summary>
+    public LayerDropPolicy LayerDropPolicy { get; init; } = LayerDropPolicy.SkipLayer;
+
     /// <summary>SpecAugment time masking during training: the probability a frame starts a masked span.</summary>
     public double MaskTimeProbability { get; init; } = 0.05;
     public int MaskTimeLength { get; init; } = 10;
     public int MaskTimeMinMasks { get; init; } = 2;
+}
+
+/// <summary>How LayerDrop removes a layer from a training step.</summary>
+internal enum LayerDropPolicy
+{
+    /// <summary>
+    /// The dropped layer does not run: it is not in the step's graph, gets no gradient and is not stepped by the
+    /// optimizer, as in fairseq and transformers. The graph then differs from step to step, so the owning model trains
+    /// on the eager tape (<c>TrainingForwardSkipsLayersPerStep</c>).
+    /// </summary>
+    SkipLayer,
+
+    /// <summary>
+    /// Every layer runs and a per-step 0/1 gate selects its output or its input
+    /// (<see cref="AiDotNet.Training.CompiledStepRandom{T}.KeepGate"/>), as <c>WavLmNetwork</c> and
+    /// <c>PreNormTransformerEncoder</c> do. The graph is the same on every step, so a compiled training plan replays
+    /// it and redraws the gates. A dropped layer's output is not used, so its gradient is zero; an optimizer with
+    /// momentum or weight decay still moves it on that step, which <see cref="SkipLayer"/> does not.
+    /// </summary>
+    StepGate,
 }
 
 /// <summary>
@@ -230,12 +253,17 @@ internal sealed class Wav2Vec2Network<T>
         states.Add(hidden);
         foreach (var layer in EncoderLayers)
         {
-            // LayerDrop: in training each layer is skipped with probability LayerDrop. A skipped layer does not run, so
-            // it is not in the step's graph, gets no gradient and is not stepped by the optimizer (no momentum update, no
-            // weight decay), as in fairseq and transformers. A compiled plan has one fixed graph and could only blend the
-            // layer out with a zero multiplier, which still steps it; the models that own this network therefore
-            // declare TrainingForwardSkipsLayersPerStep when LayerDrop is positive and train on the eager tape.
-            if (!(training && c.LayerDrop > 0 && random.NextDouble() < c.LayerDrop))
+            // LayerDrop: in training each layer is skipped with probability LayerDrop. Under SkipLayer a skipped layer
+            // does not run, so it is not in the step's graph, gets no gradient and is not stepped by the optimizer (no
+            // momentum update, no weight decay), as in fairseq and transformers; the models that own this network then
+            // declare TrainingForwardSkipsLayersPerStep and train on the eager tape. Under StepGate the layer runs and
+            // a per-step gate selects its output or its input, so one compiled graph serves every step (the gate is
+            // drawn before the layer's own dropout masks).
+            if (training && c.LayerDrop > 0 && c.LayerDropPolicy == LayerDropPolicy.StepGate)
+                hidden = AiDotNet.Training.CompiledStepRandom<T>.Gated(_engine,
+                    AiDotNet.Training.CompiledStepRandom<T>.KeepGate(random, c.LayerDrop),
+                    Encode(layer, hidden, training, random), hidden);
+            else if (!(training && c.LayerDrop > 0 && random.NextDouble() < c.LayerDrop))
                 hidden = Encode(layer, hidden, training, random);
             states.Add(hidden);
         }

@@ -399,8 +399,19 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         double learningRateValue = NumOps.ToDouble(CurrentLearningRate);
+        // One whole-parameter-list GPU step for every eligible parameter; the loop below skips the ones it
+        // updated and runs every other parameter (and all of them, when the list step declines) as before.
+        var gpuListUpdated = gpuAdam
+            ? GpuListOptimizerStep<T>.TryApply(context, Engine, "TryAdagradStepMultiTensor", 1,
+                p => new[]
+                {
+                    GpuListOptimizerStep<T>.GetOrAddState(_tapeAccSqGrad, p, q => CreateOptimizerStateTensor(q._shape, gpuAdam))
+                },
+                (float)learningRateValue, (float)_options.Epsilon, 0f)
+            : null;
         foreach (var param in context.Parameters)
         {
+            if (gpuListUpdated is not null && gpuListUpdated.Contains(param)) continue;
             // True sparse scatter: accumulator + param at touched rows only.
             if (SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
             {

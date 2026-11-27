@@ -37,19 +37,27 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// </remarks>
 /// <example>
 /// <code>
-/// var clip1 = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
-/// var text1 = "example";
-/// var durations1 = new int[] { 0, 1, 2 };
-/// var clip2 = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
-/// var text2 = "example";
-/// var durations2 = new int[] { 0, 1, 2 };
+/// var options = new MegaTTS2Options();
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
-/// var model = new MegaTTS2&lt;float&gt;(architecture, new MegaTTS2Options());
+/// var model = new MegaTTS2&lt;float&gt;(architecture, options);
 /// model.LoadVocoderWeights("generator_v1");   // a HiFi-GAN V1 generator trained on this model's mel spectrograms
+///
+/// // Two sentences of the target speaker, 3 s each at the model's sample rate, with what each one says.
+/// var clip1 = Tensor&lt;float&gt;.CreateRandom(1, 3 * options.SampleRate);
+/// var tokens1 = model.TextToTokens("the first thing the speaker said");
+/// var clip2 = Tensor&lt;float&gt;.CreateRandom(1, 3 * options.SampleRate);
+/// var tokens2 = model.TextToTokens("and the second sentence they read");
+///
+/// // Mel frames per token, one entry per token, together covering at most the clip's frames (samples / hop).
+/// // A forced aligner gives the real ones; here each clip's frames are spread evenly over its tokens.
+/// int[] durations1 = new int[tokens1.Length], durations2 = new int[tokens2.Length];
+/// for (int i = 0; i &lt; durations1.Length; i++) durations1[i] = clip1.Length / options.HopSize / durations1.Length;
+/// for (int i = 0; i &lt; durations2.Length; i++) durations2[i] = clip2.Length / options.HopSize / durations2.Length;
+///
 /// model.PromptSentences = new[]
 /// {
-///     new TtsVoice&lt;float&gt; { ReferenceAudio = clip1, ReferenceTokens = model.TextToTokens(text1), ReferenceDurations = durations1 },
-///     new TtsVoice&lt;float&gt; { ReferenceAudio = clip2, ReferenceTokens = model.TextToTokens(text2), ReferenceDurations = durations2 },
+///     new TtsVoice&lt;float&gt; { ReferenceAudio = clip1, ReferenceTokens = tokens1, ReferenceDurations = durations1 },
+///     new TtsVoice&lt;float&gt; { ReferenceAudio = clip2, ReferenceTokens = tokens2, ReferenceDurations = durations2 },
 /// };
 /// var audio = model.Synthesize("Hello, how are you doing today?");
 /// </code>

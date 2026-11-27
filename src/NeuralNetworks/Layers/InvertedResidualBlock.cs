@@ -439,7 +439,7 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
         // Lazy ctor leaves all sub-layers null until OnFirstForward
         // resolves the input channel count and allocates them. Subsequent
         // calls short-circuit via IsShapeResolved.
-        if (!IsShapeResolved) OnFirstForward(input);
+        if (!IsShapeResolved) BuildLateSubLayers(() => OnFirstForward(input));
 
         // Post-OnFirstForward contract: the four mandatory sub-layers are
         // non-null. Capture as locals so flow analysis stops complaining

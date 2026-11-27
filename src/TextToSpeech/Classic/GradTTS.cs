@@ -38,18 +38,13 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Grad-TTS model for diffusion-based speech synthesis
-/// // using score matching and stochastic differential equations
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new GradTTS&lt;double&gt;(architecture, "gradtts.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new GradTTS&lt;double&gt;(architecture, new GradTTSOptions());
+///     inputSize: 200, outputSize: 80);
+/// var model = new GradTTS&lt;double&gt;(architecture, new GradTTSOptions());
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel spectrogram; a vocoder turns it into audio
+/// // Untrained native layers; the GradTTS(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

@@ -47,13 +47,13 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///     inputSize: 200, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new StyleTTS&lt;double&gt;(architecture, "styletts.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new StyleTTS&lt;double&gt;(architecture, new StyleTTSOptions());
+/// var model = new StyleTTS&lt;double&gt;(architecture, new StyleTTSOptions());
+/// // The style comes from a reference recording: mono, at the model's sample rate. Noise stands in for it.
+/// var reference = Tensor&lt;double&gt;.CreateRandom(3 * model.SampleRate);
+/// model.Voice = model.CreateVoice(reference);
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel frames, for a vocoder
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

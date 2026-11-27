@@ -25,18 +25,13 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Spark-TTS model for LLM-based zero-shot synthesis
-/// // with BiCodec decoupled speech tokens for controllable generation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new SparkTTS&lt;double&gt;(architecture, "sparktts.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new SparkTTS&lt;double&gt;(architecture, new SparkTTSOptions());
+///     inputSize: 1, outputSize: 1);
+/// var model = new SparkTTS&lt;double&gt;(architecture, new SparkTTSOptions());
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// // Untrained native layers; the SparkTTS(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

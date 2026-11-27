@@ -338,15 +338,7 @@ public abstract partial class VitsTtsModelBase<T> : TtsModelBase<T>, IEndToEndTt
 
     /// <summary>Standard-normal noise of <paramref name="shape"/> times <paramref name="scale"/>.</summary>
     protected Tensor<T> Gaussian(int[] shape, Random random, double scale = 1.0)
-    {
-        var t = new Tensor<T>(shape);
-        for (int i = 0; i < t.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            t[i] = NumOps.FromDouble(scale * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
-        }
-        return t;
-    }
+        => AiDotNet.Helpers.SeededNoiseTensors.StandardNormal<T>(shape, random, scale);
 
     // [1, C, L] -> [1, C, frames] by repeating column l durations[l] times.
     private Tensor<T> Expand(Tensor<T> x, int[] durations)

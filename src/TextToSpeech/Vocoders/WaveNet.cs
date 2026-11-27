@@ -29,18 +29,14 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a WaveNet vocoder for autoregressive raw audio generation
-/// // using dilated causal convolutions with gated activations
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new WaveNet&lt;double&gt;(architecture, "wavenet.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new WaveNet&lt;double&gt;(architecture, new WaveNetOptions());
+///     inputSize: 80, outputSize: 1);
+/// var model = new WaveNet&lt;double&gt;(architecture, new WaveNetOptions());
+/// var mel = Tensor&lt;double&gt;.CreateRandom(model.MelChannels, 100);   // stands in for a [mel bins, frames] spectrogram
+/// Tensor&lt;double&gt; waveform = model.MelToWaveform(mel);
+/// // Untrained native layers; the WaveNet(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

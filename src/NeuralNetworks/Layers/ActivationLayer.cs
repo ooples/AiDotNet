@@ -129,13 +129,7 @@ public partial class ActivationLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     protected override void OnFirstForward(Tensor<T> input)
     {
-        int[] runtimeShape = input.Shape.ToArray();
-        int[] sampleShape = runtimeShape;
-        if (runtimeShape.Length > 1)
-        {
-            sampleShape = new int[runtimeShape.Length - 1];
-            Array.Copy(runtimeShape, 1, sampleShape, 0, sampleShape.Length);
-        }
+        int[] sampleShape = SampleShapeOf(input.Shape.ToArray());
         ResolveShapes(sampleShape, sampleShape);
     }
 

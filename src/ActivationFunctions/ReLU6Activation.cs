@@ -104,16 +104,7 @@ public class ReLU6Activation<T> : ActivationFunctionBase<T>, Fused.IFusedActivat
     /// <returns>A diagonal matrix where each diagonal element is the derivative of ReLU6 for the corresponding input element.</returns>
     public override Matrix<T> Derivative(Vector<T> input)
     {
-        int n = input.Length;
-        Matrix<T> jacobian = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
-        {
-            bool inRange = NumOps.GreaterThan(input[i], NumOps.Zero) && NumOps.LessThan(input[i], _six);
-            jacobian[i, i] = inRange ? NumOps.One : NumOps.Zero;
-        }
-
-        return jacobian;
+        return ElementwiseJacobian(input);
     }
 
     /// <summary>
@@ -134,11 +125,16 @@ public class ReLU6Activation<T> : ActivationFunctionBase<T>, Fused.IFusedActivat
     /// <returns>A new tensor containing the derivatives of the ReLU6 function for each input element.</returns>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
-        return input.Transform((x, _) =>
+        if (input.Length == 0)
         {
-            bool inRange = NumOps.GreaterThan(x, NumOps.Zero) && NumOps.LessThan(x, _six);
-            return inRange ? NumOps.One : NumOps.Zero;
-        });
+            // Nothing to compute, and a zero-length device buffer cannot be created on the GPU engine.
+            return new Tensor<T>(input._shape);
+        }
+
+        // 1 where 0 < x < 6, 0 elsewhere: the product of the two 0/1 comparison masks
+        var engine = Engine;
+        return engine.TensorMultiply(
+            engine.TensorGreaterThan(input, NumOps.Zero), engine.TensorLessThan(input, _six));
     }
 
 }

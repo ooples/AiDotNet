@@ -39,8 +39,10 @@ namespace AiDotNet.Audio.MusicGen;
 /// </remarks>
 /// <example>
 /// <code>
-/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
-/// var clip = Tensor&lt;float&gt;.CreateRandom(1, 32000);
+/// // MusicGen is a waveform model: a one-dimensional generative input (its layers come from MusicGenOptions)
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional,
+///     NeuralNetworkTaskType.Generative, inputSize: 1, outputSize: 1);
+/// var clip = Tensor&lt;float&gt;.CreateRandom(1, 32000);   // 1 s at MusicGen's 32 kHz
 /// var musicGen = new MusicGenModel&lt;float&gt;(architecture, new MusicGenOptions { ModelSize = MusicGenModelSize.Small });
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
 ///     .ConfigureModel(musicGen)

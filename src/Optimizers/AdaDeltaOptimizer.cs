@@ -464,8 +464,20 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
 
         double learningRateValue = NumOps.ToDouble(CurrentLearningRate);
         bool unitLearningRate = NumOps.Equals(CurrentLearningRate, NumOps.One);
+        // One whole-parameter-list GPU step for every eligible parameter; the loop below skips the ones it
+        // updated and runs every other parameter (and all of them, when the list step declines) as before.
+        var gpuListUpdated = gpuAdam && unitLearningRate
+            ? GpuListOptimizerStep<T>.TryApply(context, Engine, "TryAdadeltaStepMultiTensor", 2,
+                p => new[]
+                {
+                    GpuListOptimizerStep<T>.GetOrAddState(_tapeAccSqGrad, p, q => CreateOptimizerStateTensor(q._shape, gpuAdam)),
+                    GpuListOptimizerStep<T>.GetOrAddState(_tapeAccSqUpd, p, q => CreateOptimizerStateTensor(q._shape, gpuAdam))
+                },
+                (float)_options.Rho, (float)_options.Epsilon, 0f)
+            : null;
         foreach (var param in context.Parameters)
         {
+            if (gpuListUpdated is not null && gpuListUpdated.Contains(param)) continue;
             // Once state exists, zero-gradient rows must decay both accumulators too.
             if (!_tapeAccSqGrad.ContainsKey(param) && !_tapeAccSqUpd.ContainsKey(param)
                 && SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))

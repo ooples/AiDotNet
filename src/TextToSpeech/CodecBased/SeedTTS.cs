@@ -32,18 +32,13 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Seed-TTS model for large-scale autoregressive synthesis
-/// // with self-distillation for in-context learning and voice control
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new SeedTTS&lt;double&gt;(architecture, "seedtts.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new SeedTTS&lt;double&gt;(architecture, new SeedTTSOptions());
+///     inputSize: 1, outputSize: 1);
+/// var model = new SeedTTS&lt;double&gt;(architecture, new SeedTTSOptions());
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// // Untrained native layers; the SeedTTS(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

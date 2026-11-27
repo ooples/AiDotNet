@@ -32,18 +32,13 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create an F5-TTS model for flow-matching TTS with DiT backbone
-/// // generating fluent and faithful speech from text
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new F5TTS&lt;double&gt;(architecture, "f5tts.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new F5TTS&lt;double&gt;(architecture, new F5TTSOptions());
+///     inputSize: 200, outputSize: 80);
+/// var model = new F5TTS&lt;double&gt;(architecture, new F5TTSOptions());
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel spectrogram; a vocoder turns it into audio
+/// // Untrained native layers; the F5TTS(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

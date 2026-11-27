@@ -65,8 +65,17 @@ public enum SPEARTTSTrainingStage
 /// </remarks>
 /// <example>
 /// <code>
-/// // a pre-trained w2v-BERT whose semantic tokenizer has been fitted (see W2vBert)
 /// var w2vBert = new W2vBert&lt;float&gt;(new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 1, outputSize: 1024), new W2vBertOptions());
+/// // Pre-train it on unlabeled speech (self-supervised: the recordings are their own target), then fit its semantic
+/// // tokenizer: k-means needs at least SemanticClusters (1024) frames at 25 a second, about 41 s of speech or more.
+/// // Noise stands in for the recordings here: 32 recordings of 2 s at 16 kHz, 64 s in all.
+/// var unlabeledSpeech = Tensor&lt;float&gt;.CreateRandom(32, 32000);
+/// new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(w2vBert)
+///     .Build(unlabeledSpeech, unlabeledSpeech);
+/// var speech = new List&lt;Tensor&lt;float&gt;&gt;();
+/// for (int i = 0; i &lt; unlabeledSpeech.Shape[0]; i++) speech.Add(unlabeledSpeech.Slice(i).Reshape(1, 32000));
+/// w2vBert.FitSemanticTokenizer(speech);
 /// var threeSecondRecording = Tensor&lt;float&gt;.CreateRandom(1, 48000);   // 3 s at 16 kHz
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional,
 ///     NeuralNetworkTaskType.Generative, inputSize: 1, outputSize: 1);

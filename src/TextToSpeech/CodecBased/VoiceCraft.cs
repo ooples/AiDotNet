@@ -24,18 +24,15 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a VoiceCraft model for zero-shot speech editing and TTS
-/// // with token rearrangement for in-context learning from wild recordings
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new VoiceCraft&lt;double&gt;(architecture, "voicecraft.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new VoiceCraft&lt;double&gt;(architecture, new VoiceCraftOptions());
+///     inputSize: 1, outputSize: 1);
+/// var model = new VoiceCraft&lt;double&gt;(architecture, new VoiceCraftOptions());
+/// var reference = Tensor&lt;double&gt;.CreateRandom(1, 3 * 16000);   // stands in for 3 s of the target voice at 16 kHz
+/// model.Voice = model.CreateVoice(reference, "the reference's transcript");   // phonemized with eSpeak NG, which must be installed
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// // Untrained native layers; the VoiceCraft(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
