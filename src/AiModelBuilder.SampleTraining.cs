@@ -203,7 +203,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         var trainLosses = new List<double>(options.Epochs);
         var validationLosses = new List<double>(options.Epochs);
         double bestValidation = double.PositiveInfinity;
-        Vector<T>? bestParameters = null;
+        byte[]? bestState = null;
         bool lastEpochIsBest = true;
         int epochsWithoutImprovement = 0;
         bool earlyStop = false;
@@ -262,8 +262,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                         bestValidation = monitored;
                         epochsWithoutImprovement = 0;
                         lastEpochIsBest = true;
-                        // A copy: GetParameters may return a view of storage the next step overwrites.
-                        if (options.RestoreBestModel) bestParameters = _model!.GetParameters().Clone();
+                        // The whole serialized state, not GetParameters: running statistics and other buffers
+                        // change in training too, and the input/target path keeps a DeepCopy of its best model.
+                        if (options.RestoreBestModel) bestState = SnapshotModelState();
                     }
                     else
                     {
@@ -297,7 +298,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         // As the input/target path returns its best step's model: the epoch with the lowest held-out objective.
-        if (bestParameters is not null && !lastEpochIsBest) _model!.SetParameters(bestParameters);
+        if (bestState is not null && !lastEpochIsBest) RestoreModelState(bestState);
 
         var history = new Dictionary<string, List<double>> { ["train_loss"] = trainLosses };
         if (validationLosses.Count > 0) history["validation_loss"] = validationLosses;
@@ -315,5 +316,29 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return CreateOwnObjectiveResult(
             optimizationResult, preprocessingInfo: null, quantizationInfo: null, profilerSession,
             history, earlyStop, stopReason);
+    }
+
+    // The model's full state, taken and restored in place inside an internal persistence scope: a snapshot for early
+    // stopping is not a user save, so it does not need the ModelSave capability.
+    private byte[] SnapshotModelState()
+    {
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            return _model!.Serialize();
+        }
+    }
+
+    private void RestoreModelState(byte[] state)
+    {
+        // Deserialize may leave a network in inference mode; training ends in the mode it was in.
+        bool? wasTraining = (_model as NeuralNetworks.NeuralNetworkBase<T>)?.IsTrainingMode;
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            _model!.Deserialize(state);
+        }
+        if (wasTraining is bool mode && _model is NeuralNetworks.NeuralNetworkBase<T> network && network.IsTrainingMode != mode)
+        {
+            network.SetTrainingMode(mode);
+        }
     }
 }

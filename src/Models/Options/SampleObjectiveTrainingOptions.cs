@@ -65,13 +65,15 @@ public class SampleObjectiveTrainingOptions : ModelOptions
     public int EarlyStoppingPatience { get; set; } = 10;
 
     /// <summary>
-    /// Gets or sets whether the trained model is returned with the parameters of the epoch whose held-out objective
-    /// was lowest, rather than those of the last epoch.
+    /// Gets or sets whether the trained model is returned in the state of the epoch whose held-out objective was
+    /// lowest, rather than that of the last epoch.
     /// </summary>
     /// <value>
     /// Defaults to <c>true</c>, as the builder's input/target path returns the model of its best step: when early
     /// stopping ends training, the last <see cref="EarlyStoppingPatience"/> epochs were the ones that did not improve.
-    /// It has no effect when no samples are held out. Keeping the best parameters holds one copy of them in memory.
+    /// It has no effect when no samples are held out. The whole serialized model is kept and restored, not only its
+    /// parameters, so running statistics and other buffers match the best epoch too; that holds one serialized copy of
+    /// the model in memory during training.
     /// </value>
     public bool RestoreBestModel { get; set; } = true;
 
