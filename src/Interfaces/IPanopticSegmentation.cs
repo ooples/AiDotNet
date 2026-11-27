@@ -89,8 +89,18 @@ public class PanopticSegmentationResult<T>
 public class PanopticSegment<T>
 {
     /// <summary>
-    /// Unique segment ID.
+    /// The segment's id, unique within one result. Ids count up from 1 (<c>1 .. Segments.Count</c>). For a thing
+    /// segment the id is the value its pixels carry in <see cref="PanopticSegmentationResult{T}.InstanceMap"/>, so
+    /// <c>InstanceMap == SegmentId</c> selects its pixels; a stuff segment has no pixels in <c>InstanceMap</c>
+    /// (they are 0 there). The id does not encode the class: read <see cref="ClassId"/> for that.
     /// </summary>
+    /// <remarks>
+    /// <para><c>SegmentId</c> itself is an exact <see cref="int"/>. <c>InstanceMap</c> stores it in <typeparamref name="T"/>,
+    /// so the <c>InstanceMap == SegmentId</c> selection holds while every id is an integer <typeparamref name="T"/>
+    /// represents exactly: up to 2^24 for <see cref="float"/>, 2^53 for <see cref="double"/>, but only 2048 for
+    /// <c>Half</c>. With <c>Half</c> and more than 2048 thing segments, ids above 2048 round to shared values in
+    /// <c>InstanceMap</c>; use each segment's own mask, or a wider <typeparamref name="T"/>, in that case.</para>
+    /// </remarks>
     public int SegmentId { get; set; }
 
     /// <summary>

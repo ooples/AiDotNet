@@ -473,11 +473,7 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
     // z ~ Unif([0, 1]^n) (section 4.2.2).
     private Tensor<T> Noise(int n)
-    {
-        var z = new Tensor<T>(new[] { n, NoiseWidth });
-        for (int i = 0; i < z.Length; i++) z[i] = NumOps.FromDouble(_random.NextDouble());
-        return z;
-    }
+        => SyntheticTensorOps<T>.UniformTensor(new[] { n, NoiseWidth }, _random);
 
     private Tensor<T> Labels(int n, double value)
     {

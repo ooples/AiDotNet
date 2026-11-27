@@ -99,11 +99,7 @@ internal sealed class VallE2Core<T>
     }
 
     private static Tensor<T> Ids(IReadOnlyList<int> ids)
-    {
-        var tensor = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) tensor[i] = NumOps.FromDouble(ids[i]);
-        return tensor;
-    }
+        => TtsIdTensors.From<T>(ids);
 
     private static Tensor<T> Range(int start, int count) => Ids(Enumerable.Range(start, count).ToArray());
 

@@ -438,10 +438,8 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
     /// <param name="vector">The vector to fill.</param>
     protected void FillStandardNormal(Vector<T> vector)
     {
-        for (int i = 0; i < vector.Length; i++)
-        {
-            vector[i] = SampleStandardNormal();
-        }
+        // Drawn in element order from the generator stream, then copied in one block.
+        SyntheticTensorOps<T>.StandardNormalVector(vector.Length, Random).CopyTo(vector.AsWritableSpan());
     }
 
     /// <summary>

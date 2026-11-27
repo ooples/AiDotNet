@@ -19,11 +19,7 @@ internal static class VoiceboxOps<T>
     }
 
     internal static Tensor<T> Ids(IReadOnlyList<int> ids)
-    {
-        var tensor = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) tensor[i] = NumOps.FromDouble(ids[i]);
-        return tensor;
-    }
+        => TtsIdTensors.From<T>(ids);
 
     internal static int[] ToIds(Tensor<T> tensor, int vocabulary)
     {

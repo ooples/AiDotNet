@@ -1190,21 +1190,9 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     internal Tensor<T> GenerateNoiseBatchTensor(int batchSize)
     {
         int noiseDim = NoiseDimension;
-        int totalElements = batchSize * noiseDim;
-        // Box-Muller via the seeded _random so MedGANOptions.Seed makes Fit reproducible —
-        // Engine.TensorRandomUniformRange bypasses _random and breaks the seed contract.
-        var noiseData = new T[totalElements];
-        for (int i = 0; i < totalElements; i += 2)
-        {
-            double u1 = 1.0 - _random.NextDouble();   // in (0, 1] keeps log finite
-            double u2 = _random.NextDouble();
-            double r = Math.Sqrt(-2.0 * Math.Log(u1));
-            double theta = 2.0 * Math.PI * u2;
-            noiseData[i] = NumOps.FromDouble(r * Math.Cos(theta));
-            if (i + 1 < totalElements)
-                noiseData[i + 1] = NumOps.FromDouble(r * Math.Sin(theta));
-        }
-        return new Tensor<T>(noiseData, [batchSize, noiseDim]);
+        // Box-Muller from the seeded _random, both outputs of each pair, so the options seed makes the
+        // draw reproducible (an engine random fill would bypass _random).
+        return SyntheticTensorOps<T>.StandardNormalPairTensor([batchSize, noiseDim], _random);
     }
 
     /// <summary>
