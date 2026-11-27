@@ -24,18 +24,13 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a CosyVoice 3 model for zero-shot multilingual TTS
-/// // with enhanced semantic tokens and multi-scale flow matching
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new CosyVoice3&lt;double&gt;(architecture, "cosyvoice3.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new CosyVoice3&lt;double&gt;(architecture, new CosyVoice3Options());
+///     inputSize: 1, outputSize: 1);
+/// var model = new CosyVoice3&lt;double&gt;(architecture, new CosyVoice3Options());
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
+/// // Untrained native layers; the CosyVoice3(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

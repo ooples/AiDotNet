@@ -39,13 +39,10 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///     inputSize: 200, outputSize: 80);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new VITS2&lt;double&gt;(architecture, "vits2.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new VITS2&lt;double&gt;(architecture, new VITS2Options());
+/// var model = new VITS2&lt;double&gt;(architecture, new VITS2Options());
+/// Tensor&lt;double&gt; audio = model.Synthesize("Hello there.");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

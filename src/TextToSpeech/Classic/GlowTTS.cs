@@ -38,18 +38,13 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Glow-TTS model for flow-based non-autoregressive speech synthesis
-/// // with monotonic alignment search (MAS) for text-audio alignment
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new GlowTTS&lt;double&gt;(architecture, "glowtts.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new GlowTTS&lt;double&gt;(architecture, new GlowTTSOptions());
+///     inputSize: 200, outputSize: 80);
+/// var model = new GlowTTS&lt;double&gt;(architecture, new GlowTTSOptions());
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel spectrogram; a vocoder turns it into audio
+/// // Untrained native layers; the GlowTTS(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

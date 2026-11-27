@@ -52,6 +52,8 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// var tokens = new Tensor&lt;double&gt;(new[] { 3 }, new Vector&lt;double&gt;(new double[] { 12, 40, 7 }));   // phoneme ids
 /// var durations = new[] { 4, 6, 5 };                                                             // frames per phoneme
 /// var mel = Tensor&lt;double&gt;.CreateRandom(15, 80);                                                // [frames, 80]
+/// var pitch = new Tensor&lt;double&gt;(new[] { 15 }, new Vector&lt;double&gt;(Enumerable.Repeat(120.0, 15).ToArray()));   // F0 per frame, Hz
+/// var energy = Tensor&lt;double&gt;.CreateRandom(15);                                                     // energy per frame
 /// var referenceMel = Tensor&lt;double&gt;.CreateRandom(120, 80);                                      // the target speaker's speech
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
@@ -62,7 +64,7 @@ namespace AiDotNet.TextToSpeech.Classic;
 ///     .ConfigureModel(model)
 ///     .Build(new List&lt;TtsTrainingSample&lt;double&gt;&gt;
 ///     {
-///         new TtsTrainingSample&lt;double&gt; { Tokens = tokens, Mel = mel, Durations = durations, SpeakerId = 3 }
+///         new TtsTrainingSample&lt;double&gt; { Tokens = tokens, Mel = mel, Pitch = pitch, Energy = energy, Durations = durations, SpeakerId = 3 }
 ///     });
 /// model.Voice = new TtsVoice&lt;double&gt; { SpeakerId = 3, Reference = referenceMel };
 /// var spectrogram = model.Synthesize("hello world");

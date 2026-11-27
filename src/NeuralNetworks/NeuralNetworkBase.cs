@@ -6218,6 +6218,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // auto-detect, ShouldUseStreamingTraining, ConfigureInferenceForScale —
         // for exactly the foundation-scale models that need them, #1688). Robust
         // across ALL model families, not just whichever layer breaks first.
+        int[] architectureShape = currentShape;
         int[] lastGoodShape = currentShape;
         // A raw architecture input is only a candidate; do not rewrite its feature axis
         // from rank-1 declarations until a layer has established a sequence shape.
@@ -6261,7 +6262,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 continue;
             }
 
-            if (!TryAdvanceLayerShapeCore(layer, ref currentShape, ref lastGoodShape, ref lastGoodShapeComesFromLayer))
+            if (!TryAdvanceLayerShapeCore(layer, ref currentShape, ref lastGoodShape, ref lastGoodShapeComesFromLayer, architectureShape))
             {
                 // This layer resolved from NEITHER the running shape NOR the last
                 // good shape (the backtrack above already tried both). Its true
@@ -6295,7 +6296,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             foreach (var extra in GetExtraTrainableLayers())
             {
                 if (extra is null) continue;
-                TryAdvanceLayerShapeCore(extra, ref currentShape, ref lastGoodShape, ref lastGoodShapeComesFromLayer);
+                TryAdvanceLayerShapeCore(extra, ref currentShape, ref lastGoodShape, ref lastGoodShapeComesFromLayer, architectureShape);
             }
 
         // After the whole walk, so the tally covers every transition including the extra layers.
@@ -6317,14 +6318,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     private bool TryAdvanceLayerShape(ILayer<T> layer, ref int[] currentShape, ref int[] lastGoodShape)
     {
         bool lastGoodShapeComesFromLayer = false;
-        return TryAdvanceLayerShapeCore(layer, ref currentShape, ref lastGoodShape, ref lastGoodShapeComesFromLayer);
+        return TryAdvanceLayerShapeCore(layer, ref currentShape, ref lastGoodShape, ref lastGoodShapeComesFromLayer,
+            batchedArchitectureShape: null);
     }
 
     private bool TryAdvanceLayerShapeCore(
         ILayer<T> layer,
         ref int[] currentShape,
         ref int[] lastGoodShape,
-        ref bool lastGoodShapeComesFromLayer)
+        ref bool lastGoodShapeComesFromLayer,
+        int[]? batchedArchitectureShape)
     {
         var candidates = ReferenceEquals(lastGoodShape, currentShape)
             ? new[] { currentShape }
@@ -6338,7 +6341,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     // Shape-only resolution — does NOT allocate or initialize weights,
                     // so we don't consume RNG state and perturb training. Weight
                     // allocation still happens lazily on the first real Forward.
-                    lb.ResolveShapesOnly(tryShape);
+                    // The architecture's shape carries a unit batch; every shape after it is a layer's
+                    // GetOutputShape, which describes one sample. A rank-agnostic layer has to be told which
+                    // it is given, or it drops the channel axis of a per-sample image as if it were the batch.
+                    if (batchedArchitectureShape is not null && !ReferenceEquals(tryShape, batchedArchitectureShape))
+                        lb.ResolveShapesOnlyFromSampleShape(tryShape);
+                    else
+                        lb.ResolveShapesOnly(tryShape);
                 }
                 int[] outShape = layer.GetOutputShape();
 
@@ -10175,6 +10184,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (!visited.Add(layer)) return;
         if (layer is Layers.LayerBase<T> baseLayer)
         {
+            // A child its parent built on its first input is seeded by that parent, whenever it gets built. Drawing
+            // for it here would give every later layer a different seed once it exists.
+            if (baseLayer.TakesSeedFromParentOnly) return;
             // Draw for every layer, so skipping a caller-chosen one does not shift the seeds the others get.
             int next = seedRng.Next();
             if (callerChosen is null || !callerChosen.Contains(layer))
@@ -12799,13 +12811,29 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // generous headroom for everything else while keeping enough weights
         // hot to avoid thrashing. Only lowers the budget — never raises it
         // above the Tensors default — so large-RAM hosts are unaffected.
-        long availableForBudget = ResolveAvailableMemoryForStreaming();
+        long availableForBudget = ResolveAvailableMemoryForStreaming(out long heapInUse);
+        long storeBudget = options.StreamingPoolMaxResidentBytes;
         if (availableForBudget > 0)
         {
             long conservative = Math.Max(1L * 1024 * 1024 * 1024, (long)(availableForBudget * 0.25));
-            if (conservative < options.StreamingPoolMaxResidentBytes)
-                options.StreamingPoolMaxResidentBytes = conservative;
+            if (conservative < storeBudget)
+                storeBudget = conservative;
         }
+        // The ceiling is not all free: whatever the process's heap already holds (another live model, a
+        // cache, a test fixture) counts against the same limit. A budget sized from the bare ceiling let a
+        // model built in a process already holding ~6 GB of an 11 GB heap limit stream ~4 GB of weights on
+        // top and run out of memory mid-forward. Size the resident cap from the headroom instead. The
+        // store precision below keeps the ceiling-based budget, so a model's numerics do not depend on
+        // what else happened to be resident when it was built: a smaller cap only pages more.
+        long residentCap = storeBudget;
+        if (availableForBudget > 0 && heapInUse > 0)
+        {
+            long headroom = Math.Max(0L, availableForBudget - heapInUse);
+            long headroomCap = Math.Max(MinStreamingResidentCapBytes, (long)(headroom * 0.25));
+            if (headroomCap < residentCap)
+                residentCap = headroomCap;
+        }
+        options.StreamingPoolMaxResidentBytes = residentCap;
         // Quant-resident inference (Tier 1, #1622): for a foundation-scale model in inference, keep
         // the weights resident at the loosest precision that fits the (now-capped) budget so
         // multi-forward Predict pays no per-forward paging I/O. Use the entry point's intended mode,
@@ -12817,7 +12845,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // via SafeEstimateStructuralParameterCount() while ParameterCount is still 0 pre-first-
             // forward. Passing paramCount=0 would make ResolveInferenceStoreDtype fall back to Auto,
             // so the int8-resident tier would never engage before the first forward.
-            options.StreamingStoreDtype = ResolveInferenceStoreDtype(effectiveCount, options.StreamingPoolMaxResidentBytes);
+            options.StreamingStoreDtype = ResolveInferenceStoreDtype(effectiveCount, storeBudget);
         // L3b (#1622): a foundation-scale model auto-enables the verify-then-trust
         // compiled forward path (PredictAccelerated) too, composing the compiled plan
         // with the quant-resident streamed weights configured just above (L1 + L3
@@ -13270,12 +13298,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// resident budget conservatively. Returns 0 when unavailable so the caller
     /// keeps the streaming pool's own default.
     /// </summary>
-    private static long ResolveAvailableMemoryForStreaming()
+    private static long ResolveAvailableMemoryForStreaming(out long heapInUse)
     {
+        heapInUse = 0L;
 #if NET5_0_OR_GREATER
         try
         {
-            long avail = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+            // HeapSizeBytes is the heap as of the last collection, fragmentation included: the part of the
+            // ceiling a new weight cannot use.
+            var info = GC.GetGCMemoryInfo();
+            heapInUse = Math.Max(0L, info.HeapSizeBytes);
+            long avail = info.TotalAvailableMemoryBytes;
             return avail > 0 ? avail : 0L;
         }
         catch
@@ -13288,6 +13321,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return 0L;
 #endif
     }
+
+    // The smallest resident cap headroom sizing goes down to: below it the pool pages a layer's own weights
+    // out between their uses.
+    private const long MinStreamingResidentCapBytes = 256L * 1024 * 1024;
 
     /// <summary>
     /// Calls <see cref="EstimateStructuralParameterCount"/> defensively: the
@@ -16876,6 +16913,38 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
+    /// Executes one teacher-student distillation mini-batch step through the network's full training funnel
+    /// (reverse-mode tape, gradient checkpointing with segment streaming flush, or configured <see cref="ICreditRule{T}"/>)
+    /// while stepping the supplied <see cref="IGradientBasedOptimizer{T, TInput, TOutput}"/> directly on device.
+    /// </summary>
+    internal void TrainDistillationBatch(
+        Tensor<T> input,
+        Tensor<T> teacherOutput,
+        LossFunctions.LossFunctionBase<T> distillationLoss,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (teacherOutput is null) throw new ArgumentNullException(nameof(teacherOutput));
+        if (distillationLoss is null) throw new ArgumentNullException(nameof(distillationLoss));
+
+        var previousLoss = LossFunction;
+        bool previousFusedDisabled = IsFusedTrainingDisabled;
+        try
+        {
+            LossFunction = distillationLoss;
+            // DistillationLossAdapter evaluates teacher-conditioned surrogate cotangents dynamically per batch,
+            // so disable static fused-plan capture while keeping eager/checkpointed/credit-rule GPU execution active.
+            IsFusedTrainingDisabled = true;
+            TrainWithTape(input, teacherOutput, optimizer);
+        }
+        finally
+        {
+            LossFunction = previousLoss;
+            IsFusedTrainingDisabled = previousFusedDisabled;
+        }
+    }
+
+    /// <summary>
     /// Sticky disable for the fused training path on this model instance. Set
     /// when <see cref="TryTrainWithFusedOptimizer"/> falls back BEFORE the
     /// fused path has ever successfully run. Subsequent steps stay on the
@@ -17326,9 +17395,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     // context. Still recorded rather than swallowed silently -- an invisible
                     // failure here shows up later as an unexplained fused miss. Same channel the
                     // GPU-forward fallbacks in this class already use.
-                    AiDotNet.Configuration.GpuDiagnosticsConfig.Emit(
-                        AiDotNet.Configuration.GpuDiagnosticLevel.Minimal,
-                        $"[NeuralNetworkBase] shape-resolution warm-up forward failed ({ex.GetType().Name}): {ex.Message}");
+                    System.Diagnostics.Trace.TraceWarning(
+                        "[AiDotNet] {0}: the shape-resolution warm-up forward before parameter selection failed, so " +
+                        "the selection may be taken from layers that are not sized yet. {1}", GetType().Name, ex);
                 }
                 finally
                 {
@@ -17366,6 +17435,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         var request = new Training.FusedTrainingStepRequest<T>
         {
             Layers = trainableLayers,
+            // A layer the shape walk cannot size builds its children on the step's own first forward.
+            LayersAfterLazyInitialization =
+                () => Training.TapeTrainingStep<T>.CollectTrainableLayers(Layers, _layerStructureVersion),
             Input = input,
             Target = expected,
             // The composite objective re-runs the heads on the traced INPUT; passing the prediction ran the model on

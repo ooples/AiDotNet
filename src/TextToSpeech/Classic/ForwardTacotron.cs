@@ -41,18 +41,13 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Forward Tacotron model for non-autoregressive TTS
-/// // using duration predictor instead of attention for robust alignment
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new ForwardTacotron&lt;double&gt;(architecture, "forward_tacotron.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new ForwardTacotron&lt;double&gt;(architecture, new ForwardTacotronOptions());
+///     inputSize: 200, outputSize: 80);
+/// var model = new ForwardTacotron&lt;double&gt;(architecture, new ForwardTacotronOptions());
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel spectrogram; a vocoder turns it into audio
+/// // Untrained native layers; the ForwardTacotron(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

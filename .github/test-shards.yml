@@ -1484,6 +1484,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.ConvolutionalLayerGroupsTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.Elementwise02RegressionTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.ReservoirSpectralRadiusTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SeededRedrawAndResetRegressionTests.|
       FullyQualifiedName~AiDotNet.Tests.Helpers.ZlibDeflateTests.|
       FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Lfm2ReferenceTests.|
       FullyQualifiedName~AiDotNet.Tests.Video.FloRNNPaperTests.|

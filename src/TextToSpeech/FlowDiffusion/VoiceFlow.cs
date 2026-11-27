@@ -37,18 +37,13 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a VoiceFlow model for efficient TTS with rectified flow matching
-/// // using straight ODE paths for fast non-autoregressive synthesis
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new VoiceFlow&lt;double&gt;(architecture, "voiceflow.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new VoiceFlow&lt;double&gt;(architecture, new VoiceFlowOptions());
+///     inputSize: 1, outputSize: 1);
+/// var model = new VoiceFlow&lt;double&gt;(architecture, new VoiceFlowOptions());
+/// Tensor&lt;double&gt; mel = model.TextToMel("Hello there.");   // mel frames [frames, MelChannels]; a vocoder turns them into audio
+/// // Untrained native layers; the VoiceFlow(architecture, modelPath) constructor runs an exported ONNX checkpoint.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
