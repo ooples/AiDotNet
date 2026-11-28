@@ -41,6 +41,10 @@ public sealed class BaseClassCachingAndCompilationFacadeTests
         float maxDiff = 0f;
         for (int i = 0; i < sa.Length; i++)
         {
+            // A NaN or infinity on either side makes the difference non-finite, which compares false against any
+            // threshold and would otherwise leave maxDiff at zero; a parity comparison must reject it outright.
+            Assert.True(!float.IsNaN(sa[i]) && !float.IsInfinity(sa[i]) && !float.IsNaN(sb[i]) && !float.IsInfinity(sb[i]),
+                $"Parity comparison saw a non-finite value at element {i}: {sa[i]} vs {sb[i]}.");
             float d = Math.Abs(sa[i] - sb[i]);
             if (d > maxDiff) maxDiff = d;
         }
@@ -530,5 +534,289 @@ public sealed class BaseClassCachingAndCompilationFacadeTests
             Assert.True(delta > 0.0, $"{name} did not update parameters.");
             Assert.NotNull(res.Predict(trainX));
         }
+    }
+    [Fact]
+    public void ConfigureJitCompilation_ReEnable_RestoresCompilation_AfterDisabledOptOut()
+    {
+        var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>();
+        var view = (AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder;
+
+        builder.ConfigureJitCompilation(AiDotNet.Configuration.JitCompilationConfig.Disabled);
+        Assert.False(view.ConfiguredJitCompilation?.Enabled ?? true);
+
+        // The legacy opt-out must not leave Eager behind once JIT is explicitly enabled again.
+        builder.ConfigureJitCompilation(AiDotNet.Configuration.JitCompilationConfig.Default);
+        Assert.True(view.ConfiguredJitCompilation?.Enabled ?? false);
+    }
+
+    [Fact]
+    public void ConfigureCompilation_TemporaryEagerOrFusionOptOut_DoesNotOverwriteExplicitJitSettings()
+    {
+        var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>();
+        var view = (AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder;
+        builder.ConfigureJitCompilation(new AiDotNet.Configuration.JitCompilationConfig
+        {
+            Enabled = true,
+            EnableDataflowFusion = true,
+            EnableConstantFolding = true,
+        });
+
+        builder.ConfigureCompilation(CompilationOptions.Eager);
+        Assert.False(view.ConfiguredJitCompilation?.Enabled ?? true);
+        builder.ConfigureCompilation(CompilationOptions.Default);
+        Assert.True(view.ConfiguredJitCompilation?.Enabled ?? false);
+
+        builder.ConfigureCompilation(new CompilationOptions { EnableHybridFusionTileIr = false });
+        Assert.False(view.ConfiguredJitCompilation?.EnableDataflowFusion ?? true);
+        builder.ConfigureCompilation(CompilationOptions.Default);
+        Assert.True(view.ConfiguredJitCompilation?.EnableDataflowFusion ?? false);
+    }
+
+    [Fact]
+    public void CompilationOptions_CopyConstructor_PreservesEmptyBuckets_SoValidationRejectsThem()
+    {
+        var empty = new CompilationOptions { SequenceLengthBuckets = Array.Empty<int>() };
+        Assert.Throws<ArgumentException>(() => empty.Validate());
+
+        var copy = new CompilationOptions(empty);
+        Assert.Empty(copy.SequenceLengthBuckets);
+        Assert.Throws<ArgumentException>(() => copy.Validate());
+        Assert.Throws<ArgumentException>(() =>
+            new AiModelBuilder<float, Tensor<float>, Tensor<float>>().ConfigureCompilation(empty));
+
+        // Valid arrays are still independent copies.
+        var valid = new CompilationOptions { BatchSizeBuckets = new[] { 1, 4 } };
+        var validCopy = new CompilationOptions(valid);
+        valid.BatchSizeBuckets[0] = 2;
+        Assert.Equal(new[] { 1, 4 }, validCopy.BatchSizeBuckets);
+    }
+
+    [Fact]
+    public void DerivedTensorCache_RejectsNonContiguousSources_BeforeBuilding()
+    {
+        var a = CreateSeededTensor(new[] { 2, 2 }, seed: 11);
+        var c = CreateSeededTensor(new[] { 2, 2 }, seed: 12);
+        var engine = AiDotNetEngine.Current;
+        int builds = 0;
+        Tensor<float> Build(IEngine e, Tensor<float>[] sources) { builds++; return sources[0].Clone(); }
+
+        var single = new DerivedTensorCache<float>();
+        Assert.Throws<ArgumentException>(() => single.GetOrBuild(engine, Build, a, source1: null, source2: c));
+        var pair = new DerivedTensorPairCache<float>(registerPersistent: false);
+        Assert.Throws<ArgumentException>(() =>
+            pair.GetOrBuild(engine, (e, s) => (Build(e, s), null), a, source1: null, source2: null, source3: c));
+        Assert.Equal(0, builds);
+
+        // Contiguous lists keep working.
+        Assert.NotNull(single.GetOrBuild(engine, Build, a, c));
+        Assert.Equal(1, builds);
+    }
+
+    [Fact]
+    public void DerivedTensorCache_ReleasedSlot_IsTerminal_AndNeverRebuilds()
+    {
+        var a = CreateSeededTensor(new[] { 2, 2 }, seed: 13);
+        var engine = AiDotNetEngine.Current;
+        int builds = 0;
+        Tensor<float> Build(IEngine e, Tensor<float>[] sources) { builds++; return sources[0].Clone(); }
+
+        var single = new DerivedTensorCache<float>();
+        single.GetOrBuild(engine, Build, a);
+        single.Release();
+        Assert.Throws<ObjectDisposedException>(() => single.GetOrBuild(engine, Build, a));
+
+        var pair = new DerivedTensorPairCache<float>(registerPersistent: false);
+        pair.GetOrBuild(engine, (e, s) => (Build(e, s), null), a);
+        pair.Release();
+        Assert.Throws<ObjectDisposedException>(() => pair.GetOrBuild(engine, (e, s) => (Build(e, s), null), a));
+        Assert.Equal(2, builds);
+
+        // Invalidate (a weight change) is not terminal: the slot rebuilds.
+        var live = new DerivedTensorCache<float>();
+        live.GetOrBuild(engine, Build, a);
+        live.Invalidate();
+        live.GetOrBuild(engine, Build, a);
+        Assert.Equal(4, builds);
+    }
+
+    [Fact]
+    public void MixtureOfExperts_DevicePredicatedTopK_AuxiliaryLossCountsEverySelectedExpert()
+    {
+        const int inputSize = 6;
+        const int outputSize = 4;
+        const int numExperts = 3;
+        const int topK = 2;
+        var experts = new List<ILayer<float>>
+        {
+            new DenseLayer<float>(outputSize),
+            new DenseLayer<float>(outputSize),
+            new DenseLayer<float>(outputSize),
+        };
+        var router = new DenseLayer<float>(numExperts);
+        var moe = new MixtureOfExpertsLayer<float>(experts, router, [inputSize], [outputSize], topK: topK);
+        moe.UseAuxiliaryLoss = true;
+        moe.SetTrainingMode(true);
+        var x = CreateSeededTensor(new[] { 16, inputSize }, seed: 1201, scale: 1.0f);
+        _ = moe.Forward(x);
+
+        // Sharpen the router so retained top-2 weights fall below the dense branch's 0.01 threshold. Device-predicated
+        // routing skips the host index readback; its Top-K count must still see both selected experts on every token.
+        var routerParams = router.GetParameters();
+        for (int i = 0; i < routerParams.Length; i++) routerParams[i] *= 200f;
+        router.SetParameters(routerParams);
+
+        using (GraphCaptureCompatibility.Enter())
+        {
+            _ = moe.Forward(x);
+        }
+        float deviceLoss = moe.ComputeAuxiliaryLoss();
+
+        var weights = (Tensor<float>?)typeof(MixtureOfExpertsLayer<float>)
+            .GetField("_lastRoutingWeights", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?.GetValue(moe);
+        Assert.NotNull(weights);
+        int rows = weights.Shape[0];
+        var tokenCounts = new double[numExperts];
+        var probMass = new double[numExperts];
+        bool anySmallRetained = false;
+        for (int r = 0; r < rows; r++)
+        {
+            int selected = 0;
+            for (int e = 0; e < numExperts; e++)
+            {
+                float w = weights[r, e];
+                probMass[e] += w;
+                if (w > 0f)
+                {
+                    tokenCounts[e]++;
+                    selected++;
+                    if (w <= 0.01f) anySmallRetained = true;
+                }
+            }
+            Assert.Equal(topK, selected);
+        }
+        Assert.True(anySmallRetained, "Precondition: some retained Top-K weight must be at or below the dense 0.01 threshold.");
+
+        double tokenTotal = 0, massTotal = 0;
+        for (int e = 0; e < numExperts; e++) { tokenTotal += tokenCounts[e]; massTotal += probMass[e]; }
+        double expected = 0;
+        for (int e = 0; e < numExperts; e++) expected += (tokenCounts[e] / tokenTotal) * (probMass[e] / massTotal);
+        expected *= numExperts;
+
+        Assert.True(Math.Abs(expected - deviceLoss) <= 1e-4 * Math.Max(1.0, Math.Abs(expected)),
+            $"Device-predicated Top-K auxiliary loss {deviceLoss} does not count every selected expert (expected {expected}).");
+    }
+
+    [Fact]
+    public void MoEFeedForward_DevicePredicatedRouting_IgnoresNonFiniteOutputsOfUnselectedExperts()
+    {
+        var moe = new MoEFeedForwardLayer<double>(hiddenSize: 2, ffnDim: 2, numExperts: 2, topK: 1);
+        moe.Materialize();
+        var x = new Tensor<double>(new[] { 1, 2 });
+        x[0, 0] = 1.0;
+        x[0, 1] = 1.0;
+
+        var logits = moe.Router.Forward(x);
+        int unselected = logits[0, 0] >= logits[0, 1] ? 1 : 0;
+        foreach (var projection in new[] { moe.ExpertGate(unselected), moe.ExpertUp(unselected) })
+        {
+            var huge = projection.GetParameters();
+            for (int i = 0; i < huge.Length; i++) huge[i] = 1e200;
+            projection.SetParameters(huge);
+        }
+
+        var host = moe.Forward(x);
+        Tensor<double> device;
+        using (GraphCaptureCompatibility.Enter())
+        {
+            device = moe.Forward(x);
+        }
+
+        for (int i = 0; i < host.Length; i++)
+        {
+            double h = host.GetFlat(i), d = device.GetFlat(i);
+            Assert.False(double.IsNaN(h) || double.IsInfinity(h), $"host routing produced a non-finite output at {i}");
+            Assert.False(double.IsNaN(d) || double.IsInfinity(d),
+                $"device-predicated routing leaked an unselected expert's non-finite output at {i}: {d}");
+            Assert.True(Math.Abs(h - d) <= 1e-9 * Math.Max(1.0, Math.Abs(h)), $"routing paths disagree at {i}: {h} vs {d}");
+        }
+    }
+
+    [Fact]
+    public void LocalObjectiveCredit_LazyHiddenLayers_MaterializeBeforeTheRecordedHiddenPass()
+    {
+        const int inputDim = 6, width = 8, classes = 3;
+        var layers = new List<ILayer<float>>
+        {
+            new DenseLayer<float>(width, activationFunction: new TanhActivation<float>()),
+            new DenseLayer<float>(width, activationFunction: new TanhActivation<float>()),
+            new DenseLayer<float>(classes, activationFunction: new IdentityActivation<float>()),
+        };
+        var arch = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            complexity: NetworkComplexity.Simple,
+            inputSize: inputDim,
+            outputSize: classes,
+            layers: layers) { RandomSeed = 77 };
+        var net = new NeuralNetwork<float>(arch, lossFunction: new CrossEntropyLoss<float>());
+        Assert.False(((LayerBase<float>)net.Layers[0]).IsInitialized,
+            "Precondition: the hidden DenseLayer must still be lazy so the first local-credit step materializes it.");
+
+        var (x, y) = CreateClassificationDataset(rows: 12, inputDim, classes, seed: 1301);
+        using var result = LocalObjectiveGradientComputer<float>.Compute(
+            net, x, y, new TiedReadoutLocalErrorCreditRule<float>(readoutLayerCount: 1),
+            new CrossEntropyLoss<float>(), (prediction, target) => target);
+
+        Assert.Equal(2, result.HiddenLayers);
+        for (int layer = 0; layer < 2; layer++)
+        {
+            foreach (var parameter in ((ITrainableLayer<float>)net.Layers[layer]).GetTrainableParameters())
+            {
+                Assert.True(result.Gradients.TryGetValue(parameter, out var grad) && grad is not null,
+                    $"hidden layer {layer} received no local-objective gradient on its first (materializing) step");
+                Assert.True(L2Norm(grad) > 0f, $"hidden layer {layer} local-objective gradient is identically zero");
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ScheduleFreeAdamW_AveragedParameters_ReturnsTheTapeAverage_InTheModelsParameterOrder()
+    {
+        var (trainX, trainY) = CreateClassificationDataset(rows: 16, inputDim: 8, numClasses: 4, seed: 1401);
+        var net = BuildClassifierNetwork(8, 12, 4, hiddenLayers: 1, seed: 1402);
+        var opt = new ScheduleFreeAdamWOptimizer<float, Tensor<float>, Tensor<float>>(
+            net,
+            new ScheduleFreeAdamWOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 0.02,
+                MaxIterations = 3,
+                BatchSize = 8,
+            });
+
+        await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+            .ConfigureModel(net)
+            .ConfigureOptimizer(opt)
+            .ConfigureLossFunction(new CrossEntropyLoss<float>())
+            .ConfigureDataLoader(new InMemoryDataLoader<float, Tensor<float>, Tensor<float>>(trainX, trainY))
+            .BuildAsync();
+
+        Assert.True(opt.ModelOwnStepCount > 0, $"ScheduleFreeAdamW declined TryModelOwnStep: {opt.LastModelStepDeclineReason}");
+        var y = net.GetParameters().Clone();
+        var averaged = opt.AveragedParameters();
+
+        Assert.Equal(y.Length, averaged.Length);
+        double gapSq = 0.0;
+        for (int i = 0; i < averaged.Length; i++)
+        {
+            Assert.False(float.IsNaN(averaged[i]) || float.IsInfinity(averaged[i]));
+            double d = averaged[i] - y[i];
+            gapSq += d * d;
+        }
+        Assert.True(gapSq > 0.0, "AveragedParameters returned the gradient point y, not the running average x.");
+
+        // Reading the average leaves the model's parameters untouched.
+        var after = net.GetParameters();
+        for (int i = 0; i < y.Length; i++) Assert.Equal(y[i], after[i]);
     }
 }
