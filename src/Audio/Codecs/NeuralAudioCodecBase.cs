@@ -35,7 +35,7 @@ public class NeuralAudioCodecOptions : ModelOptions
     public int NumQuantizers { get; set; } = 32;
 
     /// <summary>Gets or sets the entries per codebook.</summary>
-    [AiDotNet.Attributes.NotScaled("the bits per code: a codec's codebook count at a bandwidth follows log2 of it")]    public int CodebookSize { get; set; } = 1024;
+    [AiDotNet.Attributes.NotScaled("the bits per code: a codec's codebook count at a bandwidth follows log2 of it")] public int CodebookSize { get; set; } = 1024;
 
     /// <summary>Gets or sets the bandwidth (kbps) <see cref="IAudioCodec{T}.Encode"/> and prediction use.</summary>
     public double TargetBandwidthKbps { get; set; } = 6.0;

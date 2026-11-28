@@ -2897,419 +2897,510 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // throws — the "always called" contract, symmetric with the non-streaming path.
             try
             {
-            // Train for the specified number of epochs
-            for (int epoch = startEpoch; epoch < epochs && !stepBudgetReached; epoch++)
-            {
-                T epochLoss = numOps.Zero;
-                int epochBatches = 0;
-                int batchInEpoch = 0;
-                long samplesInEpoch = (epoch == startEpoch && resumeSkipBatches == 0) ? resumeSkipSamples : 0L;
-                int? epochSeed = shuffleBaseSeed is int baseSeed ? unchecked(baseSeed + epoch) : null;
-                var microBatchBuffer = (gradientAccumulationSteps > 1 || distCoordinator is not null)
-                    ? new List<(Tensor<T> Input, Tensor<T> Target)>(gradientAccumulationSteps)
-                    : null;
-                int accumulatedMicroBatches = 0;
-
-                // Iterate through all batches in the streaming loader.
-                //
-                // BUG FIX (closes #1264 follow-up): the previous implementation
-                // unrolled each batch into a per-sample for-loop and called
-                // IGradientComputable.ComputeGradients/ApplyGradients on each
-                // single sample. That path is the LEGACY pre-tape SGD update —
-                // it bypassed the configured optimizer entirely (Adam's m/v
-                // moments, AdamW's decoupled weight decay, fused tape kernels)
-                // AND threw away the data loader's batching, so callers who
-                // configured AdamOptimizer at LR=1e-3 and a batch size of 32
-                // got vanilla SGD on a single sample at LR=1e-3 instead.
-                //
-                // The model's own Train(input, target) entry point dispatches
-                // through TrainWithTape → Optimizer.Step(TapeStepContext), which
-                // is the correct path. It also handles batched inputs natively
-                // via NormalizeBatchDim — passing [B, …] tensors trains on the
-                // batch in a single optimizer step. So we now stack each batch's
-                // samples along a new leading batch dim and call _model.Train
-                // ONCE per batch.
-                await foreach (var (inputs, outputs) in activeLoader.GetBatchesAsync(shuffle: true, seed: epochSeed, cancellationToken: cancellationToken))
+                // Train for the specified number of epochs
+                for (int epoch = startEpoch; epoch < epochs && !stepBudgetReached; epoch++)
                 {
-                    batchInEpoch++;
-                    T stepLoss = streamingLastLoss;
-                    bool stepHasLoss = false;
-                    // Optimizer updates this step applied: one, except when a batch that cannot be stacked is trained
-                    // one sample at a time (each sample its own update); the reporter then works in update units.
-                    int stepUpdates = 1;
+                    T epochLoss = numOps.Zero;
+                    int epochBatches = 0;
+                    int batchInEpoch = 0;
+                    long samplesInEpoch = (epoch == startEpoch && resumeSkipBatches == 0) ? resumeSkipSamples : 0L;
+                    int? epochSeed = shuffleBaseSeed is int baseSeed ? unchecked(baseSeed + epoch) : null;
+                    var microBatchBuffer = (gradientAccumulationSteps > 1 || distCoordinator is not null)
+                        ? new List<(Tensor<T> Input, Tensor<T> Target)>(gradientAccumulationSteps)
+                        : null;
+                    int accumulatedMicroBatches = 0;
 
-                    // Resume: skip the batches of the resumed epoch that the checkpointed run already trained on.
-                    if (epoch == startEpoch && batchInEpoch <= resumeSkipBatches)
+                    // Iterate through all batches in the streaming loader.
+                    //
+                    // BUG FIX (closes #1264 follow-up): the previous implementation
+                    // unrolled each batch into a per-sample for-loop and called
+                    // IGradientComputable.ComputeGradients/ApplyGradients on each
+                    // single sample. That path is the LEGACY pre-tape SGD update —
+                    // it bypassed the configured optimizer entirely (Adam's m/v
+                    // moments, AdamW's decoupled weight decay, fused tape kernels)
+                    // AND threw away the data loader's batching, so callers who
+                    // configured AdamOptimizer at LR=1e-3 and a batch size of 32
+                    // got vanilla SGD on a single sample at LR=1e-3 instead.
+                    //
+                    // The model's own Train(input, target) entry point dispatches
+                    // through TrainWithTape → Optimizer.Step(TapeStepContext), which
+                    // is the correct path. It also handles batched inputs natively
+                    // via NormalizeBatchDim — passing [B, …] tensors trains on the
+                    // batch in a single optimizer step. So we now stack each batch's
+                    // samples along a new leading batch dim and call _model.Train
+                    // ONCE per batch.
+                    await foreach (var (inputs, outputs) in activeLoader.GetBatchesAsync(shuffle: true, seed: epochSeed, cancellationToken: cancellationToken))
                     {
-                        samplesInEpoch += inputs.Length;
-                        continue;
-                    }
+                        batchInEpoch++;
+                        T stepLoss = streamingLastLoss;
+                        bool stepHasLoss = false;
+                        // Optimizer updates this step applied: one, except when a batch that cannot be stacked is trained
+                        // one sample at a time (each sample its own update); the reporter then works in update units.
+                        int stepUpdates = 1;
 
-                    if (distLoader is not null)
-                    {
-                        long globalBatchSamples = distLoader.LastBatchGlobalSampleCount;
-                        if (globalBatchSamples <= 0) continue;
-                        samplesInEpoch += globalBatchSamples;
-                        monitorSamplesSeen += globalBatchSamples;
-                    }
-                    else
-                    {
-                        if (inputs.Length == 0) continue;
-                        samplesInEpoch += inputs.Length;
-                        monitorSamplesSeen += inputs.Length;
-                    }
-
-                    TOutput[] processedOutputs = outputs;
-                    TInput[] processedInputs = inputs;
-                    if (inputs.Length > 0)
-                    {
-                        // Fit preprocessing pipeline on the FIRST FULL BATCH if not already
-                        // fitted. The previous code fitted on `inputs[0]` (a single sample),
-                        // which makes mean/variance scalers compute mean = that one sample's
-                        // value and variance = 0 — turning the scaler into a no-op. Fitting
-                        // on the stacked batch reflects the actual feature distribution
-                        // across all samples seen in this batch.
-                        //
-                        // For TInput == Tensor<T>, stack into a [B, …] tensor before fitting.
-                        // For other TInput types we currently fall back to single-sample fit
-                        // since there's no generic batch-stack primitive on those types;
-                        // tracked as a follow-up.
-                        FitStreamingPipelines(inputs, outputs);
-
-                        // TARGET scaling (ConfigureTargetScaling) on the streaming path: fit once on the first
-                        // batch's targets (mirroring the feature pipeline's first-batch fit above), then transform
-                        // every batch's targets so the model trains in scaled space. Predict inverse-transforms via
-                        // PreprocessingInfo.InverseTransformPredictions.
-                        if (_targetPipeline is not null)
+                        // Resume: skip the batches of the resumed epoch that the checkpointed run already trained on.
+                        if (epoch == startEpoch && batchInEpoch <= resumeSkipBatches)
                         {
-                            processedOutputs = new TOutput[outputs.Length];
-                            for (int i = 0; i < outputs.Length; i++)
-                            {
-                                processedOutputs[i] = _targetPipeline.Transform(outputs[i]);
-                            }
+                            samplesInEpoch += inputs.Length;
+                            continue;
                         }
 
-                        // Apply preprocessing to each sample BEFORE stacking so the
-                        // batched tensor reflects the transformed features. Same
-                        // pipeline-output handling as the previous code.
-                        if (_preprocessingPipeline is not null && pipelineFitted)
+                        if (distLoader is not null)
                         {
-                            processedInputs = new TInput[inputs.Length];
-                            for (int i = 0; i < inputs.Length; i++)
-                            {
-                                var transformed = _preprocessingPipeline.Transform(inputs[i]);
-                                processedInputs[i] = (transformed is TInput typed) ? typed : inputs[i];
-                            }
-                        }
-                    }
-
-                    // Neural network path: stack the batch into [B, …] tensors
-                    // and dispatch through _model.Train (or TrainWithTapeAccumulated when
-                    // GradientAccumulationSteps > 1 or when an uneven distributed tail step leaves
-                    // this rank with 0 local samples while peer ranks train).
-                    bool isIdleDistributedNeuralRank = distCoordinator is not null
-                        && processedInputs.Length == 0
-                        && _model is NeuralNetworks.NeuralNetworkBase<T>;
-                    // A data-parallel step whose update runs in the compiled plan goes through Train, whose fused
-                    // path runs it (one micro-batch per step); the accumulated step is the eager reference.
-                    bool compiledDistributedStep = distCoordinator is { CompiledOptimizerUpdate: true }
-                        && gradientAccumulationSteps <= 1
-                        && _model is INeuralNetwork<T>;
-                    // Agreed before any rank enters the plan's exchange, and before the batch's type is looked at (every
-                    // rank reaches it, the idle one included): a rank that threw alone would leave the others waiting
-                    // in the all-reduce until the collective timeout. It costs one one-element all-reduce per step. The
-                    // flag cannot ride the gradient exchange: an idle rank has no batch to run the plan on, so it never
-                    // reaches that exchange. Nor can each rank derive it locally from the loader's slicing: that holds
-                    // only when every rank's inner loader yields the same global stream, which a pre-sharded loader, a
-                    // growing source or an AggregateSamples that filters samples breaks, and one rank deciding alone is
-                    // the hang this check exists to prevent.
-                    if (compiledDistributedStep && !distCoordinator!.AllRanks(processedInputs.Length > 0))
-                        throw new NotSupportedException(
-                            "A rank received no samples this step; the data-parallel compiled update needs every rank to "
-                            + "have a batch (size the dataset to a multiple of the global batch, or turn the compiled "
-                            + "data-parallel update off).");
-                    if (distillationStep is not null)
-                    {
-                        T distillationLoss = distillationStep(processedInputs, processedOutputs);
-                        epochLoss = AddLossScalars(epochLoss, distillationLoss);
-                        stepLoss = distillationLoss;
-                        stepHasLoss = true;
-                        epochBatches++;
-                    }
-                    else if (((processedInputs.Length > 0 && processedInputs[0] is Tensor<T>
-                        && processedOutputs.Length > 0 && processedOutputs[0] is Tensor<T>)
-                        || isIdleDistributedNeuralRank)
-                        && _model is INeuralNetwork<T> nn)
-                    {
-                        var gboTrain = _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>;
-                        if (gboTrain is not null && nn is NeuralNetworks.NeuralNetworkBase<T> nnBaseForOpt)
-                        {
-                            nnBaseForOpt.SetBaseTrainOptimizer(gboTrain);
-                        }
-
-                        if ((gradientAccumulationSteps > 1 || (distCoordinator is not null && !compiledDistributedStep))
-                            && nn is NeuralNetworks.NeuralNetworkBase<T> accumNn
-                            && microBatchBuffer is not null)
-                        {
-                            AppendStreamingMicroBatches(processedInputs, processedOutputs, microBatchBuffer);
-                            accumulatedMicroBatches++;
-                            if (accumulatedMicroBatches < gradientAccumulationSteps)
-                            {
-                                continue;
-                            }
-
-                            ExecuteAccumulatedStreamingStep(accumNn, microBatchBuffer, gboTrain);
-                            accumulatedMicroBatches = 0;
-                            var accumLoss = nn.GetLastLoss();
-                            epochLoss = AddLossScalars(epochLoss, accumLoss);
-                            stepLoss = accumLoss;
-                            stepHasLoss = true;
-                            epochBatches++;
+                            long globalBatchSamples = distLoader.LastBatchGlobalSampleCount;
+                            if (globalBatchSamples <= 0) continue;
+                            samplesInEpoch += globalBatchSamples;
+                            monitorSamplesSeen += globalBatchSamples;
                         }
                         else
                         {
-                            var inputArray = processedInputs.Cast<Tensor<T>>().ToArray();
-                            var outputArray = processedOutputs.Cast<Tensor<T>>().ToArray();
-                            Tensor<T>? batchedTarget = null;
-                            bool stacked = TryStackTensorBatch(inputArray, out var batchedInput) &&
-                                TryStackTensorBatch(outputArray, out batchedTarget);
-                            if (compiledDistributedStep)
+                            if (inputs.Length == 0) continue;
+                            samplesInEpoch += inputs.Length;
+                            monitorSamplesSeen += inputs.Length;
+                        }
+
+                        TOutput[] processedOutputs = outputs;
+                        TInput[] processedInputs = inputs;
+                        if (inputs.Length > 0)
+                        {
+                            // Fit preprocessing pipeline on the FIRST FULL BATCH if not already
+                            // fitted. The previous code fitted on `inputs[0]` (a single sample),
+                            // which makes mean/variance scalers compute mean = that one sample's
+                            // value and variance = 0 — turning the scaler into a no-op. Fitting
+                            // on the stacked batch reflects the actual feature distribution
+                            // across all samples seen in this batch.
+                            //
+                            // For TInput == Tensor<T>, stack into a [B, …] tensor before fitting.
+                            // For other TInput types we currently fall back to single-sample fit
+                            // since there's no generic batch-stack primitive on those types;
+                            // tracked as a follow-up.
+                            FitStreamingPipelines(inputs, outputs);
+
+                            // TARGET scaling (ConfigureTargetScaling) on the streaming path: fit once on the first
+                            // batch's targets (mirroring the feature pipeline's first-batch fit above), then transform
+                            // every batch's targets so the model trains in scaled space. Predict inverse-transforms via
+                            // PreprocessingInfo.InverseTransformPredictions.
+                            if (_targetPipeline is not null)
                             {
-                                // Every rank must take the same path: a rank that stacked makes one Train call (one
-                                // optimizer step, one in-plan exchange) while a rank that did not makes one per sample,
-                                // so the replicas would diverge or wait on each other's exchange. Agreed with a
-                                // collective, like the sample check above, so no rank decides alone. When any rank
-                                // cannot stack, all train per sample, which needs the same sample count on every rank.
-                                if (!distCoordinator!.AllRanks(stacked))
+                                processedOutputs = new TOutput[outputs.Length];
+                                for (int i = 0; i < outputs.Length; i++)
                                 {
-                                    stacked = false;
-                                    if (!distCoordinator.RanksAgree(inputArray.Length))
-                                        throw new NotSupportedException(
-                                            "A batch on some rank could not be stacked into one tensor, so every rank trains "
-                                            + "its samples one at a time this step, but the ranks hold different numbers of "
-                                            + "samples; the data-parallel compiled update needs the same number of updates "
-                                            + "on every rank (give every sample the same shape, or turn the compiled "
-                                            + "data-parallel update off).");
+                                    processedOutputs[i] = _targetPipeline.Transform(outputs[i]);
                                 }
                             }
-                            if (stacked)
+
+                            // Apply preprocessing to each sample BEFORE stacking so the
+                            // batched tensor reflects the transformed features. Same
+                            // pipeline-output handling as the previous code.
+                            if (_preprocessingPipeline is not null && pipelineFitted)
                             {
-                                nn.Train((batchedInput ?? throw new InvalidOperationException("batchedInput is null where it is required.")), (batchedTarget ?? throw new InvalidOperationException("batchedTarget is null where it is required.")));
-                                var lastLoss = nn.GetLastLoss();
-                                epochLoss = numOps.Add(epochLoss, lastLoss);
-                                stepLoss = lastLoss;
+                                processedInputs = new TInput[inputs.Length];
+                                for (int i = 0; i < inputs.Length; i++)
+                                {
+                                    var transformed = _preprocessingPipeline.Transform(inputs[i]);
+                                    processedInputs[i] = (transformed is TInput typed) ? typed : inputs[i];
+                                }
+                            }
+                        }
+
+                        // Neural network path: stack the batch into [B, …] tensors
+                        // and dispatch through _model.Train (or TrainWithTapeAccumulated when
+                        // GradientAccumulationSteps > 1 or when an uneven distributed tail step leaves
+                        // this rank with 0 local samples while peer ranks train).
+                        bool isIdleDistributedNeuralRank = distCoordinator is not null
+                            && processedInputs.Length == 0
+                            && _model is NeuralNetworks.NeuralNetworkBase<T>;
+                        // A data-parallel step whose update runs in the compiled plan goes through Train, whose fused
+                        // path runs it (one micro-batch per step); the accumulated step is the eager reference.
+                        bool compiledDistributedStep = distCoordinator is { CompiledOptimizerUpdate: true }
+                            && gradientAccumulationSteps <= 1
+                            && _model is INeuralNetwork<T>;
+                        // Agreed before any rank enters the plan's exchange, and before the batch's type is looked at (every
+                        // rank reaches it, the idle one included): a rank that threw alone would leave the others waiting
+                        // in the all-reduce until the collective timeout. It costs one one-element all-reduce per step. The
+                        // flag cannot ride the gradient exchange: an idle rank has no batch to run the plan on, so it never
+                        // reaches that exchange. Nor can each rank derive it locally from the loader's slicing: that holds
+                        // only when every rank's inner loader yields the same global stream, which a pre-sharded loader, a
+                        // growing source or an AggregateSamples that filters samples breaks, and one rank deciding alone is
+                        // the hang this check exists to prevent.
+                        if (compiledDistributedStep && !distCoordinator!.AllRanks(processedInputs.Length > 0))
+                            throw new NotSupportedException(
+                                "A rank received no samples this step; the data-parallel compiled update needs every rank to "
+                                + "have a batch (size the dataset to a multiple of the global batch, or turn the compiled "
+                                + "data-parallel update off).");
+                        if (distillationStep is not null)
+                        {
+                            T distillationLoss = distillationStep(processedInputs, processedOutputs);
+                            epochLoss = AddLossScalars(epochLoss, distillationLoss);
+                            stepLoss = distillationLoss;
+                            stepHasLoss = true;
+                            epochBatches++;
+                        }
+                        else if (((processedInputs.Length > 0 && processedInputs[0] is Tensor<T>
+                            && processedOutputs.Length > 0 && processedOutputs[0] is Tensor<T>)
+                            || isIdleDistributedNeuralRank)
+                            && _model is INeuralNetwork<T> nn)
+                        {
+                            var gboTrain = _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>;
+                            if (gboTrain is not null && nn is NeuralNetworks.NeuralNetworkBase<T> nnBaseForOpt)
+                            {
+                                nnBaseForOpt.SetBaseTrainOptimizer(gboTrain);
+                            }
+
+                            if ((gradientAccumulationSteps > 1 || (distCoordinator is not null && !compiledDistributedStep))
+                                && nn is NeuralNetworks.NeuralNetworkBase<T> accumNn
+                                && microBatchBuffer is not null)
+                            {
+                                AppendStreamingMicroBatches(processedInputs, processedOutputs, microBatchBuffer);
+                                accumulatedMicroBatches++;
+                                if (accumulatedMicroBatches < gradientAccumulationSteps)
+                                {
+                                    continue;
+                                }
+
+                                ExecuteAccumulatedStreamingStep(accumNn, microBatchBuffer, gboTrain);
+                                accumulatedMicroBatches = 0;
+                                var accumLoss = nn.GetLastLoss();
+                                epochLoss = AddLossScalars(epochLoss, accumLoss);
+                                stepLoss = accumLoss;
                                 stepHasLoss = true;
                                 epochBatches++;
                             }
                             else
                             {
-                                // Heterogeneous shapes — process each sample
-                                // independently. Each call still goes through
-                                // TrainWithTape → Optimizer.Step so the optimizer
-                                // (Adam moments, AdamW weight decay, schedulers)
-                                // is correctly engaged, just at a smaller per-
-                                // call batch dim.
-                                T sampleLossSum = numOps.Zero;
-                                for (int i = 0; i < inputArray.Length; i++)
+                                var inputArray = processedInputs.Cast<Tensor<T>>().ToArray();
+                                var outputArray = processedOutputs.Cast<Tensor<T>>().ToArray();
+                                Tensor<T>? batchedTarget = null;
+                                bool stacked = TryStackTensorBatch(inputArray, out var batchedInput) &&
+                                    TryStackTensorBatch(outputArray, out batchedTarget);
+                                if (compiledDistributedStep)
                                 {
-                                    nn.Train(inputArray[i], outputArray[i]);
-                                    var sampleLoss = nn.GetLastLoss();
-                                    epochLoss = numOps.Add(epochLoss, sampleLoss);
-                                    sampleLossSum = AddLossScalars(sampleLossSum, sampleLoss);
+                                    // Every rank must take the same path: a rank that stacked makes one Train call (one
+                                    // optimizer step, one in-plan exchange) while a rank that did not makes one per sample,
+                                    // so the replicas would diverge or wait on each other's exchange. Agreed with a
+                                    // collective, like the sample check above, so no rank decides alone. When any rank
+                                    // cannot stack, all train per sample, which needs the same sample count on every rank.
+                                    if (!distCoordinator!.AllRanks(stacked))
+                                    {
+                                        stacked = false;
+                                        if (!distCoordinator.RanksAgree(inputArray.Length))
+                                            throw new NotSupportedException(
+                                                "A batch on some rank could not be stacked into one tensor, so every rank trains "
+                                                + "its samples one at a time this step, but the ranks hold different numbers of "
+                                                + "samples; the data-parallel compiled update needs the same number of updates "
+                                                + "on every rank (give every sample the same shape, or turn the compiled "
+                                                + "data-parallel update off).");
+                                    }
+                                }
+                                if (stacked)
+                                {
+                                    nn.Train((batchedInput ?? throw new InvalidOperationException("batchedInput is null where it is required.")), (batchedTarget ?? throw new InvalidOperationException("batchedTarget is null where it is required.")));
+                                    var lastLoss = nn.GetLastLoss();
+                                    epochLoss = numOps.Add(epochLoss, lastLoss);
+                                    stepLoss = lastLoss;
                                     stepHasLoss = true;
                                     epochBatches++;
                                 }
-                                if (inputArray.Length > 0)
+                                else
                                 {
-                                    // Each sample was its own optimizer update: report the step as that many updates,
-                                    // at their mean loss, not as one update at the last sample's loss.
-                                    stepUpdates = inputArray.Length;
-                                    stepLoss = ComputeRunningMeanLoss(sampleLossSum, inputArray.Length);
+                                    // Heterogeneous shapes — process each sample
+                                    // independently. Each call still goes through
+                                    // TrainWithTape → Optimizer.Step so the optimizer
+                                    // (Adam moments, AdamW weight decay, schedulers)
+                                    // is correctly engaged, just at a smaller per-
+                                    // call batch dim.
+                                    T sampleLossSum = numOps.Zero;
+                                    for (int i = 0; i < inputArray.Length; i++)
+                                    {
+                                        nn.Train(inputArray[i], outputArray[i]);
+                                        var sampleLoss = nn.GetLastLoss();
+                                        epochLoss = numOps.Add(epochLoss, sampleLoss);
+                                        sampleLossSum = AddLossScalars(sampleLossSum, sampleLoss);
+                                        stepHasLoss = true;
+                                        epochBatches++;
+                                    }
+                                    if (inputArray.Length > 0)
+                                    {
+                                        // Each sample was its own optimizer update: report the step as that many updates,
+                                        // at their mean loss, not as one update at the last sample's loss.
+                                        stepUpdates = inputArray.Length;
+                                        stepLoss = ComputeRunningMeanLoss(sampleLossSum, inputArray.Length);
+                                    }
                                 }
                             }
                         }
-                    }
-                    else if (gradientModelDistributed && distBackend is not null && distLoader is not null)
-                    {
-                        // Several ranks training a gradient model: every rank applies the mean gradient of the
-                        // whole global batch once per step, so the ranks stay identical.
-                        if (!AccumulateStreamingGradientModelStep(
-                            gradientStepState,
-                            processedInputs,
-                            processedOutputs,
-                            lossFunction,
-                            distBackend,
-                            distLoader.LastBatchGlobalSampleCount,
-                            gradientAccumulationSteps,
-                            out T globalBatchLoss))
+                        else if (gradientModelDistributed && distBackend is not null && distLoader is not null)
                         {
-                            continue;
+                            // Several ranks training a gradient model: every rank applies the mean gradient of the
+                            // whole global batch once per step, so the ranks stay identical.
+                            if (!AccumulateStreamingGradientModelStep(
+                                gradientStepState,
+                                processedInputs,
+                                processedOutputs,
+                                lossFunction,
+                                distBackend,
+                                distLoader.LastBatchGlobalSampleCount,
+                                gradientAccumulationSteps,
+                                out T globalBatchLoss))
+                            {
+                                continue;
+                            }
+
+                            epochLoss = AddLossScalars(epochLoss, globalBatchLoss);
+                            stepLoss = globalBatchLoss;
+                            stepHasLoss = true;
+                            epochBatches++;
+                        }
+                        else if (distBackend is { WorldSize: > 1 })
+                        {
+                            // Reaching the branch below with several ranks would train each rank on its own slice
+                            // with no exchange and let the ranks drift apart.
+                            throw new InvalidOperationException(
+                                $"Distributed streaming training has no synchronized step for {_model.GetType().Name} with " +
+                                $"{typeof(TInput).Name} inputs and {typeof(TOutput).Name} targets.");
+                        }
+                        else
+                        {
+                            // Non-neural-network model that exposes IGradientComputable (e.g. logistic regression /
+                            // classical online learners), in one process: one update per batch with the mean gradient
+                            // over the batch. This is the step several ranks take on a global batch, so a run on N
+                            // ranks reproduces a one-process run at the same global batch, and the configured batch
+                            // size means what it says.
+                            if (!AccumulateStreamingGradientModelStep(
+                                gradientStepState,
+                                processedInputs,
+                                processedOutputs,
+                                lossFunction,
+                                distBackend: null,
+                                processedInputs.Length,
+                                gradientAccumulationSteps,
+                                out T batchLoss))
+                            {
+                                continue;
+                            }
+
+                            epochLoss = AddLossScalars(epochLoss, batchLoss);
+                            stepLoss = batchLoss;   // one update per batch, at the batch's mean loss
+                            stepHasLoss = true;
+                            epochBatches++;
                         }
 
-                        epochLoss = AddLossScalars(epochLoss, globalBatchLoss);
-                        stepLoss = globalBatchLoss;
-                        stepHasLoss = true;
-                        epochBatches++;
-                    }
-                    else if (distBackend is { WorldSize: > 1 })
-                    {
-                        // Reaching the branch below with several ranks would train each rank on its own slice
-                        // with no exchange and let the ranks drift apart.
-                        throw new InvalidOperationException(
-                            $"Distributed streaming training has no synchronized step for {_model.GetType().Name} with " +
-                            $"{typeof(TInput).Name} inputs and {typeof(TOutput).Name} targets.");
-                    }
-                    else
-                    {
-                        // Non-neural-network model that exposes IGradientComputable (e.g. logistic regression /
-                        // classical online learners), in one process: one update per batch with the mean gradient
-                        // over the batch. This is the step several ranks take on a global batch, so a run on N
-                        // ranks reproduces a one-process run at the same global batch, and the configured batch
-                        // size means what it says.
-                        if (!AccumulateStreamingGradientModelStep(
-                            gradientStepState,
-                            processedInputs,
-                            processedOutputs,
-                            lossFunction,
-                            distBackend: null,
-                            processedInputs.Length,
-                            gradientAccumulationSteps,
-                            out T batchLoss))
+                        globalStep++;
+                        cursorEpoch = epoch;
+                        cursorBatchInEpoch = batchInEpoch;
+                        cursorSamplesInEpoch = samplesInEpoch;
+                        stepReporter?.OnStep(
+                            globalStep,
+                            stepHasLoss,
+                            stepLoss,
+                            monitorSamplesSeen,
+                            CurrentStreamingLearningRate(),
+                            stepReporter.TotalSteps,
+                            epoch + 1,
+                            epochs,
+                            stepUpdates);
+                        T runningEpochLoss = epochBatches > 0
+                            ? numOps.Divide(epochLoss, numOps.FromDouble(epochBatches))
+                            : numOps.Zero;
+
+                        if (streamingOptions?.ValidationLoader is not null && streamingOptions.ValidateEveryNSteps > 0
+                            && globalStep % streamingOptions.ValidateEveryNSteps == 0)
                         {
-                            continue;
+                            lastValidationLoss = await EvaluateStreamingValidationAsync(
+                                streamingOptions, globalStep, streamingMonitorSessionId);
+                            hasValidationLoss = true;
                         }
 
-                        epochLoss = AddLossScalars(epochLoss, batchLoss);
-                        stepLoss = batchLoss;   // one update per batch, at the batch's mean loss
-                        stepHasLoss = true;
-                        epochBatches++;
-                    }
-
-                    globalStep++;
-                    cursorEpoch = epoch;
-                    cursorBatchInEpoch = batchInEpoch;
-                    cursorSamplesInEpoch = samplesInEpoch;
-                    stepReporter?.OnStep(
-                        globalStep,
-                        stepHasLoss,
-                        stepLoss,
-                        monitorSamplesSeen,
-                        CurrentStreamingLearningRate(),
-                        stepReporter.TotalSteps,
-                        epoch + 1,
-                        epochs,
-                        stepUpdates);
-                    T runningEpochLoss = epochBatches > 0
-                        ? numOps.Divide(epochLoss, numOps.FromDouble(epochBatches))
-                        : numOps.Zero;
-
-                    if (streamingOptions?.ValidationLoader is not null && streamingOptions.ValidateEveryNSteps > 0
-                        && globalStep % streamingOptions.ValidateEveryNSteps == 0)
-                    {
-                        lastValidationLoss = await EvaluateStreamingValidationAsync(
-                            streamingOptions, globalStep, streamingMonitorSessionId);
-                        hasValidationLoss = true;
-                    }
-
-                    if (TryCoordinatedStreamingCheckpoint(
-                        epoch,
-                        batchInEpoch,
-                        samplesInEpoch,
-                        globalStep,
-                        runningEpochLoss,
-                        hasValidationLoss,
-                        lastValidationLoss,
-                        streamingOptions,
-                        rawLoader,
-                        distLoader,
-                        distBackend,
-                        distCoordinator,
-                        gradientAccumulationSteps,
-                        forceSave: false,
-                        fitSeed: activeFitSeed,
-                        fitBatchSize: activeFitBatchSize))
-                    {
-                        lastCheckpointStep = globalStep;
-                    }
-
-                    if (streamingOptions?.MaxSteps is long budget && globalStep >= budget)
-                    {
-                        stepBudgetReached = true;
-                        break;
-                    }
-                }
-
-                // Flush any partial gradient-accumulation buffer collected at the tail of the epoch.
-                if (!stepBudgetReached
-                    && accumulatedMicroBatches > 0
-                    && microBatchBuffer is not null
-                    && _model is NeuralNetworks.NeuralNetworkBase<T> flushNn)
-                {
-                    long stepBeforeFlush = globalStep;
-                    (epochLoss, epochBatches, globalStep, lastValidationLoss, hasValidationLoss, lastCheckpointStep, stepBudgetReached) =
-                        await FlushRemainingAccumulatedMicroBatchesAsync(
-                            flushNn,
-                            microBatchBuffer,
-                            _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>,
+                        if (TryCoordinatedStreamingCheckpoint(
                             epoch,
                             batchInEpoch,
                             samplesInEpoch,
-                            epochLoss,
-                            epochBatches,
                             globalStep,
-                            lastValidationLoss,
+                            runningEpochLoss,
                             hasValidationLoss,
-                            lastCheckpointStep,
+                            lastValidationLoss,
                             streamingOptions,
-                            streamingMonitorSessionId,
                             rawLoader,
                             distLoader,
                             distBackend,
                             distCoordinator,
                             gradientAccumulationSteps,
-                            activeFitSeed,
-                            activeFitBatchSize);
-                    if (globalStep > stepBeforeFlush)
-                    {
-                        stepReporter?.OnStep(
-                            globalStep,
-                            true,
-                            flushNn.GetLastLoss(),
-                            monitorSamplesSeen,
-                            CurrentStreamingLearningRate(),
-                            stepReporter.TotalSteps,
-                            epoch + 1,
-                            epochs);
+                            forceSave: false,
+                            fitSeed: activeFitSeed,
+                            fitBatchSize: activeFitBatchSize))
+                        {
+                            lastCheckpointStep = globalStep;
+                        }
+
+                        if (streamingOptions?.MaxSteps is long budget && globalStep >= budget)
+                        {
+                            stepBudgetReached = true;
+                            break;
+                        }
                     }
-                    cursorEpoch = epoch;
-                    cursorBatchInEpoch = batchInEpoch;
-                    cursorSamplesInEpoch = samplesInEpoch;
+
+                    // Flush any partial gradient-accumulation buffer collected at the tail of the epoch.
+                    if (!stepBudgetReached
+                        && accumulatedMicroBatches > 0
+                        && microBatchBuffer is not null
+                        && _model is NeuralNetworks.NeuralNetworkBase<T> flushNn)
+                    {
+                        long stepBeforeFlush = globalStep;
+                        (epochLoss, epochBatches, globalStep, lastValidationLoss, hasValidationLoss, lastCheckpointStep, stepBudgetReached) =
+                            await FlushRemainingAccumulatedMicroBatchesAsync(
+                                flushNn,
+                                microBatchBuffer,
+                                _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>,
+                                epoch,
+                                batchInEpoch,
+                                samplesInEpoch,
+                                epochLoss,
+                                epochBatches,
+                                globalStep,
+                                lastValidationLoss,
+                                hasValidationLoss,
+                                lastCheckpointStep,
+                                streamingOptions,
+                                streamingMonitorSessionId,
+                                rawLoader,
+                                distLoader,
+                                distBackend,
+                                distCoordinator,
+                                gradientAccumulationSteps,
+                                activeFitSeed,
+                                activeFitBatchSize);
+                        if (globalStep > stepBeforeFlush)
+                        {
+                            stepReporter?.OnStep(
+                                globalStep,
+                                true,
+                                flushNn.GetLastLoss(),
+                                monitorSamplesSeen,
+                                CurrentStreamingLearningRate(),
+                                stepReporter.TotalSteps,
+                                epoch + 1,
+                                epochs);
+                        }
+                        cursorEpoch = epoch;
+                        cursorBatchInEpoch = batchInEpoch;
+                        cursorSamplesInEpoch = samplesInEpoch;
+                    }
+
+                    // The same for a model the loop steps itself: the micro-batches left at the end of the epoch make
+                    // one last, smaller update, which is a step like any other.
+                    if (!stepBudgetReached && gradientStepState.MicroBatches > 0)
+                    {
+                        epochLoss = AddLossScalars(epochLoss, ApplyAccumulatedStreamingGradientModelStep(gradientStepState));
+                        epochBatches++;
+                        globalStep++;
+                        cursorEpoch = epoch;
+                        cursorBatchInEpoch = batchInEpoch;
+                        cursorSamplesInEpoch = samplesInEpoch;
+                        if (streamingOptions?.ValidationLoader is not null && streamingOptions.ValidateEveryNSteps > 0
+                            && globalStep % streamingOptions.ValidateEveryNSteps == 0)
+                        {
+                            lastValidationLoss = await EvaluateStreamingValidationAsync(
+                                streamingOptions, globalStep, streamingMonitorSessionId);
+                            hasValidationLoss = true;
+                        }
+
+                        if (TryCoordinatedStreamingCheckpoint(
+                            epoch,
+                            batchInEpoch,
+                            samplesInEpoch,
+                            globalStep,
+                            numOps.Divide(epochLoss, numOps.FromDouble(epochBatches)),
+                            hasValidationLoss,
+                            lastValidationLoss,
+                            streamingOptions,
+                            rawLoader,
+                            distLoader,
+                            distBackend,
+                            distCoordinator,
+                            gradientAccumulationSteps,
+                            forceSave: false,
+                            fitSeed: activeFitSeed,
+                            fitBatchSize: activeFitBatchSize))
+                        {
+                            lastCheckpointStep = globalStep;
+                        }
+
+                        if (streamingOptions?.MaxSteps is long tailBudget && globalStep >= tailBudget)
+                        {
+                            stepBudgetReached = true;
+                        }
+                    }
+
+                    // A resumed epoch whose remaining batches were all skipped trained nothing; don't report it as an epoch.
+                    if (epochBatches == 0 && epoch == startEpoch && (resumeSkipBatches > 0 || resumeSkipSamples > 0))
+                    {
+                        continue;
+                    }
+
+                    EndStreamingGradientModelEpoch();
+                    totalLoss = numOps.Add(totalLoss, epochLoss);
+                    totalBatches += epochBatches;
+
+                    // Per-epoch average loss for this epoch (mean over the epoch's batches).
+                    T avgEpochLoss = epochBatches > 0
+                        ? numOps.Divide(epochLoss, numOps.FromDouble(epochBatches))
+                        : numOps.Zero;
+                    streamingLastEpoch = epoch;
+                    streamingLastLoss = avgEpochLoss;
+                    stepReporter?.OnEpochEnd(globalStep, epoch + 1, epochs);
+
+                    // Stream this epoch's metrics to the monitor, invoke user callbacks, and evaluate
+                    // the abort signals (callback veto / cancellation / monitor issue).
+                    bool continueTraining = InvokeTrainingEpoch(
+                        epoch,
+                        epochs,
+                        avgEpochLoss,
+                        streamingMonitorSessionId,
+                        DateTime.UtcNow - streamingStart,
+                        cancellationToken,
+                        out var epochStopReason,
+                        stepProgressReported: stepReporter is not null);
+                    if (SynchronizeDistributedStopSignal(distBackend, !continueTraining))
+                    {
+                        streamingEarlyStopTriggered = true;
+                        streamingStopReason ??= epochStopReason ?? $"distributed peer requested stop at epoch {epoch}";
+                        break;
+                    }
+
+                    // Check for early stopping if configured
+                    bool localOptimizerEarlyStop = _optimizer is not null && _optimizer.ShouldEarlyStop();
+                    if (SynchronizeDistributedStopSignal(distBackend, localOptimizerEarlyStop))
+                    {
+                        streamingEarlyStopTriggered = true;
+                        streamingStopReason ??= $"optimizer early-stopping criterion met at epoch {epoch}";
+                        break;
+                    }
                 }
 
-                // The same for a model the loop steps itself: the micro-batches left at the end of the epoch make
-                // one last, smaller update, which is a step like any other.
-                if (!stepBudgetReached && gradientStepState.MicroBatches > 0)
+                if (stepBudgetReached)
                 {
-                    epochLoss = AddLossScalars(epochLoss, ApplyAccumulatedStreamingGradientModelStep(gradientStepState));
-                    epochBatches++;
-                    globalStep++;
-                    cursorEpoch = epoch;
-                    cursorBatchInEpoch = batchInEpoch;
-                    cursorSamplesInEpoch = samplesInEpoch;
-                    if (streamingOptions?.ValidationLoader is not null && streamingOptions.ValidateEveryNSteps > 0
-                        && globalStep % streamingOptions.ValidateEveryNSteps == 0)
-                    {
-                        lastValidationLoss = await EvaluateStreamingValidationAsync(
-                            streamingOptions, globalStep, streamingMonitorSessionId);
-                        hasValidationLoss = true;
-                    }
+                    streamingStopReason ??= $"step budget of {(streamingOptions ?? throw new InvalidOperationException("streamingOptions is null where it is required.")).MaxSteps} reached";
+                }
 
-                    if (TryCoordinatedStreamingCheckpoint(
-                        epoch,
-                        batchInEpoch,
-                        samplesInEpoch,
+                // Final held-out evaluation, unless the last step was just evaluated.
+                if (streamingOptions?.ValidationLoader is not null
+                    && (streamingOptions.ValidateEveryNSteps == 0 || globalStep % streamingOptions.ValidateEveryNSteps != 0))
+                {
+                    lastValidationLoss = await EvaluateStreamingValidationAsync(
+                        streamingOptions, globalStep, streamingMonitorSessionId);
+                    hasValidationLoss = true;
+                }
+
+                // Always leave a checkpoint at the exact point training stopped (step budget, early stop or the last
+                // epoch), independent of the auto-save cadence, so a later run can resume or extend from it.
+                if (globalStep > lastCheckpointStep)
+                {
+                    TryCoordinatedStreamingCheckpoint(
+                        cursorEpoch,
+                        cursorBatchInEpoch,
+                        cursorSamplesInEpoch,
                         globalStep,
-                        numOps.Divide(epochLoss, numOps.FromDouble(epochBatches)),
+                        streamingLastLoss,
                         hasValidationLoss,
                         lastValidationLoss,
                         streamingOptions,
@@ -3318,101 +3409,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                         distBackend,
                         distCoordinator,
                         gradientAccumulationSteps,
-                        forceSave: false,
+                        forceSave: true,
                         fitSeed: activeFitSeed,
-                        fitBatchSize: activeFitBatchSize))
-                    {
-                        lastCheckpointStep = globalStep;
-                    }
-
-                    if (streamingOptions?.MaxSteps is long tailBudget && globalStep >= tailBudget)
-                    {
-                        stepBudgetReached = true;
-                    }
+                        fitBatchSize: activeFitBatchSize);
                 }
-
-                // A resumed epoch whose remaining batches were all skipped trained nothing; don't report it as an epoch.
-                if (epochBatches == 0 && epoch == startEpoch && (resumeSkipBatches > 0 || resumeSkipSamples > 0))
-                {
-                    continue;
-                }
-
-                EndStreamingGradientModelEpoch();
-                totalLoss = numOps.Add(totalLoss, epochLoss);
-                totalBatches += epochBatches;
-
-                // Per-epoch average loss for this epoch (mean over the epoch's batches).
-                T avgEpochLoss = epochBatches > 0
-                    ? numOps.Divide(epochLoss, numOps.FromDouble(epochBatches))
-                    : numOps.Zero;
-                streamingLastEpoch = epoch;
-                streamingLastLoss = avgEpochLoss;
-                stepReporter?.OnEpochEnd(globalStep, epoch + 1, epochs);
-
-                // Stream this epoch's metrics to the monitor, invoke user callbacks, and evaluate
-                // the abort signals (callback veto / cancellation / monitor issue).
-                bool continueTraining = InvokeTrainingEpoch(
-                    epoch,
-                    epochs,
-                    avgEpochLoss,
-                    streamingMonitorSessionId,
-                    DateTime.UtcNow - streamingStart,
-                    cancellationToken,
-                    out var epochStopReason,
-                    stepProgressReported: stepReporter is not null);
-                if (SynchronizeDistributedStopSignal(distBackend, !continueTraining))
-                {
-                    streamingEarlyStopTriggered = true;
-                    streamingStopReason ??= epochStopReason ?? $"distributed peer requested stop at epoch {epoch}";
-                    break;
-                }
-
-                // Check for early stopping if configured
-                bool localOptimizerEarlyStop = _optimizer is not null && _optimizer.ShouldEarlyStop();
-                if (SynchronizeDistributedStopSignal(distBackend, localOptimizerEarlyStop))
-                {
-                    streamingEarlyStopTriggered = true;
-                    streamingStopReason ??= $"optimizer early-stopping criterion met at epoch {epoch}";
-                    break;
-                }
-            }
-
-            if (stepBudgetReached)
-            {
-                streamingStopReason ??= $"step budget of {(streamingOptions ?? throw new InvalidOperationException("streamingOptions is null where it is required.")).MaxSteps} reached";
-            }
-
-            // Final held-out evaluation, unless the last step was just evaluated.
-            if (streamingOptions?.ValidationLoader is not null
-                && (streamingOptions.ValidateEveryNSteps == 0 || globalStep % streamingOptions.ValidateEveryNSteps != 0))
-            {
-                lastValidationLoss = await EvaluateStreamingValidationAsync(
-                    streamingOptions, globalStep, streamingMonitorSessionId);
-                hasValidationLoss = true;
-            }
-
-            // Always leave a checkpoint at the exact point training stopped (step budget, early stop or the last
-            // epoch), independent of the auto-save cadence, so a later run can resume or extend from it.
-            if (globalStep > lastCheckpointStep)
-            {
-                TryCoordinatedStreamingCheckpoint(
-                    cursorEpoch,
-                    cursorBatchInEpoch,
-                    cursorSamplesInEpoch,
-                    globalStep,
-                    streamingLastLoss,
-                    hasValidationLoss,
-                    lastValidationLoss,
-                    streamingOptions,
-                    rawLoader,
-                    distLoader,
-                    distBackend,
-                    distCoordinator,
-                    gradientAccumulationSteps,
-                    forceSave: true,
-                    fitSeed: activeFitSeed,
-                    fitBatchSize: activeFitBatchSize);
-            }
 
             }
             finally
@@ -3975,11 +3975,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 Predictions = predictions,
                 ErrorStats = new ErrorStats<T>(new ErrorStatsInputs<T>
                 {
-                    Actual = actualVec, Predicted = predictedVec, FeatureCount = featureCount
+                    Actual = actualVec,
+                    Predicted = predictedVec,
+                    FeatureCount = featureCount
                 }),
                 PredictionStats = new PredictionStats<T>(new PredictionStatsInputs<T>
                 {
-                    Actual = actualVec, Predicted = predictedVec, NumberOfParameters = featureCount
+                    Actual = actualVec,
+                    Predicted = predictedVec,
+                    NumberOfParameters = featureCount
                 }),
             };
         }
@@ -5057,114 +5061,357 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         bool trainingDispatchCompleted = false;
         try
         {
-        // A distillation strategy configured without ConfigureKnowledgeDistillation still expresses
-        // intent to distill; engage the KD path (which fails clearly if no teacher was supplied) rather
-        // than silently training as if the strategy were never configured.
-        if (_configuredDistillationStrategy is not null && _knowledgeDistillationOptions is null)
-        {
-            _knowledgeDistillationOptions = new KnowledgeDistillationOptions<T, TInput, TOutput>
+            // A distillation strategy configured without ConfigureKnowledgeDistillation still expresses
+            // intent to distill; engage the KD path (which fails clearly if no teacher was supplied) rather
+            // than silently training as if the strategy were never configured.
+            if (_configuredDistillationStrategy is not null && _knowledgeDistillationOptions is null)
             {
-                Strategy = _configuredDistillationStrategy,
-            };
-        }
-
-        // FEDERATED LEARNING PATH (facade-first: orchestration stays internal)
-        if (_federatedLearningOptions != null)
-        {
-            if (_knowledgeDistillationOptions != null)
-            {
-                throw new InvalidOperationException("Federated learning cannot be combined with knowledge distillation in the same Build() call.");
+                _knowledgeDistillationOptions = new KnowledgeDistillationOptions<T, TInput, TOutput>
+                {
+                    Strategy = _configuredDistillationStrategy,
+                };
             }
 
-            if (_distributedBackend != null || _distributedConfiguration != null)
+            // FEDERATED LEARNING PATH (facade-first: orchestration stays internal)
+            if (_federatedLearningOptions != null)
             {
-                throw new InvalidOperationException("Federated learning is not currently compatible with distributed training configuration. Use either federated learning or distributed training per build.");
+                if (_knowledgeDistillationOptions != null)
+                {
+                    throw new InvalidOperationException("Federated learning cannot be combined with knowledge distillation in the same Build() call.");
+                }
+
+                if (_distributedBackend != null || _distributedConfiguration != null)
+                {
+                    throw new InvalidOperationException("Federated learning is not currently compatible with distributed training configuration. Use either federated learning or distributed training per build.");
+                }
+
+                var flOptions = _federatedLearningOptions;
+
+                Dictionary<int, FederatedClientDataset<TInput, TOutput>> clientPartitions;
+                int effectiveClientCount;
+
+                if (usePartitionedFederatedData)
+                {
+                    clientPartitions = CreateFederatedClientPartitionsFromClientRanges(
+                        XTrain,
+                        yTrain,
+                        (federatedClientRanges ?? throw new InvalidOperationException("federatedClientRanges is null where it is required.")));
+
+                    effectiveClientCount = clientPartitions.Count;
+
+                    if (effectiveClientCount <= 0)
+                    {
+                        throw new InvalidOperationException("Federated client data resolved from the data loader is empty.");
+                    }
+
+                    if (flOptions.NumberOfClients != effectiveClientCount)
+                    {
+                        Console.WriteLine(
+                            $"[AiDotNet] Warning: FederatedLearningOptions.NumberOfClients={flOptions.NumberOfClients} does not match the data loader client count {effectiveClientCount}. Using the data loader client count.");
+                    }
+                }
+                else
+                {
+                    clientPartitions = CreateFederatedClientPartitions(XTrain, yTrain, flOptions.NumberOfClients, flOptions.Seed);
+                    effectiveClientCount = clientPartitions.Count;
+                }
+
+                var advancedFederatedCapabilities = new AiDotNet.FederatedLearning.FederatedAdvancedCapabilities<T>(
+                    contribution: _federatedContributionEvaluator,
+                    fairness: _federatedFairnessConstraint,
+                    drift: _federatedDriftDetector,
+                    unlearner: _federatedUnlearner,
+                    tee: _federatedTeeProvider,
+                    zk: _federatedZkProofSystem,
+                    mpc: _federatedSecureComputationProtocol,
+                    psi: _federatedPrivateSetIntersection);
+
+                var trainer = new AiDotNet.FederatedLearning.Trainers.InMemoryFederatedTrainer<T, TInput, TOutput>(
+                    optimizerPrototype: finalOptimizer,
+                    learningRateOverride: flOptions.LearningRate,
+                    randomSeed: flOptions.Seed,
+                    convergenceThreshold: flOptions.ConvergenceThreshold,
+                    minRoundsBeforeConvergence: flOptions.MinRoundsBeforeConvergence,
+                    federatedLearningOptions: flOptions,
+                    clientSelectionStrategy: _federatedClientSelectionStrategy,
+                    serverOptimizer: _federatedServerOptimizer,
+                    heterogeneityCorrection: _federatedHeterogeneityCorrection,
+                    homomorphicEncryptionProvider: _federatedHomomorphicEncryptionProvider,
+                    advancedCapabilities: advancedFederatedCapabilities);
+
+                var aggregationStrategy = _federatedAggregationStrategy ?? CreateDefaultFederatedAggregationStrategy(flOptions);
+                trainer.SetAggregationStrategy(aggregationStrategy);
+                trainer.Initialize(model, effectiveClientCount);
+
+                federatedLearningMetadata = trainer.Train(
+                    clientData: clientPartitions,
+                    rounds: flOptions.MaxRounds,
+                    clientSelectionFraction: flOptions.ClientSelectionFraction,
+                    localEpochs: flOptions.LocalEpochs);
+
+                optimizationResult = new OptimizationResult<T, TInput, TOutput>
+                {
+                    BestSolution = trainer.GetGlobalModel(),
+                    Iterations = federatedLearningMetadata.RoundsCompleted
+                };
             }
-
-            var flOptions = _federatedLearningOptions;
-
-            Dictionary<int, FederatedClientDataset<TInput, TOutput>> clientPartitions;
-            int effectiveClientCount;
-
-            if (usePartitionedFederatedData)
+            else if (UseDirectTrainingPath(model))
             {
-                clientPartitions = CreateFederatedClientPartitionsFromClientRanges(
-                    XTrain,
-                    yTrain,
-                    (federatedClientRanges ?? throw new InvalidOperationException("federatedClientRanges is null where it is required.")));
-
-                effectiveClientCount = clientPartitions.Count;
-
-                if (effectiveClientCount <= 0)
+                // Branch rationale documented on UseDirectTrainingPath
+                // (non-parametric models, ClusteringBase, NN + LoRA).
+                if (_knowledgeDistillationOptions is not null)
                 {
-                    throw new InvalidOperationException("Federated client data resolved from the data loader is empty.");
+                    // A gradient-computable student on the direct path (e.g. a LoRA-wrapped neural
+                    // network) can distill exactly as on the regular path. Genuinely non-parametric
+                    // models (density clustering, most time-series) cannot: distillation is soft-label
+                    // gradient matching, which those don't do.
+                    if (model is IGradientComputable<T, TInput, TOutput> directDistillable)
+                    {
+                        RunKnowledgeDistillationTraining(directDistillable, XTrain, yTrain, finalOptimizer);
+                        int distInputSize = InputHelper<T, TInput>.GetInputSize(XTrain);
+                        optimizationResult = new OptimizationResult<T, TInput, TOutput>
+                        {
+                            BestSolution = model,
+                            Iterations = 1,
+                            SelectedFeatureIndices = Enumerable.Range(0, distInputSize).ToList(),
+                            TrainingResult = new OptimizationResult<T, TInput, TOutput>.DatasetResult
+                            {
+                                X = XTrain,
+                                Y = yTrain,
+                                Predictions = model.Predict(XTrain),
+                            },
+                        };
+                        goto knowledgeDistillationHandled;
+                    }
+
+                    throw new NotSupportedException(
+                        $"Knowledge distillation requires a gradient-computable student, but the model on the " +
+                        $"direct-training path ('{model.GetType().Name}') is not one. Distillation is soft-label " +
+                        "gradient matching, which non-parametric models (density clustering, most time series) " +
+                        "do not perform. Remove the ConfigureKnowledgeDistillation() call for this model.");
                 }
 
-                if (flOptions.NumberOfClients != effectiveClientCount)
+                // DIRECT TRAINING PATH for non-parametric models (TS, density-based clustering, etc.)
+                // and partitioning clustering models (KMeans, BIRCH, GMM, etc.) — clustering's
+                // ClusteringBase reports SupportsParameterInitialization=true (it has cluster
+                // centers / labels / membership matrices that ARE parameters in the
+                // IParameterizable sense), but its train path is the K-means EM loop, not the
+                // outer-optimizer's clone-evaluate-select. Routing it through the regular
+                // optimizer path made BuildAsync run hundreds of iterations of unrelated random
+                // search, never actually call ClusteringBase.Train, take 150+ seconds on 90
+                // samples, then return a fresh-init untrained model whose Predict() throws
+                // "Model must be trained" — exactly the timeout pattern the 25 clustering
+                // Builder_* tests in #1224 Cluster B were hitting. Probe _model (unwrapped)
+                // not the local model variable, mirroring the useFullData check below — the
+                // local may be a distributed-training wrapper.
+                // These models use their own internal optimizers and don't benefit from the outer
+                // optimizer's clone-evaluate-select loop. Train directly on the full training data.
+                // For clustering/density models, train on the full dataset (not the
+                // train/test split) since cluster structure depends on having all data points.
+                // Note: preprocessedX/preprocessedY may only contain the training split in the
+                // standard (non-federated) path. For clustering we need the complete dataset.
+                //
+                // Probe the *unwrapped* model: by this point the local `model` variable may be a
+                // DDP/FSDP/ZeRO* distributed-training wrapper (see lines ~1921-1953), and a wrapper
+                // is never a ClusteringBase<T> so the check would silently flip to false and route
+                // clustering training back through the train/test split — which is exactly the bug
+                // this clustering-data path was added to prevent.
+                // Survival models built through Build(features, times, events) join clustering on this
+                // path, for the same reason in a different shape: their event indicators are one value per
+                // row, supplied alongside rather than inside X, so the rows Train sees have to be the rows
+                // and the order the caller passed. A shuffled 80% subset would silently pair each subject
+                // with somebody else's censoring.
+                bool useFullData = _model is Clustering.Base.ClusteringBase<T>
+                    || (_model is SurvivalAnalysis.SurvivalModelBase<T> survivalTarget
+                        && survivalTarget.HasSuppliedEvents)
+                    || (_model is CausalInference.CausalModelBase<T> causalTarget
+                        && causalTarget.HasSuppliedTreatment);
+                // Clustering models need ALL data points for correct density estimation.
+                // Use preparedX/preparedY (the full dataset before train/test split) when
+                // the preprocessing pipeline is not configured. When it IS configured,
+                // apply the (already-fitted) pipeline to the full data so models operate
+                // in the same coordinate space as predictions.
+                TInput fullX;
+                TOutput fullY;
+                if (useFullData)
                 {
-                    Console.WriteLine(
-                        $"[AiDotNet] Warning: FederatedLearningOptions.NumberOfClients={flOptions.NumberOfClients} does not match the data loader client count {effectiveClientCount}. Using the data loader client count.");
+                    if (_preprocessingPipeline is not null && _preprocessingPipeline.IsFitted)
+                    {
+                        fullX = _preprocessingPipeline.Transform(preparedX);
+                        fullY = preparedY;
+                    }
+                    else
+                    {
+                        fullX = preparedX;
+                        fullY = preparedY;
+                    }
                 }
+                else
+                {
+                    fullX = XTrain;
+                    fullY = yTrain;
+                }
+                var directX = fullX;
+                var directY = fullY;
+
+                // Override the earlier split-based sample counts logged at lines ~2222-2224 so
+                // experiment run metadata reflects the dataset actually fed to Train(). Without
+                // this, clustering runs would be reported with a train/val/test split that was
+                // never used (we just trained on the full dataset).
+                if (useFullData && experimentRun is not null)
+                {
+                    int effectiveSamples = InputHelper<T, TInput>.GetInputSize(directX);
+                    experimentRun.LogParameters(new Dictionary<string, object>
+                    {
+                        ["training_samples"] = effectiveSamples,
+                        ["validation_samples"] = 0,
+                        ["test_samples"] = 0,
+                        ["full_data_used"] = true,
+                    });
+                }
+
+                // Models on this path run their own epoch loop inside Train(), so the facade cannot see
+                // their epochs. Hand the bridge to any model that can report them, so
+                // ConfigureTrainingCallback/ConfigureTrainingMonitor observe real per-epoch progress and
+                // a callback returning false actually stops training — rather than being handed one
+                // synthetic epoch after training has already finished, which no veto can affect.
+                var epochReporter = model as ITrainingEpochReporter<T>;
+                Func<TrainingProgress<T>, bool>? previousEpochCallback = null;
+                bool bridgedEpochCallback = false;
+                if (epochReporter is not null && epochBridge is not null)
+                {
+                    previousEpochCallback = epochReporter.TrainingEpochCallback;
+                    // Forward the reporter's own epoch budget (progress.TotalEpochs) so the reported total reflects
+                    // the model's configured epochs, not the optimizer's unrelated MaxIterations.
+                    epochReporter.TrainingEpochCallback =
+                        progress => epochBridge.OnEpoch(progress.Epoch, progress.TotalEpochs, progress.Loss);
+                    bridgedEpochCallback = true;
+                }
+
+                try
+                {
+                    model.Train(directX, directY);
+                }
+                finally
+                {
+                    // Only touch the callback if THIS build attached the bridge, and restore whatever the caller
+                    // had set — nulling unconditionally would wipe a callback the caller attached directly to a
+                    // model instance they still hold and then ran through the builder without configuring one.
+                    if (bridgedEpochCallback && epochReporter is not null)
+                    {
+                        epochReporter.TrainingEpochCallback = previousEpochCallback;
+                    }
+                }
+
+                // Compute evaluation metrics
+                int inputSize = InputHelper<T, TInput>.GetInputSize(directX);
+                TOutput trainPredOutput = model.Predict(directX);
+                var trainPredVec = ConversionsHelper.ConvertToVector<T, TOutput>(trainPredOutput);
+                var trainActual = ConversionsHelper.ConvertToVector<T, TOutput>(directY);
+
+                var trainErrorStats = new ErrorStats<T>(new ErrorStatsInputs<T>
+                {
+                    Actual = trainActual,
+                    Predicted = trainPredVec,
+                    FeatureCount = inputSize
+                });
+                var trainPredStats = new PredictionStats<T>(new PredictionStatsInputs<T>
+                {
+                    Actual = trainActual,
+                    Predicted = trainPredVec,
+                    NumberOfParameters = inputSize
+                });
+
+                // Models that train opaquely report nothing, so drive the per-epoch callbacks/monitor
+                // once for them: this path still streams metrics and honors abort/cancellation signals
+                // uniformly with the optimizer path. No-op when no monitor/callback is configured
+                // (bridge is null → default path untouched), and skipped when the model already
+                // reported its own epochs above, which would otherwise append a bogus extra epoch 0.
+                if (epochBridge is { EpochsObserved: 0 })
+                {
+                    epochBridge.OnEpoch(0, trainErrorStats.MSE);
+                }
+
+                // trainPredOutput is already TOutput from model.Predict
+
+                var directTrainingResult = new OptimizationResult<T, TInput, TOutput>.DatasetResult
+                {
+                    X = directX,
+                    Y = directY,
+                    Predictions = trainPredOutput,
+                    ErrorStats = trainErrorStats,
+                    PredictionStats = trainPredStats
+                };
+
+                // Populate TestResult on the direct-training path too: without it, configured test metrics
+                // (ConfigureRegressionMetric/ConfigureClassificationMetric) have nothing to evaluate and the
+                // conversion downstream fails. Evaluate the held-out test partition when the split produced one,
+                // otherwise fall back to the training partition so the result is always well-formed.
+                var directTestResult = BuildDirectBranchDatasetResult(model, XTest, yTest, inputSize)
+                    ?? directTrainingResult;
+
+                optimizationResult = new OptimizationResult<T, TInput, TOutput>
+                {
+                    BestSolution = model,
+                    Iterations = 1,
+                    SelectedFeatureIndices = Enumerable.Range(0, inputSize).ToList(),
+                    TrainingResult = directTrainingResult,
+                    TestResult = directTestResult
+                };
             }
             else
             {
-                clientPartitions = CreateFederatedClientPartitions(XTrain, yTrain, flOptions.NumberOfClients, flOptions.Seed);
-                effectiveClientCount = clientPartitions.Count;
-            }
-
-            var advancedFederatedCapabilities = new AiDotNet.FederatedLearning.FederatedAdvancedCapabilities<T>(
-                contribution: _federatedContributionEvaluator,
-                fairness: _federatedFairnessConstraint,
-                drift: _federatedDriftDetector,
-                unlearner: _federatedUnlearner,
-                tee: _federatedTeeProvider,
-                zk: _federatedZkProofSystem,
-                mpc: _federatedSecureComputationProtocol,
-                psi: _federatedPrivateSetIntersection);
-
-            var trainer = new AiDotNet.FederatedLearning.Trainers.InMemoryFederatedTrainer<T, TInput, TOutput>(
-                optimizerPrototype: finalOptimizer,
-                learningRateOverride: flOptions.LearningRate,
-                randomSeed: flOptions.Seed,
-                convergenceThreshold: flOptions.ConvergenceThreshold,
-                minRoundsBeforeConvergence: flOptions.MinRoundsBeforeConvergence,
-                federatedLearningOptions: flOptions,
-                clientSelectionStrategy: _federatedClientSelectionStrategy,
-                serverOptimizer: _federatedServerOptimizer,
-                heterogeneityCorrection: _federatedHeterogeneityCorrection,
-                homomorphicEncryptionProvider: _federatedHomomorphicEncryptionProvider,
-                advancedCapabilities: advancedFederatedCapabilities);
-
-            var aggregationStrategy = _federatedAggregationStrategy ?? CreateDefaultFederatedAggregationStrategy(flOptions);
-            trainer.SetAggregationStrategy(aggregationStrategy);
-            trainer.Initialize(model, effectiveClientCount);
-
-            federatedLearningMetadata = trainer.Train(
-                clientData: clientPartitions,
-                rounds: flOptions.MaxRounds,
-                clientSelectionFraction: flOptions.ClientSelectionFraction,
-                localEpochs: flOptions.LocalEpochs);
-
-            optimizationResult = new OptimizationResult<T, TInput, TOutput>
-            {
-                BestSolution = trainer.GetGlobalModel(),
-                Iterations = federatedLearningMetadata.RoundsCompleted
-            };
-        }
-        else if (UseDirectTrainingPath(model))
-        {
-            // Branch rationale documented on UseDirectTrainingPath
-            // (non-parametric models, ClusteringBase, NN + LoRA).
-            if (_knowledgeDistillationOptions is not null)
-            {
-                // A gradient-computable student on the direct path (e.g. a LoRA-wrapped neural
-                // network) can distill exactly as on the regular path. Genuinely non-parametric
-                // models (density clustering, most time-series) cannot: distillation is soft-label
-                // gradient matching, which those don't do.
-                if (model is IGradientComputable<T, TInput, TOutput> directDistillable)
+                // CONTINUAL LEARNING PATH: train the configured model on this task through a continual
+                // learner built around it, preserving prior tasks. Replaces standard optimizer training,
+                // which would overwrite earlier tasks.
+                if (_continualLearningEnabled)
                 {
-                    RunKnowledgeDistillationTraining(directDistillable, XTrain, yTrain, finalOptimizer);
+                    RunContinualLearningTraining(model, XTrain, yTrain);
+
+                    int clInputSize = InputHelper<T, TInput>.GetInputSize(XTrain);
+                    var clPredictions = model.Predict(XTrain);
+                    optimizationResult = new OptimizationResult<T, TInput, TOutput>
+                    {
+                        BestSolution = model,
+                        Iterations = 1,
+                        SelectedFeatureIndices = Enumerable.Range(0, clInputSize).ToList(),
+                        TrainingResult = new OptimizationResult<T, TInput, TOutput>.DatasetResult
+                        {
+                            X = XTrain,
+                            Y = yTrain,
+                            Predictions = clPredictions,
+                        },
+                    };
+
+                    goto knowledgeDistillationHandled;
+                }
+
+                // REGULAR TRAINING PATH
+                if (_knowledgeDistillationOptions is not null)
+                {
+                    // Knowledge distillation trains the student against a combined objective: a soft term
+                    // matching the teacher's logits plus a hard term against the true label. That signal
+                    // cannot travel through the optimizer's (predicted, actual) loss contract, which
+                    // carries no teacher, so distillation runs its own gradient loop here rather than
+                    // through finalOptimizer.Optimize. The gradient is produced by the configured
+                    // IDistillationStrategy and applied through the student's own IGradientComputable
+                    // surface via DistillationLossAdapter (see that type for why it deliberately routes
+                    // through the CalculateDerivative fallback rather than the tape loss).
+                    if (model is not IGradientComputable<T, TInput, TOutput> distillableStudent)
+                    {
+                        throw new NotSupportedException(
+                            $"ConfigureKnowledgeDistillation requires a gradient-computable student, but model " +
+                            $"'{model.GetType().Name}' does not implement IGradientComputable<T, TInput, TOutput>. " +
+                            "Use a neural-network student, or drive distillation manually post-build via " +
+                            "AiModelResult.KnowledgeDistillationOptions.");
+                    }
+
+                    RunKnowledgeDistillationTraining(distillableStudent, XTrain, yTrain, finalOptimizer);
+
+                    // The student is trained in place; report it as the built model, mirroring the other
+                    // in-place training branches.
                     int distInputSize = InputHelper<T, TInput>.GetInputSize(XTrain);
+                    var distPredictions = model.Predict(XTrain);
                     optimizationResult = new OptimizationResult<T, TInput, TOutput>
                     {
                         BestSolution = model,
@@ -5172,410 +5419,175 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                         SelectedFeatureIndices = Enumerable.Range(0, distInputSize).ToList(),
                         TrainingResult = new OptimizationResult<T, TInput, TOutput>.DatasetResult
                         {
-                            X = XTrain, Y = yTrain, Predictions = model.Predict(XTrain),
+                            X = XTrain,
+                            Y = yTrain,
+                            Predictions = distPredictions,
                         },
                     };
+
                     goto knowledgeDistillationHandled;
                 }
 
-                throw new NotSupportedException(
-                    $"Knowledge distillation requires a gradient-computable student, but the model on the " +
-                    $"direct-training path ('{model.GetType().Name}') is not one. Distillation is soft-label " +
-                    "gradient matching, which non-parametric models (density clustering, most time series) " +
-                    "do not perform. Remove the ConfigureKnowledgeDistillation() call for this model.");
-            }
+                // Ensure the optimizer has the model configured before optimization
+                // This is required for InitializeRandomSolution to access model.ParameterCount
+                finalOptimizer.SetModel(model);
 
-            // DIRECT TRAINING PATH for non-parametric models (TS, density-based clustering, etc.)
-            // and partitioning clustering models (KMeans, BIRCH, GMM, etc.) — clustering's
-            // ClusteringBase reports SupportsParameterInitialization=true (it has cluster
-            // centers / labels / membership matrices that ARE parameters in the
-            // IParameterizable sense), but its train path is the K-means EM loop, not the
-            // outer-optimizer's clone-evaluate-select. Routing it through the regular
-            // optimizer path made BuildAsync run hundreds of iterations of unrelated random
-            // search, never actually call ClusteringBase.Train, take 150+ seconds on 90
-            // samples, then return a fresh-init untrained model whose Predict() throws
-            // "Model must be trained" — exactly the timeout pattern the 25 clustering
-            // Builder_* tests in #1224 Cluster B were hitting. Probe _model (unwrapped)
-            // not the local model variable, mirroring the useFullData check below — the
-            // local may be a distributed-training wrapper.
-            // These models use their own internal optimizers and don't benefit from the outer
-            // optimizer's clone-evaluate-select loop. Train directly on the full training data.
-            // For clustering/density models, train on the full dataset (not the
-            // train/test split) since cluster structure depends on having all data points.
-            // Note: preprocessedX/preprocessedY may only contain the training split in the
-            // standard (non-federated) path. For clustering we need the complete dataset.
-            //
-            // Probe the *unwrapped* model: by this point the local `model` variable may be a
-            // DDP/FSDP/ZeRO* distributed-training wrapper (see lines ~1921-1953), and a wrapper
-            // is never a ClusteringBase<T> so the check would silently flip to false and route
-            // clustering training back through the train/test split — which is exactly the bug
-            // this clustering-data path was added to prevent.
-            // Survival models built through Build(features, times, events) join clustering on this
-            // path, for the same reason in a different shape: their event indicators are one value per
-            // row, supplied alongside rather than inside X, so the rows Train sees have to be the rows
-            // and the order the caller passed. A shuffled 80% subset would silently pair each subject
-            // with somebody else's censoring.
-            bool useFullData = _model is Clustering.Base.ClusteringBase<T>
-                || (_model is SurvivalAnalysis.SurvivalModelBase<T> survivalTarget
-                    && survivalTarget.HasSuppliedEvents)
-                || (_model is CausalInference.CausalModelBase<T> causalTarget
-                    && causalTarget.HasSuppliedTreatment);
-            // Clustering models need ALL data points for correct density estimation.
-            // Use preparedX/preparedY (the full dataset before train/test split) when
-            // the preprocessing pipeline is not configured. When it IS configured,
-            // apply the (already-fitted) pipeline to the full data so models operate
-            // in the same coordinate space as predictions.
-            TInput fullX;
-            TOutput fullY;
-            if (useFullData)
-            {
-                if (_preprocessingPipeline is not null && _preprocessingPipeline.IsFitted)
+                // #1833: propagate the configured optimizer's hyperparameters into models with
+                // SPECIALIZED internal update paths (e.g. GaussianSplatting's per-attribute LR
+                // schedule for position/scale/opacity/spherical-harmonics; DDPM's noise-prediction
+                // schedule). Without this hook, those models silently ignore every
+                // AdamOptimizerOptions knob except MaxIterations — the facade's Adam step runs
+                // but finds no chunks to update because it walks the standard Layers path that
+                // specialized models bypass, and the model's own internal update uses whatever
+                // defaults its constructor was built with. See #1833 for the full diagnostic.
+                //
+                // Runs immediately after SetModel and before any Optimize call so per-attribute
+                // LR schedules etc. are in place for the FIRST gradient step. Hook is a no-op
+                // for models that don't implement IHyperparameterAware — every neural-network
+                // model that fits the standard Layers walk (NeRF, InstantNGP, Transformer) picks
+                // up hyperparameters via the normal Adam.Step path and doesn't need this route.
+                var configuredOptimizerOptions = finalOptimizer.GetOptions();
+                if (configuredOptimizerOptions is not null
+                    && model is IHyperparameterAware<T, TInput, TOutput> hyperparameterAwareModel)
                 {
-                    fullX = _preprocessingPipeline.Transform(preparedX);
-                    fullY = preparedY;
+                    hyperparameterAwareModel.ApplyOptimizerHyperparameters(configuredOptimizerOptions);
+                }
+
+                // #1834 IMAGE-SPACE branch: if the caller registered an image loader AND the model
+                // implements IImageTrainable, drive training via TrainOnImageBatch per iteration.
+                // Image-space training has photometric-MSE semantics (rendered pixels vs ground-
+                // truth photo pixels) that don't fit the standard (input, target) row shape, so we
+                // route around the supervised optimizer.Optimize flow. Paper-standard AdamOptimizer
+                // BatchSize is the rays-per-batch count for radiance fields.
+                OptimizationResult<T, TInput, TOutput>? imageSpaceResult = null;
+                if (_imageDataLoader is not null
+                    && model is NeuralRadianceFields.Interfaces.IImageTrainable<T> imageTrainable
+                    && _imageDataLoader is IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> typedImageLoader)
+                {
+                    int imageEpochs = finalOptimizer.GetOptions()?.MaxIterations ?? 100;
+                    // Paper-standard rays-per-iteration is 1024–4096; AdamOptimizerOptions.BatchSize
+                    // defaults to 32 (row-sample count for supervised training) which would starve
+                    // an image-space step. Only honor an EXPLICITLY-set non-default BatchSize as
+                    // rays-per-batch; otherwise use the radiance-field paper default of 1024.
+                    const int PaperRaysPerBatch = 1024;
+                    const int AdamDefaultBatchSize = 32;
+                    int raysPerBatch =
+                        configuredOptimizerOptions is AdamOptimizerOptions<T, TInput, TOutput> adamOpts
+                            && adamOpts.BatchSize > 0
+                            && adamOpts.BatchSize != AdamDefaultBatchSize
+                            ? adamOpts.BatchSize
+                            : PaperRaysPerBatch;
+
+                    // Shared image-space training loop (extracted so both this branch and
+                    // BuildImageOnlyInternalAsync route through the same helper).
+                    RunImageSpaceTrainingLoop(
+                        imageTrainable, typedImageLoader,
+                        raysPerBatch, imageEpochs, configuredOptimizerOptions,
+                        cancellationToken: cancellationToken,
+                        epochBridge: epochBridge);
+
+                    imageSpaceResult = new OptimizationResult<T, TInput, TOutput>
+                    {
+                        BestSolution = model,
+                    };
+                }
+
+                if (imageSpaceResult is not null)
+                {
+                    // Trained above; the standard-supervised branches are skipped.
+                    optimizationResult = imageSpaceResult;
+                }
+                else if (_trainingGroups is not null
+                    && model is NeuralNetworks.NeuralNetworkBase<T> groupedNet
+                    && XTrain is Tensor<T> groupedX && yTrain is Tensor<T> groupedY)
+                {
+                    // GROUPED training (ConfigureTrainingGroups): one fit per QUERY GROUP per epoch — the
+                    // shape pairwise/listwise ranking losses require (pooled fits give the loss conflicting
+                    // targets across groups and the net collapses to a constant). Epoch budget comes from the
+                    // configured optimizer's MaxIterations, matching the facade's standard epoch source.
+                    int groupedEpochs = finalOptimizer.GetOptions()?.MaxIterations ?? 100;
+                    foreach (var group in _trainingGroups)
+                    {
+                        foreach (var idx in group)
+                        {
+                            if (idx < 0 || idx >= groupedX.Shape[0])
+                            {
+                                throw new ArgumentOutOfRangeException(nameof(_trainingGroups),
+                                    $"Training-group row index {idx} is outside the training partition (0..{groupedX.Shape[0] - 1}). " +
+                                    "With training groups configured the split is ORDER-PRESERVING (no shuffle): the training " +
+                                    "partition is the first floor(0.7·n) rows of the loaded data in their original order, so " +
+                                    "group indices must reference rows inside that leading block. Rows beyond it form the " +
+                                    "validation/test partitions (for date-grouped data, sort rows by date ascending so the " +
+                                    "held-out partitions are the most RECENT dates — a leak-free temporal split).");
+                            }
+                        }
+                    }
+
+                    for (int epoch = 0; epoch < groupedEpochs; epoch++)
+                    {
+                        foreach (var group in _trainingGroups)
+                        {
+                            if (group.Count == 0)
+                            {
+                                continue;
+                            }
+
+                            var groupX = GatherRows(groupedX, group);
+                            var groupY = GatherRows(groupedY, group);
+                            if (groupY.Rank == 1)
+                            {
+                                // Batch training produces [B, outputSize] predictions — promote rank-1
+                                // targets to a column [B, 1], exactly as TryStackTensorBatch does for
+                                // the streaming path's per-sample [1] targets.
+                                groupY = groupY.Reshape(new[] { groupY.Shape[0], 1 });
+                            }
+
+                            groupedNet.Train(groupX, groupY);
+                        }
+                    }
+
+                    optimizationResult = new OptimizationResult<T, TInput, TOutput>
+                    {
+                        BestSolution = model,
+                    };
+                }
+                else if (ShouldUseDirectSupervisedNeuralTraining(model)
+                    && model is INeuralNetwork<T> neuralNetwork
+                    && XTrain is Tensor<T> neuralX
+                    && yTrain is Tensor<T> neuralY)
+                {
+                    int epochs = finalOptimizer.GetOptions()?.MaxIterations ?? 100;
+                    optimizationResult = TrainTensorNeuralNetworkRows(model, neuralNetwork, neuralX, neuralY, epochs, epochBridge);
+                }
+                // Register the per-epoch driver so the optimizer's internal epoch loop streams
+                // metrics to the monitor and consults user callbacks. Scoped to this Optimize
+                // call only (cleared in finally) so HPO trials and reuse of the same optimizer
+                // instance are unaffected. When NO monitor/callback is configured we take the
+                // exact original code path (a bare Optimize call, no hook, no wrapper) so the
+                // default training behaviour and timing are byte-for-byte unchanged.
+                else if (epochBridge is not null && finalOptimizer is OptimizerBase<T, TInput, TOutput> epochHookOptimizer)
+                {
+                    epochHookOptimizer.SetEpochProgressCallback(epochBridge.OnEpoch);
+                    try
+                    {
+                        // Zero-alloc training scope (#1804): reuse Engine-op scratch across steps.
+                        using var __trainArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
+                        optimizationResult = finalOptimizer.Optimize(optimizationInputData);
+                    }
+                    finally
+                    {
+                        epochHookOptimizer.SetEpochProgressCallback(null);
+                    }
                 }
                 else
                 {
-                    fullX = preparedX;
-                    fullY = preparedY;
-                }
-            }
-            else
-            {
-                fullX = XTrain;
-                fullY = yTrain;
-            }
-            var directX = fullX;
-            var directY = fullY;
-
-            // Override the earlier split-based sample counts logged at lines ~2222-2224 so
-            // experiment run metadata reflects the dataset actually fed to Train(). Without
-            // this, clustering runs would be reported with a train/val/test split that was
-            // never used (we just trained on the full dataset).
-            if (useFullData && experimentRun is not null)
-            {
-                int effectiveSamples = InputHelper<T, TInput>.GetInputSize(directX);
-                experimentRun.LogParameters(new Dictionary<string, object>
-                {
-                    ["training_samples"] = effectiveSamples,
-                    ["validation_samples"] = 0,
-                    ["test_samples"] = 0,
-                    ["full_data_used"] = true,
-                });
-            }
-
-            // Models on this path run their own epoch loop inside Train(), so the facade cannot see
-            // their epochs. Hand the bridge to any model that can report them, so
-            // ConfigureTrainingCallback/ConfigureTrainingMonitor observe real per-epoch progress and
-            // a callback returning false actually stops training — rather than being handed one
-            // synthetic epoch after training has already finished, which no veto can affect.
-            var epochReporter = model as ITrainingEpochReporter<T>;
-            Func<TrainingProgress<T>, bool>? previousEpochCallback = null;
-            bool bridgedEpochCallback = false;
-            if (epochReporter is not null && epochBridge is not null)
-            {
-                previousEpochCallback = epochReporter.TrainingEpochCallback;
-                // Forward the reporter's own epoch budget (progress.TotalEpochs) so the reported total reflects
-                // the model's configured epochs, not the optimizer's unrelated MaxIterations.
-                epochReporter.TrainingEpochCallback =
-                    progress => epochBridge.OnEpoch(progress.Epoch, progress.TotalEpochs, progress.Loss);
-                bridgedEpochCallback = true;
-            }
-
-            try
-            {
-                model.Train(directX, directY);
-            }
-            finally
-            {
-                // Only touch the callback if THIS build attached the bridge, and restore whatever the caller
-                // had set — nulling unconditionally would wipe a callback the caller attached directly to a
-                // model instance they still hold and then ran through the builder without configuring one.
-                if (bridgedEpochCallback && epochReporter is not null)
-                {
-                    epochReporter.TrainingEpochCallback = previousEpochCallback;
-                }
-            }
-
-            // Compute evaluation metrics
-            int inputSize = InputHelper<T, TInput>.GetInputSize(directX);
-            TOutput trainPredOutput = model.Predict(directX);
-            var trainPredVec = ConversionsHelper.ConvertToVector<T, TOutput>(trainPredOutput);
-            var trainActual = ConversionsHelper.ConvertToVector<T, TOutput>(directY);
-
-            var trainErrorStats = new ErrorStats<T>(new ErrorStatsInputs<T>
-            {
-                Actual = trainActual,
-                Predicted = trainPredVec,
-                FeatureCount = inputSize
-            });
-            var trainPredStats = new PredictionStats<T>(new PredictionStatsInputs<T>
-            {
-                Actual = trainActual,
-                Predicted = trainPredVec,
-                NumberOfParameters = inputSize
-            });
-
-            // Models that train opaquely report nothing, so drive the per-epoch callbacks/monitor
-            // once for them: this path still streams metrics and honors abort/cancellation signals
-            // uniformly with the optimizer path. No-op when no monitor/callback is configured
-            // (bridge is null → default path untouched), and skipped when the model already
-            // reported its own epochs above, which would otherwise append a bogus extra epoch 0.
-            if (epochBridge is { EpochsObserved: 0 })
-            {
-                epochBridge.OnEpoch(0, trainErrorStats.MSE);
-            }
-
-            // trainPredOutput is already TOutput from model.Predict
-
-            var directTrainingResult = new OptimizationResult<T, TInput, TOutput>.DatasetResult
-            {
-                X = directX, Y = directY, Predictions = trainPredOutput,
-                ErrorStats = trainErrorStats,
-                PredictionStats = trainPredStats
-            };
-
-            // Populate TestResult on the direct-training path too: without it, configured test metrics
-            // (ConfigureRegressionMetric/ConfigureClassificationMetric) have nothing to evaluate and the
-            // conversion downstream fails. Evaluate the held-out test partition when the split produced one,
-            // otherwise fall back to the training partition so the result is always well-formed.
-            var directTestResult = BuildDirectBranchDatasetResult(model, XTest, yTest, inputSize)
-                ?? directTrainingResult;
-
-            optimizationResult = new OptimizationResult<T, TInput, TOutput>
-            {
-                BestSolution = model,
-                Iterations = 1,
-                SelectedFeatureIndices = Enumerable.Range(0, inputSize).ToList(),
-                TrainingResult = directTrainingResult,
-                TestResult = directTestResult
-            };
-        }
-        else
-        {
-            // CONTINUAL LEARNING PATH: train the configured model on this task through a continual
-            // learner built around it, preserving prior tasks. Replaces standard optimizer training,
-            // which would overwrite earlier tasks.
-            if (_continualLearningEnabled)
-            {
-                RunContinualLearningTraining(model, XTrain, yTrain);
-
-                int clInputSize = InputHelper<T, TInput>.GetInputSize(XTrain);
-                var clPredictions = model.Predict(XTrain);
-                optimizationResult = new OptimizationResult<T, TInput, TOutput>
-                {
-                    BestSolution = model,
-                    Iterations = 1,
-                    SelectedFeatureIndices = Enumerable.Range(0, clInputSize).ToList(),
-                    TrainingResult = new OptimizationResult<T, TInput, TOutput>.DatasetResult
-                    {
-                        X = XTrain, Y = yTrain, Predictions = clPredictions,
-                    },
-                };
-
-                goto knowledgeDistillationHandled;
-            }
-
-            // REGULAR TRAINING PATH
-            if (_knowledgeDistillationOptions is not null)
-            {
-                // Knowledge distillation trains the student against a combined objective: a soft term
-                // matching the teacher's logits plus a hard term against the true label. That signal
-                // cannot travel through the optimizer's (predicted, actual) loss contract, which
-                // carries no teacher, so distillation runs its own gradient loop here rather than
-                // through finalOptimizer.Optimize. The gradient is produced by the configured
-                // IDistillationStrategy and applied through the student's own IGradientComputable
-                // surface via DistillationLossAdapter (see that type for why it deliberately routes
-                // through the CalculateDerivative fallback rather than the tape loss).
-                if (model is not IGradientComputable<T, TInput, TOutput> distillableStudent)
-                {
-                    throw new NotSupportedException(
-                        $"ConfigureKnowledgeDistillation requires a gradient-computable student, but model " +
-                        $"'{model.GetType().Name}' does not implement IGradientComputable<T, TInput, TOutput>. " +
-                        "Use a neural-network student, or drive distillation manually post-build via " +
-                        "AiModelResult.KnowledgeDistillationOptions.");
-                }
-
-                RunKnowledgeDistillationTraining(distillableStudent, XTrain, yTrain, finalOptimizer);
-
-                // The student is trained in place; report it as the built model, mirroring the other
-                // in-place training branches.
-                int distInputSize = InputHelper<T, TInput>.GetInputSize(XTrain);
-                var distPredictions = model.Predict(XTrain);
-                optimizationResult = new OptimizationResult<T, TInput, TOutput>
-                {
-                    BestSolution = model,
-                    Iterations = 1,
-                    SelectedFeatureIndices = Enumerable.Range(0, distInputSize).ToList(),
-                    TrainingResult = new OptimizationResult<T, TInput, TOutput>.DatasetResult
-                    {
-                        X = XTrain, Y = yTrain, Predictions = distPredictions,
-                    },
-                };
-
-                goto knowledgeDistillationHandled;
-            }
-
-            // Ensure the optimizer has the model configured before optimization
-            // This is required for InitializeRandomSolution to access model.ParameterCount
-            finalOptimizer.SetModel(model);
-
-            // #1833: propagate the configured optimizer's hyperparameters into models with
-            // SPECIALIZED internal update paths (e.g. GaussianSplatting's per-attribute LR
-            // schedule for position/scale/opacity/spherical-harmonics; DDPM's noise-prediction
-            // schedule). Without this hook, those models silently ignore every
-            // AdamOptimizerOptions knob except MaxIterations — the facade's Adam step runs
-            // but finds no chunks to update because it walks the standard Layers path that
-            // specialized models bypass, and the model's own internal update uses whatever
-            // defaults its constructor was built with. See #1833 for the full diagnostic.
-            //
-            // Runs immediately after SetModel and before any Optimize call so per-attribute
-            // LR schedules etc. are in place for the FIRST gradient step. Hook is a no-op
-            // for models that don't implement IHyperparameterAware — every neural-network
-            // model that fits the standard Layers walk (NeRF, InstantNGP, Transformer) picks
-            // up hyperparameters via the normal Adam.Step path and doesn't need this route.
-            var configuredOptimizerOptions = finalOptimizer.GetOptions();
-            if (configuredOptimizerOptions is not null
-                && model is IHyperparameterAware<T, TInput, TOutput> hyperparameterAwareModel)
-            {
-                hyperparameterAwareModel.ApplyOptimizerHyperparameters(configuredOptimizerOptions);
-            }
-
-            // #1834 IMAGE-SPACE branch: if the caller registered an image loader AND the model
-            // implements IImageTrainable, drive training via TrainOnImageBatch per iteration.
-            // Image-space training has photometric-MSE semantics (rendered pixels vs ground-
-            // truth photo pixels) that don't fit the standard (input, target) row shape, so we
-            // route around the supervised optimizer.Optimize flow. Paper-standard AdamOptimizer
-            // BatchSize is the rays-per-batch count for radiance fields.
-            OptimizationResult<T, TInput, TOutput>? imageSpaceResult = null;
-            if (_imageDataLoader is not null
-                && model is NeuralRadianceFields.Interfaces.IImageTrainable<T> imageTrainable
-                && _imageDataLoader is IDataLoader<NeuralRadianceFields.Data.ImageView<T>, NeuralRadianceFields.Data.PixelBatch<T>> typedImageLoader)
-            {
-                int imageEpochs = finalOptimizer.GetOptions()?.MaxIterations ?? 100;
-                // Paper-standard rays-per-iteration is 1024–4096; AdamOptimizerOptions.BatchSize
-                // defaults to 32 (row-sample count for supervised training) which would starve
-                // an image-space step. Only honor an EXPLICITLY-set non-default BatchSize as
-                // rays-per-batch; otherwise use the radiance-field paper default of 1024.
-                const int PaperRaysPerBatch = 1024;
-                const int AdamDefaultBatchSize = 32;
-                int raysPerBatch =
-                    configuredOptimizerOptions is AdamOptimizerOptions<T, TInput, TOutput> adamOpts
-                        && adamOpts.BatchSize > 0
-                        && adamOpts.BatchSize != AdamDefaultBatchSize
-                        ? adamOpts.BatchSize
-                        : PaperRaysPerBatch;
-
-                // Shared image-space training loop (extracted so both this branch and
-                // BuildImageOnlyInternalAsync route through the same helper).
-                RunImageSpaceTrainingLoop(
-                    imageTrainable, typedImageLoader,
-                    raysPerBatch, imageEpochs, configuredOptimizerOptions,
-                    cancellationToken: cancellationToken,
-                    epochBridge: epochBridge);
-
-                imageSpaceResult = new OptimizationResult<T, TInput, TOutput>
-                {
-                    BestSolution = model,
-                };
-            }
-
-            if (imageSpaceResult is not null)
-            {
-                // Trained above; the standard-supervised branches are skipped.
-                optimizationResult = imageSpaceResult;
-            }
-            else if (_trainingGroups is not null
-                && model is NeuralNetworks.NeuralNetworkBase<T> groupedNet
-                && XTrain is Tensor<T> groupedX && yTrain is Tensor<T> groupedY)
-            {
-                // GROUPED training (ConfigureTrainingGroups): one fit per QUERY GROUP per epoch — the
-                // shape pairwise/listwise ranking losses require (pooled fits give the loss conflicting
-                // targets across groups and the net collapses to a constant). Epoch budget comes from the
-                // configured optimizer's MaxIterations, matching the facade's standard epoch source.
-                int groupedEpochs = finalOptimizer.GetOptions()?.MaxIterations ?? 100;
-                foreach (var group in _trainingGroups)
-                {
-                    foreach (var idx in group)
-                    {
-                        if (idx < 0 || idx >= groupedX.Shape[0])
-                        {
-                            throw new ArgumentOutOfRangeException(nameof(_trainingGroups),
-                                $"Training-group row index {idx} is outside the training partition (0..{groupedX.Shape[0] - 1}). " +
-                                "With training groups configured the split is ORDER-PRESERVING (no shuffle): the training " +
-                                "partition is the first floor(0.7·n) rows of the loaded data in their original order, so " +
-                                "group indices must reference rows inside that leading block. Rows beyond it form the " +
-                                "validation/test partitions (for date-grouped data, sort rows by date ascending so the " +
-                                "held-out partitions are the most RECENT dates — a leak-free temporal split).");
-                        }
-                    }
-                }
-
-                for (int epoch = 0; epoch < groupedEpochs; epoch++)
-                {
-                    foreach (var group in _trainingGroups)
-                    {
-                        if (group.Count == 0)
-                        {
-                            continue;
-                        }
-
-                        var groupX = GatherRows(groupedX, group);
-                        var groupY = GatherRows(groupedY, group);
-                        if (groupY.Rank == 1)
-                        {
-                            // Batch training produces [B, outputSize] predictions — promote rank-1
-                            // targets to a column [B, 1], exactly as TryStackTensorBatch does for
-                            // the streaming path's per-sample [1] targets.
-                            groupY = groupY.Reshape(new[] { groupY.Shape[0], 1 });
-                        }
-
-                        groupedNet.Train(groupX, groupY);
-                    }
-                }
-
-                optimizationResult = new OptimizationResult<T, TInput, TOutput>
-                {
-                    BestSolution = model,
-                };
-            }
-            else if (ShouldUseDirectSupervisedNeuralTraining(model)
-                && model is INeuralNetwork<T> neuralNetwork
-                && XTrain is Tensor<T> neuralX
-                && yTrain is Tensor<T> neuralY)
-            {
-                int epochs = finalOptimizer.GetOptions()?.MaxIterations ?? 100;
-                optimizationResult = TrainTensorNeuralNetworkRows(model, neuralNetwork, neuralX, neuralY, epochs, epochBridge);
-            }
-            // Register the per-epoch driver so the optimizer's internal epoch loop streams
-            // metrics to the monitor and consults user callbacks. Scoped to this Optimize
-            // call only (cleared in finally) so HPO trials and reuse of the same optimizer
-            // instance are unaffected. When NO monitor/callback is configured we take the
-            // exact original code path (a bare Optimize call, no hook, no wrapper) so the
-            // default training behaviour and timing are byte-for-byte unchanged.
-            else if (epochBridge is not null && finalOptimizer is OptimizerBase<T, TInput, TOutput> epochHookOptimizer)
-            {
-                epochHookOptimizer.SetEpochProgressCallback(epochBridge.OnEpoch);
-                try
-                {
+                    // Optimize the final model on the full training set
                     // Zero-alloc training scope (#1804): reuse Engine-op scratch across steps.
                     using var __trainArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
                     optimizationResult = finalOptimizer.Optimize(optimizationInputData);
                 }
-                finally
-                {
-                    epochHookOptimizer.SetEpochProgressCallback(null);
-                }
             }
-            else
-            {
-                // Optimize the final model on the full training set
-                // Zero-alloc training scope (#1804): reuse Engine-op scratch across steps.
-                using var __trainArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
-                optimizationResult = finalOptimizer.Optimize(optimizationInputData);
-            }
-        }
-        trainingDispatchCompleted = true;
+            trainingDispatchCompleted = true;
         }
         finally
         {
@@ -5605,7 +5617,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         // Knowledge distillation trains the student in place above and jumps here, skipping the
         // optimizer dispatch and its epoch-bridge handling (distillation runs its own gradient loop).
-        knowledgeDistillationHandled:
+    knowledgeDistillationHandled:
 
         // Post-training stages, each on its own data: one-shot fine-tuning (#1357 / #1361), the staged training
         // pipeline (#1361 #2) and the curriculum-scheduled refinement pass (#1361 #3). The streaming path runs

@@ -39,8 +39,13 @@ internal sealed class AiDotNetDdpmModel : IBenchmarkModel
                 OptimizerFactory = () => new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(null,
                     new AdamWOptimizerOptions<float, Tensor<float>, Tensor<float>>
                     {
-                        InitialLearningRate = 2e-4, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, WeightDecay = 0.0,
-                        EnableGradientClipping = true, MaxGradientNorm = 1.0,
+                        InitialLearningRate = 2e-4,
+                        Beta1 = 0.9,
+                        Beta2 = 0.999,
+                        Epsilon = 1e-8,
+                        WeightDecay = 0.0,
+                        EnableGradientClipping = true,
+                        MaxGradientNorm = 1.0,
                     }),
             },
             channels: Channels,
@@ -120,8 +125,13 @@ internal sealed class AiDotNetWhisperTinyModel : IBenchmarkModel
             new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(null,
                 new AdamWOptimizerOptions<float, Tensor<float>, Tensor<float>>
                 {
-                    InitialLearningRate = 1e-3, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, WeightDecay = 0.01,
-                    EnableGradientClipping = true, MaxGradientNorm = 1.0,
+                    InitialLearningRate = 1e-3,
+                    Beta1 = 0.9,
+                    Beta2 = 0.999,
+                    Epsilon = 1e-8,
+                    WeightDecay = 0.01,
+                    EnableGradientClipping = true,
+                    MaxGradientNorm = 1.0,
                 }));
 
         LoadSyntheticBatch(1);
@@ -191,7 +201,10 @@ internal sealed class AiDotNetFasterRcnnModel : IBenchmarkModel
         _model = new AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN.FasterRCNN<float>(
             new ObjectDetectionOptions<float>
             {
-                Size = ModelSize.Medium, NumClasses = Classes, InputSize = [ImageSize, ImageSize], Seed = seed,
+                Size = ModelSize.Medium,
+                NumClasses = Classes,
+                InputSize = [ImageSize, ImageSize],
+                Seed = seed,
             });
 
         LoadSyntheticBatch(1);

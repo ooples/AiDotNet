@@ -692,7 +692,11 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
         Network.SetBaseTrainOptimizer(new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(null,
             new AdamWOptimizerOptions<float, Tensor<float>, Tensor<float>>
             {
-                InitialLearningRate = 1e-3, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, WeightDecay = 0.01,
+                InitialLearningRate = 1e-3,
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8,
+                WeightDecay = 0.01,
             }));
 
         // Materialize lazy layers BEFORE counting parameters (issue #1566 item 1).

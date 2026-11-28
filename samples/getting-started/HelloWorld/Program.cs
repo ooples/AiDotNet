@@ -72,8 +72,8 @@ Tensor<double> Pack(double[][] rows, bool features)
 
 var trainX = Pack(iris[..trainSize], features: true);
 var trainY = Pack(iris[..trainSize], features: false);
-var testX  = Pack(iris[trainSize..], features: true);
-var testY  = Pack(iris[trainSize..], features: false);
+var testX = Pack(iris[trainSize..], features: true);
+var testY = Pack(iris[trainSize..], features: false);
 
 // ── 4. Build + train. ──────────────────────────────────────────────────────
 var architecture = new NeuralNetworkArchitecture<double>(

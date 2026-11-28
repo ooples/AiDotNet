@@ -648,15 +648,15 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
         {
             _modelOptions = modelOptions;
             foreach (var type in options)
-            foreach (var contract in type.AllInterfaces)
-            foreach (var member in contract.GetMembers().OfType<IPropertySymbol>())
-            {
-                if (type.FindImplementationForInterfaceMember(member) is not IPropertySymbol implementation) continue;
-                var key = member.OriginalDefinition;
-                if (!_interfaces.TryGetValue(key, out var implementations))
-                    _interfaces[key] = implementations = new List<IPropertySymbol>();
-                implementations.Add(implementation.OriginalDefinition);
-            }
+                foreach (var contract in type.AllInterfaces)
+                    foreach (var member in contract.GetMembers().OfType<IPropertySymbol>())
+                    {
+                        if (type.FindImplementationForInterfaceMember(member) is not IPropertySymbol implementation) continue;
+                        var key = member.OriginalDefinition;
+                        if (!_interfaces.TryGetValue(key, out var implementations))
+                            _interfaces[key] = implementations = new List<IPropertySymbol>();
+                        implementations.Add(implementation.OriginalDefinition);
+                    }
         }
 
         internal void RecordInterface(ISymbol? containing, IPropertySymbol property)

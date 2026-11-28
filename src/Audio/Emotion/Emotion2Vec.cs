@@ -144,7 +144,9 @@ public partial class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer
 
         return new EmotionResult<T>
         {
-            Emotion = primary, Confidence = confidence, SecondaryEmotion = secondary,
+            Emotion = primary,
+            Confidence = confidence,
+            SecondaryEmotion = secondary,
             Arousal = _options.IncludeArousalValence ? ComputeArousalFromProbs(probs) : default,
             Valence = _options.IncludeArousalValence ? ComputeValenceFromProbs(probs) : default
         };
@@ -180,9 +182,11 @@ public partial class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer
             var result = RecognizeEmotion(chunk);
             results.Add(new TimedEmotionResult<T>
             {
-                Emotion = result.Emotion, Confidence = result.Confidence,
+                Emotion = result.Emotion,
+                Confidence = result.Confidence,
                 SecondaryEmotion = result.SecondaryEmotion,
-                Arousal = result.Arousal, Valence = result.Valence,
+                Arousal = result.Arousal,
+                Valence = result.Valence,
                 StartTime = start / (double)_options.SampleRate,
                 EndTime = (start + windowSamples) / (double)_options.SampleRate
             });

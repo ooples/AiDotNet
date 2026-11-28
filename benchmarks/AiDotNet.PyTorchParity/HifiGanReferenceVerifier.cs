@@ -380,18 +380,32 @@ internal static class HifiGanReferenceVerifier
         bool pass = errors.Count == 0 && checks.All(check => check.Pass);
         var receipt = new
         {
-            schema = "hifigan-v1-equivalence-receipt-v1", model = "hifigan-v1", device, pass,
+            schema = "hifigan-v1-equivalence-receipt-v1",
+            model = "hifigan-v1",
+            device,
+            pass,
             reference_manifest_sha256 = manifestSha256,
-            engine = AiDotNetEngine.Current.Name, tolerance, fused_steps = fused, eager_steps = eager,
+            engine = AiDotNetEngine.Current.Name,
+            tolerance,
+            fused_steps = fused,
+            eager_steps = eager,
             comparison_policy = new
             {
                 schema = "hifigan-v1-calibrated-learned-state-v1",
-                learned_state_checks = 1164, spectral_state_checks = 48, unchanged_checks = 451,
-                learned_state = new { finite_required = true, relative_l2_max = tolerance.Relative,
-                    cosine_min = tolerance.GradientCosine, max_absolute_error_gate = false },
+                learned_state_checks = 1164,
+                spectral_state_checks = 48,
+                unchanged_checks = 451,
+                learned_state = new
+                {
+                    finite_required = true,
+                    relative_l2_max = tolerance.Relative,
+                    cosine_min = tolerance.GradientCosine,
+                    max_absolute_error_gate = false
+                },
                 other_criteria = "unchanged_original",
             },
-            checks, errors,
+            checks,
+            errors,
             assemblies_sha256 = new Dictionary<string, string>
             {
                 ["AiDotNet"] = Hash(typeof(HiFiGAN<float>).Assembly.Location),

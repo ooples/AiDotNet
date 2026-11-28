@@ -184,9 +184,12 @@ public partial class ECAPATDNNSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVe
         double totalDuration = enrollmentAudio.Sum(a => (double)a.Length / SampleRate);
         return new SpeakerProfile<T>
         {
-            SpeakerId = Guid.NewGuid().ToString(), Embedding = aggregated,
-            NumEnrollmentSamples = enrollmentAudio.Count, TotalEnrollmentDuration = totalDuration,
-            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            SpeakerId = Guid.NewGuid().ToString(),
+            Embedding = aggregated,
+            NumEnrollmentSamples = enrollmentAudio.Count,
+            TotalEnrollmentDuration = totalDuration,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
         };
     }
 
@@ -201,10 +204,12 @@ public partial class ECAPATDNNSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVe
         var aggregated = AggregateEmbeddings([existingProfile.Embedding, newEmb]);
         return new SpeakerProfile<T>
         {
-            SpeakerId = existingProfile.SpeakerId, Embedding = aggregated,
+            SpeakerId = existingProfile.SpeakerId,
+            Embedding = aggregated,
             NumEnrollmentSamples = existingProfile.NumEnrollmentSamples + 1,
             TotalEnrollmentDuration = existingProfile.TotalEnrollmentDuration + ((double)newAudio.Length / SampleRate),
-            CreatedAt = existingProfile.CreatedAt, UpdatedAt = DateTime.UtcNow
+            CreatedAt = existingProfile.CreatedAt,
+            UpdatedAt = DateTime.UtcNow
         };
     }
 

@@ -291,8 +291,10 @@ public partial class BandSplitRNN<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
         }
         return new SourceSeparationResult<T>
         {
-            Sources = sources, OriginalMix = audio,
-            SampleRate = _options.SampleRate, Duration = audio.Length / (double)_options.SampleRate
+            Sources = sources,
+            OriginalMix = audio,
+            SampleRate = _options.SampleRate,
+            Duration = audio.Length / (double)_options.SampleRate
         };
     }
 

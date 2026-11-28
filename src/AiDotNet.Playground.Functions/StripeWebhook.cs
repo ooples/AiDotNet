@@ -268,8 +268,10 @@ public class StripeWebhook
         var token = Guid.NewGuid();
         var claim = await CallStateRpc(supabaseUrl, supabaseKey, "claim_playground_stripe_event", new
         {
-            p_profile_id = userId, p_event_id = stripeEvent.Id,
-            p_event_created = new DateTimeOffset(stripeEvent.Created).ToUnixTimeSeconds(), p_token = token
+            p_profile_id = userId,
+            p_event_id = stripeEvent.Id,
+            p_event_created = new DateTimeOffset(stripeEvent.Created).ToUnixTimeSeconds(),
+            p_token = token
         });
         if (claim is "duplicate" or "stale")
         {
@@ -292,7 +294,9 @@ public class StripeWebhook
                 throw new InvalidOperationException("Stripe subscription does not match the event customer.");
             var outcome = await CallStateRpc(supabaseUrl, supabaseKey, "complete_playground_stripe_event", new
             {
-                p_profile_id = userId, p_token = token, p_customer_id = stripeCustomerId,
+                p_profile_id = userId,
+                p_token = token,
+                p_customer_id = stripeCustomerId,
                 p_subscription_id = subscription.Id,
                 p_subscription_created = new DateTimeOffset(subscription.Created).ToUnixTimeSeconds(),
                 p_status = subscription.Status

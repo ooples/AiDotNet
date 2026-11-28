@@ -216,15 +216,20 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
         var remappedSegments = result.Segments.Select(s => new SpeakerSegment<T>
         {
             Speaker = labelMap.TryGetValue(s.Speaker, out var mapped) ? mapped : s.Speaker,
-            StartTime = s.StartTime, EndTime = s.EndTime, Confidence = s.Confidence
+            StartTime = s.StartTime,
+            EndTime = s.EndTime,
+            Confidence = s.Confidence
         }).ToList();
 
         var newLabels = remappedSegments.Select(s => s.Speaker).Distinct().ToList();
         double totalDuration = (double)audio.Length / _options.SampleRate;
         return new DiarizationResult<T>
         {
-            Segments = remappedSegments, NumSpeakers = newLabels.Count, SpeakerLabels = newLabels,
-            TotalDuration = totalDuration, OverlapRegions = result.OverlapRegions,
+            Segments = remappedSegments,
+            NumSpeakers = newLabels.Count,
+            SpeakerLabels = newLabels,
+            TotalDuration = totalDuration,
+            OverlapRegions = result.OverlapRegions,
             SpeakerStats = ComputeSpeakerStatistics(remappedSegments, totalDuration)
         };
     }
@@ -548,7 +553,8 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
                         segments.Add(new SpeakerSegment<T>
                         {
                             Speaker = $"Speaker_{currentSpeaker}",
-                            StartTime = segStart, EndTime = segEnd,
+                            StartTime = segStart,
+                            EndTime = segEnd,
                             Confidence = confidence
                         });
                     }
@@ -564,7 +570,8 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
             segments.Add(new SpeakerSegment<T>
             {
                 Speaker = $"Speaker_{currentSpeaker}",
-                StartTime = segStart, EndTime = totalDuration,
+                StartTime = segStart,
+                EndTime = totalDuration,
                 Confidence = confidence
             });
         }
@@ -606,7 +613,8 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
                 {
                     overlaps.Add(new OverlapRegion<T>
                     {
-                        StartTime = overlapStart, EndTime = overlapEnd,
+                        StartTime = overlapStart,
+                        EndTime = overlapEnd,
                         Speakers = new[] { segments[i].Speaker, segments[j].Speaker }
                     });
                 }

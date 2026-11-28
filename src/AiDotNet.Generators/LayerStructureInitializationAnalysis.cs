@@ -255,7 +255,7 @@ internal static class LayerStructureInitializationAnalysis
             if (operation.Instance is IInstanceReferenceOperation { ReferenceKind: InstanceReferenceKind.ContainingTypeInstance })
             {
                 bool explicitBase = operation.Syntax is InvocationExpressionSyntax
-                    { Expression: MemberAccessExpressionSyntax { Expression: BaseExpressionSyntax } };
+                { Expression: MemberAccessExpressionSyntax { Expression: BaseExpressionSyntax } };
                 if (!explicitBase && !method.IsSealed && (method.IsVirtual || method.IsOverride || method.IsAbstract))
                 {
                     // The proof only ever lets the EXACT owner type skip initialization (the generated

@@ -306,39 +306,39 @@ internal partial class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
         try
         {
 
-        // The paper-faithful chain uses BatchNormalizationLayer between every
-        // conv. BN's inference broadcast in this codebase
-        // (BatchNormalizationLayer.ApplyInferenceAnyRank) assumes the
-        // canonical NCHW layout — dim 0 = batch, dim 1 = channels. For a
-        // rank-3 unbatched [C, H, W] image the broadcast picks the wrong
-        // axis and the shape mismatches at the first BN. Force a leading
-        // batch dim so the entire chain stays in [B, C, H, W] form,
-        // matching what NeuralNetworkBase.NormalizeBatchDim would emit for
-        // Train's tape forward — inference and training shape-consistent.
-        var batched = input.Rank == 3
-            ? Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]])
-            : input;
+            // The paper-faithful chain uses BatchNormalizationLayer between every
+            // conv. BN's inference broadcast in this codebase
+            // (BatchNormalizationLayer.ApplyInferenceAnyRank) assumes the
+            // canonical NCHW layout — dim 0 = batch, dim 1 = channels. For a
+            // rank-3 unbatched [C, H, W] image the broadcast picks the wrong
+            // axis and the shape mismatches at the first BN. Force a leading
+            // batch dim so the entire chain stays in [B, C, H, W] form,
+            // matching what NeuralNetworkBase.NormalizeBatchDim would emit for
+            // Train's tape forward — inference and training shape-consistent.
+            var batched = input.Rank == 3
+                ? Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]])
+                : input;
 
-        var c = batched;
-        foreach (var l in Layers) c = l.Forward(c);
+            var c = batched;
+            foreach (var l in Layers) c = l.Forward(c);
 
-        // Paper's graph_encoder.py finishes with
-        //   x = self.proj(x)            # [B, C, N, 1]
-        //   x = torch.mean(x, dim=2)    # [B, C, 1]
-        //   x = x.squeeze(-1).squeeze(-1)  # [B, C]
-        // i.e. the public output is rank-2 [B, embeddingDim]. GlobalPooling
-        // with keepDims=true yields rank-4 [B, embeddingDim, 1, 1]; squeeze
-        // trailing singleton dims so the base test class's warm-up infers
-        // a rank-2 EffectiveOutputShape that downstream
-        // CreateRandomTargetTensor calls can use without a rank mismatch
-        // against the loss target.
-        while (c.Rank > 2 && c.Shape[c.Rank - 1] == 1)
-        {
-            var newShape = new int[c.Rank - 1];
-            for (int i = 0; i < c.Rank - 1; i++) newShape[i] = c.Shape[i];
-            c = Engine.Reshape(c, newShape);
-        }
-        return c;
+            // Paper's graph_encoder.py finishes with
+            //   x = self.proj(x)            # [B, C, N, 1]
+            //   x = torch.mean(x, dim=2)    # [B, C, 1]
+            //   x = x.squeeze(-1).squeeze(-1)  # [B, C]
+            // i.e. the public output is rank-2 [B, embeddingDim]. GlobalPooling
+            // with keepDims=true yields rank-4 [B, embeddingDim, 1, 1]; squeeze
+            // trailing singleton dims so the base test class's warm-up infers
+            // a rank-2 EffectiveOutputShape that downstream
+            // CreateRandomTargetTensor calls can use without a rank mismatch
+            // against the loss target.
+            while (c.Rank > 2 && c.Shape[c.Rank - 1] == 1)
+            {
+                var newShape = new int[c.Rank - 1];
+                for (int i = 0; i < c.Rank - 1; i++) newShape[i] = c.Shape[i];
+                c = Engine.Reshape(c, newShape);
+            }
+            return c;
 
         }
         finally
@@ -472,7 +472,7 @@ internal partial class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
-        {
+    {
         // Falls back to the base's guaranteed front-end rather than to the RAW WAVEFORM. Returning
         // rawAudio here meant that whenever _melSpectrogram had not been built yet, a rank-1 signal
         // went straight into the encoder: no time axis, no frequency axis, and the failure surfaced

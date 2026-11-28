@@ -151,8 +151,11 @@ public partial class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEvent
             foreach (int i in above)
                 allEvents.Add(new AudioEvent<T>
                 {
-                    EventType = ClassLabels[i], Confidence = values[i],
-                    StartTime = startTime, EndTime = endTime, PeakTime = (startTime + endTime) / 2.0
+                    EventType = ClassLabels[i],
+                    Confidence = values[i],
+                    StartTime = startTime,
+                    EndTime = endTime,
+                    PeakTime = (startTime + endTime) / 2.0
                 });
         }
         var merged = MergeEvents(allEvents);
@@ -160,7 +163,8 @@ public partial class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEvent
         var eventStats = ComputeEventStatistics(merged);
         return new AudioEventResult<T>
         {
-            Events = merged, TotalDuration = totalDuration,
+            Events = merged,
+            TotalDuration = totalDuration,
             DetectedEventTypes = merged.Select(e => e.EventType).Distinct().ToArray(),
             EventStats = eventStats
         };
@@ -182,7 +186,8 @@ public partial class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEvent
         var filtered = result.Events.Where(e => eventTypeSet.Contains(e.EventType)).ToList();
         return new AudioEventResult<T>
         {
-            Events = filtered, TotalDuration = result.TotalDuration,
+            Events = filtered,
+            TotalDuration = result.TotalDuration,
             DetectedEventTypes = filtered.Select(e => e.EventType).Distinct().ToArray(),
             EventStats = ComputeEventStatistics(filtered)
         };
@@ -357,8 +362,10 @@ public partial class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEvent
                     {
                         var ev = new AudioEvent<T>
                         {
-                            EventType = _model.ClassLabels[i], Confidence = probs[i],
-                            StartTime = startTime, EndTime = endTime,
+                            EventType = _model.ClassLabels[i],
+                            Confidence = probs[i],
+                            StartTime = startTime,
+                            EndTime = endTime,
                             PeakTime = (startTime + endTime) / 2.0
                         };
                         _newEvents.Add(ev);

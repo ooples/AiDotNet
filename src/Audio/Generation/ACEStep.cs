@@ -205,8 +205,10 @@ public partial class ACEStep<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// <inheritdoc />
     public AudioGenerationOptions<T> GetDefaultOptions() => new()
     {
-        DurationSeconds = 10.0, NumInferenceSteps = _options.NumSteps,
-        GuidanceScale = 3.0, Stereo = _options.NumChannels == 2
+        DurationSeconds = 10.0,
+        NumInferenceSteps = _options.NumSteps,
+        GuidanceScale = 3.0,
+        Stereo = _options.NumChannels == 2
     };
 
     #endregion

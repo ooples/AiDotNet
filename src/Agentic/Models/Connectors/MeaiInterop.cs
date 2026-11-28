@@ -138,7 +138,7 @@ internal static class MeaiInterop
                 case ToolResultContent result:
                     contents.Add(new Meai.FunctionResultContent(result.CallId, result.Result));
                     break;
-                // Image/multimodal content is not bridged through MEAI here; text and tool content are.
+                    // Image/multimodal content is not bridged through MEAI here; text and tool content are.
             }
         }
 

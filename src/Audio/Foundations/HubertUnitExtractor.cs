@@ -110,7 +110,12 @@ internal sealed class HubertUnitExtractor<T>
     /// post-norm layers, built up to <paramref name="layers"/>.</summary>
     public static HubertConfiguration MHubertBase(int layers = 11) => new()
     {
-        LayerNormFeatureEncoder = false, HiddenSize = 768, Layers = layers, Heads = 12, IntermediateSize = 3072, LayerNormFirst = false,
+        LayerNormFeatureEncoder = false,
+        HiddenSize = 768,
+        Layers = layers,
+        Heads = 12,
+        IntermediateSize = 3072,
+        LayerNormFirst = false,
     };
 
     public HubertNetwork<T> Network { get; }

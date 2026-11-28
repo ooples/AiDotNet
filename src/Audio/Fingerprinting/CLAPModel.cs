@@ -1067,7 +1067,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         // AudioNeuralNetworkBase manages disposal; no extra state to gate.
     }
 
- // _logTemperature (learnable τ scalar)
+    // _logTemperature (learnable τ scalar)
 
     // UpdateParameters restated a fold the base now derives from generated component registration.
     // Removed under AIDN082.

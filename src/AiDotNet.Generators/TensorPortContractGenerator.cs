@@ -1031,18 +1031,18 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
 
         return port.Domain switch
         {
-        Domain.Unspecified => "global::AiDotNet.NeuralNetworks.Layers.LayerInputDomain.Unspecified",
-        Domain.BooleanMask => "global::AiDotNet.NeuralNetworks.Layers.LayerInputDomain.BooleanMask",
-        Domain.AdditiveMask => "global::AiDotNet.NeuralNetworks.Layers.LayerInputDomain.AdditiveMask",
-        Domain.Deferred => "global::AiDotNet.NeuralNetworks.Layers.LayerInputDomain.Deferred(\"The generated port has not been bound.\")",
-        Domain.Custom => "global::AiDotNet.NeuralNetworks.Layers.LayerInputDomain.Custom("
-            + Literal(port.CustomProviderKey ?? string.Empty) + ")",
-        Domain.IntegerIndices when !string.IsNullOrWhiteSpace(port.MaxExclusiveResolver)
-            => "global::AiDotNet.NeuralNetworks.Layers.LayerInputDomain.Indices("
-                + port.MaxExclusiveResolver + "(" + inputShapeExpression + "))",
-        Domain.IntegerIndices => "global::AiDotNet.NeuralNetworks.Layers.LayerInputDomain.Indices("
-            + port.MaxExclusiveMember + ")",
-        _ => "global::AiDotNet.NeuralNetworks.Layers.LayerInputDomain.Continuous",
+            Domain.Unspecified => "global::AiDotNet.NeuralNetworks.Layers.LayerInputDomain.Unspecified",
+            Domain.BooleanMask => "global::AiDotNet.NeuralNetworks.Layers.LayerInputDomain.BooleanMask",
+            Domain.AdditiveMask => "global::AiDotNet.NeuralNetworks.Layers.LayerInputDomain.AdditiveMask",
+            Domain.Deferred => "global::AiDotNet.NeuralNetworks.Layers.LayerInputDomain.Deferred(\"The generated port has not been bound.\")",
+            Domain.Custom => "global::AiDotNet.NeuralNetworks.Layers.LayerInputDomain.Custom("
+                + Literal(port.CustomProviderKey ?? string.Empty) + ")",
+            Domain.IntegerIndices when !string.IsNullOrWhiteSpace(port.MaxExclusiveResolver)
+                => "global::AiDotNet.NeuralNetworks.Layers.LayerInputDomain.Indices("
+                    + port.MaxExclusiveResolver + "(" + inputShapeExpression + "))",
+            Domain.IntegerIndices => "global::AiDotNet.NeuralNetworks.Layers.LayerInputDomain.Indices("
+                + port.MaxExclusiveMember + ")",
+            _ => "global::AiDotNet.NeuralNetworks.Layers.LayerInputDomain.Continuous",
         };
     }
 

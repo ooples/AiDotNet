@@ -34,9 +34,16 @@ internal sealed class AstPipeline<T>
     /// <summary>The network shape the options describe.</summary>
     public static AstConfiguration Configuration(ASTOptions o, int classes) => new()
     {
-        MelBins = o.NumMels, Frames = o.TargetLength, PatchSize = o.PatchSize, FrequencyStride = o.FrequencyStride,
-        TimeStride = o.TimeStride, Dim = o.EmbeddingDim, Depth = o.NumEncoderLayers, Heads = o.NumAttentionHeads,
-        MlpRatio = (double)o.FeedForwardDim / o.EmbeddingDim, Classes = classes,
+        MelBins = o.NumMels,
+        Frames = o.TargetLength,
+        PatchSize = o.PatchSize,
+        FrequencyStride = o.FrequencyStride,
+        TimeStride = o.TimeStride,
+        Dim = o.EmbeddingDim,
+        Depth = o.NumEncoderLayers,
+        Heads = o.NumAttentionHeads,
+        MlpRatio = (double)o.FeedForwardDim / o.EmbeddingDim,
+        Classes = classes,
     };
 
     private static void Validate(ASTOptions o)

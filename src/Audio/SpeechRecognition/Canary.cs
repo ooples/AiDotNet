@@ -153,7 +153,9 @@ public partial class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         double duration = (double)audio.Length / _options.SampleRate;
         var result = new TranscriptionResult<T>
         {
-            Text = text, Language = language, DurationSeconds = duration,
+            Text = text,
+            Language = language,
+            DurationSeconds = duration,
             Confidence = NumOps.FromDouble(0.95)
         };
         if (ResolveReturnTimestamps(includeTimestamps))
@@ -369,7 +371,8 @@ public partial class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
         public TranscriptionResult<T> GetPartialResult() => new()
         {
-            Text = _partialText, Language = _language,
+            Text = _partialText,
+            Language = _language,
             Confidence = _model.NumOps.FromDouble(0.8)
         };
 
@@ -384,7 +387,8 @@ public partial class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             }
             return new TranscriptionResult<T>
             {
-                Text = _partialText, Language = _language,
+                Text = _partialText,
+                Language = _language,
                 Confidence = _model.NumOps.FromDouble(0.95)
             };
         }

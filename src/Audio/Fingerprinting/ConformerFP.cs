@@ -202,8 +202,14 @@ public partial class ConformerFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
             if (cosSim >= threshold && matchLen >= minMatchLength)
             {
                 double timePerFrame = query.Duration / Math.Max(1, queryFrames);
-                matches.Add(new FingerprintMatch { QueryStartTime = 0, ReferenceStartTime = rStart * timePerFrame,
-                    Duration = matchLen * timePerFrame, Confidence = cosSim, MatchCount = matchLen });
+                matches.Add(new FingerprintMatch
+                {
+                    QueryStartTime = 0,
+                    ReferenceStartTime = rStart * timePerFrame,
+                    Duration = matchLen * timePerFrame,
+                    Confidence = cosSim,
+                    MatchCount = matchLen
+                });
                 rStart += matchLen - 1;
             }
         }
@@ -240,7 +246,7 @@ public partial class ConformerFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
-        {
+    {
         // Falls back to the base's guaranteed front-end rather than to the RAW WAVEFORM. Returning
         // rawAudio here meant that whenever _melSpectrogram had not been built yet, a rank-1 signal
         // went straight into the encoder: no time axis, no frequency axis, and the failure surfaced

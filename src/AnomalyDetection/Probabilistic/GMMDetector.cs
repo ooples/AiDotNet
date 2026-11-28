@@ -42,7 +42,7 @@ namespace AiDotNet.AnomalyDetection.Probabilistic;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ResearchPaper("Pattern Recognition and Machine Learning", "https://www.springer.com/gp/book/9780387310732")]
+[ResearchPaper("Pattern Recognition and Machine Learning", "https://www.springer.com/gp/book/9780387310732")]
 public partial class GMMDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _nComponents;

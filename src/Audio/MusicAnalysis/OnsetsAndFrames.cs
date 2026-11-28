@@ -235,7 +235,7 @@ public partial class OnsetsAndFrames<T> : AudioNeuralNetworkBase<T>, IMusicTrans
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
-        {
+    {
         // Falls back to the base's guaranteed front-end rather than to the RAW WAVEFORM. Returning
         // rawAudio here meant that whenever _melSpectrogram had not been built yet, a rank-1 signal
         // went straight into the encoder: no time axis, no frequency axis, and the failure surfaced

@@ -44,7 +44,7 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ResearchPaper("LoOP: Local Outlier Probabilities", "https://doi.org/10.1145/1645953.1646195")]
+[ResearchPaper("LoOP: Local Outlier Probabilities", "https://doi.org/10.1145/1645953.1646195")]
 public partial class LoOPDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;

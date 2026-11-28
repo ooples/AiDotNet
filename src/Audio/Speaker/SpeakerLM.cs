@@ -43,7 +43,7 @@ namespace AiDotNet.Audio.Speaker;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    [ResearchPaper("Probabilistic Linear Discriminant Analysis for Inferences About Identity", "https://doi.org/10.1109/ICCV.2007.4409052")]
+[ResearchPaper("Probabilistic Linear Discriminant Analysis for Inferences About Identity", "https://doi.org/10.1109/ICCV.2007.4409052")]
 public partial class SpeakerLM<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, ISpeakerEmbeddingExtractor<T>
 {
     #region Fields
@@ -164,9 +164,12 @@ public partial class SpeakerLM<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<
         double totalDuration = enrollmentAudio.Sum(a => (double)a.Length / SampleRate);
         return new SpeakerProfile<T>
         {
-            SpeakerId = Guid.NewGuid().ToString(), Embedding = aggregated,
-            NumEnrollmentSamples = enrollmentAudio.Count, TotalEnrollmentDuration = totalDuration,
-            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+            SpeakerId = Guid.NewGuid().ToString(),
+            Embedding = aggregated,
+            NumEnrollmentSamples = enrollmentAudio.Count,
+            TotalEnrollmentDuration = totalDuration,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
         };
     }
 
@@ -181,10 +184,12 @@ public partial class SpeakerLM<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<
         var aggregated = AggregateEmbeddings([existingProfile.Embedding, newEmb]);
         return new SpeakerProfile<T>
         {
-            SpeakerId = existingProfile.SpeakerId, Embedding = aggregated,
+            SpeakerId = existingProfile.SpeakerId,
+            Embedding = aggregated,
             NumEnrollmentSamples = existingProfile.NumEnrollmentSamples + 1,
             TotalEnrollmentDuration = existingProfile.TotalEnrollmentDuration + ((double)newAudio.Length / SampleRate),
-            CreatedAt = existingProfile.CreatedAt, UpdatedAt = DateTime.UtcNow
+            CreatedAt = existingProfile.CreatedAt,
+            UpdatedAt = DateTime.UtcNow
         };
     }
 

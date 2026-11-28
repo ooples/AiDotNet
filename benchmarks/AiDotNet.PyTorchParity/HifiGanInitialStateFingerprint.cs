@@ -32,8 +32,14 @@ internal static class HifiGanInitialStateFingerprint
             var bytes = MemoryMarshal.AsBytes(values.AsSpan());
             all.AppendData(Encoding.UTF8.GetBytes(name + "|" + string.Join(",", value.Shape.ToArray()) + "|"));
             all.AppendData(bytes);
-            tensors.Add(new { name, role, shape = value.Shape.ToArray(), elements = values.Length,
-                sha256 = Convert.ToHexString(SHA256.HashData(bytes)) });
+            tensors.Add(new
+            {
+                name,
+                role,
+                shape = value.Shape.ToArray(),
+                elements = values.Length,
+                sha256 = Convert.ToHexString(SHA256.HashData(bytes))
+            });
             if (role == "learned") { learnedCount++; learnedElements += values.Length; }
             if (role == "spectral_buffer") spectralBuffers++;
         }
@@ -65,11 +71,20 @@ internal static class HifiGanInitialStateFingerprint
         string Hash(string file) { using var stream = File.OpenRead(file); return Convert.ToHexString(SHA256.HashData(stream)); }
         string json = JsonSerializer.Serialize(new
         {
-            schema = "hifigan-full-initial-state-fingerprint-v1", diagnostic_only = true, pid = Environment.ProcessId,
-            seed, engine = AiDotNetEngine.Current.Name, complete_stored_state_sha256 = stateHash, input_sha256 = inputHash,
-            parameter_elements = learnedElements, learned_tensor_count = learnedCount, spectral_buffer_count = spectralBuffers,
-            ai_sha256 = Hash(typeof(HiFiGAN<float>).Assembly.Location), tensors_sha256 = Hash(typeof(Tensor<float>).Assembly.Location),
-            harness_sha256 = Hash(Assembly.GetExecutingAssembly().Location), tensors
+            schema = "hifigan-full-initial-state-fingerprint-v1",
+            diagnostic_only = true,
+            pid = Environment.ProcessId,
+            seed,
+            engine = AiDotNetEngine.Current.Name,
+            complete_stored_state_sha256 = stateHash,
+            input_sha256 = inputHash,
+            parameter_elements = learnedElements,
+            learned_tensor_count = learnedCount,
+            spectral_buffer_count = spectralBuffers,
+            ai_sha256 = Hash(typeof(HiFiGAN<float>).Assembly.Location),
+            tensors_sha256 = Hash(typeof(Tensor<float>).Assembly.Location),
+            harness_sha256 = Hash(Assembly.GetExecutingAssembly().Location),
+            tensors
         }, new JsonSerializerOptions { WriteIndented = true }) + "\n";
         // Two diagnostics can both pass the existence check above. Publish by moving a private file into place
         // without overwrite, so the second one fails instead of replacing the first receipt.
