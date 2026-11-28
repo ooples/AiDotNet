@@ -73,7 +73,7 @@ public class GpuSparseEmbeddingFirstTests
                 using var scope = GpuResidencyScope.Begin();
                 // Sparse embedding gradients are live only while the backward runs: step inside the streaming callback,
                 // as the network's optimizer-in-backward does.
-                tape.ComputeGradientsStreaming(loss, new[] { table }, (source, grad) =>
+                tape.ComputeGradientsStreamingTyped(loss, new[] { table }, (source, _) =>
                 {
                     sawSparse |= SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(source);
                     // Unprocessed: only the sparse side channel, no dense entry (a dense entry means clipping or
