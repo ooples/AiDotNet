@@ -198,6 +198,20 @@ public partial class MaxPool3DLayer<T> : LayerBase<T>, IShapeContract
         ResolveShapes(new[] { c, d, h, w }, new[] { c, outD, outH, outW });
     }
 
+    /// <summary>
+    /// Rebinds a shape the architecture walk guessed to the first tensor the layer really receives.
+    /// </summary>
+    /// <remarks>
+    /// A pooling layer has no parameters and accepts any spatial extent, so a size written by the shape-only walk is
+    /// an estimate from the architecture's declared input, not a contract. Keeping it made the layer report the
+    /// architecture's size after pooling an image of another size.
+    /// </remarks>
+    protected override void ReconcileShapeOnlyResolution(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank == 4 || rank == 5) OnFirstForward(input);
+    }
+
     #endregion
 
     #region Forward Pass

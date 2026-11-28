@@ -198,4 +198,71 @@ public class LayerShapeResolutionTests
             inputDepth: 3,
             outputSize: 10));
     }
+    /// <summary>
+    /// A pooling layer the architecture walk sized for one image reports the size it really pools. PSENet's fixture
+    /// declares a 640-pixel architecture and trains on 128-pixel images: its stem pool kept [64, 159, 159] from the
+    /// walk while producing [64, 31, 31], and the first training forward stopped on that disagreement.
+    /// </summary>
+    [Fact]
+    public void MaxPool_ShapeOnlyGuess_ReconcilesWithTheFirstRealInput()
+    {
+        using var pool = new MaxPoolingLayer<double>(3, 2);
+        pool.ResolveShapesOnly([64, 320, 320]);
+        Assert.Equal(new[] { 64, 159, 159 }, pool.GetOutputShape());
+
+        var output = pool.Forward(new Tensor<double>([1, 64, 64, 64]));
+
+        Assert.Equal(new[] { 1, 64, 31, 31 }, output.Shape.ToArray());
+        Assert.Equal(new[] { 64, 64, 64 }, pool.GetInputShape());
+        Assert.Equal(new[] { 64, 31, 31 }, pool.GetOutputShape());
+    }
+
+    [Fact]
+    public void AveragePool_ShapeOnlyGuess_ReconcilesWithTheFirstRealInput()
+    {
+        using var pool = new AveragePoolingLayer<double>(2, 2);
+        pool.ResolveShapesOnly([8, 40, 40]);
+        Assert.Equal(new[] { 8, 20, 20 }, pool.GetOutputShape());
+
+        var output = pool.Forward(new Tensor<double>([1, 8, 12, 12]));
+
+        Assert.Equal(new[] { 1, 8, 6, 6 }, output.Shape.ToArray());
+        Assert.Equal(new[] { 8, 6, 6 }, pool.GetOutputShape());
+    }
+
+    [Fact]
+    public void MaxPool3D_ShapeOnlyGuess_ReconcilesWithTheFirstRealInput()
+    {
+        using var pool = new MaxPool3DLayer<double>(2, 2);
+        pool.ResolveShapesOnly([4, 16, 16, 16]);
+        Assert.Equal(new[] { 4, 8, 8, 8 }, pool.GetOutputShape());
+
+        var output = pool.Forward(new Tensor<double>([1, 4, 8, 8, 8]));
+
+        Assert.Equal(new[] { 1, 4, 4, 4, 4 }, output.Shape.ToArray());
+        Assert.Equal(new[] { 4, 4, 4, 4 }, pool.GetOutputShape());
+    }
+
+    /// <summary>
+    /// The model-level case: a training forward that is the first forward, on an image smaller than the architecture
+    /// declares. Predict-first already worked, because the layers then resolved from the real tensor.
+    /// </summary>
+    [Fact]
+    public void PSENet_TrainingForwardFirst_OnAnImageSmallerThanTheArchitecture_Runs()
+    {
+        using var model = new AiDotNet.Document.OCR.TextDetection.PSENet<float>(
+            new NeuralNetworkArchitecture<float>(
+                inputType: InputType.ThreeDimensional,
+                taskType: NeuralNetworkTaskType.BinaryClassification,
+                inputDepth: 3,
+                inputHeight: 640,
+                inputWidth: 640,
+                outputSize: 7));
+
+        using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<float>();
+        var output = model.ForwardForTraining(new Tensor<float>([3, 128, 128]));
+
+        Assert.Equal(new[] { 1, 7, 8, 8 }, output.Shape.ToArray());
+    }
+
 }
