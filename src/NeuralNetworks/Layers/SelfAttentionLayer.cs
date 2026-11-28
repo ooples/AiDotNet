@@ -244,6 +244,12 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     private int _fusedQkvSrcKGpuVersion;
     private int _fusedQkvSrcVGpuVersion;
     private long _fusedQkvGeneration;
+    // The fp16-resident masters the fused weight was last built from (null while a projection is still fp32). Part of
+    // the rebuild signature: once a projection is offloaded its fp32 field is a fixed [0,0] placeholder, so only the
+    // master's identity can show that the authoritative weight changed.
+    private Tensor<Half>? _fusedQkvSrcQHalf;
+    private Tensor<Half>? _fusedQkvSrcKHalf;
+    private Tensor<Half>? _fusedQkvSrcVHalf;
     /// <summary>
     /// Stores the attention score tensor from the most recent forward pass for use in backpropagation.
     /// </summary>
@@ -971,6 +977,23 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         return fused;
     }
 
+    /// <summary>
+    /// Returns the authoritative fp32 value of one projection weight: the weight itself while it is still fp32, or a
+    /// fresh upcast of its fp16-resident master once the resident path has offloaded it.
+    /// </summary>
+    private Tensor<T> AuthoritativeProjection(Tensor<T> full, Tensor<Half>? half)
+    {
+        if (half is null)
+            return full;
+
+        int rank = half.Rank;
+        int[] dims = new int[rank];
+        for (int i = 0; i < rank; i++) dims[i] = half.Shape[i];
+        var upcast = new Tensor<T>(dims);
+        NumOps.FromHalfSpan(half.AsSpan(), upcast.AsWritableSpan());
+        return upcast;
+    }
+
     private Tensor<T> GetOrBuildFusedQkvWeights()
     {
         int e = _embeddingDimension;
@@ -996,14 +1019,25 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
             || _fusedQkvSrcVVersion != _valueWeights.Version
             || _fusedQkvSrcQGpuVersion != _queryWeights.GpuCacheVersion
             || _fusedQkvSrcKGpuVersion != _keyWeights.GpuCacheVersion
-            || _fusedQkvSrcVGpuVersion != _valueWeights.GpuCacheVersion;
+            || _fusedQkvSrcVGpuVersion != _valueWeights.GpuCacheVersion
+            || !ReferenceEquals(_fusedQkvSrcQHalf, _queryWeightsHalf)
+            || !ReferenceEquals(_fusedQkvSrcKHalf, _keyWeightsHalf)
+            || !ReferenceEquals(_fusedQkvSrcVHalf, _valueWeightsHalf);
 
         if (!needRebuild)
         {
             return UpcastResidentWeight(ref _fusedQkvWeights, ref _fusedQkvWeightsHalf);
         }
 
-        var fused = BuildFusedQkvMatrix(Engine, _queryWeights, _keyWeights, _valueWeights, e);
+        // Build from the authoritative weights: a projection the separate (unfused) resident path already offloaded
+        // lives only in its fp16 master, and its fp32 field is a [0,0] placeholder. Each master is upcast into its own
+        // fresh tensor (not the shared upcast scratch, which the next upcast would overwrite) before concatenation.
+        var fused = BuildFusedQkvMatrix(
+            Engine,
+            AuthoritativeProjection(_queryWeights, _queryWeightsHalf),
+            AuthoritativeProjection(_keyWeights, _keyWeightsHalf),
+            AuthoritativeProjection(_valueWeights, _valueWeightsHalf),
+            e);
 
         // Capture source identities and versions BEFORE UpcastResidentWeight frees the fp32 weights (resident path).
         _fusedQkvSrcQ = _queryWeights;
@@ -1016,6 +1050,9 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         _fusedQkvSrcKGpuVersion = _keyWeights.GpuCacheVersion;
         _fusedQkvSrcVGpuVersion = _valueWeights.GpuCacheVersion;
         _fusedQkvGeneration = currentGen;
+        _fusedQkvSrcQHalf = _queryWeightsHalf;
+        _fusedQkvSrcKHalf = _keyWeightsHalf;
+        _fusedQkvSrcVHalf = _valueWeightsHalf;
 
         _fusedQkvWeights = fused;
         _fusedQkvWeightsHalf = null;

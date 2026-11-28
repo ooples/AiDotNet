@@ -244,6 +244,7 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>, IShapeContract
         {
             // Static-shape device-predicated expert mixing: zero TensorNonzero / host shape syncs so the entire
             // sparse Top-K MoE block traces into compiled plans and static-shape CUDA Graphs seamlessly.
+            T zero = Ops.Zero;
             for (int e = 0; e < _numExperts; e++)
             {
                 var g = _gate[e].Forward(flat);
@@ -253,7 +254,12 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>, IShapeContract
                 using (new NoGradScope<T>())
                 {
                     var weightCol = Engine.TensorNarrow(weightPerExpert, 1, e, 1); // [n, 1]
-                    output = Engine.TensorAdd(output, Engine.TensorMultiply(d, weightCol));
+                    // Select zero for tokens not routed to expert e before weighting: a zero routing weight does not
+                    // neutralize a non-finite expert output (0 * Inf = NaN), and the sparse host path never evaluates
+                    // an unselected expert at all. Selected outputs pass through unchanged.
+                    var selected = Engine.TensorBroadcastTo(Engine.TensorGreaterThan(weightCol, zero), d._shape);
+                    var routed = Engine.TensorWhere(selected, d, Engine.TensorZerosLike(d));
+                    output = Engine.TensorAdd(output, Engine.TensorMultiply(routed, weightCol));
                 }
             }
         }

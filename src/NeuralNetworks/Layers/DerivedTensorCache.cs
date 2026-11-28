@@ -83,6 +83,7 @@ internal sealed class DerivedTensorCache<T> : IDerivedParameterCache
     private long _generation;
     private long _variantKey;
     private int _sourceCount;
+    private bool _released;
     private IEngine? _engine;
     private Tensor<T>? _value;
     private bool _registeredPersistent;
@@ -153,9 +154,12 @@ internal sealed class DerivedTensorCache<T> : IDerivedParameterCache
         if (build is null) throw new ArgumentNullException(nameof(build));
         if (source0 is null) throw new ArgumentNullException(nameof(source0));
 
-        int count = source1 is null ? 1 : source2 is null ? 2 : source3 is null ? 3 : 4;
+        int count = DerivedTensorCacheSources.Count(source1, source2, source3);
         lock (_gate)
         {
+            if (_released)
+                throw new ObjectDisposedException(GetType().Name,
+                    "This derived-tensor cache slot was released with its owning layer and cannot build again.");
             long generation = TrainingGeneration;
             if (_value is { } cached
                 && _generation == generation
@@ -223,7 +227,16 @@ internal sealed class DerivedTensorCache<T> : IDerivedParameterCache
     public void Invalidate() => ClearCore(disposeOwned: _disposeReplacedValues);
 
     /// <summary>Releases persistent engine registrations and drops cached references during layer disposal.</summary>
-    public void Release() => ClearCore(disposeOwned: _disposeReplacedValues);
+    public void Release()
+    {
+        lock (_gate)
+        {
+            // Terminal: a forward that obtained this slot before its owner was disposed must not rebuild (and
+            // re-register a persistent engine tensor for) a value nothing will ever release again.
+            _released = true;
+        }
+        ClearCore(disposeOwned: _disposeReplacedValues);
+    }
 
     private void ClearCore(bool disposeOwned)
     {
@@ -287,6 +300,7 @@ internal sealed class DerivedTensorPairCache<T> : IDerivedParameterCache
     private long _generation;
     private long _variantKey;
     private int _sourceCount;
+    private bool _released;
     private IEngine? _engine;
     private Tensor<T>? _first;
     private Tensor<T>? _second;
@@ -356,9 +370,12 @@ internal sealed class DerivedTensorPairCache<T> : IDerivedParameterCache
         if (build is null) throw new ArgumentNullException(nameof(build));
         if (source0 is null) throw new ArgumentNullException(nameof(source0));
 
-        int count = source1 is null ? 1 : source2 is null ? 2 : source3 is null ? 3 : 4;
+        int count = DerivedTensorCacheSources.Count(source1, source2, source3);
         lock (_gate)
         {
+            if (_released)
+                throw new ObjectDisposedException(GetType().Name,
+                    "This derived-tensor cache slot was released with its owning layer and cannot build again.");
             long generation = DerivedTensorCacheGeneration.Current;
             if (_hasValue
                 && _first is { } cachedFirst
@@ -444,7 +461,16 @@ internal sealed class DerivedTensorPairCache<T> : IDerivedParameterCache
 
     public void Invalidate() => ClearCore(disposeOwned: _disposeReplacedValues);
 
-    public void Release() => ClearCore(disposeOwned: _disposeReplacedValues);
+    public void Release()
+    {
+        lock (_gate)
+        {
+            // Terminal: a forward that obtained this slot before its owner was disposed must not rebuild (and
+            // re-register a persistent engine tensor for) a value nothing will ever release again.
+            _released = true;
+        }
+        ClearCore(disposeOwned: _disposeReplacedValues);
+    }
 
     private void ClearCore(bool disposeOwned)
     {
@@ -501,6 +527,36 @@ internal sealed class DerivedTensorPairCache<T> : IDerivedParameterCache
 /// (eager, taped, traced, or a compiled replay that updates weights on the device without advancing their versions)
 /// and parameter-surface mutation.
 /// </summary>
+internal static class DerivedTensorCacheSources
+{
+    /// <summary>
+    /// Counts the optional dependencies after the required first source. They must be contiguous: a supplied source
+    /// after an omitted one would otherwise be neither passed to the builder nor tracked for invalidation.
+    /// </summary>
+    internal static int Count<T>(Tensor<T>? source1, Tensor<T>? source2, Tensor<T>? source3)
+    {
+        if (source1 is null)
+        {
+            if (source2 is not null || source3 is not null)
+                throw new ArgumentException(
+                    "Derived-tensor cache sources must be contiguous: source1 is null but a later source was supplied.",
+                    source2 is not null ? nameof(source2) : nameof(source3));
+            return 1;
+        }
+
+        if (source2 is null)
+        {
+            if (source3 is not null)
+                throw new ArgumentException(
+                    "Derived-tensor cache sources must be contiguous: source2 is null but source3 was supplied.",
+                    nameof(source3));
+            return 2;
+        }
+
+        return source3 is null ? 3 : 4;
+    }
+}
+
 internal static class DerivedTensorCacheGeneration
 {
     private static long s_generation;

@@ -402,6 +402,14 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     /// group for a transposed convolution).</summary>
     internal int FanIn => (_transposed ? _out : _in / _groups) * _kernel;
 
+    /// <summary>
+    /// Whether derived-kernel cache slots dispose the kernels they replace (<c>AIDOTNET_DERIVED_WEIGHT_LIFETIMES=1</c>).
+    /// A slot fixes this policy when it is created, so the variable is read once per process rather than on every
+    /// forward.
+    /// </summary>
+    private static readonly bool DisposeReplacedDerivedKernels =
+        Environment.GetEnvironmentVariable("AIDOTNET_DERIVED_WEIGHT_LIFETIMES") == "1";
+
     /// <summary>The effective kernel W.</summary>
     internal Tensor<T> Kernel()
     {
@@ -411,7 +419,6 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
             // Eval and non-differentiable inference reuse the same effective weights until their sources change.
             // Keeping their owned storage also lets convolution backends retain a packed/persistent kernel instead of
             // packing fresh normalization scratch every call.
-            bool disposeReplaced = Environment.GetEnvironmentVariable("AIDOTNET_DERIVED_WEIGHT_LIFETIMES") == "1";
             if (CanUseDerivedParameterCache)
             {
                 return GetOrBuildDerivedParameter(
@@ -419,21 +426,20 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
                     static (engine, sources) => TensorScope.Detach(WeightNormalizedKernel(engine, sources[0], sources[1])),
                     _direction,
                     _gain,
-                    disposeReplacedValues: disposeReplaced);
+                    disposeReplacedValues: DisposeReplacedDerivedKernels);
             }
             return WeightNormalizedKernel(Engine, _direction, _gain);
         }
 
         if (CanUseEvalDerivedParameterCache)
         {
-            bool disposeReplaced = Environment.GetEnvironmentVariable("AIDOTNET_DERIVED_WEIGHT_LIFETIMES") == "1";
             return GetOrBuildDerivedParameter(
                 "SpectralNormalizedKernel",
                 static (engine, sources) => TensorScope.Detach(SpectralNormalizedEvalKernel(engine, sources[0], sources[1], sources[2])),
                 _direction,
                 _u,
                 _v,
-                disposeReplacedValues: disposeReplaced);
+                disposeReplacedValues: DisposeReplacedDerivedKernels);
         }
 
         int rows = _direction.Shape[0], per = _direction.Length / rows;

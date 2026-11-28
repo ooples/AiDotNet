@@ -1038,9 +1038,11 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         T threshold = NumOps.FromDouble(0.01);
 
         Tensor<T> tokenCountsTensor;
-        if (_topK > 0 && _lastTopKIndices != null)
+        if (_topK > 0)
         {
-            // For Top-K, sparse weights are already zero for inactive experts
+            // For Top-K, sparse weights are already zero for inactive experts. Keyed on _topK alone, not on host index
+            // availability: device-predicated routing skips the host index readback, and must count the same
+            // assignments as host routing for identical routing weights.
             // Count non-zero entries per expert (column-wise)
             var isActive = Engine.TensorGreaterThan(_lastRoutingWeights, NumOps.Zero);
             // Convert boolean-like comparison result to counts

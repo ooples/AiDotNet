@@ -9611,15 +9611,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     public virtual IReadOnlyList<Tensor<T>> GetTrainableParameters() => _registeredTensors;
 
-    /// <summary>
-    /// Multiplies the optimizer's learning rate for this layer's own trainable parameters.
-    /// </summary>
-    /// <remarks>
-    /// The per-parameter-group learning rate of PyTorch's <c>param_groups</c>. Papers routinely train
-    /// some parameters at a different rate from the rest - S4 caps its HiPPO state-space parameters
-    /// (Gu et al. 2022, Sec. 4) - and one optimizer over the whole model cannot express that otherwise.
-    /// Applies to this layer's parameters and its sublayers', unless a sublayer declares its own. Default 1.
-    /// </remarks>
     private static long s_learningRatePolicyEpoch;
 
     /// <summary>
@@ -9630,6 +9621,15 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     internal static long LearningRatePolicyEpoch =>
         System.Threading.Interlocked.Read(ref s_learningRatePolicyEpoch);
 
+    /// <summary>
+    /// Multiplies the optimizer's learning rate for this layer's own trainable parameters.
+    /// </summary>
+    /// <remarks>
+    /// The per-parameter-group learning rate of PyTorch's <c>param_groups</c>. Papers routinely train
+    /// some parameters at a different rate from the rest - S4 caps its HiPPO state-space parameters
+    /// (Gu et al. 2022, Sec. 4) - and one optimizer over the whole model cannot express that otherwise.
+    /// Applies to this layer's parameters and its sublayers', unless a sublayer declares its own. Default 1.
+    /// </remarks>
     public double LearningRateScale
     {
         get => _learningRateScale;
@@ -10239,7 +10239,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// Gets whether the current execution context is a non-differentiable, non-tracing pass eligible to serve
     /// cached derived parameter tensors.
     /// </summary>
-    protected bool CanUseDerivedParameterCache
+    private protected bool CanUseDerivedParameterCache
         => DerivedTensorCache<T>.CanUse(Engine, requireEvalMode: false, isTrainingMode: IsTrainingMode);
 
     /// <summary>
@@ -10247,7 +10247,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// eligible to serve cached derived parameter tensors (for layers whose training pass mutates auxiliary state,
     /// such as power-iteration vectors in spectral normalization).
     /// </summary>
-    protected bool CanUseEvalDerivedParameterCache
+    private protected bool CanUseEvalDerivedParameterCache
         => DerivedTensorCache<T>.CanUse(Engine, requireEvalMode: true, isTrainingMode: IsTrainingMode);
 
     /// <summary>
@@ -10256,7 +10256,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// generation, and <paramref name="variantKey"/>, building it once under <c>TensorScope.Suspend()</c> +
     /// <c>NoGradScope</c> and optionally registering the result as a persistent device tensor.
     /// </summary>
-    protected Tensor<T> GetOrBuildDerivedParameter(
+    private protected Tensor<T> GetOrBuildDerivedParameter(
         string cacheKey,
         Func<IEngine, Tensor<T>[], Tensor<T>> build,
         Tensor<T> source0,
@@ -10288,7 +10288,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// keyed by <paramref name="cacheKey"/>, execution <see cref="IEngine"/>, source tensor storage identities,
     /// <c>Version</c>, <c>GpuCacheVersion</c>, training generation, and <paramref name="variantKey"/>.
     /// </summary>
-    protected (Tensor<T> First, Tensor<T>? Second) GetOrBuildDerivedParameterPair(
+    private protected (Tensor<T> First, Tensor<T>? Second) GetOrBuildDerivedParameterPair(
         string cacheKey,
         Func<IEngine, Tensor<T>[], (Tensor<T> First, Tensor<T>? Second)> build,
         Tensor<T> source0,
@@ -10319,7 +10319,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// Invalidates all derived-parameter caches owned by this layer so subsequent inference passes rebuild from
     /// updated weights. Fast no-op when no derived caches have been registered on this layer.
     /// </summary>
-    protected void InvalidateDerivedParameterCaches()
+    private protected void InvalidateDerivedParameterCaches()
     {
         if (System.Threading.Volatile.Read(ref _derivedParameterCaches) is null)
             return;

@@ -224,39 +224,31 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
 
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Tensor<T>, StaticReflectorCachePair> s_staticReflectorCaches = new();
 
-    [ThreadStatic]
-    private static Dictionary<int, (Tensor<T> Identity, IEngine? RegisteredEngine)>? t_dimensionIdentities;
-
-    private static Tensor<T> GetOrCreateDimensionIdentity(IEngine engine, int d)
+    /// <summary>
+    /// Builds a transient <c>[d, d]</c> identity for one cold derived-operator build. It is deliberately not cached:
+    /// the built operator is what the layer cache retains, and a per-thread identity cache would keep one dense
+    /// <c>d x d</c> matrix (plus an engine registration) alive per width ever seen, independent of any layer.
+    /// </summary>
+    private static Tensor<T> CreateDimensionIdentity(int d)
     {
-        var cache = t_dimensionIdentities ??= new Dictionary<int, (Tensor<T> Identity, IEngine? RegisteredEngine)>();
-        if (!cache.TryGetValue(d, out var entry))
+        var ops = MathHelper.GetNumericOperations<T>();
+        T one = ops.One;
+        var idData = new T[d * d];
+        for (int r = 0; r < d; r++)
         {
-            using var suspendScope = AiDotNet.Tensors.Engines.TensorScope.Suspend();
-            using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
-            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-
-            var ops = MathHelper.GetNumericOperations<T>();
-            T one = ops.One;
-            var idData = new T[d * d];
-            for (int r = 0; r < d; r++)
-            {
-                idData[r * d + r] = one;
-            }
-
-            var idTensor = AiDotNet.Tensors.Engines.TensorScope.Detach(new Tensor<T>([d, d], new Vector<T>(idData)));
-            entry = (idTensor, null);
+            idData[r * d + r] = one;
         }
 
-        if (!ReferenceEquals(entry.RegisteredEngine, engine))
-        {
-            engine.RegisterPersistentTensor(entry.Identity, PersistentTensorRole.Constant);
-            entry = (entry.Identity, engine);
-            cache[d] = entry;
-        }
-
-        return entry.Identity;
+        return new Tensor<T>([d, d], new Vector<T>(idData));
     }
+
+    /// <summary>
+    /// Upper bound on how many times more multiply-accumulates the dense cached operator may cost than applying the
+    /// low-rank factors (<c>d*d</c> versus <c>2*k*d</c> per row) before the factors are kept instead. Within it the
+    /// single dense GEMM wins on launch count; beyond it (for example <c>d = 512, k = 1</c>) the dense GEMM does
+    /// hundreds of times the work for every forward.
+    /// </summary>
+    private const int MaxDenseOperatorWorkInflation = 32;
 
     private static (Tensor<T> First, Tensor<T>? Second) BuildDerivedOperatorPair(
         IEngine engine,
@@ -312,10 +304,11 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
 
         bool isGpu = engine.Unwrap() is DirectGpuTensorEngine;
         int fullMatrixCap = isGpu ? 512 : 128;
-        bool materializeFullOperator = (2L * k >= d && d <= 4096) || d <= fullMatrixCap;
+        bool denseWorkAcceptable = (long)d <= 2L * MaxDenseOperatorWorkInflation * k;
+        bool materializeFullOperator = (2L * k >= d && d <= 4096) || (d <= fullMatrixCap && denseWorkAcceptable);
         if (materializeFullOperator)
         {
-            Tensor<T> identityD = GetOrCreateDimensionIdentity(engine, d);
+            Tensor<T> identityD = CreateDimensionIdentity(d);
             Tensor<T> update = engine.TensorMatMul(aFactor, bFactor);
             Tensor<T> qMat = AiDotNet.Tensors.Engines.TensorScope.Detach(engine.TensorSubtract(identityD, update));
             return (qMat, null);
