@@ -27,25 +27,91 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 
-def _preconfigure_environment(argv: List[str]) -> None:
-    device = "cpu"
-    for idx, tok in enumerate(argv):
-        if tok == "--device" and idx + 1 < len(argv):
-            device = argv[idx + 1].lower()
-        elif tok == "--cpu-dry-run":
-            device = "cpu"
+def parse_args(argv: List[str]) -> argparse.Namespace:
+    """Single CLI parser, used both for pre-import environment setup and at runtime.
 
-    if device == "cpu":
+    Accepts both ``--device cuda`` (the orchestrator's separate-token form) and ``--device=cuda``.
+    """
+    p = argparse.ArgumentParser(description="Paired Compiled PyTorch cross-family benchmark runner.")
+    p.add_argument("--device", default="cpu", type=str.lower, choices=["cpu", "cuda", "gpu"])
+    p.add_argument(
+        "--mode",
+        default="inductor-max-autotune",
+        choices=["inductor-max-autotune", "inductor-default", "eager-control"],
+    )
+    p.add_argument("--precision", default="fp32", type=str.lower, choices=["fp32", "tf32", "bf16", "fp16"])
+    p.add_argument("--wave", default="all", type=str.lower, choices=["all", "1", "2", "wave1", "wave2"])
+    p.add_argument("--filter", default=None)
+    p.add_argument("--smoke", action="store_true", dest="smoke")
+    p.add_argument(
+        "--cpu-dry-run",
+        action="store_true",
+        dest="cpu_dry_run",
+        help="Smoke run forced onto the CPU (implies --smoke and --device cpu).",
+    )
+    p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--warmup", type=int, default=5)
+    p.add_argument("--steps", type=int, default=20)
+    p.add_argument("--output", default=None)
+    args = p.parse_args(argv)
+
+    if args.cpu_dry_run:
+        args.smoke = True
+        args.device = "cpu"
+    if args.device == "gpu":
+        args.device = "cuda"
+    if args.steps < 1:
+        p.error(f"--steps must be >= 1 (got {args.steps}); a run with no measured steps has no latency data.")
+    if args.warmup < 0:
+        p.error(f"--warmup must be >= 0 (got {args.warmup}).")
+    if args.device == "cpu" and args.precision == "fp16":
+        p.error("--precision fp16 is not supported with --device cpu: this runner enables FP16 autocast only on CUDA, "
+                "so the workload would run in FP32 while being labelled FP16. Use fp32 or bf16 on CPU.")
+    return args
+
+
+def _require_approved_cuda_selection() -> str:
+    """Require an explicit single-GPU selection that is not physical GPU 0.
+
+    The process-local ``cuda:0`` ordinal says nothing about physical identity: with CUDA_VISIBLE_DEVICES unset every
+    GPU is visible and ``cuda:0`` may be physical GPU 0, and without PCI_BUS_ID ordering the default
+    FASTEST_FIRST enumeration can map index ``1`` to any card. So both must be set explicitly.
+    """
+    vis = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if vis is None or not vis.strip():
+        raise RuntimeError(
+            "Safety gate: --device cuda requires an explicit single-GPU selection. "
+            "Set CUDA_DEVICE_ORDER=PCI_BUS_ID and CUDA_VISIBLE_DEVICES=1 (GPU 0 is off-limits)."
+        )
+    tokens = [t.strip() for t in vis.split(",") if t.strip()]
+    if len(tokens) != 1:
+        raise RuntimeError(f"Safety gate: CUDA_VISIBLE_DEVICES must select exactly one GPU (got '{vis}').")
+    token = tokens[0]
+    if not token.isdigit():
+        raise RuntimeError(
+            f"Safety gate: CUDA_VISIBLE_DEVICES must be a numeric PCI-bus-ordered index (got '{token}')."
+        )
+    if int(token) == 0:
+        raise RuntimeError("Safety gate: GPU 0 is strictly off-limits. Set CUDA_VISIBLE_DEVICES=1.")
+    if os.environ.get("CUDA_DEVICE_ORDER", "").strip().upper() != "PCI_BUS_ID":
+        raise RuntimeError(
+            "Safety gate: set CUDA_DEVICE_ORDER=PCI_BUS_ID so CUDA_VISIBLE_DEVICES indexes physical GPUs by bus order."
+        )
+    return token
+
+
+def _preconfigure_environment(args: argparse.Namespace) -> None:
+    if args.device == "cpu":
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
-    elif device in ("cuda", "gpu"):
-        vis = os.environ.get("CUDA_VISIBLE_DEVICES", "")
-        if vis.strip() == "0":
-            raise RuntimeError("Safety gate: GPU 0 is strictly off-limits. Set CUDA_VISIBLE_DEVICES=1.")
+    elif args.device == "cuda":
+        _require_approved_cuda_selection()
         os.environ.setdefault("TORCHINDUCTOR_FX_GRAPH_CACHE", "1")
         os.environ.setdefault("TORCHINDUCTOR_AUTOGRAD_CACHE", "1")
 
 
-_preconfigure_environment(sys.argv[1:])
+_CLI_ARGS: Optional[argparse.Namespace] = parse_args(sys.argv[1:]) if __name__ == "__main__" else None
+if _CLI_ARGS is not None:
+    _preconfigure_environment(_CLI_ARGS)
 
 import torch  # noqa: E402
 import torch.nn as nn  # noqa: E402
@@ -512,7 +578,9 @@ def build_autocast_ctx(device: torch.device, precision: str):
     p = precision.lower()
     if p == "bf16":
         return torch.autocast(device_type=device.type, dtype=torch.bfloat16)
-    if p == "fp16" and device.type == "cuda":
+    if p == "fp16":
+        if device.type != "cuda":
+            raise ValueError("FP16 autocast is only enabled on CUDA; refusing to label an FP32 CPU run as FP16.")
         return torch.autocast(device_type="cuda", dtype=torch.float16)
     return nullcontext()
 
@@ -546,6 +614,7 @@ def execute_standard_workload(
     is_classification: bool,
     local_credit: bool = False,
     extra_notes: str = "",
+    measure_b1: bool = True,
 ) -> Dict[str, Any]:
     overlap = verify_zero_row_overlap(train_x, eval_x)
     model = model.to(device)
@@ -567,7 +636,13 @@ def execute_standard_workload(
     with torch.no_grad():
         initial_eval_loss = float(compute_loss(model, eval_x, eval_y).item())
 
+    if not math.isfinite(initial_eval_loss):
+        raise RuntimeError(
+            f"Adversarial Gate 10 violation in '{workload_id}': non-finite initial eval loss ({initial_eval_loss})."
+        )
+
     exec_model, compile_tag = maybe_compile_module(model, args.mode, device)
+    infer_mode = compile_tag
 
     def run_infer(inp: torch.Tensor) -> None:
         with torch.no_grad():
@@ -581,43 +656,99 @@ def execute_standard_workload(
         if device.type == "cuda":
             raise
         exec_model = model
-        compile_tag = f"cpu-inductor-unavailable({type(exc).__name__})"
+        infer_mode = f"cpu-inductor-unavailable({type(exc).__name__})"
 
-    b1_summary = measure_raw_action(device, args.warmup, args.steps, lambda: run_infer(b1_x))
+    b1_summary = (
+        measure_raw_action(device, args.warmup, args.steps, lambda: run_infer(b1_x))
+        if measure_b1
+        else summarize_latencies([])
+    )
     batch_infer_summary = measure_raw_action(device, args.warmup, args.steps, lambda: run_infer(eval_x))
 
     model.train()
 
-    def run_train_step() -> None:
+    # The training entrypoint gets its own compilation: the local-credit objective does not go through
+    # model.forward, so compiling the module would leave its training step eager while tagged compiled.
+    if local_credit:
+        def _local_credit_loss(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+            return model.forward_local_credit_loss(x, y)  # type: ignore[operator]
+
+        train_loss_fn, train_mode = maybe_compile_module(_local_credit_loss, args.mode, device)
+    else:
+        # The standard objective goes through model.forward, so it reuses the inference compilation.
+        train_module, train_mode = exec_model, infer_mode
+
+        def _standard_loss(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+            out = train_module(x)
+            return (
+                F.cross_entropy(out.reshape(-1, out.size(-1)), y.reshape(-1))
+                if is_classification
+                else F.mse_loss(out, y)
+            )
+
+        train_loss_fn = _standard_loss
+
+    def run_train_step(apply_update: bool = True) -> None:
         optimizer.zero_grad(set_to_none=True)
         with build_autocast_ctx(device, args.precision):
-            if local_credit:
-                loss = model.forward_local_credit_loss(train_x, train_y)  # type: ignore[operator]
-            else:
-                out = exec_model(train_x)
-                loss = (
-                    F.cross_entropy(out.reshape(-1, out.size(-1)), train_y.reshape(-1))
-                    if is_classification
-                    else F.mse_loss(out, train_y)
-                )
+            loss = train_loss_fn(train_x, train_y)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(params_list, max_norm=1.0, foreach=True)
-        optimizer.step()
+        if apply_update:
+            optimizer.step()
+        else:
+            optimizer.zero_grad(set_to_none=True)
+
+    # Probe the first training call before timing so a CPU compile failure falls back to eager. The probe is
+    # counted inside the warmup budget so both runners commit exactly warmup + steps optimizer updates. With
+    # --warmup 0 the probe runs forward + backward + clip but skips optimizer.step(), keeping the same failure
+    # handling without committing an extra update.
+    probe_commits_update = args.warmup > 0
+
+    def _train_eager_fallback(exc: Exception) -> None:
+        nonlocal train_loss_fn, train_mode
+        if local_credit:
+            def _eager_lc(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+                return model.forward_local_credit_loss(x, y)  # type: ignore[operator]
+
+            train_loss_fn = _eager_lc
+        else:
+            def _eager_std(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+                out = model(x)
+                return (
+                    F.cross_entropy(out.reshape(-1, out.size(-1)), y.reshape(-1))
+                    if is_classification
+                    else F.mse_loss(out, y)
+                )
+
+            train_loss_fn = _eager_std
+        train_mode = f"cpu-train-fallback({type(exc).__name__})"
 
     try:
-        run_train_step()
+        run_train_step(apply_update=probe_commits_update)
         sync_device(device)
     except Exception as exc:
         if device.type == "cuda":
             raise
-        exec_model = model
-        compile_tag = f"cpu-train-fallback({type(exc).__name__})"
+        # A failed probe never reached optimizer.step(), so no update was committed; clear partial grads and
+        # rerun the probe eagerly so the update budget stays exact.
+        optimizer.zero_grad(set_to_none=True)
+        _train_eager_fallback(exc)
+        run_train_step(apply_update=probe_commits_update)
+        sync_device(device)
 
-    train_summary = measure_raw_action(device, args.warmup, args.steps, run_train_step)
+    remaining_warmup = args.warmup - 1 if probe_commits_update else 0
+    train_summary = measure_raw_action(device, remaining_warmup, args.steps, run_train_step)
 
     model.eval()
     with torch.no_grad():
         final_eval_loss = float(compute_loss(model, eval_x, eval_y).item())
+    if not math.isfinite(final_eval_loss):
+        raise RuntimeError(
+            f"Adversarial Gate 10 violation in '{workload_id}': non-finite final eval loss ({final_eval_loss})."
+        )
+
+    compile_tag = infer_mode if infer_mode == train_mode else f"infer={infer_mode};train={train_mode}"
 
     batch_size = int(train_x.shape[0])
     notes_parts = [
@@ -634,12 +765,16 @@ def execute_standard_workload(
         "wave": wave,
         "framework": "PyTorch",
         "execution_mode": compile_tag,
+        "requested_mode": args.mode,
+        "inference_execution_mode": infer_mode,
+        "train_execution_mode": train_mode,
         "precision_tier": args.precision.upper(),
         "device": args.device,
         "seed": args.seed,
         "batch_size": batch_size,
         "train_eval_window_overlap": overlap,
         "model_spec": spec,
+        "b1_available": measure_b1,
         "b1_inference_latency": b1_summary,
         "batched_inference_latency": batch_infer_summary,
         "batched_train_step_latency": train_summary,
@@ -674,8 +809,20 @@ def run_optimizer_sweep(args: argparse.Namespace, device: torch.device) -> Dict[
     overlap = verify_zero_row_overlap(train_x, eval_x)
 
     def make_mlp() -> TabularMlp:
+        # Same seed -> same initial weights for every optimizer case.
+        torch.manual_seed(args.seed)
         return TabularMlp(in_dim, hid_dim, n_hidden=2, classes=classes).to(device)
 
+    def eval_loss_of(m: nn.Module) -> float:
+        m.eval()
+        with torch.no_grad():
+            value = float(F.cross_entropy(m(eval_x), eval_y).item())
+        m.train()
+        return value
+
+    # Exactly the optimizer names the AiDotNet paired sweep ("wave1_optimizer_base_sweep") times, with the same
+    # timed work in both arms: forward + loss + backward + optimizer step, no gradient clipping. Framework-specific
+    # optimizers (ASGD, Adafactor here; Adam8Bit, Lion, LAMB, ... in AiDotNet) are not in the paired median.
     use_cuda_fused = device.type == "cuda"
     opt_builders: List[Tuple[str, Callable[[Any], torch.optim.Optimizer]]] = [
         ("AdamW", lambda ps: torch.optim.AdamW(ps, lr=1e-3, fused=use_cuda_fused)),
@@ -683,20 +830,20 @@ def run_optimizer_sweep(args: argparse.Namespace, device: torch.device) -> Dict[
         ("SGD", lambda ps: torch.optim.SGD(ps, lr=1e-2, foreach=True)),
         ("Momentum", lambda ps: torch.optim.SGD(ps, lr=1e-2, momentum=0.9, foreach=True)),
         ("NAG", lambda ps: torch.optim.SGD(ps, lr=1e-2, momentum=0.9, nesterov=True, foreach=True)),
-        ("RMSprop", lambda ps: torch.optim.RMSprop(ps, lr=1e-3, foreach=True)),
+        ("RMSProp", lambda ps: torch.optim.RMSprop(ps, lr=1e-3, foreach=True)),
         ("Adagrad", lambda ps: torch.optim.Adagrad(ps, lr=1e-2, foreach=True)),
-        ("Adadelta", lambda ps: torch.optim.Adadelta(ps, lr=1.0, foreach=True)),
-        ("Adamax", lambda ps: torch.optim.Adamax(ps, lr=2e-3, foreach=True)),
-        ("AMSGrad", lambda ps: torch.optim.AdamW(ps, lr=1e-3, amsgrad=True, fused=use_cuda_fused)),
-        ("NAdam", lambda ps: torch.optim.NAdam(ps, lr=1e-3, foreach=True)),
+        ("AdaDelta", lambda ps: torch.optim.Adadelta(ps, lr=1.0, foreach=True)),
+        ("AdaMax", lambda ps: torch.optim.Adamax(ps, lr=2e-3, foreach=True)),
+        ("AMSGrad", lambda ps: torch.optim.Adam(ps, lr=1e-3, amsgrad=True, fused=use_cuda_fused)),
+        ("Nadam", lambda ps: torch.optim.NAdam(ps, lr=1e-3, foreach=True)),
         ("RAdam", lambda ps: torch.optim.RAdam(ps, lr=1e-3, foreach=True)),
-        ("ASGD", lambda ps: torch.optim.ASGD(ps, lr=1e-2, foreach=True)),
         ("Rprop", lambda ps: torch.optim.Rprop(ps, lr=1e-2, foreach=True)),
     ]
-    if hasattr(torch.optim, "Adafactor"):
-        opt_builders.append(("Adafactor", lambda ps: torch.optim.Adafactor(ps, lr=1e-3)))  # type: ignore[attr-defined]
 
     per_opt_medians: List[float] = []
+    per_opt_initial_loss: List[float] = []
+    per_opt_final_loss: List[float] = []
+    per_opt_notes: List[str] = []
     param_count = 0
     iters = 2 if args.smoke else 5
 
@@ -705,41 +852,60 @@ def run_optimizer_sweep(args: argparse.Namespace, device: torch.device) -> Dict[
         param_count = sum(p.numel() for p in net.parameters())
         params = [p for p in net.parameters() if p.requires_grad]
         opt = build_opt(params)
+        initial_loss = eval_loss_of(net)
 
         def step_fn() -> None:
             opt.zero_grad(set_to_none=True)
             out = net(train_x)
             loss = F.cross_entropy(out, train_y)
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(params, max_norm=1.0, foreach=True)
             opt.step()
 
         summary = measure_raw_action(device, warmup=1, steps=iters, fn=step_fn)
         for p in params:
             if not torch.isfinite(p).all():
                 raise RuntimeError(f"PyTorch optimizer '{opt_name}' produced non-finite parameters.")
+        final_loss = eval_loss_of(net)
+        if not (math.isfinite(initial_loss) and math.isfinite(final_loss)):
+            raise RuntimeError(
+                f"Adversarial Gate 10 violation in 'wave1_optimizer_base_sweep' optimizer '{opt_name}': "
+                f"non-finite eval loss ({initial_loss} -> {final_loss})."
+            )
         per_opt_medians.append(summary["median_ms"])
+        per_opt_initial_loss.append(initial_loss)
+        per_opt_final_loss.append(final_loss)
+        per_opt_notes.append(
+            f"{opt_name}:step_median_ms={summary['median_ms']:.4f},loss={initial_loss:.4f}->{final_loss:.4f}"
+        )
 
+    # Inference latency is optimizer-independent: time a freshly built (seeded) copy of the same MLP, with
+    # autograd disabled exactly as the standard inference path does.
     probe = make_mlp()
     probe.eval()
-    b1_summary = measure_raw_action(device, 1, iters, lambda: probe(b1_x))
-    batch_infer_summary = measure_raw_action(device, 1, iters, lambda: probe(eval_x))
+
+    def probe_infer(inp: torch.Tensor) -> None:
+        with torch.no_grad():
+            _ = probe(inp)
+
+    b1_summary = measure_raw_action(device, 1, iters, lambda: probe_infer(b1_x))
+    batch_infer_summary = measure_raw_action(device, 1, iters, lambda: probe_infer(eval_x))
     sweep_summary = summarize_latencies(per_opt_medians)
-    with torch.no_grad():
-        eval_loss = float(F.cross_entropy(probe(eval_x), eval_y).item())
 
     return {
         "workload_id": "wave1_optimizer_base_sweep",
         "wave": 1,
         "framework": "PyTorch",
         "execution_mode": f"foreach/fused({len(opt_builders)}opts)",
+        "requested_mode": args.mode,
+        "inference_execution_mode": "eager",
+        "train_execution_mode": "eager",
         "precision_tier": args.precision.upper(),
         "device": args.device,
         "seed": args.seed,
         "batch_size": batch,
         "train_eval_window_overlap": overlap,
         "model_spec": {
-            "architecture": f"PyTorchForeachFusedOptimizerSweep-{len(opt_builders)}Opts",
+            "architecture": f"PyTorchForeachFusedOptimizer-PairedSweep-{len(opt_builders)}Opts",
             "init": "SeededRandom",
             "layers": 3,
             "hidden_dim": hid_dim,
@@ -756,10 +922,14 @@ def run_optimizer_sweep(args: argparse.Namespace, device: torch.device) -> Dict[
         "batched_train_items_per_sec": (
             batch * 1000.0 / sweep_summary["median_ms"] if sweep_summary["median_ms"] > 0 else 0.0
         ),
-        "initial_eval_loss": eval_loss,
-        "final_eval_loss": eval_loss,
+        # Median across optimizer cases of each case's own pre-/post-run eval loss.
+        "initial_eval_loss": summarize_latencies(per_opt_initial_loss)["median_ms"],
+        "final_eval_loss": summarize_latencies(per_opt_final_loss)["median_ms"],
         "managed_alloc_bytes_per_step": 0.0,
-        "notes": f"Swept {len(opt_builders)} PyTorch fused/foreach optimizers.",
+        "notes": (
+            f"Paired sweep of {len(opt_builders)} PyTorch fused/foreach optimizers; "
+            "timed op = forward+loss+backward+step (no clip). " + "; ".join(per_opt_notes)
+        ),
     }
 
 
@@ -1057,43 +1227,35 @@ def build_all_workloads(args: argparse.Namespace, device: torch.device) -> List[
             make_disjoint_features((total_nodes, node_features), seed, 113, device),
             make_class_targets((total_nodes,), classes, seed, 114, device),
             is_classification=True,
+            extra_notes=(
+                f"FullGraphNodes={total_nodes}; B=1 unavailable "
+                f"(transductive full-graph GCN: every inference covers all {total_nodes} nodes)"
+            ),
+            measure_b1=False,
         )
 
     workloads.append((2, "wave2_gnn_gcn_gat", _run_gnn))
     return workloads
 
 
-def parse_args(argv: List[str]) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Paired Compiled PyTorch cross-family benchmark runner.")
-    p.add_argument("--device", default="cpu", choices=["cpu", "cuda", "gpu"])
-    p.add_argument(
-        "--mode",
-        default="inductor-max-autotune",
-        choices=["inductor-max-autotune", "inductor-default", "eager-control"],
-    )
-    p.add_argument("--precision", default="fp32", choices=["fp32", "tf32", "bf16", "fp16"])
-    p.add_argument("--wave", default="all", choices=["all", "1", "2", "wave1", "wave2"])
-    p.add_argument("--filter", default=None)
-    p.add_argument("--smoke", "--cpu-dry-run", action="store_true", dest="smoke")
-    p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--warmup", type=int, default=5)
-    p.add_argument("--steps", type=int, default=20)
-    p.add_argument("--output", default=None)
-    return p.parse_args(argv)
-
-
-def main(argv: List[str]) -> int:
-    args = parse_args(argv)
+def main(args: argparse.Namespace) -> int:
     if args.smoke:
         args.warmup = min(args.warmup, 2)
         args.steps = min(args.steps, 3)
 
     torch.manual_seed(args.seed)
-    if args.device in ("cuda", "gpu"):
-        if os.environ.get("CUDA_VISIBLE_DEVICES", "").strip() == "0":
-            raise RuntimeError("Safety gate: GPU 0 is strictly off-limits. Set CUDA_VISIBLE_DEVICES=1.")
+    if args.device == "cuda":
+        _require_approved_cuda_selection()
         if not torch.cuda.is_available():
             raise RuntimeError("Requested --device cuda, but torch.cuda.is_available() is False.")
+        if torch.cuda.device_count() != 1:
+            raise RuntimeError(
+                f"Safety gate: expected exactly one visible CUDA device, found {torch.cuda.device_count()}."
+            )
+        bound_name = torch.cuda.get_device_name(0)
+        if "3080" in bound_name:
+            raise RuntimeError(f"Safety gate: bound to '{bound_name}' (GPU 0 RTX 3080 is off-limits).")
+        print(f"[PyTorch.CrossFamilyCompiledSuite] Bound CUDA device: {bound_name}")
         device = torch.device("cuda:0")
     else:
         device = torch.device("cpu")
@@ -1119,8 +1281,12 @@ def main(argv: List[str]) -> int:
         records.append(rec)
         print(
             f"  {rec['workload_id']:<42} | params={rec['model_spec']['parameter_count']:>9} | "
-            f"B=1 med={rec['b1_inference_latency']['median_ms']:>8.3f} ms | "
-            f"BatchInfer med={rec['batched_inference_latency']['median_ms']:>8.3f} ms "
+            + (
+                f"B=1 med={rec['b1_inference_latency']['median_ms']:>8.3f} ms | "
+                if rec.get("b1_available", True)
+                else f"B=1 med={'n/a':>8}    | "
+            )
+            + f"BatchInfer med={rec['batched_inference_latency']['median_ms']:>8.3f} ms "
             f"({rec['batched_infer_items_per_sec']:>8.1f} it/s) | "
             f"TrainStep med={rec['batched_train_step_latency']['median_ms']:>8.3f} ms | "
             f"loss {rec['initial_eval_loss']:.4f}->{rec['final_eval_loss']:.4f}"
@@ -1129,11 +1295,12 @@ def main(argv: List[str]) -> int:
     if args.output:
         out_path = Path(args.output).resolve()
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(json.dumps(records, indent=2), encoding="utf-8")
+        out_path.write_text(json.dumps(records, indent=2, allow_nan=False), encoding="utf-8")
         print(f"[PyTorch.CrossFamilyCompiledSuite] Wrote {len(records)} records -> {out_path}")
 
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    assert _CLI_ARGS is not None
+    raise SystemExit(main(_CLI_ARGS))

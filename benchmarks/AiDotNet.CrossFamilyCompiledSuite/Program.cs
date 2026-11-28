@@ -121,6 +121,9 @@ public sealed class WorkloadBenchmarkRecord
     [JsonPropertyName("model_spec")]
     public ModelSpecTag ModelSpec { get; set; } = new();
 
+    [JsonPropertyName("b1_available")]
+    public bool B1Available { get; set; } = true;
+
     [JsonPropertyName("b1_inference_latency")]
     public TimingSummary B1InferenceLatency { get; set; } = new();
 
@@ -160,6 +163,13 @@ public static class Program
             cli.MeasureSteps = Math.Min(cli.MeasureSteps, 3);
         }
 
+        string wave = cli.Wave.ToLowerInvariant();
+        if (wave is not ("all" or "1" or "2" or "wave1" or "wave2"))
+        {
+            throw new ArgumentException($"Unsupported --wave '{cli.Wave}'. Expected all, 1, 2, wave1, or wave2.");
+        }
+        cli.Wave = wave;
+
         ConfigureEngineDevice(cli.Device);
         var compilationOptions = BuildCompilationOptions(cli);
         compilationOptions.Validate();
@@ -187,7 +197,10 @@ public static class Program
                 RunHouseholderProjectionAsync(cli, compilationOptions));
 
             await RunIfMatchedAsync(records, cli, compilationOptions, "wave1_optimizer_base_sweep", () =>
-                RunOptimizerSweepAsync(cli, compilationOptions));
+                RunOptimizerSweepAsync(cli, compilationOptions, paired: true));
+
+            await RunIfMatchedAsync(records, cli, compilationOptions, "wave1_optimizer_unpaired_dotnet_only_sweep", () =>
+                RunOptimizerSweepAsync(cli, compilationOptions, paired: false));
 
             await RunIfMatchedAsync(records, cli, compilationOptions, "wave1_vision_resnet", () =>
                 RunVisionResNetAsync(cli, compilationOptions));
@@ -475,6 +488,36 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// Builds the network with the architecture seeded from the CLI seed (equal seeds give equal initial
+    /// weights) and with the benchmark's AdamW (lr 1e-3, weight decay 0.01, norm clip 1.0) installed as the
+    /// network's own training optimizer, so <c>network.Train</c> in the timed step runs exactly this AdamW
+    /// update - the same optimizer and clip the PyTorch arm times.
+    /// </summary>
+    private static (NeuralNetwork<float> Network, AdamWOptimizer<float, Tensor<float>, Tensor<float>> Optimizer) CreateSeededNetworkWithAdamW(
+        NeuralNetworkArchitecture<float> arch,
+        LossFunctionBase<float> lossFn,
+        int batchSize,
+        int seed)
+    {
+        arch.RandomSeed = seed;
+        var opt = new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(
+            null,
+            new AdamWOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 1e-3,
+                WeightDecay = 0.01,
+                BatchSize = batchSize,
+                MaxIterations = 1,
+                EnableGradientClipping = true,
+                GradientClippingMethod = GradientClippingMethod.ByNorm,
+                MaxGradientNorm = 1.0,
+            });
+        var net = new NeuralNetwork<float>(arch, optimizer: opt, lossFunction: lossFn);
+        opt.SetModel(net);
+        return (net, opt);
+    }
+
     private static double EvaluateMeanLoss(NeuralNetwork<float> net, LossFunctionBase<float> lossFn, Tensor<float> evalX, Tensor<float> evalY)
     {
         using var noGrad = new NoGradScope<float>();
@@ -492,6 +535,7 @@ public static class Program
         int wave,
         ModelSpecTag spec,
         NeuralNetwork<float> network,
+        AdamWOptimizer<float, Tensor<float>, Tensor<float>> opt,
         LossFunctionBase<float> lossFn,
         Tensor<float> b1Input,
         Tensor<float> batchTrainX,
@@ -499,7 +543,8 @@ public static class Program
         Tensor<float> batchEvalX,
         Tensor<float> batchEvalY,
         ICreditRule<float>? creditRule = null,
-        string notes = "")
+        string notes = "",
+        bool measureB1 = true)
     {
         int overlap = VerifyZeroRowOverlap(batchTrainX, batchEvalX);
         int batchSize = batchTrainX.Shape[0];
@@ -508,18 +553,6 @@ public static class Program
         _ = network.Predict(b1Input);
         spec.ParameterCount = network.ParameterCount;
 
-        var opt = new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(
-            network,
-            new AdamWOptimizerOptions<float, Tensor<float>, Tensor<float>>
-            {
-                InitialLearningRate = 1e-3,
-                BatchSize = batchSize,
-                MaxIterations = 1,
-                EnableGradientClipping = true,
-                GradientClippingMethod = GradientClippingMethod.ByNorm,
-                MaxGradientNorm = 1.0,
-            });
-        opt.SetModel(network);
         if (creditRule is not null)
         {
             network.SetCreditRule(creditRule, cli.Seed);
@@ -545,11 +578,14 @@ public static class Program
         var inferFacade = builder.BuildForInference();
 
         // 1. Measure B = 1 inference latency via AiModelResult.Predict (zero target tensors passed).
-        var b1Summary = MeasureRawAction(
-            cli.WarmupSteps,
-            cli.MeasureSteps,
-            () => { _ = inferFacade.Predict(b1Input); },
-            out _);
+        //    Skipped (reported unavailable) when the workload has no distinct single-item input.
+        var b1Summary = measureB1
+            ? MeasureRawAction(
+                cli.WarmupSteps,
+                cli.MeasureSteps,
+                () => { _ = inferFacade.Predict(b1Input); },
+                out _)
+            : new TimingSummary();
 
         // 2. Measure batched inference throughput via AiModelResult.Predict.
         var batchInferSummary = MeasureRawAction(
@@ -559,6 +595,8 @@ public static class Program
             out _);
 
         // 3. Measure batched training step (Forward + Loss + Backward/LocalCredit + GradClip + AdamW.Step).
+        //    network.Train resolves the network's own training optimizer, which CreateSeededNetworkWithAdamW
+        //    installed as `opt`.
         network.SetTrainingMode(true);
         var trainStepSummary = MeasureRawAction(
             cli.WarmupSteps,
@@ -587,6 +625,7 @@ public static class Program
             BatchSize = batchSize,
             TrainEvalWindowOverlap = overlap,
             ModelSpec = spec,
+            B1Available = measureB1,
             B1InferenceLatency = b1Summary,
             BatchedInferenceLatency = batchInferSummary,
             BatchedTrainStepLatency = trainStepSummary,
@@ -633,7 +672,7 @@ public static class Program
             outputSize: vocab,
             layers: layers);
         var lossFn = new CategoricalCrossEntropyLoss<float>();
-        var net = new NeuralNetwork<float>(arch, lossFunction: lossFn);
+        var (net, opt) = CreateSeededNetworkWithAdamW(arch, lossFn, batch, cli.Seed);
 
         var b1 = CreateDisjointFeatures(new[] { 1, seq, dModel }, cli.Seed, 10);
         var trainX = CreateDisjointFeatures(new[] { batch, seq, dModel }, cli.Seed, 11);
@@ -659,6 +698,7 @@ public static class Program
                 ContextOrSpatial = seq,
             },
             net,
+            opt,
             lossFn,
             b1,
             trainX,
@@ -697,7 +737,7 @@ public static class Program
             outputSize: vocab,
             layers: layers);
         var lossFn = new CategoricalCrossEntropyLoss<float>();
-        var net = new NeuralNetwork<float>(arch, lossFunction: lossFn);
+        var (net, opt) = CreateSeededNetworkWithAdamW(arch, lossFn, batch, cli.Seed);
 
         var b1 = CreateDisjointFeatures(new[] { 1, seq, dModel }, cli.Seed, 20);
         var trainX = CreateDisjointFeatures(new[] { batch, seq, dModel }, cli.Seed, 21);
@@ -719,6 +759,7 @@ public static class Program
                 ContextOrSpatial = seq,
             },
             net,
+            opt,
             lossFn,
             b1,
             trainX,
@@ -753,7 +794,7 @@ public static class Program
             outputSize: dModel,
             layers: layers);
         var lossFn = new MeanSquaredErrorLoss<float>();
-        var net = new NeuralNetwork<float>(arch, lossFunction: lossFn);
+        var (net, opt) = CreateSeededNetworkWithAdamW(arch, lossFn, batch, cli.Seed);
 
         var b1 = CreateDisjointFeatures(new[] { 1, seq, dModel }, cli.Seed, 30);
         var trainX = CreateDisjointFeatures(new[] { batch, seq, dModel }, cli.Seed, 31);
@@ -775,6 +816,7 @@ public static class Program
                 ContextOrSpatial = seq,
             },
             net,
+            opt,
             lossFn,
             b1,
             trainX,
@@ -784,11 +826,19 @@ public static class Program
             notes: $"DerivedWeightCaching={compilationOptions.EnableDerivedWeightCaching}");
     }
 
+    /// <summary>
+    /// Optimizer step-latency sweep. <paramref name="paired"/> = true times only the optimizers the PyTorch
+    /// runner also times (same names, same timed work: forward + loss + backward + optimizer step, no gradient
+    /// clipping), so the paired median compares like with like. <paramref name="paired"/> = false times the
+    /// AiDotNet-only optimizers under a separate, unpaired workload id that has no PyTorch counterpart.
+    /// </summary>
     private static Task<WorkloadBenchmarkRecord> RunOptimizerSweepAsync(
         BenchmarkCliOptions cli,
-        CompilationOptions compilationOptions)
+        CompilationOptions compilationOptions,
+        bool paired)
     {
         _ = compilationOptions;
+        string workloadId = paired ? "wave1_optimizer_base_sweep" : "wave1_optimizer_unpaired_dotnet_only_sweep";
         int batch = cli.Smoke ? 8 : 32;
         int inDim = cli.Smoke ? 32 : 256;
         int hidDim = cli.Smoke ? 64 : 512;
@@ -815,17 +865,18 @@ public static class Program
                     new DenseLayer<float>(hidDim, activationFunction: new GELUActivation<float>()),
                     new DenseLayer<float>(classes, vectorActivation: new SoftmaxActivation<float>()),
                 });
+            // Same seed -> same initial weights for every optimizer case and every process.
+            arch.RandomSeed = cli.Seed;
             var m = new NeuralNetwork<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
             _ = m.Predict(b1);
             return m;
         }
 
-        var optimizerFactories = new (string Name, Func<NeuralNetwork<float>, IGradientBasedOptimizer<float, Tensor<float>, Tensor<float>>> Build)[]
+        // Paired set: exactly the optimizer names the PyTorch runner's sweep times.
+        var pairedFactories = new (string Name, Func<NeuralNetwork<float>, IGradientBasedOptimizer<float, Tensor<float>, Tensor<float>>> Build)[]
         {
             ("AdamW", n => new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(n)),
             ("Adam", n => new AdamOptimizer<float, Tensor<float>, Tensor<float>>(n)),
-            ("Adam8Bit", n => new Adam8BitOptimizer<float, Tensor<float>, Tensor<float>>(n)),
-            ("Lion", n => new LionOptimizer<float, Tensor<float>, Tensor<float>>(n)),
             ("SGD", n => new StochasticGradientDescentOptimizer<float, Tensor<float>, Tensor<float>>(n)),
             ("Momentum", n => new MomentumOptimizer<float, Tensor<float>, Tensor<float>>(n)),
             ("NAG", n => new NesterovAcceleratedGradientOptimizer<float, Tensor<float>, Tensor<float>>(n)),
@@ -836,6 +887,14 @@ public static class Program
             ("AMSGrad", n => new AMSGradOptimizer<float, Tensor<float>, Tensor<float>>(n)),
             ("Nadam", n => new NadamOptimizer<float, Tensor<float>, Tensor<float>>(n)),
             ("RAdam", n => new RAdamOptimizer<float, Tensor<float>, Tensor<float>>(n)),
+            ("Rprop", n => new RpropOptimizer<float, Tensor<float>, Tensor<float>>(n)),
+        };
+
+        // AiDotNet-only optimizers: reported in their own unpaired record, never in the paired median.
+        var unpairedFactories = new (string Name, Func<NeuralNetwork<float>, IGradientBasedOptimizer<float, Tensor<float>, Tensor<float>>> Build)[]
+        {
+            ("Adam8Bit", n => new Adam8BitOptimizer<float, Tensor<float>, Tensor<float>>(n)),
+            ("Lion", n => new LionOptimizer<float, Tensor<float>, Tensor<float>>(n)),
             ("LAMB", n => new LAMBOptimizer<float, Tensor<float>, Tensor<float>>(n)),
             ("LARS", n => new LARSOptimizer<float, Tensor<float>, Tensor<float>>(n)),
             ("Adafactor", n => new AdafactorOptimizer<float, Tensor<float>, Tensor<float>>(n)),
@@ -843,10 +902,13 @@ public static class Program
             ("DAdaptAdam", n => new DAdaptAdamOptimizer<float, Tensor<float>, Tensor<float>>(n)),
             ("ScaledAdam", n => new ScaledAdamOptimizer<float, Tensor<float>, Tensor<float>>(n)),
             ("FTRL", n => new FTRLOptimizer<float, Tensor<float>, Tensor<float>>(n)),
-            ("Rprop", n => new RpropOptimizer<float, Tensor<float>, Tensor<float>>(n)),
         };
 
+        var optimizerFactories = paired ? pairedFactories : unpairedFactories;
         var perOptimizerMedianMs = new List<double>(optimizerFactories.Length);
+        var perOptimizerInitialLoss = new List<double>(optimizerFactories.Length);
+        var perOptimizerFinalLoss = new List<double>(optimizerFactories.Length);
+        var perOptimizerNotes = new List<string>(optimizerFactories.Length);
         long paramCount = 0;
         var lossFn = new CategoricalCrossEntropyLoss<float>();
 
@@ -868,6 +930,9 @@ public static class Program
                 }
             }
 
+            // Loss of THIS optimizer's model, before and after its own warmup + measured steps.
+            double optInitialLoss = EvaluateMeanLoss(net, lossFn, evalX, evalY);
+
             var stepSummary = MeasureRawAction(
                 warmup: 1,
                 iterations: cli.Smoke ? 2 : 5,
@@ -887,9 +952,28 @@ public static class Program
                 if (float.IsNaN(checkParams[i]) || float.IsInfinity(checkParams[i]))
                     throw new InvalidOperationException($"Optimizer '{optName}' produced non-finite weights.");
             }
+
+            double optFinalLoss = EvaluateMeanLoss(net, lossFn, evalX, evalY);
+            if (double.IsNaN(optInitialLoss) || double.IsInfinity(optInitialLoss)
+                || double.IsNaN(optFinalLoss) || double.IsInfinity(optFinalLoss))
+            {
+                throw new InvalidOperationException(
+                    $"Adversarial Gate 10 violation in '{workloadId}' optimizer '{optName}': non-finite eval loss ({optInitialLoss} -> {optFinalLoss}).");
+            }
+
             perOptimizerMedianMs.Add(stepSummary.MedianMs);
+            perOptimizerInitialLoss.Add(optInitialLoss);
+            perOptimizerFinalLoss.Add(optFinalLoss);
+            perOptimizerNotes.Add(string.Format(
+                CultureInfo.InvariantCulture,
+                "{0}:step_median_ms={1:F4},loss={2:F4}->{3:F4}",
+                optName,
+                stepSummary.MedianMs,
+                optInitialLoss,
+                optFinalLoss));
         }
 
+        // Inference latency is optimizer-independent: time a freshly built (seeded) copy of the same MLP.
         var probeNet = BuildMlp();
         var b1Summary = MeasureRawAction(1, cli.Smoke ? 2 : 5, () => { _ = probeNet.Predict(b1); }, out _);
         var batchInferSummary = MeasureRawAction(1, cli.Smoke ? 2 : 5, () => { _ = probeNet.Predict(evalX); }, out _);
@@ -897,7 +981,7 @@ public static class Program
 
         return Task.FromResult(new WorkloadBenchmarkRecord
         {
-            WorkloadId = "wave1_optimizer_base_sweep",
+            WorkloadId = workloadId,
             Wave = 1,
             ExecutionMode = cli.Mode,
             PrecisionTier = cli.Precision.ToUpperInvariant(),
@@ -907,7 +991,7 @@ public static class Program
             TrainEvalWindowOverlap = overlap,
             ModelSpec = new ModelSpecTag
             {
-                Architecture = $"GradientBasedOptimizerBase-Sweep-{optimizerFactories.Length}Opts",
+                Architecture = $"GradientBasedOptimizerBase-{(paired ? "PairedSweep" : "UnpairedSweep")}-{optimizerFactories.Length}Opts",
                 Layers = 3,
                 HiddenDim = hidDim,
                 VocabOrClasses = classes,
@@ -919,9 +1003,11 @@ public static class Program
             BatchedTrainStepLatency = sweepSummary,
             BatchedInferItemsPerSec = batchInferSummary.MedianMs > 0 ? (batch * 1000.0 / batchInferSummary.MedianMs) : 0.0,
             BatchedTrainItemsPerSec = sweepSummary.MedianMs > 0 ? (batch * 1000.0 / sweepSummary.MedianMs) : 0.0,
-            InitialEvalLoss = EvaluateMeanLoss(probeNet, lossFn, evalX, evalY),
-            FinalEvalLoss = EvaluateMeanLoss(probeNet, lossFn, evalX, evalY),
-            Notes = $"Swept {optimizerFactories.Length} optimizers inheriting GradientBasedOptimizerBase.",
+            // Median across optimizer cases of each case's own pre-/post-run eval loss.
+            InitialEvalLoss = SummarizeLatencies(perOptimizerInitialLoss.ToArray()).MedianMs,
+            FinalEvalLoss = SummarizeLatencies(perOptimizerFinalLoss.ToArray()).MedianMs,
+            Notes = $"{(paired ? "Paired" : "Unpaired (AiDotNet-only)")} sweep of {optimizerFactories.Length} optimizers; timed op = forward+loss+backward+step (no clip). "
+                + string.Join("; ", perOptimizerNotes),
         });
     }
 
@@ -953,7 +1039,7 @@ public static class Program
             outputSize: classes,
             layers: layers);
         var lossFn = new CategoricalCrossEntropyLoss<float>();
-        var net = new NeuralNetwork<float>(arch, lossFunction: lossFn);
+        var (net, opt) = CreateSeededNetworkWithAdamW(arch, lossFn, batch, cli.Seed);
 
         var b1 = CreateDisjointFeatures(new[] { 1, channels, spatial, spatial }, cli.Seed, 50);
         var trainX = CreateDisjointFeatures(new[] { batch, channels, spatial, spatial }, cli.Seed, 51);
@@ -975,6 +1061,7 @@ public static class Program
                 ContextOrSpatial = spatial,
             },
             net,
+            opt,
             lossFn,
             b1,
             trainX,
@@ -997,11 +1084,10 @@ public static class Program
         var layers = new List<ILayer<float>>();
         for (int l = 0; l < nBlocks; l++)
         {
-            layers.Add(new LayerNormalizationLayer<float>(dModel));
-            layers.Add(new MultiHeadAttentionLayer<float>(heads, dModel / heads));
-            layers.Add(new LayerNormalizationLayer<float>(dModel));
-            layers.Add(new DenseLayer<float>(dModel * 4, activationFunction: new GELUActivation<float>()));
-            layers.Add(new DenseLayer<float>(dModel, activationFunction: new IdentityActivation<float>()));
+            // Pre-LN encoder block with both residuals (x + Attn(LN(x)); y + FFN(LN(y))), matching the
+            // PyTorch EncoderBlock this workload is paired with.
+            layers.Add(new TransformerEncoderBlock<float>(
+                dModel, heads, dModel * 4, dropoutRate: 0.0, ffnActivation: new GELUActivation<float>()));
         }
         layers.Add(new FlattenLayer<float>());
         layers.Add(new DenseLayer<float>(classes, vectorActivation: new SoftmaxActivation<float>()));
@@ -1014,7 +1100,7 @@ public static class Program
             outputSize: classes,
             layers: layers);
         var lossFn = new CategoricalCrossEntropyLoss<float>();
-        var net = new NeuralNetwork<float>(arch, lossFunction: lossFn);
+        var (net, opt) = CreateSeededNetworkWithAdamW(arch, lossFn, batch, cli.Seed);
 
         var b1 = CreateDisjointFeatures(new[] { 1, numPatches, dModel }, cli.Seed, 60);
         var trainX = CreateDisjointFeatures(new[] { batch, numPatches, dModel }, cli.Seed, 61);
@@ -1036,6 +1122,7 @@ public static class Program
                 ContextOrSpatial = numPatches,
             },
             net,
+            opt,
             lossFn,
             b1,
             trainX,
@@ -1069,7 +1156,7 @@ public static class Program
             outputSize: classes,
             layers: layers);
         var lossFn = new CategoricalCrossEntropyLoss<float>();
-        var net = new NeuralNetwork<float>(arch, lossFunction: lossFn);
+        var (net, opt) = CreateSeededNetworkWithAdamW(arch, lossFn, batch, cli.Seed);
 
         var b1 = CreateDisjointFeatures(new[] { 1, inFeatures }, cli.Seed, 70);
         var trainX = CreateDisjointFeatures(new[] { batch, inFeatures }, cli.Seed, 71);
@@ -1091,6 +1178,7 @@ public static class Program
                 ContextOrSpatial = inFeatures,
             },
             net,
+            opt,
             lossFn,
             b1,
             trainX,
@@ -1112,11 +1200,10 @@ public static class Program
         var layers = new List<ILayer<float>>();
         for (int l = 0; l < nBlocks; l++)
         {
-            layers.Add(new LayerNormalizationLayer<float>(dModel));
-            layers.Add(new MultiHeadAttentionLayer<float>(heads, dModel / heads));
-            layers.Add(new LayerNormalizationLayer<float>(dModel));
-            layers.Add(new DenseLayer<float>(dModel * 4, activationFunction: new SiLUActivation<float>()));
-            layers.Add(new DenseLayer<float>(dModel, activationFunction: new IdentityActivation<float>()));
+            // Pre-LN encoder block with both residuals (x + Attn(LN(x)); y + FFN(LN(y))), matching the
+            // PyTorch EncoderBlock this workload is paired with.
+            layers.Add(new TransformerEncoderBlock<float>(
+                dModel, heads, dModel * 4, dropoutRate: 0.0, ffnActivation: new SiLUActivation<float>()));
         }
         layers.Add(new LayerNormalizationLayer<float>(dModel));
         layers.Add(new DenseLayer<float>(dModel, activationFunction: new IdentityActivation<float>()));
@@ -1129,7 +1216,7 @@ public static class Program
             outputSize: dModel,
             layers: layers);
         var lossFn = new MeanSquaredErrorLoss<float>();
-        var net = new NeuralNetwork<float>(arch, lossFunction: lossFn);
+        var (net, opt) = CreateSeededNetworkWithAdamW(arch, lossFn, batch, cli.Seed);
 
         var b1 = CreateDisjointFeatures(new[] { 1, latentTokens, dModel }, cli.Seed, 80);
         var trainX = CreateDisjointFeatures(new[] { batch, latentTokens, dModel }, cli.Seed, 81);
@@ -1151,6 +1238,7 @@ public static class Program
                 ContextOrSpatial = latentTokens,
             },
             net,
+            opt,
             lossFn,
             b1,
             trainX,
@@ -1185,7 +1273,7 @@ public static class Program
             outputSize: horizon,
             layers: layers);
         var lossFn = new MeanSquaredErrorLoss<float>();
-        var net = new NeuralNetwork<float>(arch, lossFunction: lossFn);
+        var (net, opt) = CreateSeededNetworkWithAdamW(arch, lossFn, batch, cli.Seed);
 
         var b1 = CreateDisjointFeatures(new[] { 1, channels, lookback }, cli.Seed, 90);
         var trainX = CreateDisjointFeatures(new[] { batch, channels, lookback }, cli.Seed, 91);
@@ -1207,6 +1295,7 @@ public static class Program
                 ContextOrSpatial = lookback,
             },
             net,
+            opt,
             lossFn,
             b1,
             trainX,
@@ -1249,7 +1338,7 @@ public static class Program
             outputSize: vocab,
             layers: layers);
         var lossFn = new CategoricalCrossEntropyLoss<float>();
-        var net = new NeuralNetwork<float>(arch, lossFunction: lossFn);
+        var (net, opt) = CreateSeededNetworkWithAdamW(arch, lossFn, batch, cli.Seed);
 
         var b1 = CreateDisjointFeatures(new[] { 1, frames, dModel }, cli.Seed, 100);
         var trainX = CreateDisjointFeatures(new[] { batch, frames, dModel }, cli.Seed, 101);
@@ -1271,6 +1360,7 @@ public static class Program
                 ContextOrSpatial = frames,
             },
             net,
+            opt,
             lossFn,
             b1,
             trainX,
@@ -1321,7 +1411,7 @@ public static class Program
             outputSize: classes,
             layers: layers);
         var lossFn = new CategoricalCrossEntropyLoss<float>();
-        var net = new NeuralNetwork<float>(arch, lossFunction: lossFn);
+        var (net, opt) = CreateSeededNetworkWithAdamW(arch, lossFn, totalNodes, cli.Seed);
 
         var b1 = CreateDisjointFeatures(new[] { totalNodes, nodeFeatures }, cli.Seed, 110);
         var trainX = CreateDisjointFeatures(new[] { totalNodes, nodeFeatures }, cli.Seed, 111);
@@ -1343,12 +1433,15 @@ public static class Program
                 ContextOrSpatial = totalNodes,
             },
             net,
+            opt,
             lossFn,
             b1,
             trainX,
             trainY,
             evalX,
-            evalY);
+            evalY,
+            notes: $"FullGraphNodes={totalNodes}; B=1 unavailable (transductive full-graph GCN: every inference covers all {totalNodes} nodes)",
+            measureB1: false);
     }
 
     private static BenchmarkCliOptions ParseArgs(string[] args)

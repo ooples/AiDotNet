@@ -108,8 +108,8 @@ else {
     $DotnetTrace = Get-Command "dotnet-trace" -ErrorAction SilentlyContinue
     if ($null -ne $DotnetTrace) {
         $NetTracePath = Join-Path $OutputDir "aidotnet_${Device}_${Mode}.nettrace"
-        Write-Host "[PerfViewWrapper] Collecting CPU + GC allocation EventPipe trace -> $NetTracePath"
-        & dotnet-trace collect --providers "Microsoft-DotNETCore-SampleProfiler,Microsoft-Windows-DotNETRuntime:0x800008001D:5" -o $NetTracePath -- dotnet @RunnerArgs
+        Write-Host "[PerfViewWrapper] Collecting CPU + GC allocation + contention + exception EventPipe trace -> $NetTracePath"
+        & dotnet-trace collect --providers "Microsoft-DotNETCore-SampleProfiler,Microsoft-Windows-DotNETRuntime:0x800008C01D:5" -o $NetTracePath -- dotnet @RunnerArgs
         if ($LASTEXITCODE -ne 0) {
             throw "dotnet-trace collection exited with code $LASTEXITCODE"
         }

@@ -107,12 +107,20 @@ def run_arm_pass(
     cmd: List[str],
     out_json: Path,
     env: Dict[str, str],
+    wave: str,
+    workload_filter: Optional[str],
 ) -> List[Dict[str, Any]]:
     print(f"\n[ABBA] >>> Running {arm_label}: {' '.join(cmd)}")
     subprocess.run(cmd, env=env, check=True)
     if not out_json.exists():
         raise FileNotFoundError(f"Expected benchmark output JSON was not written: {out_json}")
-    return json.loads(out_json.read_text(encoding="utf-8"))
+    records = json.loads(out_json.read_text(encoding="utf-8"))
+    if not isinstance(records, list) or not records:
+        raise RuntimeError(
+            f"{arm_label} produced no workload records (wave={wave!r}, filter={workload_filter!r}); "
+            "refusing to write an empty comparison."
+        )
+    return records
 
 
 def format_markdown_report(summary: Dict[str, Any]) -> str:
@@ -123,12 +131,14 @@ def format_markdown_report(summary: Dict[str, Any]) -> str:
     lines.append(f"- **Device:** `{summary['device']}` (`smoke={summary['smoke']}`)")
     lines.append(f"- **Precision Tier:** `{summary['precision']}`")
     lines.append(f"- **Seeds:** `{summary['seeds']}`")
-    lines.append(f"- **ABBA Schedule per Seed:** `AiDotNet(auto) -> AiDotNet(direct-ptx) -> PyTorch(inductor) -> PyTorch(inductor) -> AiDotNet(direct-ptx) -> AiDotNet(auto)`")
+    lines.append("- **Executed schedule per seed:**")
+    for entry in summary["schedule"]:
+        lines.append(f"  - trial {entry['trial']} (seed `{entry['seed']}`): `{' -> '.join(entry['arms'])}`")
     lines.append("")
     lines.append(
-        "| Workload | Arm | Params | B=1 Med (ms) | Batch Infer Med (ms) | Train Step Med (ms) | Train Mean ± SD (ms) | Train [Min, Max] (ms) | Alloc/Step (KB) | Final Loss | Overlap |"
+        "| Workload | Arm | Actual Mode (infer / train) | Params | B=1 Med (ms) | Batch Infer Med (ms) | Train Step Med (ms) | Train Mean ± SD (ms) | Train [Min, Max] (ms) | Alloc/Step (KB) | Final Loss | Overlap |"
     )
-    lines.append("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+    lines.append("|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
 
     for wid, arm_map in summary["workloads"].items():
         for arm_name, stats_obj in arm_map.items():
@@ -137,9 +147,11 @@ def format_markdown_report(summary: Dict[str, Any]) -> str:
             tr = stats_obj["train_step_median_ms"]
             alloc_kb = stats_obj.get("managed_alloc_kb_median", 0.0)
             floss = stats_obj.get("final_loss_median", 0.0)
+            b1_cell = f"{b1['median']:.3f}" if stats_obj.get("b1_available", True) else "n/a"
+            mode_cell = f"{stats_obj['inference_execution_mode']} / {stats_obj['train_execution_mode']}"
             lines.append(
-                f"| `{wid}` | `{arm_name}` | {stats_obj['parameter_count']:,} | "
-                f"{b1['median']:.3f} | {bi['median']:.3f} | {tr['median']:.3f} | "
+                f"| `{wid}` | `{arm_name}` | `{mode_cell}` | {stats_obj['parameter_count']:,} | "
+                f"{b1_cell} | {bi['median']:.3f} | {tr['median']:.3f} | "
                 f"{tr['mean']:.3f} ± {tr['sd']:.3f} | [{tr['min']:.3f}, {tr['max']:.3f}] | "
                 f"{alloc_kb:,.1f} | {floss:.4f} | "
                 f"{stats_obj['max_overlap']} |"
@@ -198,8 +210,18 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     p.add_argument("--precision", default="fp32", choices=["fp32", "tf32", "bf16", "fp16"])
     p.add_argument("--wave", default="all", choices=["all", "1", "2", "wave1", "wave2"])
     p.add_argument("--filter", default=None, help="Substring filter on workload_id.")
-    p.add_argument("--seeds", default="42,1337,2026", help="Comma-separated integer seeds (>=3 recommended).")
-    p.add_argument("--abba-repeats", type=int, default=2, choices=[1, 2], help="2 = full ABBA mirror per seed; 1 = forward ABC/CBA.")
+    p.add_argument(
+        "--seeds",
+        default=None,
+        help="Comma-separated distinct integer seeds (default 42,1337,2026; CPU dry-run default 42).",
+    )
+    p.add_argument(
+        "--abba-repeats",
+        type=int,
+        default=None,
+        choices=[1, 2],
+        help="2 = full ABBA mirror per seed; 1 = forward ABC/CBA (default 2; CPU dry-run default 1).",
+    )
     p.add_argument("--warmup", type=int, default=5)
     p.add_argument("--steps", type=int, default=20)
     p.add_argument("--skip-before", action="store_true", help="Omit the Before (uncached-eager) baseline arm.")
@@ -208,7 +230,32 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     p.add_argument("--local-tensors-root", default=None, help="Optional LocalTensorsRoot path for dotnet build.")
     p.add_argument("--python-exe", default=None, help="Python interpreter with PyTorch installed (auto-detected if omitted).")
     p.add_argument("--output-dir", default=None, help="Directory for raw pass JSONs + aggregated report.")
-    return p.parse_args(argv)
+    args = p.parse_args(argv)
+    if args.steps < 1:
+        p.error(f"--steps must be >= 1 (got {args.steps}); a run with no measured steps has no latency data.")
+    if args.warmup < 0:
+        p.error(f"--warmup must be >= 0 (got {args.warmup}).")
+    return args
+
+
+DEFAULT_SEEDS = "42,1337,2026"
+DRY_RUN_DEFAULT_SEEDS = "42"
+
+
+def parse_seed_list(raw: str) -> List[int]:
+    try:
+        seeds = [int(x.strip()) for x in raw.split(",") if x.strip()]
+    except ValueError as exc:
+        raise SystemExit(f"ERROR: --seeds must be comma-separated integers (got {raw!r}): {exc}")
+    if not seeds:
+        raise SystemExit(f"ERROR: --seeds must contain at least one seed (got {raw!r}).")
+    duplicates = sorted({s for s in seeds if seeds.count(s) > 1})
+    if duplicates:
+        raise SystemExit(
+            f"ERROR: --seeds must list independent seeds; duplicates {duplicates} would overwrite raw passes "
+            "and be double-counted in the aggregate."
+        )
+    return seeds
 
 
 def main(argv: List[str]) -> int:
@@ -220,13 +267,9 @@ def main(argv: List[str]) -> int:
         smoke = True
         env["CUDA_VISIBLE_DEVICES"] = ""
         env["AIDOTNET_DISABLE_GPU"] = "1"
-        seeds = [int(x.strip()) for x in args.seeds.split(",") if x.strip()]
-        if args.seeds == "42,1337,2026":
-            # Keep CPU dry-run fast unless user explicitly overrides --seeds; still exercises multi-pass ABBA.
-            seeds = [42]
-            abba_repeats = 1
-        else:
-            abba_repeats = args.abba_repeats
+        # Fast dry-run defaults apply only to settings the user omitted; explicit values are honored.
+        seeds = parse_seed_list(args.seeds if args.seeds is not None else DRY_RUN_DEFAULT_SEEDS)
+        abba_repeats = args.abba_repeats if args.abba_repeats is not None else 1
     else:
         if args.gpu_index == 0:
             raise SystemExit("ERROR: Safety gate violation — GPU 0 is strictly off-limits. Use --gpu-index 1 or --cpu-dry-run.")
@@ -235,10 +278,10 @@ def main(argv: List[str]) -> int:
         env["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
         env["CUDA_VISIBLE_DEVICES"] = str(args.gpu_index)
         env.pop("AIDOTNET_DISABLE_GPU", None)
-        seeds = [int(x.strip()) for x in args.seeds.split(",") if x.strip()]
+        seeds = parse_seed_list(args.seeds if args.seeds is not None else DEFAULT_SEEDS)
         if len(seeds) < 3:
             print(f"[ABBA] WARNING: Gate 10 requires >= 3 seeds for publication claims (got {len(seeds)}: {seeds}).")
-        abba_repeats = args.abba_repeats
+        abba_repeats = args.abba_repeats if args.abba_repeats is not None else 2
 
     out_dir = (
         Path(args.output_dir).resolve()
@@ -373,20 +416,63 @@ def main(argv: List[str]) -> int:
     )
 
     collected: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
+    executed_schedule: List[Dict[str, Any]] = []
 
     for seed_idx, seed in enumerate(seeds):
         forward_order = list(arms) if (seed_idx % 2 == 0) else list(reversed(arms))
         schedule = forward_order + list(reversed(forward_order)) if abba_repeats == 2 else forward_order
+        executed_schedule.append({"trial": seed_idx, "seed": seed, "arms": [name for name, _ in schedule]})
 
         for pass_idx, (arm_name, cmd_builder) in enumerate(schedule):
-            raw_json = out_dir / f"raw_seed{seed}_pass{pass_idx}_{arm_name}.json"
-            records = run_arm_pass(f"{arm_name} (seed={seed}, pass={pass_idx})", cmd_builder(seed, raw_json), raw_json, env)
+            raw_json = out_dir / f"raw_trial{seed_idx}_seed{seed}_pass{pass_idx}_{arm_name}.json"
+            if raw_json.exists():
+                # A stale file from an earlier run must not stand in for a pass that failed to write.
+                raw_json.unlink()
+            records = run_arm_pass(
+                f"{arm_name} (seed={seed}, pass={pass_idx})",
+                cmd_builder(seed, raw_json),
+                raw_json,
+                env,
+                wave=args.wave,
+                workload_filter=args.filter,
+            )
             for rec in records:
                 wid = rec["workload_id"]
                 collected.setdefault(wid, {}).setdefault(arm_name, []).append(rec)
 
-    workloads_summary: Dict[str, Dict[str, Any]] = {}
+    def actual_modes(rec: Dict[str, Any]) -> Tuple[str, str]:
+        base = str(rec.get("execution_mode", ""))
+        return (
+            str(rec.get("inference_execution_mode", base)),
+            str(rec.get("train_execution_mode", base)),
+        )
+
+    def is_fallback(mode: str) -> bool:
+        m = mode.lower()
+        return "fallback" in m or "unavailable" in m
+
+    # Group by requested arm AND the mode each phase actually ran in, so an eager fallback is never aggregated
+    # into (or published under) a compiled arm's label.
+    regrouped: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
     for wid, arm_records in collected.items():
+        for arm_name, recs in arm_records.items():
+            by_mode: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
+            for rec in recs:
+                by_mode.setdefault(actual_modes(rec), []).append(rec)
+            mixed = len(by_mode) > 1
+            if mixed:
+                print(
+                    f"[ABBA] WARNING: {wid}/{arm_name} ran in mixed execution modes {sorted(by_mode)}; "
+                    "reporting each mode as a separate row."
+                )
+            for (infer_mode, train_mode), mode_recs in by_mode.items():
+                label = arm_name
+                if mixed or is_fallback(infer_mode) or is_fallback(train_mode):
+                    label = f"{arm_name} [actual: infer={infer_mode}; train={train_mode}]"
+                regrouped.setdefault(wid, {})[label] = mode_recs
+
+    workloads_summary: Dict[str, Dict[str, Any]] = {}
+    for wid, arm_records in regrouped.items():
         workloads_summary[wid] = {}
         for arm_name, recs in arm_records.items():
             b1_meds = [float(r["b1_inference_latency"]["median_ms"]) for r in recs]
@@ -397,8 +483,13 @@ def main(argv: List[str]) -> int:
             overlaps = [int(r.get("train_eval_window_overlap", 0)) for r in recs]
             if any(ov != 0 for ov in overlaps):
                 raise RuntimeError(f"Adversarial Gate 7 violation in {wid}/{arm_name}: non-zero overlap detected.")
+            infer_mode, train_mode = actual_modes(recs[0])
             workloads_summary[wid][arm_name] = {
                 "runs": len(recs),
+                "requested_mode": str(recs[0].get("requested_mode", recs[0].get("execution_mode", ""))),
+                "inference_execution_mode": infer_mode,
+                "train_execution_mode": train_mode,
+                "b1_available": all(bool(r.get("b1_available", True)) for r in recs),
                 "parameter_count": int(recs[0]["model_spec"]["parameter_count"]),
                 "max_overlap": max(overlaps) if overlaps else 0,
                 "b1_median_ms": aggregate_metric(b1_meds),
@@ -416,12 +507,13 @@ def main(argv: List[str]) -> int:
         "wave": args.wave,
         "seeds": seeds,
         "abba_repeats": abba_repeats,
+        "schedule": executed_schedule,
         "workloads": workloads_summary,
     }
 
     summary_json = out_dir / "abba_summary.json"
     summary_md = out_dir / "abba_summary.md"
-    summary_json.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    summary_json.write_text(json.dumps(summary, indent=2, allow_nan=False), encoding="utf-8")
     summary_md.write_text(format_markdown_report(summary), encoding="utf-8")
     print(f"\n[ABBA] Completed! Summary JSON: {summary_json}")
     print(f"[ABBA] Markdown Report:       {summary_md}")
