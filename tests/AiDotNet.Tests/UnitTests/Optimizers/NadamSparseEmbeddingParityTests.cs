@@ -53,11 +53,13 @@ public class NadamSparseEmbeddingParityTests
                 var loss = engine.ReduceSum(engine.TensorMultiply(rows, weight), null);
                 // Sparse embedding gradients are live only while the backward runs, which is where the network's
                 // optimizer-in-backward steps; take the Nadam step inside the streaming callback the same way.
-                tape.ComputeGradientsStreaming(loss, new[] { sparseTable }, (source, grad) =>
+                tape.ComputeGradientsStreamingTyped(loss, new[] { sparseTable }, (source, _) =>
                 {
                     sawSparse |= SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(source);
-                    sparseNadam.Step(new TapeStepContext<double>(new[] { source },
-                        new Dictionary<Tensor<double>, Tensor<double>> { [source] = grad }, 0.0));
+                    // The coalesced dense form of the same gradient, as the dense streaming overload hands over.
+                    var gradients = new Dictionary<Tensor<double>, Tensor<double>>();
+                    SparseEmbeddingOptimizerHelpers.MaterializeSparseGradients(new[] { source }, gradients, engine);
+                    sparseNadam.Step(new TapeStepContext<double>(new[] { source }, gradients, 0.0));
                 });
             }
 

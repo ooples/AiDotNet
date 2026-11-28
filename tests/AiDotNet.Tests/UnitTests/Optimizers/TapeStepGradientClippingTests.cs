@@ -175,7 +175,7 @@ public class TapeStepGradientClippingTests
         {
             var rows = engine.TensorEmbeddingLookup<double, int>(table, new Tensor<int>(ids, new[] { ids.Length }));
             var loss = engine.ReduceSum(engine.TensorMultiply(rows, weight), null);
-            tape.ComputeGradientsStreaming(loss, new[] { table }, (source, grad) =>
+            tape.ComputeGradientsStreamingTyped(loss, new[] { table }, (source, _) =>
             {
                 sawSparse |= SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(source);
                 optimizer.Step(new TapeStepContext<double>(new[] { source }, new Dictionary<Tensor<double>, Tensor<double>>(), 0.0));

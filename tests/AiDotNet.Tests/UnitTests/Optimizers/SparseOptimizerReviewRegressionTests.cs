@@ -56,7 +56,7 @@ public class SparseOptimizerReviewRegressionTests : IDisposable
             {
                 var rows = engine.TensorEmbeddingLookup<double, int>(sparse, ids);
                 var loss = engine.ReduceSum(engine.TensorMultiplyScalar(rows, 0.5 + step * 0.25), null);
-                tape.ComputeGradientsStreaming(loss, new[] { sparse }, (source, _) =>
+                tape.ComputeGradientsStreamingTyped(loss, new[] { sparse }, (source, _) =>
                 {
                     Assert.True(SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(source));
                     sparseOptimizer.Step(new TapeStepContext<double>(new[] { source },
@@ -92,7 +92,7 @@ public class SparseOptimizerReviewRegressionTests : IDisposable
         using var tape = new GradientTape<T>();
         var rows = engine.TensorEmbeddingLookup<T, int>(parameter, new Tensor<int>(new[] { 0 }, new[] { 1 }));
         var loss = engine.ReduceSum(rows, null);
-        tape.ComputeGradientsStreaming(loss, new[] { parameter }, (source, _) =>
+        tape.ComputeGradientsStreamingTyped(loss, new[] { parameter }, (source, _) =>
         {
             Assert.True(SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(source));
             optimizer.Step(new TapeStepContext<T>(new[] { source }, new Dictionary<Tensor<T>, Tensor<T>>(), default!));
@@ -118,7 +118,7 @@ public class SparseOptimizerReviewRegressionTests : IDisposable
         var ids = duplicateRows ? new[] { 0, 0 } : new[] { 0 };
         var rows = engine.TensorEmbeddingLookup<double, int>(parameter, new Tensor<int>(ids, new[] { ids.Length }));
         var loss = engine.ReduceSum(engine.TensorMultiplyScalar(rows, 3.0), null);
-        tape.ComputeGradientsStreaming(loss, new[] { parameter }, (source, _) =>
+        tape.ComputeGradientsStreamingTyped(loss, new[] { parameter }, (source, _) =>
         {
             var gradients = new Dictionary<Tensor<double>, Tensor<double>>();
             SparseEmbeddingOptimizerHelpers.MaterializeSparseGradients(new[] { source }, gradients, engine);
@@ -183,7 +183,7 @@ public class SparseOptimizerReviewRegressionTests : IDisposable
         using var tape = new GradientTape<double>();
         var rows = engine.TensorEmbeddingLookup<double, int>(sparse, new Tensor<int>(new[] { 0 }, new[] { 1 }));
         var loss = engine.ReduceSum(engine.TensorMultiplyScalar(rows, 3.0), null);
-        tape.ComputeGradientsStreaming(loss, new[] { sparse }, (source, _) =>
+        tape.ComputeGradientsStreamingTyped(loss, new[] { sparse }, (source, _) =>
         {
             var gradients = new Dictionary<Tensor<double>, Tensor<double>>();
             SparseEmbeddingOptimizerHelpers.MaterializeSparseGradients(new[] { source }, gradients, engine);

@@ -354,7 +354,9 @@ public sealed class AdamHalfStateTests
         var selected = engine.TensorEmbeddingLookup<Half, int>(table, new Tensor<int>(rows, new[] { rows.Length }));
         var loss = engine.ReduceSum(engine.TensorMultiply(selected, weights), null, false);
         bool sawSparse = false;
-        tape.ComputeGradientsStreaming(loss, new[] { table }, (source, _) =>
+        // The typed streaming backward is the one that keeps the embedding gradient sparse: the dense overload hands its
+        // consumer a materialized dense gradient and records no sparse rows.
+        tape.ComputeGradientsStreamingTyped(loss, new[] { table }, (source, _) =>
         {
             sawSparse = SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(source);
             // Deliberately keep the raw sparse-only form alive for the optimizer's selected-row path.
