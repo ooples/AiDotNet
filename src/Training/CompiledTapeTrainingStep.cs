@@ -842,7 +842,12 @@ public static partial class CompiledTapeTrainingStep<T>
         if (optimizerType == AiDotNet.Tensors.Engines.Compilation.OptimizerType.Rprop
             || double.IsNaN(learningRate) || double.IsInfinity(learningRate) || learningRate < 0.0)
             return null;
-        if (!AiDotNet.Configuration.CompilationRuntimeSettings.GpuResidentOptimizerScalarsEnabled)
+        // The external handle exists to keep per-step rate changes off the captured device plan (GPU-resident scalars,
+        // CUDA Graph replay). Off a DirectGpu engine there is nothing to capture, and wrapping a constant rate in a
+        // schedule changes what a fused checkpoint carries: a CPU fused run resumed from its own checkpoint diverged,
+        // and a fused checkpoint no longer resumed on the compiled path (StreamingStepTrainingTests).
+        if (!AiDotNet.Configuration.CompilationRuntimeSettings.GpuResidentOptimizerScalarsEnabled
+            || AiDotNetEngine.Current.Unwrap() is not AiDotNet.Tensors.Engines.DirectGpuTensorEngine)
             return null;
         var extSchedule = CurrentState.externalLrSchedule
             ??= AiDotNet.Tensors.Engines.Compilation.LrSchedule.External(learningRate);

@@ -730,7 +730,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         // Step 3: Apply Top-K selection if enabled
         if (_topK > 0)
         {
-            (routingWeights, _lastTopKIndices) = ApplyTopK(routingWeights, _topK, useDevicePredicatedRouting);
+            (routingWeights, _lastTopKIndices) = ApplyTopKCore(routingWeights, _topK, useDevicePredicatedRouting);
         }
         else
         {
@@ -1307,7 +1307,17 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// With this example, we use only 33% of experts but keep the most relevant ones!
     /// </para>
     /// </remarks>
-    private (Tensor<T> sparseWeights, int[,]? topKIndices) ApplyTopK(Tensor<T> weights, int k, bool skipHostIndexReadback = false)
+    private (Tensor<T> sparseWeights, int[,] topKIndices) ApplyTopK(Tensor<T> weights, int k)
+    {
+        var (sparseWeights, topKIndices) = ApplyTopKCore(weights, k, skipHostIndexReadback: false);
+        return (sparseWeights, topKIndices ?? throw new InvalidOperationException("Top-K host indices were not read back."));
+    }
+
+    /// <summary>
+    /// <see cref="ApplyTopK"/> with an option to skip the host readback of the selected indices, for
+    /// device-predicated routing, which must not synchronize with the host; the indices are then <c>null</c>.
+    /// </summary>
+    private (Tensor<T> sparseWeights, int[,]? topKIndices) ApplyTopKCore(Tensor<T> weights, int k, bool skipHostIndexReadback)
     {
         int batchSize = weights.Shape[0];
         int numExperts = weights.Shape[1];
