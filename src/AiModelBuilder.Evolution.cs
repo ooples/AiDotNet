@@ -1067,6 +1067,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             EvolutionSummary = outcome.Summary,
             ProgramEvolution = outcome.ProgramResult,
             EvolutionRunResult = outcome.RunResult,
+            JitCompilationConfig = _jitCompilationConfig,
+            CompilationOptions = new CompilationOptions(_compilationOptions),
             AllowNondeterminism = _allowNondeterminism
         };
 

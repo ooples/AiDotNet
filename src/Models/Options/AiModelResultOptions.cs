@@ -753,6 +753,12 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     public AiDotNet.Configuration.JitCompilationConfig? JitCompilationConfig { get; set; }
 
     /// <summary>
+    /// Unified compilation, CUDA-Graph, derived-weight caching, precision-tier, and Direct-PTX options carried from
+    /// <c>AiModelBuilder.ConfigureCompilation</c> (defaults to <see cref="CompilationOptions.Default"/>).
+    /// </summary>
+    public AiDotNet.Models.Options.CompilationOptions? CompilationOptions { get; set; }
+
+    /// <summary>
     /// Determinism policy. When false (default), Predict re-asserts deterministic
     /// mode on the calling thread. When true, allows nondeterministic kernels.
     /// </summary>

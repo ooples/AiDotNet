@@ -241,6 +241,11 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
     /// <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.NotifyEpochStart"/>.
     /// </para>
     /// </remarks>
+    protected override bool SupportsModelOwnStep =>
+        _options.Centered
+        || (!_options.UseAdaptiveMomentum
+            && Math.Abs(_options.InitialMomentum) == 0.0);
+
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
@@ -260,6 +265,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
 
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;
                 _t++;
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
                 if (!_options.Centered)

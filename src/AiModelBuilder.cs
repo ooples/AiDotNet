@@ -270,6 +270,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     // Opt out with ConfigureJitCompilation(JitCompilationConfig.Disabled).
     private AiDotNet.Configuration.JitCompilationConfig? _jitCompilationConfig
         = AiDotNet.Configuration.JitCompilationConfig.Default;
+    private bool _jitCompilationExplicitlyConfigured;
+    // Unified compilation, CUDA-Graph, derived-weight caching, precision-tier, and Direct-PTX options (on by default).
+    private CompilationOptions _compilationOptions = CompilationOptions.Default;
     private bool _reportAccelerationAtBuild;
     private Action<string>? _accelerationLogger;
     private AiDotNet.Diagnostics.AccelerationSnapshot? _accelerationSnapshot;

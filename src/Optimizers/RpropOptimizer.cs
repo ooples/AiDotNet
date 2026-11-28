@@ -199,6 +199,8 @@ public partial class RpropOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// size to Delta_min. That is the paper's stated requirement, not a simplification.
     /// </para>
     /// </remarks>
+    protected override bool SupportsModelOwnStep => true;
+
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
@@ -221,8 +223,11 @@ public partial class RpropOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             NotifyEpochStart(epoch);
 
             // Full-batch gradient: one honest gradient over all the data, exactly once per iteration.
-            var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
-            currentSolution = UpdateSolution(currentSolution, gradient);
+            if (!TryModelOwnStep(currentSolution, inputData.XTrain, inputData.YTrain))
+            {
+                var gradient = CalculateGradient(currentSolution, inputData.XTrain, inputData.YTrain);
+                currentSolution = UpdateSolution(currentSolution, gradient);
+            }
 
             var currentStepData = EvaluateSolution(currentSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);

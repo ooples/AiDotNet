@@ -46,7 +46,11 @@ internal abstract class FullPrecisionStreamingOptimizer<T> : IStreamingOptimizer
             LearningRate = learningRate;
     }
 
-    public void BeginStep() => Step++;
+    public void BeginStep()
+    {
+        Step++;
+        AiDotNet.NeuralNetworks.Layers.DerivedTensorCacheGeneration.Advance();
+    }
 
     // First-order optimizers update in place during Apply; nothing to flush.
     public virtual void EndStep() { }

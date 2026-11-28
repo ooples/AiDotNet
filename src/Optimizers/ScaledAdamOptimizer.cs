@@ -246,6 +246,8 @@ public class ScaledAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBas
         for (int i = 0; i < values.Length; i++) state.Delta[i] += values[i] * scaleStep * (1 - o.Beta1);
     }
 
+    protected override bool SupportsModelOwnStep => true;
+
     /// <inheritdoc />
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
@@ -260,7 +262,10 @@ public class ScaledAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBas
             NotifyEpochStart(epoch);
             var batcher = CreateBatcher(inputData, _options.BatchSize, epoch);
             foreach (var (xBatch, yBatch, _) in batcher.GetBatches())
+            {
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;
                 currentSolution = UpdateSolution(currentSolution, CalculateGradient(currentSolution, xBatch, yBatch));
+            }
             var currentStepData = EvaluateSolution(currentSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
             UpdateAdaptiveParameters(currentStepData, previousStepData);

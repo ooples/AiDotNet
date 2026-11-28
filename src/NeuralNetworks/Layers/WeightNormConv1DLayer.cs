@@ -130,8 +130,25 @@ public partial class WeightNormConv1DLayer<T> : LayerBase<T>, IShapeContract
     {
         for (int i = 0; i < _length.Length; i++) _length[i] = NumOps.Zero;
         for (int i = 0; i < _bias.Length; i++) _bias[i] = NumOps.Zero;
+        _length.IncrementVersion();
+        _bias.IncrementVersion();
+        InvalidateDerivedParameterCaches();
         Engine.InvalidatePersistentTensor(_length);
         Engine.InvalidatePersistentTensor(_bias);
+    }
+
+    private static Tensor<T> ComputeWeightNormalizedKernel(
+        AiDotNet.Tensors.Engines.IEngine engine,
+        Tensor<T> direction,
+        Tensor<T> length,
+        int outChannels,
+        int inChannels,
+        int kernelSize)
+    {
+        var squared = engine.TensorMultiply(direction, direction);
+        var norm = engine.TensorSqrt(engine.ReduceSum(squared, new[] { 1, 2, 3 }, keepDims: true));
+        var scale = engine.TensorDivide(engine.Reshape(length, new[] { outChannels, 1, 1, 1 }), norm);
+        return engine.TensorMultiply(direction, engine.TensorTile(scale, new[] { 1, inChannels, 1, kernelSize }));
     }
 
     /// <inheritdoc />
@@ -140,10 +157,17 @@ public partial class WeightNormConv1DLayer<T> : LayerBase<T>, IShapeContract
         if (input.Rank != 3 || input.Shape[1] != _inChannels)
             throw new ArgumentException($"Expected [batch, {_inChannels}, time], got [{string.Join(", ", input.Shape)}].", nameof(input));
         // w = g * v / ||v|| per output channel.
-        var squared = Engine.TensorMultiply(_direction, _direction);
-        var norm = Engine.TensorSqrt(Engine.ReduceSum(squared, new[] { 1, 2, 3 }, keepDims: true));        // [out, 1, 1, 1]
-        var scale = Engine.TensorDivide(Engine.Reshape(_length, new[] { _outChannels, 1, 1, 1 }), norm);
-        var kernel = Engine.TensorMultiply(_direction, Engine.TensorTile(scale, new[] { 1, _inChannels, 1, _kernelSize }));
+        int outCh = _outChannels;
+        int inCh = _inChannels;
+        int kSize = _kernelSize;
+        Tensor<T> kernel = CanUseDerivedParameterCache
+            ? GetOrBuildDerivedParameter(
+                "WeightNormalizedKernel",
+                (eng, srcs) => AiDotNet.Tensors.Engines.TensorScope.Detach(
+                    ComputeWeightNormalizedKernel(eng, srcs[0], srcs[1], outCh, inCh, kSize)),
+                _direction,
+                _length)
+            : ComputeWeightNormalizedKernel(Engine, _direction, _length, outCh, inCh, kSize);
 
         var input4D = Engine.Reshape(input, new[] { input.Shape[0], _inChannels, 1, input.Shape[2] });
         var conv = Engine.Conv2D(input4D, kernel, new[] { 1, 1 }, new[] { 0, _padding }, new[] { 1, _dilation });
@@ -164,8 +188,11 @@ public partial class WeightNormConv1DLayer<T> : LayerBase<T>, IShapeContract
         {
             for (int i = 0; i < tensor.Length; i++, k++)
                 tensor[i] = NumOps.Subtract(tensor[i], NumOps.Multiply(learningRate, gradients[k]));
+            tensor.IncrementVersion();
             Engine.InvalidatePersistentTensor(tensor);
         }
+        InvalidateDerivedParameterCaches();
+        DerivedTensorCacheGeneration.Advance();
     }
 
     /// <inheritdoc />

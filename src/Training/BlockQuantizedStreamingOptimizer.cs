@@ -104,6 +104,7 @@ internal abstract class BlockQuantizedStreamingOptimizer<T> : IStreamingOptimize
     public void BeginStep()
     {
         Step++;
+        AiDotNet.NeuralNetworks.Layers.DerivedTensorCacheGeneration.Advance();
         OnBeginStep();
     }
 

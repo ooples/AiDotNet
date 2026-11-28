@@ -227,6 +227,7 @@ public sealed class JitCompilationConfig
         // deserialized or mutated config before any plan is compiled against it.
         Validate();
 
+        bool allowVendorLibraries = CompilationRuntimeSettings.Current.AllowExternalVendorLibraries;
         var opts = new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions
         {
             EnableCompilation = Enabled,
@@ -241,7 +242,10 @@ public sealed class JitCompilationConfig
             EnableConstantFolding = EnableConstantFolding,
             EnableForwardCSE = EnableForwardCSE,
             EnableBlasBatch = EnableBlasBatch,
-            EnableMixedPrecision = EnableMixedPrecisionCompilation
+            EnableMixedPrecision = EnableMixedPrecisionCompilation,
+            UseCublas = allowVendorLibraries,
+            UseCudnn = allowVendorLibraries,
+            UseCudnnBatchNorm = allowVendorLibraries
         };
         AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(opts);
     }

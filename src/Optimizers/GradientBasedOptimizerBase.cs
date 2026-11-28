@@ -3578,10 +3578,34 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         context = WithSparseLeavesAsValueViews(context);
         var learningRateGroups = CaptureLearningRateGroups(context);
         _stepNoGrad = new NoGradScope<T>();
-        using var gpuStepBatch = GradientBasedOptimizerGpuStepBatch.Begin(
-            typeof(T) == typeof(float)
-                ? AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine
-                : null);
+        var activeGpuEngine = typeof(T) == typeof(float)
+            ? AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine
+            : null;
+        using var gpuStepBatch = GradientBasedOptimizerGpuStepBatch.Begin(activeGpuEngine);
+        if (activeGpuEngine is not null
+            && Configuration.CompilationRuntimeSettings.GpuResidentOptimizerScalarsEnabled
+            && activeGpuEngine.GetBackend() is { } scalarBackend)
+        {
+            float clipScalar = TapeStepGradientClipNorm > 0.0
+                ? (float)TapeStepGradientClipNorm
+                : 0f;
+            float wdScalar = this is Fused.IFusedOptimizerSpec fusedSpec && fusedSpec.TryGetFusedOptimizerConfig(out var fCfg)
+                ? (float)fCfg.WeightDecay
+                : 0f;
+            float b1Scalar = this is Fused.IFusedOptimizerSpec fs1 && fs1.TryGetFusedOptimizerConfig(out var fc1) ? (float)fc1.Beta1 : 0f;
+            float b2Scalar = this is Fused.IFusedOptimizerSpec fs2 && fs2.TryGetFusedOptimizerConfig(out var fc2) ? (float)fc2.Beta2 : 0f;
+            float epsScalar = this is Fused.IFusedOptimizerSpec fs3 && fs3.TryGetFusedOptimizerConfig(out var fc3) ? (float)fc3.Epsilon : 1e-8f;
+            _gpuScalarBuffer.EnsureUpdated(
+                scalarBackend,
+                (float)GetCurrentLearningRate(),
+                Volatile.Read(ref _tapeStepCount) + 1,
+                wdScalar,
+                b1Scalar,
+                b2Scalar,
+                epsScalar,
+                clipScalar,
+                isStreamCapturing: AiDotNet.NeuralNetworks.GraphCaptureCompatibility.IsActive);
+        }
         try
         {
             // The clip (here or in StepCore) scales the gradients in place; a layer that published one by reference
@@ -3602,8 +3626,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             _lastStepGradientNormSq = TapeClipNormThreadCache.LastPreClipNormSq;
             TapeClipNormThreadCache.LastPreClipNormSq = null;
             Interlocked.Increment(ref _tapeStepCount);
+            AiDotNet.NeuralNetworks.Layers.DerivedTensorCacheGeneration.Advance();
             GradientsClippedAhead = false;
-            _activeStepClippedAheadNormSq = null;
             _stepNoGrad?.Dispose();
             _stepNoGrad = null;
         }
@@ -3632,12 +3656,38 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// rate. Optimizer state (moments, trust ratios) is rate-independent and is left untouched. Only tensors of
     /// layers that declare a policy are snapshotted, so a model without one pays nothing.
     /// </remarks>
+    private WeakReference<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>>? _lrGroupCheckedNetwork;
+    private int _lrGroupStructureVersion = -1;
+    private int _lrGroupSurfaceEpoch = -1;
+    private long _lrGroupPolicyEpoch = -1;
+    private bool _lrGroupHasAnyPolicy;
+
     private List<(LayerBase<T> Layer, Vector<T> Before, double Factor)>? CaptureLearningRateGroups(TapeStepContext<T> context)
     {
         if (Model is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network) return null;
 
+        long policyEpoch = LayerBase<T>.LearningRatePolicyEpoch;
+        if (policyEpoch == 0)
+        {
+            return null;
+        }
+
+        int structureVersion = network.LayerStructureVersion;
+        int surfaceEpoch = LayerBase<T>.ParameterSurfaceEpoch;
+        if (!_lrGroupHasAnyPolicy
+            && _lrGroupStructureVersion == structureVersion
+            && _lrGroupSurfaceEpoch == surfaceEpoch
+            && _lrGroupPolicyEpoch == policyEpoch
+            && _lrGroupCheckedNetwork is not null
+            && _lrGroupCheckedNetwork.TryGetTarget(out var cachedNet)
+            && ReferenceEquals(cachedNet, network))
+        {
+            return null;
+        }
+
         double baseRate = GetCurrentLearningRate();
         List<(LayerBase<T>, Vector<T>, double)>? groups = null;
+        bool foundAnyDeclaringLayer = false;
         // Each entry carries the factor already applied by its nearest declaring ancestor, so a nested
         // declaration is applied relative to it and the nearest declaration wins.
         var pending = new Stack<(ILayer<T> Layer, double Inherited)>();
@@ -3651,6 +3701,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             double effective = inherited;
             if (owner.LearningRateScale != 1.0 || owner.MaxLearningRate.HasValue)
             {
+                foundAnyDeclaringLayer = true;
                 effective = owner.LearningRateScale;
                 if (owner.MaxLearningRate is { } cap && baseRate > 0)
                     effective = Math.Min(effective, cap / baseRate);
@@ -3671,6 +3722,11 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 for (int i = subLayers.Count - 1; i >= 0; i--) pending.Push((subLayers[i], effective));
         }
 
+        _lrGroupCheckedNetwork = new WeakReference<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>>(network);
+        _lrGroupStructureVersion = structureVersion;
+        _lrGroupSurfaceEpoch = surfaceEpoch;
+        _lrGroupPolicyEpoch = policyEpoch;
+        _lrGroupHasAnyPolicy = foundAnyDeclaringLayer;
         return groups;
     }
 
@@ -4746,7 +4802,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                         && syncedGpuBuf.Handle != IntPtr.Zero
                         && (gf._gpuBackend is null || ReferenceEquals(gf._gpuBackend, gpuBackend))
                         && syncedGpuBuf.Size >= gf.Length
-                        && gf._gpuBufferVersion == gf.Version)
+                        && gf._gpuBufferVersion == gf.GpuCacheVersion)
                     {
                         (syncedGpuGrads ??= new List<Tensor<float>>(grads.Count)).Add(gf);
                     }
@@ -4770,7 +4826,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                     if (gf._gpuBuffer is { } syncedGpuBuf)
                     {
                         gpuBackend.Scale(syncedGpuBuf, syncedGpuBuf, scaleF, gf.Length);
-                        gf._gpuBufferVersion = gf.Version;
+                        gf._gpuBufferVersion = gf.GpuCacheVersion;
                     }
                 }
             }
@@ -5116,6 +5172,13 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </summary>
     protected static bool HasAnomalousTapeGradients(TapeStepContext<T> context)
     {
+        // Never force a blocking device-to-host scalar sync while capturing a static-shape CUDA Graph;
+        // device-side anomaly flags/norm kernels record inside the graph without breaking stream capture.
+        if (AiDotNet.NeuralNetworks.GraphCaptureCompatibility.IsActive
+            || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+        {
+            return false;
+        }
         // GPU engine: when any gradient is pending on device, run one device sum of squares over every gradient and
         // read one scalar back. When all gradients are already host-current (!HasPendingGpuData), check them in SIMD
         // on host without launching a GPU kernel or forcing a D2H sync.
@@ -5287,8 +5350,14 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <para><b>For Beginners:</b> The base implementation disposes _gpuState if set.
     /// Derived classes with multiple state buffers should override.</para>
     /// </remarks>
+    private readonly GpuOptimizerScalarBuffer _gpuScalarBuffer = new();
+
+    /// <summary>Gets the fixed-address GPU scalar buffer carrying per-step optimizer hyperparameters and anomaly flags.</summary>
+    internal IGpuBuffer? GpuScalarStateBuffer => _gpuScalarBuffer.DeviceBuffer;
+
     public virtual void DisposeGpuState()
     {
+        _gpuScalarBuffer.Dispose();
         _gpuState?.Dispose();
         _gpuState = null;
         _gpuStateInitialized = false;
@@ -5410,7 +5479,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             && moment._gpuBuffer.Handle != IntPtr.Zero
             && (moment._gpuBackend is null || ReferenceEquals(moment._gpuBackend, gpuBackend))
             && moment._gpuBuffer.Size >= moment.Length
-            && (moment.HasPendingGpuData || moment._gpuBufferVersion == moment.Version))
+            && (moment.HasPendingGpuData || moment._gpuBufferVersion == moment.GpuCacheVersion))
         {
             var existing = moment.TryGetGpuBuffer();
             if (existing is not null)
@@ -5450,7 +5519,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             && gf._gpuBuffer.Handle != IntPtr.Zero
             && (gf._gpuBackend is null || ReferenceEquals(gf._gpuBackend, gpuBackend))
             && gf._gpuBuffer.Size >= gf.Length
-            && (gf.HasPendingGpuData || gf._gpuBufferVersion == gf.Version))
+            && (gf.HasPendingGpuData || gf._gpuBufferVersion == gf.GpuCacheVersion))
         {
             var existing = gf.TryGetGpuBuffer();
             if (existing is not null)
@@ -5557,7 +5626,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             }
 
             var pBuf = gpuEngine.AcquireParameterBuffer(pf, out _);
-            if (pBuf is null && (pf.OffloadDevicePointer != IntPtr.Zero || pf.HasPendingGpuData || pf._gpuBufferVersion == pf.Version))
+            if (pBuf is null && (pf.OffloadDevicePointer != IntPtr.Zero || pf.HasPendingGpuData || pf._gpuBufferVersion == pf.GpuCacheVersion))
             {
                 pBuf = pf.TryGetGpuBuffer();
             }
@@ -5652,7 +5721,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             }
 
             var pBuf = gpuEngine.AcquireParameterBuffer(pf, out _);
-            if (pBuf is null && (pf.OffloadDevicePointer != IntPtr.Zero || pf.HasPendingGpuData || pf._gpuBufferVersion == pf.Version))
+            if (pBuf is null && (pf.OffloadDevicePointer != IntPtr.Zero || pf.HasPendingGpuData || pf._gpuBufferVersion == pf.GpuCacheVersion))
             {
                 pBuf = pf.TryGetGpuBuffer();
             }
@@ -5756,7 +5825,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             }
 
             var pBuf = gpuEngine.AcquireParameterBuffer(pf, out _);
-            if (pBuf is null && (pf.OffloadDevicePointer != IntPtr.Zero || pf.HasPendingGpuData || pf._gpuBufferVersion == pf.Version))
+            if (pBuf is null && (pf.OffloadDevicePointer != IntPtr.Zero || pf.HasPendingGpuData || pf._gpuBufferVersion == pf.GpuCacheVersion))
             {
                 pBuf = pf.TryGetGpuBuffer();
             }

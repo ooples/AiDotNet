@@ -42,7 +42,7 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
     private readonly bool _transpose;
 
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
-    private readonly Tensor<T> _reflectors;
+    private Tensor<T> _reflectors;
 
     /// <summary>Gets the feature dimension <c>D</c> rotated by this layer.</summary>
     public int Dimension => _dimension;
@@ -213,9 +213,148 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
         return entry;
     }
 
+    private sealed class StaticReflectorCachePair
+    {
+        public DerivedTensorPairCache<T> Forward { get; } =
+            new(disposeReplacedValues: false, registerPersistent: false, persistentRole: PersistentTensorRole.Weights);
+
+        public DerivedTensorPairCache<T> Transposed { get; } =
+            new(disposeReplacedValues: false, registerPersistent: false, persistentRole: PersistentTensorRole.Weights);
+    }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Tensor<T>, StaticReflectorCachePair> s_staticReflectorCaches = new();
+
+    [ThreadStatic]
+    private static Dictionary<int, (Tensor<T> Identity, IEngine? RegisteredEngine)>? t_dimensionIdentities;
+
+    private static Tensor<T> GetOrCreateDimensionIdentity(IEngine engine, int d)
+    {
+        var cache = t_dimensionIdentities ??= new Dictionary<int, (Tensor<T> Identity, IEngine? RegisteredEngine)>();
+        if (!cache.TryGetValue(d, out var entry))
+        {
+            using var suspendScope = AiDotNet.Tensors.Engines.TensorScope.Suspend();
+            using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+
+            var ops = MathHelper.GetNumericOperations<T>();
+            T one = ops.One;
+            var idData = new T[d * d];
+            for (int r = 0; r < d; r++)
+            {
+                idData[r * d + r] = one;
+            }
+
+            var idTensor = AiDotNet.Tensors.Engines.TensorScope.Detach(new Tensor<T>([d, d], new Vector<T>(idData)));
+            entry = (idTensor, null);
+        }
+
+        if (!ReferenceEquals(entry.RegisteredEngine, engine))
+        {
+            engine.RegisterPersistentTensor(entry.Identity, PersistentTensorRole.Constant);
+            entry = (entry.Identity, engine);
+            cache[d] = entry;
+        }
+
+        return entry.Identity;
+    }
+
+    private static (Tensor<T> First, Tensor<T>? Second) BuildDerivedOperatorPair(
+        IEngine engine,
+        Tensor<T> reflectors,
+        bool transpose)
+    {
+        int k = reflectors.Shape[0];
+        int d = reflectors.Shape[1];
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T two = numOps.FromDouble(2.0);
+        double floorValue = ReflectorNormFloor();
+
+        Tensor<T> aFactor;
+        Tensor<T> bFactor;
+        if (k == 1)
+        {
+            Tensor<T> uHat = NormalizeReflectorRows(engine, reflectors, floorValue);
+            aFactor = engine.TensorTranspose(uHat);
+            bFactor = engine.TensorMultiplyScalar(uHat, two);
+        }
+        else
+        {
+            var masks = GetOrCreateCompactWyMasks(engine, k);
+            Tensor<T> uHat = NormalizeReflectorRows(engine, reflectors, floorValue);
+            aFactor = engine.TensorTranspose(uHat);
+            Tensor<T> gram = engine.TensorMatMul(uHat, aFactor);
+            Tensor<T> tMat;
+            if (k == 2 && masks.WyOffFwd2 is not null && masks.WyOffTrans2 is not null && masks.TwoIdentity2 is not null)
+            {
+                Tensor<T> offMask = transpose ? masks.WyOffTrans2 : masks.WyOffFwd2;
+                tMat = engine.TensorAdd(engine.TensorMultiply(gram, offMask), masks.TwoIdentity2);
+            }
+            else
+            {
+                Tensor<T> nilpotent = engine.TensorMultiply(gram, masks.StrictUpperTwo);
+                Tensor<T> series = masks.Identity;
+                for (int i = k - 2; i >= 0; i--)
+                {
+                    Tensor<T> nilpotentRow = engine.TensorMatMul(masks.BasisRows[i], nilpotent);
+                    Tensor<T> solvedRow = engine.TensorMatMul(nilpotentRow, series);
+                    series = engine.TensorSubtract(series, engine.TensorMatMul(masks.BasisColumns[i], solvedRow));
+                }
+
+                tMat = engine.TensorMultiplyScalar(series, two);
+                if (transpose)
+                {
+                    tMat = engine.TensorTranspose(tMat);
+                }
+            }
+
+            bFactor = engine.TensorMatMul(tMat, uHat);
+        }
+
+        bool isGpu = engine.Unwrap() is DirectGpuTensorEngine;
+        int fullMatrixCap = isGpu ? 512 : 128;
+        bool materializeFullOperator = (2L * k >= d && d <= 4096) || d <= fullMatrixCap;
+        if (materializeFullOperator)
+        {
+            Tensor<T> identityD = GetOrCreateDimensionIdentity(engine, d);
+            Tensor<T> update = engine.TensorMatMul(aFactor, bFactor);
+            Tensor<T> qMat = AiDotNet.Tensors.Engines.TensorScope.Detach(engine.TensorSubtract(identityD, update));
+            return (qMat, null);
+        }
+
+        return (AiDotNet.Tensors.Engines.TensorScope.Detach(aFactor), AiDotNet.Tensors.Engines.TensorScope.Detach(bFactor));
+    }
+
+    private static Tensor<T> ApplyCachedOperatorPair(
+        IEngine engine,
+        Tensor<T> input,
+        int d,
+        int rowCount,
+        (Tensor<T> First, Tensor<T>? Second) pair)
+    {
+        Tensor<T> current = input.Rank == 2
+            ? input
+            : engine.Reshape(input, [rowCount, d]);
+
+        if (pair.Second is null)
+        {
+            current = engine.TensorMatMul(current, pair.First);
+        }
+        else
+        {
+            Tensor<T> proj = engine.TensorMatMul(current, pair.First);
+            Tensor<T> outer = engine.TensorMatMul(proj, pair.Second);
+            current = engine.TensorSubtract(current, outer);
+        }
+
+        return input.Rank == 2
+            ? current
+            : engine.Reshape(current, input._shape);
+    }
+
     /// <summary>
     /// Applies the matrix-free product of Householder reflections stored in <paramref name="reflectors"/>
-    /// (<c>[k, D]</c>) to <paramref name="input"/> (<c>[..., D]</c>) using pure tape-tracked <see cref="IEngine"/> ops.
+    /// (<c>[k, D]</c>) to <paramref name="input"/> (<c>[..., D]</c>) using pure tape-tracked <see cref="IEngine"/> ops,
+    /// automatically caching derived orthogonal operators or Compact WY factors in non-differentiable inference mode.
     /// </summary>
     internal static Tensor<T> ApplyChain(IEngine engine, Tensor<T> input, Tensor<T> reflectors, bool transpose = false)
     {
@@ -237,6 +376,20 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
         if (rowCount == 0)
         {
             return engine.TensorMultiplyScalar(input, numOps.One);
+        }
+
+        if (DerivedTensorCache<T>.CanUse(engine))
+        {
+            StaticReflectorCachePair holder = s_staticReflectorCaches.GetOrCreateValue(reflectors);
+            DerivedTensorPairCache<T> slot = transpose ? holder.Transposed : holder.Forward;
+            var cachedPair = slot.GetOrBuild(
+                engine,
+                transpose
+                    ? static (eng, srcs) => BuildDerivedOperatorPair(eng, srcs[0], transpose: true)
+                    : static (eng, srcs) => BuildDerivedOperatorPair(eng, srcs[0], transpose: false),
+                reflectors,
+                variantKey: transpose ? 1L : 0L);
+            return ApplyCachedOperatorPair(engine, input, d, rowCount, cachedPair);
         }
 
         T two = numOps.FromDouble(2.0);
@@ -350,7 +503,28 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
 
     /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
-        => ApplyChain(Engine, input, _reflectors, _transpose);
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (CanUseDerivedParameterCache && input.Rank >= 1 && input.Shape[^1] == _dimension)
+        {
+            int rowCount = input.Length / _dimension;
+            if (rowCount > 0)
+            {
+                var pair = GetOrBuildDerivedParameterPair(
+                    _transpose ? "HouseholderOperator_Transposed" : "HouseholderOperator_Forward",
+                    _transpose
+                        ? static (eng, srcs) => BuildDerivedOperatorPair(eng, srcs[0], transpose: true)
+                        : static (eng, srcs) => BuildDerivedOperatorPair(eng, srcs[0], transpose: false),
+                    _reflectors,
+                    variantKey: _transpose ? 1L : 0L,
+                    persistentRole: PersistentTensorRole.Weights,
+                    registerPersistent: true);
+                return ApplyCachedOperatorPair(Engine, input, _dimension, rowCount, pair);
+            }
+        }
+
+        return ApplyChain(Engine, input, _reflectors, _transpose);
+    }
 
     /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
@@ -360,7 +534,7 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var gradTensor = new Tensor<T>(_reflectors._shape, gradients);
         Engine.TensorSubtractInPlace(_reflectors, Engine.TensorMultiplyScalar(gradTensor, learningRate));
-        Engine.InvalidatePersistentTensor(_reflectors);
+        InvalidateTrainableParameter(_reflectors);
     }
 
     /// <inheritdoc />
@@ -391,6 +565,6 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
             : Math.Min(ReflectorNormFloor(), 1e-6);
         var normalized = NormalizeReflectorRows(Engine, reflectors, initFloor);
         normalized.AsSpan().Slice(0, reflectors.Length).CopyTo(reflectors.Data.Span);
-        Engine.InvalidatePersistentTensor(reflectors);
+        InvalidateTrainableParameter(reflectors);
     }
 }

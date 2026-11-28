@@ -888,7 +888,43 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     {
         _jitCompilationConfig = config ?? AiDotNet.Configuration.JitCompilationConfig.Default;
         _jitCompilationConfig.Validate();
+        _jitCompilationExplicitlyConfigured = true;
+        if (!_jitCompilationConfig.Enabled)
+        {
+            _compilationOptions.Mode = Enums.ExecutionMode.Eager;
+        }
         return this;
+    }
+
+    /// <summary>
+    /// Configures unified graph compilation, multi-bucket CUDA Graph replay, precision tiers, derived-weight caching,
+    /// persistent autotuning, and self-contained Direct-PTX execution.
+    /// </summary>
+    /// <param name="options">Compilation options; <c>null</c> resets to <see cref="CompilationOptions.Default"/>.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureCompilation(
+        CompilationOptions? options = null)
+    {
+        var resolved = options is not null ? new CompilationOptions(options) : CompilationOptions.Default;
+        resolved.Validate();
+        _compilationOptions = resolved;
+        _jitCompilationConfig = AiDotNet.Configuration.CompilationRuntimeSettings.ToJitCompilationConfig(
+            resolved,
+            _jitCompilationExplicitlyConfigured ? _jitCompilationConfig : null);
+        return this;
+    }
+
+    private void ApplyCompilationSettings(bool setAsProcessDefault = true)
+    {
+        _compilationOptions.Validate();
+        var effectiveJit = AiDotNet.Configuration.CompilationRuntimeSettings.ToJitCompilationConfig(
+            _compilationOptions,
+            _jitCompilationExplicitlyConfigured ? _jitCompilationConfig : null);
+        _jitCompilationConfig = effectiveJit;
+        AiDotNet.Configuration.CompilationRuntimeSettings.Apply(
+            _compilationOptions,
+            _jitCompilationExplicitlyConfigured ? effectiveJit : null,
+            setAsProcessDefault: setAsProcessDefault);
     }
 
     /// <summary>
@@ -1364,10 +1400,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // ctor-time auto-detect already ran.
         ApplyWeightStreamingConfig();
 
-        // Apply JIT compilation config so every subsequent step in BuildAsync
-        // sees the configured TensorCodecOptions. CompiledModelCache engages
-        // automatically when Enabled=true; Enabled=false short-circuits to eager.
-        _jitCompilationConfig?.ApplyToTensorCodec();
+        // Apply unified compilation, CUDA-Graph, derived-weight caching, precision-tier,
+        // and Direct-PTX settings before any training or inference runs.
+        ApplyCompilationSettings(setAsProcessDefault: true);
 
         // Deterministic-by-default: force bitwise-reproducible kernels unless
         // the caller opted out via AllowNondeterminism().
@@ -1574,6 +1609,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             CodeSyntaxProvider = _codeSyntaxProvider,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             JitCompilationConfig = _jitCompilationConfig,
+            CompilationOptions = new CompilationOptions(_compilationOptions),
             AllowNondeterminism = _allowNondeterminism,
             AugmentationConfig = _augmentationConfig,
             SegmentationVisualization = _segmentationVisualizationConfig,
@@ -1941,6 +1977,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             MetaTrainingResult = metaResult,
             PostprocessingPipeline = _postprocessingPipeline,
             JitCompilationConfig = _jitCompilationConfig,
+            CompilationOptions = new CompilationOptions(_compilationOptions),
             AllowNondeterminism = _allowNondeterminism,
             SegmentationVisualization = _segmentationVisualizationConfig,
             LoRAConfiguration = _loraConfiguration,
@@ -2251,6 +2288,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             DeploymentConfiguration = deploymentConfig,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             JitCompilationConfig = _jitCompilationConfig,
+            CompilationOptions = new CompilationOptions(_compilationOptions),
             AllowNondeterminism = _allowNondeterminism,
             AugmentationConfig = _augmentationConfig,
             SegmentationVisualization = _segmentationVisualizationConfig,
@@ -2646,6 +2684,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             DeploymentConfiguration = deploymentConfig,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             JitCompilationConfig = _jitCompilationConfig,
+            CompilationOptions = new CompilationOptions(_compilationOptions),
             AllowNondeterminism = _allowNondeterminism,
             SegmentationVisualization = _segmentationVisualizationConfig,
             ReasoningConfig = _reasoningConfig,

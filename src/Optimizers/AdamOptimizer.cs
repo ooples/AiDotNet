@@ -2328,11 +2328,11 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                         && syncedGpuBuf.Handle != IntPtr.Zero
                         && (gf._gpuBackend is null || ReferenceEquals(gf._gpuBackend, gpuBackend))
                         && syncedGpuBuf.Size >= gf.Length
-                        && gf._gpuBufferVersion == gf.Version)
+                        && gf._gpuBufferVersion == gf.GpuCacheVersion)
                     {
                         using var __gpuOp = gpuEngine.EnterGpuOp();
                         gpuBackend.Scale(syncedGpuBuf, syncedGpuBuf, (float)scaleFactor, gf.Length);
-                        gf._gpuBufferVersion = gf.Version;
+                        gf._gpuBufferVersion = gf.GpuCacheVersion;
                     }
                 }
                 continue;

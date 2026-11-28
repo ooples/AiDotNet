@@ -331,7 +331,7 @@ internal static class GradientBasedOptimizerGpuStepBatch
     private static void ApplyTensorUpdated(Tensor<float> tensor, GpuSyncPoint syncPoint)
     {
         tensor.MarkModified(syncPoint);
-        tensor._gpuBufferVersion = tensor.Version;
+        tensor._gpuBufferVersion = tensor.GpuCacheVersion;
     }
 
     private static void ApplyParameterUpdated(

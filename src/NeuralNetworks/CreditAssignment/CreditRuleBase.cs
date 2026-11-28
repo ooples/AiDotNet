@@ -111,10 +111,10 @@ public abstract class CreditRuleBase<T> : IFeedbackLearningRule<T>
         bool normalizeColumns = false)
     {
         var layers = context.Layers;
-        var sig = BuildSignature(layers);
-        if (_feedback is not null && _signature is not null && SignatureEquals(_signature, sig))
+        if (_feedback is not null && _signature is not null && SignatureMatches(_signature, layers))
             return _feedback;
 
+        var sig = BuildSignature(layers);
         var random = ResolveRandom(context);
         var fb = new Matrix<T>?[layers.Count];
         for (int i = 0; i < layers.Count; i++)
@@ -128,6 +128,17 @@ public abstract class CreditRuleBase<T> : IFeedbackLearningRule<T>
         _feedback = fb;
         _signature = sig;
         return fb;
+    }
+
+    private static bool SignatureMatches(int[] sig, IReadOnlyList<ICreditLayer<T>> layers)
+    {
+        if (sig.Length != layers.Count * 2) return false;
+        for (int i = 0; i < layers.Count; i++)
+        {
+            if (sig[2 * i] != layers[i].FlatFeatureSize || sig[2 * i + 1] != InFeatures(layers[i]))
+                return false;
+        }
+        return true;
     }
 
     private static int[] BuildSignature(IReadOnlyList<ICreditLayer<T>> layers)
@@ -166,7 +177,11 @@ public abstract class CreditRuleBase<T> : IFeedbackLearningRule<T>
     protected static Matrix<T> TargetMatrix(ICreditAssignmentContext<T> context) => FlatMatrix(context.Target);
 
     /// <summary>Projects a <c>[batch, C]</c> signal (error or target) through a <c>[C, M]</c> feedback matrix, giving <c>[batch, M]</c>.</summary>
-    protected static Matrix<T> ProjectThrough(Matrix<T> signal, Matrix<T> feedback) => signal.Multiply(feedback);
+    protected static Matrix<T> ProjectThrough(Matrix<T> signal, Matrix<T> feedback)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return AiDotNetEngine.Current.MatrixMultiply(signal, feedback);
+    }
 
     /// <summary>Flattens a <c>[batch, …]</c> tensor to a <c>[batch, flatFeatures]</c> matrix (row-major over the non-batch axes).</summary>
     protected static Matrix<T> FlatMatrix(Tensor<T> t)

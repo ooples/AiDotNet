@@ -162,6 +162,10 @@ public partial class StochasticGradientDescentOptimizer<T, TInput, TOutput> : Gr
     /// Set these options via GradientBasedOptimizerOptions.DataSampler, ShuffleData, DropLastBatch, and RandomSeed.
     /// </para>
     /// </remarks>
+    protected override bool SupportsModelOwnStep =>
+        !_options.UseAdaptiveMomentum
+        && Math.Abs(_options.InitialMomentum) == 0.0;
+
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         // Initialize with random solution
@@ -183,6 +187,8 @@ public partial class StochasticGradientDescentOptimizer<T, TInput, TOutput> : Gr
 
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;
+
                 // Calculate gradient on the batch (single sample for true SGD)
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
 

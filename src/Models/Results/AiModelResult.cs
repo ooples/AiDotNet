@@ -1067,6 +1067,13 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     [JsonProperty]
     private AiDotNet.Configuration.JitCompilationConfig? JitCompilationConfig { get; set; }
 
+    /// <summary>
+    /// Unified compilation, CUDA-Graph, derived-weight caching, precision-tier, and Direct-PTX options carried from
+    /// <c>AiModelBuilder.ConfigureCompilation</c>.
+    /// </summary>
+    [JsonProperty]
+    public AiDotNet.Models.Options.CompilationOptions CompilationOptions { get; private set; }
+        = AiDotNet.Models.Options.CompilationOptions.Default;
     /// <summary>Builder's determinism policy, re-asserted on every Predict.</summary>
     [JsonProperty]
     private bool AllowNondeterminism { get; set; }
@@ -1804,6 +1811,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         InferenceOptimizationConfig = options.InferenceOptimizationConfig;
         ServingDraftModel = options.ServingDraftModel;
         JitCompilationConfig = options.JitCompilationConfig;
+        CompilationOptions = options.CompilationOptions is not null
+            ? new AiDotNet.Models.Options.CompilationOptions(options.CompilationOptions)
+            : (options.JitCompilationConfig is { Enabled: false }
+                ? AiDotNet.Models.Options.CompilationOptions.Eager
+                : AiDotNet.Models.Options.CompilationOptions.Default);
         AllowNondeterminism = options.AllowNondeterminism;
         QuantizationInfo = options.QuantizationInfo;
 
@@ -2662,17 +2674,12 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             return FinishForecast(forecast, forecastsTarget);
         }
 
-        // Bridge builder-configured JIT compilation flags into this thread's
-        // TensorCodecOptions so CompiledModelCache engages correctly.
-        if (JitCompilationConfig is { } jit)
-        {
-            jit.ApplyToTensorCodec();
-        }
-        else
-        {
-            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(
-                AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Default);
-        }
+        // Bridge builder-configured unified compilation + derived-weight caching + precision-tier +
+        // Direct-PTX + JIT flags into this thread's runtime context on every Predict call.
+        AiDotNet.Configuration.CompilationRuntimeSettings.Apply(
+            CompilationOptions,
+            JitCompilationConfig,
+            setAsProcessDefault: false);
 
         // Re-assert the builder's determinism policy on this thread.
         AiDotNet.Tensors.Engines.AiDotNetEngine.SetDeterministicMode(!AllowNondeterminism);
@@ -4138,6 +4145,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             // JIT compilation is parameter-specific, don't copy
             InferenceOptimizationConfig = InferenceOptimizationConfig,
             JitCompilationConfig = JitCompilationConfig,
+            CompilationOptions = new AiDotNet.Models.Options.CompilationOptions(CompilationOptions),
             AllowNondeterminism = AllowNondeterminism,
             SegmentationVisualization = SegmentationVisualization,
             ReasoningConfig = ReasoningConfig,
@@ -5861,6 +5869,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             // JIT compilation is model-specific, don't copy
             InferenceOptimizationConfig = InferenceOptimizationConfig,
             JitCompilationConfig = JitCompilationConfig,
+            CompilationOptions = new AiDotNet.Models.Options.CompilationOptions(CompilationOptions),
             AllowNondeterminism = AllowNondeterminism,
             SegmentationVisualization = SegmentationVisualization,
             ReasoningConfig = ReasoningConfig,
@@ -6062,6 +6071,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 // Files saved before compilation was on by default carry no config: they get today's default, as a
                 // freshly built model does. An explicit opt-out was saved as a config with Enabled = false.
                 JitCompilationConfig = deserializedObject.JitCompilationConfig ?? AiDotNet.Configuration.JitCompilationConfig.Default;
+                CompilationOptions = deserializedObject.CompilationOptions is not null
+                    ? new AiDotNet.Models.Options.CompilationOptions(deserializedObject.CompilationOptions)
+                    : (JitCompilationConfig is { Enabled: false }
+                        ? AiDotNet.Models.Options.CompilationOptions.Eager
+                        : AiDotNet.Models.Options.CompilationOptions.Default);
                 CompiledProgram = deserializedObject.CompiledProgram ?? [];
                 AllowNondeterminism = deserializedObject.AllowNondeterminism;
                 SerializedModelData = deserializedObject.SerializedModelData;

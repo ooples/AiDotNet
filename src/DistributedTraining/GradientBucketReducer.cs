@@ -785,7 +785,7 @@ internal sealed class GradientBucketReducer<T> : IDisposable
             srcFloat._gpuBuffer is { } srcGpuBuf &&
             srcGpuBuf.Handle != IntPtr.Zero &&
             srcFloat._gpuBackend is { } gpuBack &&
-            srcFloat._gpuBufferVersion == srcFloat.Version &&
+            srcFloat._gpuBufferVersion == srcFloat.GpuCacheVersion &&
             srcFloat._storageOffset == 0 &&
             srcFloat.IsContiguous)
         {

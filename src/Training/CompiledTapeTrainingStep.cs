@@ -121,6 +121,7 @@ public static partial class CompiledTapeTrainingStep<T>
         internal double configuredMaxGradNorm;
         // Mixed precision (FusedMixedPrecision): the configuration the plan was committed with, and the plan whose loss
         // scaling is configured (a new plan for a new shape takes the previous one's scaler state).
+        internal AiDotNet.Tensors.Engines.Compilation.ExternalLrSchedule? externalLrSchedule;
         internal string? mixedPrecisionSignature;
         internal object? lossScaledPlan;
         internal long fusedStepCount;
@@ -799,6 +800,23 @@ public static partial class CompiledTapeTrainingStep<T>
         return true;
     }
 
+    private static AiDotNet.Tensors.Engines.Compilation.LrSchedule? ResolveEffectivePlanSchedule(
+        AiDotNet.Tensors.Engines.Compilation.OptimizerType optimizerType,
+        double learningRate,
+        AiDotNet.Tensors.Engines.Compilation.LrSchedule? configuredSchedule)
+    {
+        if (configuredSchedule is not null)
+            return configuredSchedule;
+        if (optimizerType == AiDotNet.Tensors.Engines.Compilation.OptimizerType.Rprop || learningRate <= 0.0)
+            return null;
+        if (!AiDotNet.Configuration.CompilationRuntimeSettings.GpuResidentOptimizerScalarsEnabled)
+            return null;
+        var extSchedule = CurrentState.externalLrSchedule
+            ??= AiDotNet.Tensors.Engines.Compilation.LrSchedule.External(learningRate);
+        extSchedule.LearningRate = learningRate;
+        return extSchedule;
+    }
+
     /// <summary>Runs only a caller-declared graph break through the already configured optimizer.</summary>
     internal static bool TryDeclaredGraphBreak(object owner, object? stateKey, FusedTrainingStepRequest<T> request,
         AiDotNet.Optimizers.Fused.FusedOptimizerConfig config, double l2, bool l2AfterClip, double clip,
@@ -815,8 +833,9 @@ public static partial class CompiledTapeTrainingStep<T>
             _currentState = state;
             _lastFallbackException = null;
             var parameters = CollectDeduplicatedParametersWithExtras(request.Layers, request.ExtraParameters, request.Selection);
+            var effectiveSchedule = ResolveEffectivePlanSchedule(config.Type, (float)config.LearningRate, config.Schedule);
             var contract = new OptimizerContract(parameters, (int)config.Type, config.LearningRate,
-                config.Beta1, config.Beta2, config.Epsilon, config.WeightDecay, config.Schedule, request.Optimizer,
+                config.Beta1, config.Beta2, config.Epsilon, config.WeightDecay, effectiveSchedule, request.Optimizer,
                 config.UseBf16Moments || config.MomentStorage == AiDotNet.Enums.OptimizerMomentStorage.BFloat16,
                 config.MomentStorage == AiDotNet.Enums.OptimizerMomentStorage.Int8Blockwise ? config.Int8MomentBlockSize : 0,
                 config.Int8MinQuantizedLength, config.Extras,
@@ -1273,7 +1292,13 @@ public static partial class CompiledTapeTrainingStep<T>
                 return;
             }
         }
-        if (shapes.Count >= MaxBatchShapesPerLifecycle)
+        int maxShapes = AiDotNet.Configuration.CompilationRuntimeSettings.MultiBucketShapeRoutingEnabled
+            ? System.Math.Max(
+                MaxBatchShapesPerLifecycle,
+                AiDotNet.Configuration.CompilationRuntimeSettings.Current.SequenceLengthBuckets.Length
+                + AiDotNet.Configuration.CompilationRuntimeSettings.Current.BatchSizeBuckets.Length)
+            : MaxBatchShapesPerLifecycle;
+        if (shapes.Count >= maxShapes)
         {
             _retiringCache?.Invalidate();
             _retiringCache = _cache;
@@ -1296,7 +1321,7 @@ public static partial class CompiledTapeTrainingStep<T>
         CurrentState.mixedPrecisionSignature = null;
         CurrentState.lossScaledPlan = null;
         _configuredOptimizerConfig = null;
-            CurrentState.optimizerContract = null;
+        CurrentState.optimizerContract = null;
         _configuredL2 = 0.0;
         _configuredL2AfterClip = false;
         // AiDotNet#1331: drop the persistent input/target tensors so the next
@@ -1893,6 +1918,11 @@ public static partial class CompiledTapeTrainingStep<T>
         _lastFallbackException = null;
         CurrentState.distributedReplayDisagreementReason = null;
         CurrentState.distributedReplayEvaluated = false;
+
+        // Keep constant/externally-adjusted learning rates live on a dynamic ExternalLrSchedule handle so
+        // warmup, cosine annealing, or manual per-step LR updates never invalidate _configuredPlan or break
+        // captured full-step CUDA Graphs. (Rprop takes no learning rate and requires lrSchedule == null.)
+        lrSchedule = ResolveEffectivePlanSchedule(optimizerType, learningRate, lrSchedule);
         CurrentState.lastFallbackUnreplayableClosureStep = false;
         // Declared graph breaks bypass probing and consume their random draws once.
 
@@ -2507,7 +2537,10 @@ public static partial class CompiledTapeTrainingStep<T>
                 foreach (var schedule in withSchedules.LearningRateSchedules)
                 {
                     if (schedule is AiDotNet.Tensors.Engines.Compilation.ExternalLrSchedule external)
+                    {
+                        CurrentState.externalLrSchedule = external;
                         optimizer.AdoptRestoredFusedLrSchedule(external);
+                    }
                 }
             }
         }
