@@ -19,6 +19,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.237.0](https://github.com/ooples/AiDotNet/compare/v0.236.1...v0.237.0) (2026-11-28)
+
+
+### Features
+
+* **credit:** add CreateWithFrameAlignment auxiliary adapters and scope inner detached readout tape ([#2643](https://github.com/ooples/AiDotNet/issues/2643)) ([e842cfa](https://github.com/ooples/AiDotNet/commit/e842cfa12281ceb7a5c88fdfc4e153b8ea40b019))
+* **distributed:** compiled DDP step, PyTorch DDP semantics, live training view ([#2632](https://github.com/ooples/AiDotNet/issues/2632)) ([e0d46df](https://github.com/ooples/AiDotNet/commit/e0d46df8e6afe91fed1826c9a8948f31e44e1e2f))
+
+
+### Bug Fixes
+
+* **audio:** fairseq-faithful wav2vec 2.0 masking and RobustConformer loss weighting ([#2623](https://github.com/ooples/AiDotNet/issues/2623)) ([660405a](https://github.com/ooples/AiDotNet/commit/660405a276e36f441c52673f16266113ca6295e6))
+* combined v1 fixes - classical ML regression, A-6 protocol, element-wise sweeps, softmax and CI (combines 11 PRs) ([#2660](https://github.com/ooples/AiDotNet/issues/2660)) ([d24a758](https://github.com/ooples/AiDotNet/commit/d24a758f8a74258faa7fd27cfceb5242f3203c89))
+* **compat:** baseline the finance nlp api removals from [#2676](https://github.com/ooples/AiDotNet/issues/2676) ([#2683](https://github.com/ooples/AiDotNet/issues/2683)) ([4ddaf40](https://github.com/ooples/AiDotNet/commit/4ddaf40d9c85e2310528864e2bcd68094bdd29d4))
+* **docs:** green the Docs Wiki gates and train sample-objective models through the facade ([#2649](https://github.com/ooples/AiDotNet/issues/2649)) ([ee8cc00](https://github.com/ooples/AiDotNet/commit/ee8cc0020dc932d2d1d0a4d30e64556534b31969))
+* **finance:** rebuild the nlp models on bert and decoder bases that train correctly ([#2676](https://github.com/ooples/AiDotNet/issues/2676)) ([53fbbcc](https://github.com/ooples/AiDotNet/commit/53fbbcc654522facb826c4e78249b2c47dd5336d))
+* **training:** restore the best epoch's whole serialized state, not only its parameters ([#2679](https://github.com/ooples/AiDotNet/issues/2679)) ([bc2efd5](https://github.com/ooples/AiDotNet/commit/bc2efd57526e9e6ad50626b5e348388e6c51f98c))
+* **training:** return the best held-out epoch's model when sample training stops early ([#2675](https://github.com/ooples/AiDotNet/issues/2675)) ([42f3562](https://github.com/ooples/AiDotNet/commit/42f3562d9b69f0bee8f01854f468ab4fd14557bd))
+
+
+### Performance
+
+* combined element-wise sweeps - segmentation, synthetic draws, TTS ids (combines [#2650](https://github.com/ooples/AiDotNet/issues/2650) [#2655](https://github.com/ooples/AiDotNet/issues/2655) [#2656](https://github.com/ooples/AiDotNet/issues/2656)) ([#2672](https://github.com/ooples/AiDotNet/issues/2672)) ([b68892d](https://github.com/ooples/AiDotNet/commit/b68892d7f6a844748222690ddf1d0174ba8a17fe))
+* draw every remaining seeded Box-Muller loop through SeededNoiseTensors (follow-up to [#2657](https://github.com/ooples/AiDotNet/issues/2657)) ([#2671](https://github.com/ooples/AiDotNet/issues/2671)) ([502c030](https://github.com/ooples/AiDotNet/commit/502c030c9a6ee562ae7ecdbd0d3795860ef5c6b7))
+* draw the synthetic generators' noise and the last tts id loops through the shared helpers ([#2674](https://github.com/ooples/AiDotNet/issues/2674)) ([527f50c](https://github.com/ooples/AiDotNet/commit/527f50c0babb846f06876878a008fd2ba3044a8c))
+* **gan:** device-resident DCGAN step and CPU churn fix; scale-free portfolio observation; RobustConformer test split and CI fixes ([#2627](https://github.com/ooples/AiDotNet/issues/2627)) ([b45f47f](https://github.com/ooples/AiDotNet/commit/b45f47fa3e325c3d416f7b5619dedbcba8644e30))
+* **layers:** persistent Compact WY constants and exact k=2 fast path in HouseholderSubspaceLayer ([#2659](https://github.com/ooples/AiDotNet/issues/2659)) ([f3b353d](https://github.com/ooples/AiDotNet/commit/f3b353d46a05ece89ce2c09095089ef954f8b7ff))
+* **training:** multi-tensor checkpointed streaming optimizer batching and fused Householder chain dispatch ([#2661](https://github.com/ooples/AiDotNet/issues/2661)) ([ef42c70](https://github.com/ooples/AiDotNet/commit/ef42c70cf42416d3c5519c3e368b0ddeaf6022ab))
+
+
+### Documentation
+
+* **asr:** fold the speech-recognition half of the docs series ([#2646](https://github.com/ooples/AiDotNet/issues/2646), [#2648](https://github.com/ooples/AiDotNet/issues/2648)) ([#2669](https://github.com/ooples/AiDotNet/issues/2669)) ([859dfeb](https://github.com/ooples/AiDotNet/commit/859dfeb6a9e132fa5c1647758ecfc7f41f51ad68))
+* make the tts, speech and video examples run what they show (folds [#2645](https://github.com/ooples/AiDotNet/issues/2645), [#2647](https://github.com/ooples/AiDotNet/issues/2647)) ([#2666](https://github.com/ooples/AiDotNet/issues/2666)) ([438f843](https://github.com/ooples/AiDotNet/commit/438f843143965243f5b80620ebc8a24cf8bafe4b))
+* **vision-language:** run the instruction-tuned, encoder, foundational and generative examples (part 1 of 2) ([#2667](https://github.com/ooples/AiDotNet/issues/2667)) ([d4f0fb7](https://github.com/ooples/AiDotNet/commit/d4f0fb78668302f8a4dbe56a33e861adb24a0a42))
+* **vl:** run the vl examples (2/2); vit and slowfast train on logits (folds [#2662](https://github.com/ooples/AiDotNet/issues/2662)) ([#2668](https://github.com/ooples/AiDotNet/issues/2668)) ([ddd5dd1](https://github.com/ooples/AiDotNet/commit/ddd5dd13218d6cbd3f7045ad1c9bbad5fa9f44c2))
+
 ## [0.236.1](https://github.com/ooples/AiDotNet/compare/v0.236.0...v0.236.1) (2026-11-23)
 
 
