@@ -332,9 +332,16 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
 
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
-                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;
+                // Each accepted batch advances per-batch learning-rate schedules exactly once, on both paths, as
+                // AdamOptimizer does; OnBatchEnd is the only place the scheduler steps.
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch))
+                {
+                    OnBatchEnd();
+                    continue;
+                }
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
                 currentSolution = UpdateSolution(currentSolution, gradient);
+                OnBatchEnd();
             }
 
             var currentStepData = EvaluateSolution(currentSolution, inputData);

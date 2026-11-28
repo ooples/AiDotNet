@@ -120,6 +120,10 @@ internal static class LocalObjectiveGradientComputer<T>
         public List<int> HiddenIndices = new();
         public List<Tensor<T>> ModelParameterSources = new();
         public HashSet<Tensor<T>> ModelParameterSet = new(TensorReferenceComparer<Tensor<T>>.Instance);
+        // True when some trainable layer (or sublayer) does not derive from LayerBase<T>. Only LayerBase<T> advances
+        // ParameterSurfaceEpoch when it replaces a parameter tensor; ITrainableLayer<T>.SetTrainableParameters carries no
+        // such obligation, so a topology containing such a layer is never served from the cache.
+        public bool HasUnversionedTrainableLayer;
     }
 
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<NeuralNetworkBase<T>, CachedNetworkParameterTopology>
@@ -153,14 +157,19 @@ internal static class LocalObjectiveGradientComputer<T>
             if (holder.StructureVersion == structVer
                 && holder.ParameterEpoch == paramEpoch
                 && holder.ReadoutCount == readoutCount
-                && holder.LayerParameters.Length == layers.Count)
+                && holder.LayerParameters.Length == layers.Count
+                && !holder.HasUnversionedTrainableLayer)
             {
                 return (holder.LayerParameters, holder.HiddenIndices, holder.ModelParameterSources, holder.ModelParameterSet);
             }
 
             var paramsOf = new List<Tensor<T>>[layers.Count];
+            bool hasUnversioned = false;
             for (int i = 0; i < layers.Count; i++)
+            {
                 paramsOf[i] = CollectParameters(layers[i]);
+                hasUnversioned |= ContainsUnversionedTrainableLayer(layers[i]);
+            }
 
             var hiddenIdx = new List<int>(readoutStart);
             for (int i = 0; i < readoutStart; i++)
@@ -184,6 +193,7 @@ internal static class LocalObjectiveGradientComputer<T>
             holder.StructureVersion = structVer;
             holder.ParameterEpoch = paramEpoch;
             holder.ReadoutCount = readoutCount;
+            holder.HasUnversionedTrainableLayer = hasUnversioned;
             return (paramsOf, hiddenIdx, modelSources, modelSet);
         }
     }
@@ -207,6 +217,18 @@ internal static class LocalObjectiveGradientComputer<T>
         int readoutStart = layers.Count - readoutCount;
         int headIndex = layers.Count - 1;
         int epochBeforeForward = LayerBase<T>.ParameterSurfaceEpoch;
+
+        // A lazy hidden layer has no registered parameters until its first forward. If the recorded hidden pass below
+        // met it uninitialized, the pass would forward it as a parameterless layer (no stop-gradient boundary, no
+        // recorded activation), and the topology refresh after the forward would then list it as a hidden layer with
+        // no output. Materialize such layers first, from a gradient-free inference-mode prefix forward (no tape, no
+        // normalization-statistics update, no dropout draw), so the hidden pass sees the final topology. This runs
+        // once, on the first step of a lazily-shaped network.
+        if (AnyHiddenLayerUninitialized(layers, readoutStart))
+        {
+            MaterializeLazyHiddenLayers(network, layers, readoutStart, input);
+            epochBeforeForward = LayerBase<T>.ParameterSurfaceEpoch;
+        }
 
         var (paramsOf, hiddenIdx, cachedModelSources, cachedModelSet) = GetOrBuildTopology(network, readoutCount);
         if (hiddenIdx.Count == 0)
@@ -794,6 +816,54 @@ internal static class LocalObjectiveGradientComputer<T>
             tape.Retain(outputObjective);
             tape.Retain(prediction);
             return new LocalObjectiveGradients<T>(grads, outputObjective, prediction, hiddenIdx.Count, locals, protectedTensors);
+        }
+        finally
+        {
+            network.SetTrainingMode(prevTraining);
+        }
+    }
+
+    private static bool AnyHiddenLayerUninitialized(IList<ILayer<T>> layers, int readoutStart)
+    {
+        for (int i = 0; i < readoutStart; i++)
+        {
+            if (layers[i] is LayerBase<T> { IsInitialized: false })
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Resolves and initializes every uninitialized hidden layer before the recorded hidden pass, forwarding the input
+    /// through the hidden prefix without gradient recording and in inference mode so the extra forward leaves no trace
+    /// on the tape or in running statistics. The caller's training mode is restored afterwards.
+    /// </summary>
+    private static void MaterializeLazyHiddenLayers(
+        NeuralNetworkBase<T> network, IList<ILayer<T>> layers, int readoutStart, Tensor<T> input)
+    {
+        int lastLazy = -1;
+        for (int i = 0; i < readoutStart; i++)
+        {
+            if (layers[i] is LayerBase<T> { IsInitialized: false })
+                lastLazy = i;
+        }
+        if (lastLazy < 0) return;
+
+        bool prevTraining = network.IsTrainingMode;
+        network.SetTrainingMode(false);
+        try
+        {
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var current = input;
+            for (int i = 0; i <= lastLazy; i++)
+            {
+                if (i == lastLazy && layers[i] is LayerBase<T> { IsInitialized: false } lazy)
+                {
+                    lazy.InitializeFromInputWithoutForward(current);
+                    break;
+                }
+                current = layers[i].Forward(current);
+            }
         }
         finally
         {
@@ -1541,6 +1611,23 @@ internal static class LocalObjectiveGradientComputer<T>
             for (int i = 0; i < r; i++) a[i] = i;
             return a;
         }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="layer"/> or any sublayer is an <see cref="ITrainableLayer{T}"/> that does not derive from
+    /// <see cref="LayerBase{T}"/>, i.e. one whose tensor replacement is not tracked by
+    /// <see cref="LayerBase{T}.ParameterSurfaceEpoch"/>.
+    /// </summary>
+    private static bool ContainsUnversionedTrainableLayer(ILayer<T> layer)
+    {
+        if (layer is LayerBase<T> lb)
+        {
+            foreach (var sub in lb.GetSubLayers())
+                if (ContainsUnversionedTrainableLayer(sub)) return true;
+            return false;
+        }
+
+        return layer is ITrainableLayer<T>;
     }
 
     internal static List<Tensor<T>> CollectParameters(ILayer<T> layer)

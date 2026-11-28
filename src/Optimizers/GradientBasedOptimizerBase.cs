@@ -3578,58 +3578,68 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         context = WithSparseLeavesAsValueViews(context);
         var learningRateGroups = CaptureLearningRateGroups(context);
         _stepNoGrad = new NoGradScope<T>();
-        var activeGpuEngine = typeof(T) == typeof(float)
-            ? AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine
-            : null;
-        using var gpuStepBatch = GradientBasedOptimizerGpuStepBatch.Begin(activeGpuEngine);
-        if (activeGpuEngine is not null
-            && Configuration.CompilationRuntimeSettings.GpuResidentOptimizerScalarsEnabled
-            && activeGpuEngine.GetBackend() is { } scalarBackend)
-        {
-            float clipScalar = TapeStepGradientClipNorm > 0.0
-                ? (float)TapeStepGradientClipNorm
-                : 0f;
-            float wdScalar = this is Fused.IFusedOptimizerSpec fusedSpec && fusedSpec.TryGetFusedOptimizerConfig(out var fCfg)
-                ? (float)fCfg.WeightDecay
-                : 0f;
-            float b1Scalar = this is Fused.IFusedOptimizerSpec fs1 && fs1.TryGetFusedOptimizerConfig(out var fc1) ? (float)fc1.Beta1 : 0f;
-            float b2Scalar = this is Fused.IFusedOptimizerSpec fs2 && fs2.TryGetFusedOptimizerConfig(out var fc2) ? (float)fc2.Beta2 : 0f;
-            float epsScalar = this is Fused.IFusedOptimizerSpec fs3 && fs3.TryGetFusedOptimizerConfig(out var fc3) ? (float)fc3.Epsilon : 1e-8f;
-            _gpuScalarBuffer.EnsureUpdated(
-                scalarBackend,
-                (float)GetCurrentLearningRate(),
-                Volatile.Read(ref _tapeStepCount) + 1,
-                wdScalar,
-                b1Scalar,
-                b2Scalar,
-                epsScalar,
-                clipScalar,
-                isStreamCapturing: AiDotNet.NeuralNetworks.GraphCaptureCompatibility.IsActive);
-        }
+        // GPU setup (batch scope, scalar upload) runs inside the protected region: if it throws, the finally still
+        // disposes the step's no-grad scope, so later training work is not left running without gradient recording.
+        GradientBasedOptimizerGpuStepBatch.Scope gpuStepBatch = default;
         try
         {
-            // The clip (here or in StepCore) scales the gradients in place; a layer that published one by reference
-            // keeps the unclipped values first.
-            if (!GradientsClippedAhead && GradientOptions.EnableGradientClipping)
-                LayerBase<T>.SnapshotPublishedGradientsBeforeInPlaceWrite(context.Gradients.Values);
-            // Opt-in monitoring: reduce the norm now, before a by-value clip changes the gradients, when no clip by
-            // norm will reduce it during the step.
-            if (ComputeGradientNormEveryStep && !GradientsClippedAhead && !(TapeStepGradientClipNorm > 0.0))
-                TapeClipNormThreadCache.LastPreClipNormSq = MonitoringGlobalGradientSquaredNorm(context);
-            if (!ClipsGradientsInStepCore && !GradientsClippedAhead) ApplyConfiguredTapeGradientClipping(context);
-            StepCore(context);
-            ApplyLearningRateGroups(learningRateGroups);
-            gpuStepBatch.Commit();
+            try
+            {
+                var activeGpuEngine = typeof(T) == typeof(float)
+                    ? AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine
+                    : null;
+                gpuStepBatch = GradientBasedOptimizerGpuStepBatch.Begin(activeGpuEngine);
+                if (activeGpuEngine is not null
+                    && Configuration.CompilationRuntimeSettings.GpuResidentOptimizerScalarsEnabled
+                    && activeGpuEngine.GetBackend() is { } scalarBackend)
+                {
+                    float clipScalar = TapeStepGradientClipNorm > 0.0
+                        ? (float)TapeStepGradientClipNorm
+                        : 0f;
+                    float wdScalar = this is Fused.IFusedOptimizerSpec fusedSpec && fusedSpec.TryGetFusedOptimizerConfig(out var fCfg)
+                        ? (float)fCfg.WeightDecay
+                        : 0f;
+                    float b1Scalar = this is Fused.IFusedOptimizerSpec fs1 && fs1.TryGetFusedOptimizerConfig(out var fc1) ? (float)fc1.Beta1 : 0f;
+                    float b2Scalar = this is Fused.IFusedOptimizerSpec fs2 && fs2.TryGetFusedOptimizerConfig(out var fc2) ? (float)fc2.Beta2 : 0f;
+                    float epsScalar = this is Fused.IFusedOptimizerSpec fs3 && fs3.TryGetFusedOptimizerConfig(out var fc3) ? (float)fc3.Epsilon : 1e-8f;
+                    _gpuScalarBuffer.EnsureUpdated(
+                        scalarBackend,
+                        (float)GetCurrentLearningRate(),
+                        Volatile.Read(ref _tapeStepCount) + 1,
+                        wdScalar,
+                        b1Scalar,
+                        b2Scalar,
+                        epsScalar,
+                        clipScalar,
+                        isStreamCapturing: AiDotNet.NeuralNetworks.GraphCaptureCompatibility.IsActive);
+                }
+                // The clip (here or in StepCore) scales the gradients in place; a layer that published one by reference
+                // keeps the unclipped values first.
+                if (!GradientsClippedAhead && GradientOptions.EnableGradientClipping)
+                    LayerBase<T>.SnapshotPublishedGradientsBeforeInPlaceWrite(context.Gradients.Values);
+                // Opt-in monitoring: reduce the norm now, before a by-value clip changes the gradients, when no clip by
+                // norm will reduce it during the step.
+                if (ComputeGradientNormEveryStep && !GradientsClippedAhead && !(TapeStepGradientClipNorm > 0.0))
+                    TapeClipNormThreadCache.LastPreClipNormSq = MonitoringGlobalGradientSquaredNorm(context);
+                if (!ClipsGradientsInStepCore && !GradientsClippedAhead) ApplyConfiguredTapeGradientClipping(context);
+                StepCore(context);
+                ApplyLearningRateGroups(learningRateGroups);
+                gpuStepBatch.Commit();
+            }
+            finally
+            {
+                _lastStepGradientNormSq = TapeClipNormThreadCache.LastPreClipNormSq;
+                TapeClipNormThreadCache.LastPreClipNormSq = null;
+                Interlocked.Increment(ref _tapeStepCount);
+                AiDotNet.NeuralNetworks.Layers.DerivedTensorCacheGeneration.Advance();
+                GradientsClippedAhead = false;
+                _stepNoGrad?.Dispose();
+                _stepNoGrad = null;
+            }
         }
         finally
         {
-            _lastStepGradientNormSq = TapeClipNormThreadCache.LastPreClipNormSq;
-            TapeClipNormThreadCache.LastPreClipNormSq = null;
-            Interlocked.Increment(ref _tapeStepCount);
-            AiDotNet.NeuralNetworks.Layers.DerivedTensorCacheGeneration.Advance();
-            GradientsClippedAhead = false;
-            _stepNoGrad?.Dispose();
-            _stepNoGrad = null;
+            gpuStepBatch.Dispose();
         }
     }
 
@@ -5172,17 +5182,16 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </summary>
     protected static bool HasAnomalousTapeGradients(TapeStepContext<T> context)
     {
-        // Never force a blocking device-to-host scalar sync while capturing a static-shape CUDA Graph;
-        // device-side anomaly flags/norm kernels record inside the graph without breaking stream capture.
-        if (AiDotNet.NeuralNetworks.GraphCaptureCompatibility.IsActive
-            || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
-        {
-            return false;
-        }
+        // Never force a blocking device-to-host sync while capturing a static-shape CUDA Graph: during capture the
+        // device reduction (and any engine-side finiteness reduction that reads a scalar back) is skipped, but
+        // gradients whose host backing is already current are still checked on host, which needs no sync. Host-side
+        // optimizers that materialize device gradients themselves (ScaledAdam) check what they materialize; see
+        // IsGraphCaptureActive.
+        bool capturing = IsGraphCaptureActive;
         // GPU engine: when any gradient is pending on device, run one device sum of squares over every gradient and
         // read one scalar back. When all gradients are already host-current (!HasPendingGpuData), check them in SIMD
         // on host without launching a GPU kernel or forcing a D2H sync.
-        if (AnyTapeGradientHasPendingGpuData(context) && DeviceTapeGradients(context) is { } deviceGrads)
+        if (!capturing && AnyTapeGradientHasPendingGpuData(context) && DeviceTapeGradients(context) is { } deviceGrads)
         {
             using var deviceSum = AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryGradientSumOfSquares(deviceGrads);
             if (deviceSum is not null && deviceSum.IsFinite) return false;
@@ -5192,6 +5201,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         {
             var grad = kvp.Value;
             if (grad is null) continue;
+            if (capturing && grad.HasPendingGpuData) continue;
             // When host backing is already current, a double sum of squares is finite whenever all elements are finite
             // (and for float, squares never overflow double so non-finite iff an element is NaN/Inf).
             if (!grad.HasPendingGpuData && TrySumOfSquaresHostSimd(grad, out double sq))
@@ -5199,12 +5209,20 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 if (!double.IsNaN(sq) && !double.IsInfinity(sq)) continue;
                 if (typeof(T) == typeof(float) || double.IsNaN(sq)) return true;
             }
-            if (grad.Length == 0) continue;
+            if (grad.Length == 0 || capturing) continue;
             using var finiteMask = AiDotNetEngine.Current.TensorIsFinite(grad);
             if (AiDotNetEngine.Current.TensorMinValue(finiteMask) == AiDotNet.Tensors.Bit.False) return true;
         }
         return false;
     }
+
+    /// <summary>
+    /// Whether a static-shape CUDA Graph capture or compiled graph trace is active, during which
+    /// <see cref="HasAnomalousTapeGradients"/> skips every check that would read a device value back.
+    /// </summary>
+    private protected static bool IsGraphCaptureActive
+        => AiDotNet.NeuralNetworks.GraphCaptureCompatibility.IsActive
+           || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive;
 
     /// <summary>
     /// Updates a matrix of parameters based on the calculated gradient.

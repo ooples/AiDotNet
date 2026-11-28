@@ -76,6 +76,10 @@ internal sealed class GpuOptimizerScalarBuffer : IDisposable
                 }
 
                 _deviceBuffer?.Dispose();
+                _deviceBuffer = null;
+                _backend = null;
+                // Not uploaded until AllocateBuffer succeeds: a throw leaves the slot reallocating on the next call.
+                _hasUploadedInitialState = false;
                 _hostStaging[SlotLearningRate] = learningRate;
                 _hostStaging[SlotStepCount] = stepCountFloat;
                 _hostStaging[SlotWeightDecay] = weightDecay;
@@ -111,6 +115,9 @@ internal sealed class GpuOptimizerScalarBuffer : IDisposable
                 _hostStaging[SlotMaxGradNorm] = maxGradNorm;
                 _hostStaging[SlotAnomalyFlag] = 0f;
                 Buffer.BlockCopy(_hostStaging, 0, _hostStagingBytes, 0, _hostStagingBytes.Length);
+                // Mark dirty before the upload and complete only after it returns: the staging array already holds
+                // the requested values, so a failed upload must not let a retry with the same values skip the copy.
+                _hasUploadedInitialState = false;
                 backend.UploadByteBuffer(liveBuffer, _hostStagingBytes);
                 _hasUploadedInitialState = true;
             }

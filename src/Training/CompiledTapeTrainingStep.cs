@@ -632,6 +632,35 @@ public static partial class CompiledTapeTrainingStep<T>
             LayerSlotShapes = LayerSlots?.Select(slots => slots.Select(parameter => parameter._shape.ToArray()).ToArray()).ToArray();
         }
 
+        private OptimizerContract(OptimizerContract source, object? scheduler)
+        {
+            Configuration = source.Configuration;
+            Optimizer = source.Optimizer;
+            Scheduler = scheduler;
+            SchedulerMode = source.SchedulerMode;
+            Scheduled = source.Scheduled;
+            Bf16 = source.Bf16;
+            Int8Block = source.Int8Block;
+            Int8Minimum = source.Int8Minimum;
+            L2 = source.L2;
+            L2AfterClip = source.L2AfterClip;
+            Extras = source.Extras;
+            Parameters = source.Parameters;
+            LayerOwners = source.LayerOwners;
+            LayerSlots = source.LayerSlots;
+            LayerSlotShapes = source.LayerSlotShapes;
+        }
+
+        /// <summary>
+        /// Returns this contract with its schedule replaced by <paramref name="replacement"/> when it currently records
+        /// exactly <paramref name="previous"/> (the internally created external schedule a checkpoint import rebuilt);
+        /// otherwise returns this contract unchanged, so a user-supplied scheduler is never swapped.
+        /// </summary>
+        internal OptimizerContract WithReboundSchedule(object? previous, object replacement)
+            => previous is not null && ReferenceEquals(Scheduler, previous) && !ReferenceEquals(previous, replacement)
+                ? new OptimizerContract(this, replacement)
+                : this;
+
         internal bool Matches(OptimizerContract other, bool compareParameters = true)
             => Configuration.Equals(other.Configuration)
                 && ReferenceEquals(Optimizer, other.Optimizer)
@@ -807,7 +836,11 @@ public static partial class CompiledTapeTrainingStep<T>
     {
         if (configuredSchedule is not null)
             return configuredSchedule;
-        if (optimizerType == AiDotNet.Tensors.Engines.Compilation.OptimizerType.Rprop || learningRate <= 0.0)
+        // Zero is a valid rate (warmup from zero, a manual pause): it stays on the external schedule so the change from
+        // or to a positive rate keeps the committed plan and its moments. Only a rate the schedule cannot hold (negative
+        // or non-finite) and Rprop, which takes no learning rate, run unscheduled.
+        if (optimizerType == AiDotNet.Tensors.Engines.Compilation.OptimizerType.Rprop
+            || double.IsNaN(learningRate) || double.IsInfinity(learningRate) || learningRate < 0.0)
             return null;
         if (!AiDotNet.Configuration.CompilationRuntimeSettings.GpuResidentOptimizerScalarsEnabled)
             return null;
@@ -2538,7 +2571,14 @@ public static partial class CompiledTapeTrainingStep<T>
                 {
                     if (schedule is AiDotNet.Tensors.Engines.Compilation.ExternalLrSchedule external)
                     {
+                        // The committed contract recorded the external schedule created for this run; the import
+                        // replaced it, and the next call resolves the restored instance. Rebind the contract to it
+                        // (only when it recorded that internal instance, so a user scheduler still has to match),
+                        // or every step after the first resumed one would be rejected as a schedule change.
+                        var previousExternal = CurrentState.externalLrSchedule;
                         CurrentState.externalLrSchedule = external;
+                        if (CurrentState.optimizerContract is { } committedContract)
+                            CurrentState.optimizerContract = committedContract.WithReboundSchedule(previousExternal, external);
                         optimizer.AdoptRestoredFusedLrSchedule(external);
                     }
                 }

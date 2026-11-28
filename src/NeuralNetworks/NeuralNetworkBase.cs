@@ -16880,24 +16880,31 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // TRAINED — the previous behaviour left them frozen at
             // their initial random values forever, which was the
             // actual review concern.
-            if (extraTrainableTensors.Count > 0 && !mpSkipOptimizerStep)
+            //
+            // GPU weight-cache coherence after the opt.Step + extras-update: see
+            // InvalidateWeightCachesAfterSuccessfulWeightUpdate for the full rationale (cache keys by
+            // array reference → stale GPU weights → model never learns). It runs from a finally because
+            // opt.Step has already written the host weights: if an extras update throws, the device
+            // copies of those weights must still be dropped, or the next forward reads pre-step weights.
+            try
             {
-                T extrasLr = NumOps.FromDouble(GetOptimizerLearningRate(opt));
-                foreach (var extra in extraTrainableTensors)
+                if (extraTrainableTensors.Count > 0 && !mpSkipOptimizerStep)
                 {
-                    if (!allGrads.TryGetValue(extra, out var extraGrad)) continue;
-                    if (extraGrad is null || extraGrad.Length != extra.Length) continue;
-                    var update = Engine.TensorMultiplyScalar(extraGrad, extrasLr);
-                    Engine.TensorSubtractInPlace(extra, update);
+                    T extrasLr = NumOps.FromDouble(GetOptimizerLearningRate(opt));
+                    foreach (var extra in extraTrainableTensors)
+                    {
+                        if (!allGrads.TryGetValue(extra, out var extraGrad)) continue;
+                        if (extraGrad is null || extraGrad.Length != extra.Length) continue;
+                        var update = Engine.TensorMultiplyScalar(extraGrad, extrasLr);
+                        Engine.TensorSubtractInPlace(extra, update);
+                    }
                 }
             }
-
-            // GPU weight-cache coherence after the opt.Step + extras-update above.
-            // See InvalidateWeightCachesAfterSuccessfulWeightUpdate for the full
-            // rationale (cache keys by array reference → stale GPU weights → model
-            // never learns).
-            if (!mpSkipOptimizerStep)
-                InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+            finally
+            {
+                if (!mpSkipOptimizerStep)
+                    InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+            }
 
             // Advance the optimizer's learning-rate scheduler at the
             // tape-batch boundary via the shared helper. Without this,
@@ -20282,6 +20289,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             }
             _savedOriginalParameters = null;
             _parameterBuffer = null;
+            // A layer that copies values instead of rebinding its tensor reference does so on every attempt for the
+            // same layer structure, so remember the rejection: without it every step would allocate the full buffer,
+            // copy every weight, attempt the replacement and roll it back again. A structure change (which bumps
+            // _layerStructureVersion) re-tests from scratch. Failures that throw (shape mismatches) are not memoized.
+            _skipParameterBuffer = true;
+            _skipParameterBufferVersion = _layerStructureVersion;
             return null;
         }
 

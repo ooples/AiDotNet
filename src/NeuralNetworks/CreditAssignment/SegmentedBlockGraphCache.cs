@@ -23,9 +23,13 @@ internal static class SegmentedBlockGraphCache<T>
         public int ParameterEpoch = -1;
         public CompiledModelCache<T>? Cache;
         public readonly List<(int[] Shape, Tensor<T> InputLeaf)> InputLeaves = new();
+        // Set when compiling this block failed for the current engine and parameter epoch; the block then runs eagerly
+        // without retrying (and re-logging) the compile every step until either key changes.
+        public bool CompileFailed;
 
         public void Reset()
         {
+            CompileFailed = false;
             Cache?.Dispose();
             Cache = null;
             InputLeaves.Clear();
@@ -40,8 +44,11 @@ internal static class SegmentedBlockGraphCache<T>
 
     /// <summary>
     /// Evaluates <paramref name="layer"/> under <see cref="NoGradScope{T}"/> using a cached compiled block plan when
-    /// <see cref="CompilationRuntimeSettings.SegmentedBlockGraphsEnabled"/> is active and no outer gradient tape or
-    /// graph capture is recording; falls back transparently to eager <c>layer.Forward(input)</c> if compilation fails.
+    /// <see cref="CompilationRuntimeSettings.SegmentedBlockGraphsEnabled"/> is active and nothing is differentiating the
+    /// forward (no unsuppressed gradient tape, no training trace) and no graph capture is active; falls back to eager
+    /// <c>layer.Forward(input)</c> if compilation fails. An outer tape suppressed by <see cref="NoGradScope{T}"/> (the
+    /// local-credit detached target preparation runs inside a block tape) does not block the compiled path, because
+    /// nothing it executes is recorded.
     /// </summary>
     internal static Tensor<T> ForwardDetachedBlock(ILayer<T> layer, Tensor<T> input)
     {
@@ -50,7 +57,6 @@ internal static class SegmentedBlockGraphCache<T>
 
         IEngine engine = AiDotNetEngine.Current;
         if (!CompilationRuntimeSettings.SegmentedBlockGraphsEnabled
-            || GradientTape<T>.Current is not null
             || GradientRecording.IsRecording<T>()
             || GraphMode.IsActive
             || GraphCaptureCompatibility.IsActive
@@ -65,6 +71,9 @@ internal static class SegmentedBlockGraphCache<T>
 
         lock (state.Gate)
         {
+            if (state.CompileFailed && ReferenceEquals(state.Engine, engine) && state.ParameterEpoch == currentEpoch)
+                return layer.Forward(input);
+
             try
             {
                 if (!ReferenceEquals(state.Engine, engine) || state.ParameterEpoch != currentEpoch)
@@ -83,10 +92,20 @@ internal static class SegmentedBlockGraphCache<T>
                     () => layer.Forward(leaf));
                 return plan.Execute();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 if (CompilationRuntimeSettings.ThrowOnCompilationFailure)
                     throw;
+                // Drop the failed plan and remember the failure for this engine and parameter epoch so the block runs
+                // eagerly without a compile attempt per step; record why, so a compile failure is distinguishable
+                // from compiled execution.
+                state.Reset();
+                state.Engine = engine;
+                state.ParameterEpoch = currentEpoch;
+                state.CompileFailed = true;
+                System.Diagnostics.Trace.TraceWarning(
+                    $"SegmentedBlockGraphCache: compiling the detached block for {layer.GetType().Name} failed; " +
+                    $"running it eagerly. {ex.GetType().Name}: {ex.Message}");
                 return layer.Forward(input);
             }
         }
