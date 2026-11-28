@@ -75,7 +75,12 @@ internal sealed class SpeechBrainEcapa<T>
         }
         Tdnn NewTdnn(int inputs, int outputs, int kernel, int dilation) => new()
         {
-            Conv = Conv(inputs, outputs, kernel, dilation), Norm = Norm(outputs), Inputs = inputs, Outputs = outputs, Kernel = kernel, Dilation = dilation,
+            Conv = Conv(inputs, outputs, kernel, dilation),
+            Norm = Norm(outputs),
+            Inputs = inputs,
+            Outputs = outputs,
+            Kernel = kernel,
+            Dilation = dilation,
         };
         First = NewTdnn(c.Mels, c.Channels[0], c.Kernels[0], c.Dilations[0]);
         for (int i = 1; i < stages - 1; i++)

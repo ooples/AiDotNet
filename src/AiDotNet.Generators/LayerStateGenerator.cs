@@ -211,16 +211,16 @@ public class LayerStateGenerator : IIncrementalGenerator
                     && !ctor.ContainingType.IsRecord)
                 {
                     return new LayerModel
-                {
-                    TypeName = ctor.ContainingType.Name,
-                    Location = new SourceSpan(syntax.Identifier.GetLocation()),
-                    Diagnostics =
+                    {
+                        TypeName = ctor.ContainingType.Name,
+                        Location = new SourceSpan(syntax.Identifier.GetLocation()),
+                        Diagnostics =
                     {
                         new PendingDiagnostic(
                             FactoryDeclined, new SourceSpan(syntax.Identifier.GetLocation()),
                             ctor.ContainingType.Name, "required parameter '" + ctor.Parameters.First(q => !q.IsOptional && !IsActivation(q.Type, out _) && !marked.Contains(q, SymbolEqualityComparer.Default)).Name + "' has no backing member the derived type can read"),
                     },
-                };
+                    };
                 }
 
                 return null;
@@ -251,12 +251,12 @@ public class LayerStateGenerator : IIncrementalGenerator
         // rebuild the layer would replace a clear "no factory" with a silent wrong reconstruction.
         if (marked.Count == 0 && !activationOnly)
         {
-                if (DerivesFromLayerBase(ctor.ContainingType)
-                    && !ctor.ContainingType.IsAbstract
-                    && ctor.ContainingType.TypeKind == TypeKind.Class
-                    && !ctor.ContainingType.IsRecord)
-                {
-                    return new LayerModel
+            if (DerivesFromLayerBase(ctor.ContainingType)
+                && !ctor.ContainingType.IsAbstract
+                && ctor.ContainingType.TypeKind == TypeKind.Class
+                && !ctor.ContainingType.IsRecord)
+            {
+                return new LayerModel
                 {
                     TypeName = ctor.ContainingType.Name,
                     Location = new SourceSpan(syntax.Identifier.GetLocation()),
@@ -267,10 +267,10 @@ public class LayerStateGenerator : IIncrementalGenerator
                             ctor.ContainingType.Name, "no constructor parameter resolves to restorable state"),
                     },
                 };
-                }
-
-                return null;
             }
+
+            return null;
+        }
 
         var inferredState = new HashSet<string>(marked.Select(p => p.Name), System.StringComparer.Ordinal);
 

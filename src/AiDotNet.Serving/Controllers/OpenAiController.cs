@@ -249,7 +249,9 @@ public sealed class OpenAiController : ControllerBase
         // First chunk announces the assistant role.
         await WriteChunkAsync(new ChatCompletionChunk
         {
-            Id = id, Created = created, Model = request.Model,
+            Id = id,
+            Created = created,
+            Model = request.Model,
             Choices = { new ChatChoice { Index = 0, Delta = new ChatMessageOut { Role = "assistant", Content = string.Empty } } }
         }, ct);
 
@@ -299,7 +301,9 @@ public sealed class OpenAiController : ControllerBase
         finishReason = stopped ? "stop" : (ids.Count >= sdr.MaxNewTokens ? "length" : "stop");
         await WriteChunkAsync(new ChatCompletionChunk
         {
-            Id = id, Created = created, Model = request.Model,
+            Id = id,
+            Created = created,
+            Model = request.Model,
             Choices = { new ChatChoice { Index = 0, Delta = new ChatMessageOut(), FinishReason = finishReason } }
         }, ct);
         // Per the OpenAI stream_options.include_usage contract, emit a final chunk (empty choices) carrying the
@@ -308,7 +312,9 @@ public sealed class OpenAiController : ControllerBase
         {
             await WriteChunkAsync(new ChatCompletionChunk
             {
-                Id = id, Created = created, Model = request.Model,
+                Id = id,
+                Created = created,
+                Model = request.Model,
                 Usage = new Usage
                 {
                     PromptTokens = ctx.PromptTokenCount,
@@ -366,7 +372,9 @@ public sealed class OpenAiController : ControllerBase
             var (text, genCount, finish) = Collect(ctx, sdr, stops, ct);
             var response = new CompletionResponse
             {
-                Id = id, Created = created, Model = request.Model,
+                Id = id,
+                Created = created,
+                Model = request.Model,
                 Choices = { new CompletionChoice { Index = 0, Text = text, FinishReason = finish } },
                 Usage = new Usage { PromptTokens = ctx.PromptTokenCount, CompletionTokens = genCount, TotalTokens = ctx.PromptTokenCount + genCount }
             };
@@ -422,7 +430,9 @@ public sealed class OpenAiController : ControllerBase
         {
             await WriteChunkAsync(new CompletionResponse
             {
-                Id = id, Created = created, Model = request.Model,
+                Id = id,
+                Created = created,
+                Model = request.Model,
                 Usage = new Usage
                 {
                     PromptTokens = ctx.PromptTokenCount,
@@ -693,13 +703,17 @@ public sealed class OpenAiController : ControllerBase
 
     private static ChatCompletionChunk ContentChunk(string id, long created, string model, string content) => new()
     {
-        Id = id, Created = created, Model = model,
+        Id = id,
+        Created = created,
+        Model = model,
         Choices = { new ChatChoice { Index = 0, Delta = new ChatMessageOut { Content = content } } }
     };
 
     private static CompletionResponse CompletionChunk(string id, long created, string model, string text, string? finish) => new()
     {
-        Id = id, Created = created, Model = model,
+        Id = id,
+        Created = created,
+        Model = model,
         Choices = { new CompletionChoice { Index = 0, Text = text, FinishReason = finish } }
     };
 

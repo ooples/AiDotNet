@@ -143,11 +143,11 @@ public class UncertaintySampling<T> : IActiveLearningStrategy<T>
                 // 1 - max(probabilities)
                 return engine.ScalarMinusTensor(_numOps.One, ActiveLearningEngineOps.MaxRows(probabilities));
             case UncertaintyMeasure.MarginSampling:
-                {
-                    // 1 - (P(1st) - P(2nd))
-                    var (first, second) = ActiveLearningEngineOps.TopTwoRows(probabilities);
-                    return engine.ScalarMinusTensor(_numOps.One, engine.TensorSubtract(first, second));
-                }
+            {
+                // 1 - (P(1st) - P(2nd))
+                var (first, second) = ActiveLearningEngineOps.TopTwoRows(probabilities);
+                return engine.ScalarMinusTensor(_numOps.One, engine.TensorSubtract(first, second));
+            }
             default:
                 // Entropy: -Σ p*log(p)
                 return ActiveLearningEngineOps.EntropyRows(probabilities, ActiveLearningEngineOps.Tolerance<T>(1e-10));

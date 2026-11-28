@@ -151,7 +151,8 @@ public partial class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>,
         var codecOptions = (SoundStreamOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(o.SoundStream);
         codecOptions.IncludeDiscriminators = false;
         var codec = new SoundStream<T>(new NeuralNetworkArchitecture<T>(InputType.OneDimensional,
-            NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1) { RandomSeed = Architecture.RandomSeed }, codecOptions);
+            NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1)
+        { RandomSeed = Architecture.RandomSeed }, codecOptions);
         if (codec.CodebookSize != o.CodebookSize || ((IAudioCodec<T>)codec).SampleRate != o.SampleRate)
             throw new ArgumentException($"AudioLM's {o.SampleRate} Hz audio and {o.CodebookSize} codes per level must be its codec's.");
         if (codec.QuantizersForBandwidth(o.SoundStream.TargetBandwidthKbps) != o.NumCodebooks)

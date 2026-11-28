@@ -573,8 +573,14 @@ public class TextToSpeechSynthesizer
         // Simplified phoneme generation for demonstration
         var phonemeMap = new Dictionary<char, string>
         {
-            ['h'] = "HH", ['e'] = "EH", ['l'] = "L", ['o'] = "OW",
-            ['w'] = "W", ['r'] = "R", ['d'] = "D", [' '] = "SIL"
+            ['h'] = "HH",
+            ['e'] = "EH",
+            ['l'] = "L",
+            ['o'] = "OW",
+            ['w'] = "W",
+            ['r'] = "R",
+            ['d'] = "D",
+            [' '] = "SIL"
         };
 
         foreach (var c in text.ToLower())

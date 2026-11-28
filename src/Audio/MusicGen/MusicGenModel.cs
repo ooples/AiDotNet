@@ -227,7 +227,8 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         var codecOptions = (EnCodecOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(o.Codec);
         codecOptions.IncludeDiscriminators = false;
         var codec = new EnCodec<T>(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
-            inputSize: 1, outputSize: 1) { RandomSeed = Architecture.RandomSeed }, codecOptions);
+            inputSize: 1, outputSize: 1)
+        { RandomSeed = Architecture.RandomSeed }, codecOptions);
         int codebooks = codec.QuantizersForBandwidth(codecOptions.TargetBandwidthKbps);
         int modelled = (o.Stereo ? 2 : 1) * codebooks;
         if (codebooks != o.Codec.NumQuantizers || o.ResolveDelays().Length != modelled)
@@ -555,14 +556,25 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer = UsesDAdaptation
             ? new DAdaptAdamOptimizer<T, Tensor<T>, Tensor<T>>(this, new DAdaptAdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = rate, Beta1 = o.Beta1, Beta2 = o.Beta2, WeightDecay = o.WeightDecay,
-                EnableGradientClipping = o.GradientClipNorm > 0, MaxGradientNorm = o.GradientClipNorm, LearningRateScheduler = schedule,
+                InitialLearningRate = rate,
+                Beta1 = o.Beta1,
+                Beta2 = o.Beta2,
+                WeightDecay = o.WeightDecay,
+                EnableGradientClipping = o.GradientClipNorm > 0,
+                MaxGradientNorm = o.GradientClipNorm,
+                LearningRateScheduler = schedule,
                 SchedulerStepMode = SchedulerStepMode.StepPerBatch,
             })
             : new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = rate, Beta1 = o.Beta1, Beta2 = o.Beta2, Epsilon = 1e-8, WeightDecay = o.WeightDecay,
-                EnableGradientClipping = o.GradientClipNorm > 0, MaxGradientNorm = o.GradientClipNorm, LearningRateScheduler = schedule,
+                InitialLearningRate = rate,
+                Beta1 = o.Beta1,
+                Beta2 = o.Beta2,
+                Epsilon = 1e-8,
+                WeightDecay = o.WeightDecay,
+                EnableGradientClipping = o.GradientClipNorm > 0,
+                MaxGradientNorm = o.GradientClipNorm,
+                LearningRateScheduler = schedule,
                 SchedulerStepMode = SchedulerStepMode.StepPerBatch,
                 UseAdaptiveBetas = false,
             });

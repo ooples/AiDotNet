@@ -117,8 +117,11 @@ public partial class Conformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         }
         return new TranscriptionResult<T>
         {
-            Text = Text(tokens), Language = language ?? _options.Language, Confidence = NumOps.FromDouble(tokens.Count > 0 ? 1.0 : 0.0),
-            DurationSeconds = audio.Length / (double)SampleRate, Segments = Array.Empty<TranscriptionSegment<T>>(),
+            Text = Text(tokens),
+            Language = language ?? _options.Language,
+            Confidence = NumOps.FromDouble(tokens.Count > 0 ? 1.0 : 0.0),
+            DurationSeconds = audio.Length / (double)SampleRate,
+            Segments = Array.Empty<TranscriptionSegment<T>>(),
         };
     }
 
@@ -187,7 +190,7 @@ public partial class Conformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         TrainNativeWaveformBatch(input, target, _network, _optimizer, (_, row) => Labels(row), (network, wave, rowLabels) =>
         {
             var encoded = network.Encode(network.SpecAugment(network.FeatureTensor(wave), _random), training: true);
-                var loss = network.TransducerLoss(encoded, rowLabels);
+            var loss = network.TransducerLoss(encoded, rowLabels);
             return loss;
         });
 

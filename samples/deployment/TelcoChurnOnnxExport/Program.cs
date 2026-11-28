@@ -9,23 +9,23 @@ Console.WriteLine("The resulting .onnx is the artifact the Databricks notebook l
 
 // ── Configuration ────────────────────────────────────────────────────────────
 const int InputFeatures = 4;       // [tenure, monthlyCharges, totalCharges, contractType]
-const int HiddenUnits   = 8;
-const int OutputUnits   = 1;       // binary churn probability
-const int NumSamples    = 2000;
+const int HiddenUnits = 8;
+const int OutputUnits = 1;       // binary churn probability
+const int NumSamples = 2000;
 var rng = new Random(42);
 
 // ── 1. Generate synthetic Telco-Churn-shaped data ────────────────────────────
 Console.WriteLine($"[1/4] Generating {NumSamples} synthetic Telco Churn samples...");
 
 var features = new AdnTensor(new[] { NumSamples, InputFeatures });
-var labels   = new AdnTensor(new[] { NumSamples, OutputUnits });
+var labels = new AdnTensor(new[] { NumSamples, OutputUnits });
 
 for (int i = 0; i < NumSamples; i++)
 {
-    float tenureMonths    = (float)(rng.NextDouble() * 71 + 1);
-    float monthlyCharges  = (float)(rng.NextDouble() * 100 + 20);
-    float totalCharges    = tenureMonths * monthlyCharges * (float)(0.85 + rng.NextDouble() * 0.30);
-    float contractTypeId  = rng.Next(3);
+    float tenureMonths = (float)(rng.NextDouble() * 71 + 1);
+    float monthlyCharges = (float)(rng.NextDouble() * 100 + 20);
+    float totalCharges = tenureMonths * monthlyCharges * (float)(0.85 + rng.NextDouble() * 0.30);
+    float contractTypeId = rng.Next(3);
 
     features[i, 0] = (tenureMonths - 36f) / 36f;
     features[i, 1] = (monthlyCharges - 70f) / 50f;

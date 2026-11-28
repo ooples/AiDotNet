@@ -391,28 +391,28 @@ public class ShapeDeclarationValidationGenerator : IIncrementalGenerator
             // them would be 60 false errors telling people to rename methods that are already correct.
             if (DerivesFromLayerBase(type))
             {
-            foreach (var member in type.GetMembers("Forward").OfType<IMethodSymbol>())
-            {
-                if (!member.IsOverride) continue;
-                // The dictionary and params overloads are separate methods; only the single-tensor
-                // one is the traced entry point.
-                if (member.Parameters.Length != 1) continue;
-                // FULLY QUALIFIED. `Name: "Tensor"` accepted any type called Tensor from any
-                // namespace or referenced package. ADNSHAPE004 is an Error that GATES THE
-                // BUILD, so a false positive here is a hard break on correct code -- and the
-                // comment above already explains that this scoping is load-bearing rather
-                // than tidiness.
-                if (member.Parameters[0].Type is not INamedTypeSymbol tensorParam) continue;
-                if (tensorParam.ConstructedFrom.ToDisplayString(NamespaceQualifiedNoGenerics) != TensorTypeName)
+                foreach (var member in type.GetMembers("Forward").OfType<IMethodSymbol>())
                 {
-                    continue;
-                }
+                    if (!member.IsOverride) continue;
+                    // The dictionary and params overloads are separate methods; only the single-tensor
+                    // one is the traced entry point.
+                    if (member.Parameters.Length != 1) continue;
+                    // FULLY QUALIFIED. `Name: "Tensor"` accepted any type called Tensor from any
+                    // namespace or referenced package. ADNSHAPE004 is an Error that GATES THE
+                    // BUILD, so a false positive here is a hard break on correct code -- and the
+                    // comment above already explains that this scoping is load-bearing rather
+                    // than tidiness.
+                    if (member.Parameters[0].Type is not INamedTypeSymbol tensorParam) continue;
+                    if (tensorParam.ConstructedFrom.ToDisplayString(NamespaceQualifiedNoGenerics) != TensorTypeName)
+                    {
+                        continue;
+                    }
 
-                spc.ReportDiagnostic(new ShapeFinding(
-                    OverridesForwardDescriptor,
-                    member.Locations.FirstOrDefault() ?? type.Locations.FirstOrDefault(),
-                    type.Name));
-            }
+                    spc.ReportDiagnostic(new ShapeFinding(
+                        OverridesForwardDescriptor,
+                        member.Locations.FirstOrDefault() ?? type.Locations.FirstOrDefault(),
+                        type.Name));
+                }
             }
 
             if (layouts.Count == 0) return Finish(type, spc);

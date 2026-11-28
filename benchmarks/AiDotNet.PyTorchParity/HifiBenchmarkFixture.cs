@@ -45,8 +45,18 @@ internal sealed class HifiBenchmarkFixture
         string manifestPath = Path.Combine(_directory, "manifest.json");
         _manifest = JObject.Parse(File.ReadAllText(manifestPath));
         _manifestHash = HashFile(manifestPath);
-        var protocol = JObject.FromObject(new { epochs, train_batches = batches, batch_size = batchSize, seed,
-            inference_batches = inferenceBatches, utterance_frames = 256, segment_frames = 32, hop = 256, mel_channels = 80 });
+        var protocol = JObject.FromObject(new
+        {
+            epochs,
+            train_batches = batches,
+            batch_size = batchSize,
+            seed,
+            inference_batches = inferenceBatches,
+            utterance_frames = 256,
+            segment_frames = 32,
+            hop = 256,
+            mel_channels = 80
+        });
         if ((string?)_manifest["schema"] != "hifigan-shared-workload-v1" || !JToken.DeepEquals(_manifest["protocol"], protocol)
             || epochs != 3 || batches != 3 || batchSize != 1 || !inferenceBatches.SequenceEqual(new[] { 1, 8, 16 }))
             throw new InvalidDataException("Fixture protocol differs from the actual3x3/b1,b8,b16 invocation.");
@@ -151,14 +161,28 @@ internal sealed class HifiBenchmarkFixture
             ?? throw new MissingFieldException("The validated crop sampling contract changed.");
         if (random.FieldType != typeof(Random)) throw new InvalidDataException("The crop source contract changed.");
         random.SetValue(model, _crop);
-        _preflight = new JObject {
-            ["schema"]="hifigan-shared-workload-consumption-v1",["framework"]="aidotnet",["pass"]=false,
-            ["pid"]=Environment.ProcessId,["state_tensor_count"]=fields.Length,
-            ["preflight_pass"]=true,["fixture_manifest_sha256"]=_manifestHash,["state_sha256"]=aggregate,
-            ["state"]=actual,["inputs"]=_actualInputs.DeepClone(),["training_steps"]=_actualSteps.DeepClone(),
-            ["consumed_steps"]=new JArray(),["inference_batches_consumed"]=new JArray(),["state_checkpoint_retained"]=false,
-            ["hash_observer"]=new JObject { ["cpu_payload_clone"]=false,["source_version_unchanged"]=true,
-                ["gpu_readback"]="existing canonical tensor host storage; no separate observer payload buffer" },
+        _preflight = new JObject
+        {
+            ["schema"] = "hifigan-shared-workload-consumption-v1",
+            ["framework"] = "aidotnet",
+            ["pass"] = false,
+            ["pid"] = Environment.ProcessId,
+            ["state_tensor_count"] = fields.Length,
+            ["preflight_pass"] = true,
+            ["fixture_manifest_sha256"] = _manifestHash,
+            ["state_sha256"] = aggregate,
+            ["state"] = actual,
+            ["inputs"] = _actualInputs.DeepClone(),
+            ["training_steps"] = _actualSteps.DeepClone(),
+            ["consumed_steps"] = new JArray(),
+            ["inference_batches_consumed"] = new JArray(),
+            ["state_checkpoint_retained"] = false,
+            ["hash_observer"] = new JObject
+            {
+                ["cpu_payload_clone"] = false,
+                ["source_version_unchanged"] = true,
+                ["gpu_readback"] = "existing canonical tensor host storage; no separate observer payload buffer"
+            },
         };
         SaveReceipt();
     }
@@ -191,8 +215,11 @@ internal sealed class HifiBenchmarkFixture
         foreach (var pair in _inputs) CheckDescriptor(pair.Key, pair.Value, Req(Object(_manifest, "inputs")[pair.Key], pair.Key));
         ValidateFiles();
         _preflight["pass"] = true;
-        _preflight["consumed_steps"] = new JArray(((JArray)Req(_manifest["training_steps"], "training_steps")).Select(step => new JObject {
-            ["index"]=(int)Req(step["index"], "index"),["pool_index"]=(int)Req(step["pool_index"], "pool_index"),["crop_start"]=(int)Req(step["crop_start"], "crop_start"),
+        _preflight["consumed_steps"] = new JArray(((JArray)Req(_manifest["training_steps"], "training_steps")).Select(step => new JObject
+        {
+            ["index"] = (int)Req(step["index"], "index"),
+            ["pool_index"] = (int)Req(step["pool_index"], "pool_index"),
+            ["crop_start"] = (int)Req(step["crop_start"], "crop_start"),
         }));
         _preflight["inference_batches_consumed"] = new JArray(1, 8, 16);
         SaveReceipt();
@@ -306,8 +333,11 @@ internal sealed class HifiBenchmarkFixture
     {
         if (!value.Shape.ToArray().SequenceEqual(shape)) throw new InvalidDataException("Full workload tensor geometry differs.");
     }
-    private static JObject Describe(ReadOnlySpan<float> values, int[] shape) => new() {
-        ["dtype"]="F32",["shape"]=new JArray(shape),["sha256"]=Convert.ToHexString(SHA256.HashData(MemoryMarshal.AsBytes(values))).ToLowerInvariant(),
+    private static JObject Describe(ReadOnlySpan<float> values, int[] shape) => new()
+    {
+        ["dtype"] = "F32",
+        ["shape"] = new JArray(shape),
+        ["sha256"] = Convert.ToHexString(SHA256.HashData(MemoryMarshal.AsBytes(values))).ToLowerInvariant(),
     };
     private static JObject CheckDescriptor(string name, Tensor<float> value, JToken expected)
     {
@@ -322,10 +352,14 @@ internal sealed class HifiBenchmarkFixture
         using var digest = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         for (int channel = 0; channel < 80; channel++)
             digest.AppendData(MemoryMarshal.AsBytes(values.Slice(channel * 256 + start, 32)));
-        return new JObject { ["dtype"]="F32",["shape"]=new JArray(1, 80, 32),
-            ["sha256"]=Convert.ToHexString(digest.GetHashAndReset()).ToLowerInvariant() };
+        return new JObject
+        {
+            ["dtype"] = "F32",
+            ["shape"] = new JArray(1, 80, 32),
+            ["sha256"] = Convert.ToHexString(digest.GetHashAndReset()).ToLowerInvariant()
+        };
     }
-    private static string HashFile(string path) { using var stream=File.OpenRead(path); return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant(); }
+    private static string HashFile(string path) { using var stream = File.OpenRead(path); return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant(); }
 
     private sealed class FixtureCropRandom(int[] starts) : Random
     {

@@ -64,8 +64,13 @@ internal sealed class AiDotNetTimeSeriesModel : IBenchmarkModel
         var optimizer = new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(null,
             new AdamWOptimizerOptions<float, Tensor<float>, Tensor<float>>
             {
-                InitialLearningRate = learningRate, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, WeightDecay = 0.0,
-                EnableGradientClipping = true, MaxGradientNorm = 1.0,
+                InitialLearningRate = learningRate,
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8,
+                WeightDecay = 0.0,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0,
             });
         // A [96, channels] grid: the forecasters read the feature count from the architecture's width.
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -76,29 +81,62 @@ internal sealed class AiDotNetTimeSeriesModel : IBenchmarkModel
         {
             TimeSeriesFamily.Informer => new Informer<float>(architecture, new InformerOptions<float>
             {
-                LookbackWindow = Lookback, LabelLength = LabelLength, ForecastHorizon = Horizon, EmbeddingDim = 512,
-                NumAttentionHeads = 8, NumEncoderLayers = 2, NumDecoderLayers = 1, FeedForwardDim = 2048,
-                SamplingFactor = 5, Attention = AiDotNet.TimeSeries.InformerAttention.ProbSparse, Distil = true,
-                Mix = true, UseGelu = true, DropoutRate = 0.05, Seed = seed,
+                LookbackWindow = Lookback,
+                LabelLength = LabelLength,
+                ForecastHorizon = Horizon,
+                EmbeddingDim = 512,
+                NumAttentionHeads = 8,
+                NumEncoderLayers = 2,
+                NumDecoderLayers = 1,
+                FeedForwardDim = 2048,
+                SamplingFactor = 5,
+                Attention = AiDotNet.TimeSeries.InformerAttention.ProbSparse,
+                Distil = true,
+                Mix = true,
+                UseGelu = true,
+                DropoutRate = 0.05,
+                Seed = seed,
             }, optimizer),
             TimeSeriesFamily.Autoformer => new Autoformer<float>(architecture, new AutoformerOptions<float>
             {
-                LookbackWindow = Lookback, LabelLength = LabelLength, ForecastHorizon = Horizon, EmbeddingDim = 512,
-                NumAttentionHeads = 8, NumEncoderLayers = 2, NumDecoderLayers = 1, FeedForwardDim = 2048,
-                MovingAverageKernel = 25, AutoCorrelationFactor = 1, UseGelu = true, DropoutRate = 0.05, Seed = seed,
+                LookbackWindow = Lookback,
+                LabelLength = LabelLength,
+                ForecastHorizon = Horizon,
+                EmbeddingDim = 512,
+                NumAttentionHeads = 8,
+                NumEncoderLayers = 2,
+                NumDecoderLayers = 1,
+                FeedForwardDim = 2048,
+                MovingAverageKernel = 25,
+                AutoCorrelationFactor = 1,
+                UseGelu = true,
+                DropoutRate = 0.05,
+                Seed = seed,
             }, optimizer),
             TimeSeriesFamily.DeepAR => new DeepAR<float>(architecture, new DeepAROptions<float>
             {
-                LookbackWindow = Lookback, ForecastHorizon = Horizon, HiddenSize = 40, NumLayers = 3, DropoutRate = 0.1,
-                LikelihoodType = "Gaussian", NumSamples = 200, EmbeddingDimension = 20,
-                ScaleHandling = DeepARScaleHandling.PaperMean, Seed = seed,
+                LookbackWindow = Lookback,
+                ForecastHorizon = Horizon,
+                HiddenSize = 40,
+                NumLayers = 3,
+                DropoutRate = 0.1,
+                LikelihoodType = "Gaussian",
+                NumSamples = 200,
+                EmbeddingDimension = 20,
+                ScaleHandling = DeepARScaleHandling.PaperMean,
+                Seed = seed,
             }, optimizer),
             TimeSeriesFamily.NBeats => new NBEATSFinance<float>(architecture, new NBEATSModelOptions<float>
             {
-                LookbackWindow = Lookback, ForecastHorizon = Horizon, NumStacks = 30, NumBlocksPerStack = 1,
-                HiddenLayerSize = 512, NumHiddenLayers = 4,
+                LookbackWindow = Lookback,
+                ForecastHorizon = Horizon,
+                NumStacks = 30,
+                NumBlocksPerStack = 1,
+                HiddenLayerSize = 512,
+                NumHiddenLayers = 4,
                 // NBEATSFinance always builds generic blocks; say so rather than leave the default (true) unread.
-                UseInterpretableBasis = false, Seed = seed,
+                UseInterpretableBasis = false,
+                Seed = seed,
             }, optimizer),
             _ => throw new ArgumentOutOfRangeException(nameof(family)),
         };

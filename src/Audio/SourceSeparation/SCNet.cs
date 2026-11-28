@@ -356,8 +356,10 @@ public partial class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator
         }
         return new SourceSeparationResult<T>
         {
-            Sources = sources, OriginalMix = audio,
-            SampleRate = _options.SampleRate, Duration = audio.Length / (double)_options.SampleRate
+            Sources = sources,
+            OriginalMix = audio,
+            SampleRate = _options.SampleRate,
+            Duration = audio.Length / (double)_options.SampleRate
         };
     }
 

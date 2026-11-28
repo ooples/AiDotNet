@@ -23,8 +23,13 @@ internal static class ArrayAllocationTelemetry
             }
             var values = new ulong[7];
             Snapshot(values, (uint)values.Length);
-            return new { coverage = "clr_array_callbacks_v1", abi = 1, snapshot = values,
-                scope = "All managed arrays including headers and unknown-class objects conservatively included; unmanaged storage is outside this provider." };
+            return new
+            {
+                coverage = "clr_array_callbacks_v1",
+                abi = 1,
+                snapshot = values,
+                scope = "All managed arrays including headers and unknown-class objects conservatively included; unmanaged storage is outside this provider."
+            };
         }
         catch (Exception exception)
         {

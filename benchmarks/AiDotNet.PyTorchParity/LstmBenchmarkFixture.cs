@@ -143,8 +143,12 @@ internal sealed class LstmBenchmarkFixture
 
     private static object Describe(Raw value) => Describe(value.Shape, value.Values);
 
-    private static object Describe(int[] shape, ReadOnlySpan<float> values) => new { dtype = "F32", shape,
-        sha256 = Convert.ToHexString(SHA256.HashData(MemoryMarshal.AsBytes(values))).ToLowerInvariant() };
+    private static object Describe(int[] shape, ReadOnlySpan<float> values) => new
+    {
+        dtype = "F32",
+        shape,
+        sha256 = Convert.ToHexString(SHA256.HashData(MemoryMarshal.AsBytes(values))).ToLowerInvariant()
+    };
 
     private static object DescribeInput(Tensor<float> tensor)
     {
@@ -243,9 +247,15 @@ internal sealed class LstmBenchmarkFixture
 
     private Dictionary<string, object> Receipt(string schema) => new()
     {
-        ["schema"] = schema, ["model"] = "lstm", ["framework"] = "aidotnet", ["device"] = BenchStats.DeviceName,
-        ["pid"] = Environment.ProcessId, ["fixture_manifest_sha256"] = _manifestHash, ["initial_state_sha256"] = _initialHash,
-        ["inputs_sha256"] = _inputsHash, ["source_sha256"] = new Dictionary<string, string>
+        ["schema"] = schema,
+        ["model"] = "lstm",
+        ["framework"] = "aidotnet",
+        ["device"] = BenchStats.DeviceName,
+        ["pid"] = Environment.ProcessId,
+        ["fixture_manifest_sha256"] = _manifestHash,
+        ["initial_state_sha256"] = _initialHash,
+        ["inputs_sha256"] = _inputsHash,
+        ["source_sha256"] = new Dictionary<string, string>
         {
             ["AiDotNet.PyTorchParity"] = HashFile(typeof(LstmBenchmarkFixture).Assembly.Location),
             ["AiDotNet"] = HashFile(typeof(NeuralNetworkBase<float>).Assembly.Location),

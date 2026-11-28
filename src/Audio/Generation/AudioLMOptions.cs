@@ -70,7 +70,7 @@ public class AudioLMOptions : ModelOptions
     public int CoarseCodebooks { get; set; } = 4;
 
     /// <summary>N, codes per level (1024).</summary>
-    [AiDotNet.Attributes.NotScaled("the codec's codes per codebook, which it must equal")]    public int CodebookSize { get; set; } = 1024;
+    [AiDotNet.Attributes.NotScaled("the codec's codes per codebook, which it must equal")] public int CodebookSize { get; set; } = 1024;
 
     /// <summary>Transformer width (1024).</summary>
     public int ModelDim { get; set; } = 1024;
@@ -117,6 +117,9 @@ public class AudioLMOptions : ModelOptions
     /// <summary>The SoundStream codec: 16 kHz, strides (2, 4, 5, 8), 12 levels of 1024 codes.</summary>
     public SoundStreamOptions SoundStream { get; set; } = new()
     {
-        SampleRate = 16000, NumQuantizers = 12, CodebookSize = 1024, TargetBandwidthKbps = 6.0,
+        SampleRate = 16000,
+        NumQuantizers = 12,
+        CodebookSize = 1024,
+        TargetBandwidthKbps = 6.0,
     };
 }

@@ -45,7 +45,7 @@ namespace AiDotNet.AnomalyDetection.Ensemble;
 [ModelTask(ModelTask.AnomalyDetection)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ResearchPaper("HiCS: High Contrast Subspaces for Density-Based Outlier Ranking", "https://doi.org/10.1109/ICDE.2012.88")]
+[ResearchPaper("HiCS: High Contrast Subspaces for Density-Based Outlier Ranking", "https://doi.org/10.1109/ICDE.2012.88")]
 public partial class RandomSubspaceDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _nEstimators;

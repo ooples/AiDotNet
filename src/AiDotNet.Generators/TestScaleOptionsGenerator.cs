@@ -811,7 +811,7 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine("        // AlignDeclaredConstraints; relating every width to every head count here could undo that.");
         sb.AppendLine("        for (int i = 0; i < DivisibilityConstraints.Length; i++)");
         sb.AppendLine("            if (DivisibilityConstraints[i].Type == key) return;");
-        sb.AppendLine();        sb.AppendLine("        var heads = new global::System.Collections.Generic.List<global::System.Reflection.PropertyInfo>();");
+        sb.AppendLine(); sb.AppendLine("        var heads = new global::System.Collections.Generic.List<global::System.Reflection.PropertyInfo>();");
         sb.AppendLine("        foreach (var property in optionsType.GetProperties(global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.Public))");
         sb.AppendLine("        {");
         sb.AppendLine("            if (property.PropertyType != typeof(int) || !property.CanRead || !property.CanWrite) continue;");

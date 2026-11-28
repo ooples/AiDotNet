@@ -195,7 +195,8 @@ public partial class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventD
             {
                 allEvents.Add(new AudioEvent<T>
                 {
-                    EventType = ClassLabels[i], Confidence = scores[i],
+                    EventType = ClassLabels[i],
+                    Confidence = scores[i],
                     StartTime = startTime,
                     EndTime = Math.Min(startTime + _options.DetectionWindowSize, totalDuration),
                     PeakTime = startTime + _options.DetectionWindowSize / 2
@@ -208,7 +209,8 @@ public partial class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventD
 
         return new AudioEventResult<T>
         {
-            Events = mergedEvents, TotalDuration = totalDuration,
+            Events = mergedEvents,
+            TotalDuration = totalDuration,
             DetectedEventTypes = mergedEvents.Select(e => e.EventType).Distinct().ToList(),
             EventStats = eventStats
         };
@@ -230,7 +232,8 @@ public partial class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventD
         var filteredEvents = result.Events.Where(e => eventTypeSet.Contains(e.EventType)).ToList();
         return new AudioEventResult<T>
         {
-            Events = filteredEvents, TotalDuration = result.TotalDuration,
+            Events = filteredEvents,
+            TotalDuration = result.TotalDuration,
             DetectedEventTypes = filteredEvents.Select(e => e.EventType).Distinct().ToList(),
             EventStats = ComputeEventStatistics(filteredEvents)
         };
@@ -427,8 +430,10 @@ public partial class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventD
                     {
                         var evt = new AudioEvent<T>
                         {
-                            EventType = _detector.ClassLabels[i], Confidence = scores[i],
-                            StartTime = _processedTime, EndTime = _processedTime + _detector._options.DetectionWindowSize,
+                            EventType = _detector.ClassLabels[i],
+                            Confidence = scores[i],
+                            StartTime = _processedTime,
+                            EndTime = _processedTime + _detector._options.DetectionWindowSize,
                             PeakTime = _processedTime + _detector._options.DetectionWindowSize / 2
                         };
                         _newEvents.Add(evt);

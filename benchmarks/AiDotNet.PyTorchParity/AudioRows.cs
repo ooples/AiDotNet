@@ -43,8 +43,13 @@ internal sealed class AiDotNetPannsCnn14Model : IBenchmarkModel
             optimizer: new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(null,
                 new AdamWOptimizerOptions<float, Tensor<float>, Tensor<float>>
                 {
-                    InitialLearningRate = 1e-3, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, WeightDecay = 0.01,
-                    EnableGradientClipping = true, MaxGradientNorm = 1.0,
+                    InitialLearningRate = 1e-3,
+                    Beta1 = 0.9,
+                    Beta2 = 0.999,
+                    Epsilon = 1e-8,
+                    WeightDecay = 0.01,
+                    EnableGradientClipping = true,
+                    MaxGradientNorm = 1.0,
                 }));
 
         LoadSyntheticBatch(1);
@@ -139,15 +144,30 @@ internal sealed class AiDotNetWav2Vec2BaseModel : IBenchmarkModel
             // the ones it depends on.
             new Wav2Vec2ModelOptions
             {
-                HiddenDim = 768, NumTransformerLayers = 12, NumHeads = 12, FfDim = 3072, MaxAudioLengthSeconds = 30,
-                FreezeFeatureEncoder = true, HiddenDropout = 0.1, AttentionDropout = 0.1, ActivationDropout = 0.1,
-                FinalDropout = 0.1, MaskTimeProbability = 0.05, LayerDrop = 0.0, Seed = seed,
+                HiddenDim = 768,
+                NumTransformerLayers = 12,
+                NumHeads = 12,
+                FfDim = 3072,
+                MaxAudioLengthSeconds = 30,
+                FreezeFeatureEncoder = true,
+                HiddenDropout = 0.1,
+                AttentionDropout = 0.1,
+                ActivationDropout = 0.1,
+                FinalDropout = 0.1,
+                MaskTimeProbability = 0.05,
+                LayerDrop = 0.0,
+                Seed = seed,
             },
             optimizer: new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(null,
                 new AdamWOptimizerOptions<float, Tensor<float>, Tensor<float>>
                 {
-                    InitialLearningRate = 5e-5, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, WeightDecay = 0.0,
-                    EnableGradientClipping = true, MaxGradientNorm = 1.0,
+                    InitialLearningRate = 5e-5,
+                    Beta1 = 0.9,
+                    Beta2 = 0.999,
+                    Epsilon = 1e-8,
+                    WeightDecay = 0.0,
+                    EnableGradientClipping = true,
+                    MaxGradientNorm = 1.0,
                 }));
 
         LoadSyntheticBatch(1);

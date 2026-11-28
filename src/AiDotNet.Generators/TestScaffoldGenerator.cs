@@ -14702,30 +14702,30 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 3, 64, 64 };");
             }
-                if (model.ClassName is "YOLOv8" or "YOLOv9" or "YOLOv10" or "YOLOv11")
-                {
-                    // The YoloConv detectors (reference BatchNorm eps 1e-3) at 64x64 leave P5 at 2x2, where
-                    // every BatchNorm normalizes four values. YOLOv9-t's depth-3 RepNCSPELAN4 stages raise
-                    // the gradient norm to ~1000 (norm 22 at 128x128) and YOLOv8n no longer descends at eps
-                    // 1e-3, so no practical SGD step is reliable. Only the loss-reduction contract trains at
-                    // 128x128, P5 at 4x4; every other contract keeps 64x64.
-                    sb.AppendLine("    protected override int[] LossReductionInputShape => new[] { 1, 3, 128, 128 };");
-                }
-                if (model.ClassName == "RTDETR")
-                {
-                    // RT-DETR's denoising class embedding is read only by the contrastive-denoising queries, which the
-                    // target-less tensor Train cannot build; TrainDetections' semantic oracle covers it.
-                    sb.AppendLine("    protected override System.Collections.Generic.IReadOnlyCollection<string> ParametersUnusedByForward =>");
-                    sb.AppendLine("        new[] { \"AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.RTDETR<T>::_decoder/w0\" };");
-                }
-                if (model.ClassName == "DINO")
-                {
-                    // DINO's CDN label embedding (label_enc) is read only by the contrastive-denoising queries,
-                    // which exist only when TrainDetections has targets to noise; the target-less tensor Train
-                    // cannot reach it. TrainDetections_ShouldUseSemanticTargetsAndUpdateBothHeads covers it.
-                    sb.AppendLine("    protected override System.Collections.Generic.IReadOnlyCollection<string> ParametersUnusedByForward =>");
-                    sb.AppendLine("        new[] { \"AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.DINO<T>::_transformer/w2\" };");
-                }
+            if (model.ClassName is "YOLOv8" or "YOLOv9" or "YOLOv10" or "YOLOv11")
+            {
+                // The YoloConv detectors (reference BatchNorm eps 1e-3) at 64x64 leave P5 at 2x2, where
+                // every BatchNorm normalizes four values. YOLOv9-t's depth-3 RepNCSPELAN4 stages raise
+                // the gradient norm to ~1000 (norm 22 at 128x128) and YOLOv8n no longer descends at eps
+                // 1e-3, so no practical SGD step is reliable. Only the loss-reduction contract trains at
+                // 128x128, P5 at 4x4; every other contract keeps 64x64.
+                sb.AppendLine("    protected override int[] LossReductionInputShape => new[] { 1, 3, 128, 128 };");
+            }
+            if (model.ClassName == "RTDETR")
+            {
+                // RT-DETR's denoising class embedding is read only by the contrastive-denoising queries, which the
+                // target-less tensor Train cannot build; TrainDetections' semantic oracle covers it.
+                sb.AppendLine("    protected override System.Collections.Generic.IReadOnlyCollection<string> ParametersUnusedByForward =>");
+                sb.AppendLine("        new[] { \"AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.RTDETR<T>::_decoder/w0\" };");
+            }
+            if (model.ClassName == "DINO")
+            {
+                // DINO's CDN label embedding (label_enc) is read only by the contrastive-denoising queries,
+                // which exist only when TrainDetections has targets to noise; the target-less tensor Train
+                // cannot reach it. TrainDetections_ShouldUseSemanticTargetsAndUpdateBothHeads covers it.
+                sb.AppendLine("    protected override System.Collections.Generic.IReadOnlyCollection<string> ParametersUnusedByForward =>");
+                sb.AppendLine("        new[] { \"AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.DINO<T>::_transformer/w2\" };");
+            }
         }
         else if (model.ClassName == "StableVideoSR")
         {
@@ -16426,11 +16426,16 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     if (model.ClassName is "E2TTS" or "F5TTS" or "ProDiff")
                         sb.AppendLine("    protected override int InputSensitivityWarmUpSteps => 2;");
                     int memorizationSteps = model.ClassName is "E2TTS" or "F5TTS" ? E2TtsMemorizationIterations
-                        : naturalSpeechWarmup || model.ClassName == "NonAttentiveTacotron" ? PastWarmupTtsIterations
-                        // VoiceFlow trains at its reference 5e-5 and fell 5.4866 -> 5.4382 (0.88 %) in one step.
-                        : model.ClassName is "AdaSpeech" or "AdaSpeech2" or "VoiceFlow" ? 4
-                        // ForwardTacotron's objective falls a fraction of a percent per step at the fixture's constant 1e-3;
-                        // six steps clear the 1 % threshold, which is unchanged.
+                        : naturalSpeechWarmup || model.ClassName == "NonAttentiveTacotron" ? PastWarmupTtsIterations
+
+                        // VoiceFlow trains at its reference 5e-5 and fell 5.4866 -> 5.4382 (0.88 %) in one step.
+
+                        : model.ClassName is "AdaSpeech" or "AdaSpeech2" or "VoiceFlow" ? 4
+
+                        // ForwardTacotron's objective falls a fraction of a percent per step at the fixture's constant 1e-3;
+
+                        // six steps clear the 1 % threshold, which is unchanged.
+
                         : model.ClassName == "ForwardTacotron" ? 6 : DefaultTtsSmokeIterations;
                     sb.AppendLine($"    protected override int MemorizationTaskIterations => {memorizationSteps};");
                     if (naturalSpeechWarmup)
@@ -21475,7 +21480,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override double[] SignTestActual => new[] { 1.0 };");
                 break;
 
-            // InputFormatContinuous (0) = default, no overrides needed
+                // InputFormatContinuous (0) = default, no overrides needed
         }
     }
 
@@ -23191,79 +23196,79 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
     {
         switch (family)
         {
-            case TestFamily.GaussianProcess:       return "GaussianProcessModelTestBase";
-            case TestFamily.TimeSeries:            return "TimeSeriesModelTestBase";
-            case TestFamily.Diffusion:             return "DiffusionModelTestBase";
-            case TestFamily.LatentDiffusion:       return "LatentDiffusionTestBase";
-            case TestFamily.GAN:                   return "GANModelTestBase";
-            case TestFamily.Embedding:             return "EmbeddingModelTestBase";
-            case TestFamily.GraphNN:               return "GraphNNModelTestBase";
-            case TestFamily.AudioNN:               return "AudioNNModelTestBase";
-            case TestFamily.DocumentNN:            return "DocumentNNModelTestBase";
-            case TestFamily.VisionLanguage:        return "VisionLanguageTestBase";
-            case TestFamily.Segmentation:          return "SegmentationTestBase";
-            case TestFamily.ObjectDetection:       return "ObjectDetectionTestBase";
-            case TestFamily.TextDetection:         return "TextDetectionTestBase";
-            case TestFamily.OCR:                   return "OCRTestBase";
-            case TestFamily.VideoNN:               return "VideoNNModelTestBase";
-            case TestFamily.TTS:                   return "TTSModelTestBase";
-            case TestFamily.Financial:             return "FinancialModelTestBase";
-            case TestFamily.NER:                   return "NERModelTestBase";
-            case TestFamily.CodeModel:             return "CodeModelTestBase";
-            case TestFamily.VideoDiffusion:        return "VideoDiffusionTestBase";
-            case TestFamily.AudioDiffusion:        return "AudioDiffusionTestBase";
-            case TestFamily.FrameInterpolation:    return "FrameInterpolationTestBase";
-            case TestFamily.VideoSuperResolution:  return "VideoSuperResolutionTestBase";
-            case TestFamily.VideoDenoising:        return "VideoDenoisingTestBase";
-            case TestFamily.AudioClassifier:       return "AudioClassifierTestBase";
-            case TestFamily.OpticalFlow:           return "OpticalFlowTestBase";
-            case TestFamily.SpeakerRecognition:    return "SpeakerRecognitionTestBase";
-            case TestFamily.EnsembleClassifier:    return "EnsembleClassifierTestBase";
-            case TestFamily.NaiveBayes:            return "NaiveBayesTestBase";
-            case TestFamily.SVM:                   return "SVMTestBase";
-            case TestFamily.Forecasting:           return "ForecastingModelTestBase";
-            case TestFamily.ThreeDDiffusion:       return "ThreeDDiffusionTestBase";
-            case TestFamily.VideoInpainting:       return "VideoInpaintingTestBase";
-            case TestFamily.VideoStabilization:    return "VideoStabilizationTestBase";
-            case TestFamily.LinearClassifier:      return "LinearClassifierTestBase";
-            case TestFamily.MetaClassifier:        return "MetaClassifierTestBase";
-            case TestFamily.OrdinalClassifier:     return "OrdinalClassifierTestBase";
+            case TestFamily.GaussianProcess: return "GaussianProcessModelTestBase";
+            case TestFamily.TimeSeries: return "TimeSeriesModelTestBase";
+            case TestFamily.Diffusion: return "DiffusionModelTestBase";
+            case TestFamily.LatentDiffusion: return "LatentDiffusionTestBase";
+            case TestFamily.GAN: return "GANModelTestBase";
+            case TestFamily.Embedding: return "EmbeddingModelTestBase";
+            case TestFamily.GraphNN: return "GraphNNModelTestBase";
+            case TestFamily.AudioNN: return "AudioNNModelTestBase";
+            case TestFamily.DocumentNN: return "DocumentNNModelTestBase";
+            case TestFamily.VisionLanguage: return "VisionLanguageTestBase";
+            case TestFamily.Segmentation: return "SegmentationTestBase";
+            case TestFamily.ObjectDetection: return "ObjectDetectionTestBase";
+            case TestFamily.TextDetection: return "TextDetectionTestBase";
+            case TestFamily.OCR: return "OCRTestBase";
+            case TestFamily.VideoNN: return "VideoNNModelTestBase";
+            case TestFamily.TTS: return "TTSModelTestBase";
+            case TestFamily.Financial: return "FinancialModelTestBase";
+            case TestFamily.NER: return "NERModelTestBase";
+            case TestFamily.CodeModel: return "CodeModelTestBase";
+            case TestFamily.VideoDiffusion: return "VideoDiffusionTestBase";
+            case TestFamily.AudioDiffusion: return "AudioDiffusionTestBase";
+            case TestFamily.FrameInterpolation: return "FrameInterpolationTestBase";
+            case TestFamily.VideoSuperResolution: return "VideoSuperResolutionTestBase";
+            case TestFamily.VideoDenoising: return "VideoDenoisingTestBase";
+            case TestFamily.AudioClassifier: return "AudioClassifierTestBase";
+            case TestFamily.OpticalFlow: return "OpticalFlowTestBase";
+            case TestFamily.SpeakerRecognition: return "SpeakerRecognitionTestBase";
+            case TestFamily.EnsembleClassifier: return "EnsembleClassifierTestBase";
+            case TestFamily.NaiveBayes: return "NaiveBayesTestBase";
+            case TestFamily.SVM: return "SVMTestBase";
+            case TestFamily.Forecasting: return "ForecastingModelTestBase";
+            case TestFamily.ThreeDDiffusion: return "ThreeDDiffusionTestBase";
+            case TestFamily.VideoInpainting: return "VideoInpaintingTestBase";
+            case TestFamily.VideoStabilization: return "VideoStabilizationTestBase";
+            case TestFamily.LinearClassifier: return "LinearClassifierTestBase";
+            case TestFamily.MetaClassifier: return "MetaClassifierTestBase";
+            case TestFamily.OrdinalClassifier: return "OrdinalClassifierTestBase";
             case TestFamily.SemiSupervisedClassifier: return "SemiSupervisedClassifierTestBase";
-            case TestFamily.MultiLabelClassifier:  return "MultiLabelClassifierTestBase";
-            case TestFamily.FinancialNLP:          return "FinancialNLPTestBase";
-            case TestFamily.RiskModel:             return "RiskModelTestBase";
-            case TestFamily.PortfolioOptimizer:    return "PortfolioOptimizerTestBase";
-            case TestFamily.TransformerNER:        return "TransformerNERTestBase";
-            case TestFamily.SpanBasedNER:          return "SpanBasedNERTestBase";
-            case TestFamily.SequenceLabelingNER:   return "SequenceLabelingNERTestBase";
-            case TestFamily.AnomalyDetector:       return "AnomalyDetectorTestBase";
-            case TestFamily.Survival:              return "SurvivalModelTestBase";
-            case TestFamily.Causal:                return "CausalModelTestBase";
+            case TestFamily.MultiLabelClassifier: return "MultiLabelClassifierTestBase";
+            case TestFamily.FinancialNLP: return "FinancialNLPTestBase";
+            case TestFamily.RiskModel: return "RiskModelTestBase";
+            case TestFamily.PortfolioOptimizer: return "PortfolioOptimizerTestBase";
+            case TestFamily.TransformerNER: return "TransformerNERTestBase";
+            case TestFamily.SpanBasedNER: return "SpanBasedNERTestBase";
+            case TestFamily.SequenceLabelingNER: return "SequenceLabelingNERTestBase";
+            case TestFamily.AnomalyDetector: return "AnomalyDetectorTestBase";
+            case TestFamily.Survival: return "SurvivalModelTestBase";
+            case TestFamily.Causal: return "CausalModelTestBase";
             case TestFamily.ReinforcementLearning: return "ReinforcementLearningTestBase";
-            case TestFamily.Regression:            return "RegressionModelTestBase";
-            case TestFamily.NonLinearRegression:   return "NonLinearRegressionTestBase";
-            case TestFamily.Classification:        return "ClassificationModelTestBase";
+            case TestFamily.Regression: return "RegressionModelTestBase";
+            case TestFamily.NonLinearRegression: return "NonLinearRegressionTestBase";
+            case TestFamily.Classification: return "ClassificationModelTestBase";
             case TestFamily.ProbabilisticClassifier: return "ProbabilisticClassifierTestBase";
-            case TestFamily.Clustering:            return "ClusteringModelTestBase";
-            case TestFamily.SafetyModule:          return "SafetyModuleTestBase";
-            case TestFamily.TensorModule:          return "TensorModuleTestBase";
-            case TestFamily.Neck:                  return "NeckTestBase";
-            case TestFamily.InstanceSegmentation:  return "InstanceSegmenterTestBase";
-            case TestFamily.VideoSafetyModule:     return "VideoSafetyModuleTestBase";
-            case TestFamily.TextSafetyModule:      return "TextSafetyModuleTestBase";
-            case TestFamily.ImageWatermarker:      return "KeyedWatermarkTestBase";
-            case TestFamily.AudioSafetyModule:     return "AudioSafetyModuleTestBase";
-            case TestFamily.VAE:                   return "VAEModelTestBase";
-            case TestFamily.NoisePredictor:        return "NoisePredictorTestBase";
-            case TestFamily.SelfSupervised:        return "SelfSupervisedLearningMethodTestBase";
-            case TestFamily.Sharded:               return "ShardedModelTestBase";
-            case TestFamily.Policy:                return "PolicyTestBase";
-            case TestFamily.DeepfakeDetector:      return "DeepfakeDetectorTestBase";
-            case TestFamily.MetaLearning:          return "MetaLearnerTestBase";
+            case TestFamily.Clustering: return "ClusteringModelTestBase";
+            case TestFamily.SafetyModule: return "SafetyModuleTestBase";
+            case TestFamily.TensorModule: return "TensorModuleTestBase";
+            case TestFamily.Neck: return "NeckTestBase";
+            case TestFamily.InstanceSegmentation: return "InstanceSegmenterTestBase";
+            case TestFamily.VideoSafetyModule: return "VideoSafetyModuleTestBase";
+            case TestFamily.TextSafetyModule: return "TextSafetyModuleTestBase";
+            case TestFamily.ImageWatermarker: return "KeyedWatermarkTestBase";
+            case TestFamily.AudioSafetyModule: return "AudioSafetyModuleTestBase";
+            case TestFamily.VAE: return "VAEModelTestBase";
+            case TestFamily.NoisePredictor: return "NoisePredictorTestBase";
+            case TestFamily.SelfSupervised: return "SelfSupervisedLearningMethodTestBase";
+            case TestFamily.Sharded: return "ShardedModelTestBase";
+            case TestFamily.Policy: return "PolicyTestBase";
+            case TestFamily.DeepfakeDetector: return "DeepfakeDetectorTestBase";
+            case TestFamily.MetaLearning: return "MetaLearnerTestBase";
             case TestFamily.ClassificationMetaLearning: return "ClassificationMetaLearnerTestBase";
-            case TestFamily.Volatility:            return "VolatilityModelTestBase";
-            case TestFamily.NeuralNetwork:         return "NeuralNetworkModelTestBase";
-            default:                               return "RegressionModelTestBase";
+            case TestFamily.Volatility: return "VolatilityModelTestBase";
+            case TestFamily.NeuralNetwork: return "NeuralNetworkModelTestBase";
+            default: return "RegressionModelTestBase";
         }
     }
 

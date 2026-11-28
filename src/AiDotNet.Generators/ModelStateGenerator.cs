@@ -1207,10 +1207,16 @@ public class ModelStateGenerator : IIncrementalGenerator
 
                     ITypeSymbol? memberType = member switch
                     {
-                        IPropertySymbol { IsStatic: false, IsIndexer: false,
-                            GetMethod.DeclaredAccessibility: Accessibility.Public } property => property.Type,
-                        IFieldSymbol { IsStatic: false,
-                            DeclaredAccessibility: Accessibility.Public } field => field.Type,
+                        IPropertySymbol
+                        {
+                            IsStatic: false, IsIndexer: false,
+                            GetMethod.DeclaredAccessibility: Accessibility.Public
+                        } property => property.Type,
+                        IFieldSymbol
+                        {
+                            IsStatic: false,
+                            DeclaredAccessibility: Accessibility.Public
+                        } field => field.Type,
                         _ => null,
                     };
                     if (memberType is null) continue;

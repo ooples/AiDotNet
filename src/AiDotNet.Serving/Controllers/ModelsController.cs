@@ -450,98 +450,98 @@ public class ModelsController : ControllerBase
         // The trial is for end-user SDK usage, not for server-side model serving.
         using (AiDotNet.Helpers.ModelPersistenceGuard.InternalOperation())
         {
-        var modelResult = new AiModelResult<T, Matrix<T>, Vector<T>>();
-        modelResult.LoadFromFile(path);
+            var modelResult = new AiModelResult<T, Matrix<T>, Vector<T>>();
+            modelResult.LoadFromFile(path);
 
-        // Get dimensions from the model metadata
-        var metadata = modelResult.GetModelMetadata();
-        var inputDim = metadata.FeatureCount > 0 ? metadata.FeatureCount : 1;
+            // Get dimensions from the model metadata
+            var metadata = modelResult.GetModelMetadata();
+            var inputDim = metadata.FeatureCount > 0 ? metadata.FeatureCount : 1;
 
-        // Output dimension defaults to 1 for most regression/classification models
-        // Use Convert.ToInt32 to handle various numeric types from JSON deserialization
-        // (e.g., long, double, JsonElement)
-        var outputDim = 1;
-        if (metadata.Properties.TryGetValue("OutputDimension", out var outputDimValue) && outputDimValue != null)
-        {
-            try
+            // Output dimension defaults to 1 for most regression/classification models
+            // Use Convert.ToInt32 to handle various numeric types from JSON deserialization
+            // (e.g., long, double, JsonElement)
+            var outputDim = 1;
+            if (metadata.Properties.TryGetValue("OutputDimension", out var outputDimValue) && outputDimValue != null)
             {
-                outputDim = Convert.ToInt32(outputDimValue);
+                try
+                {
+                    outputDim = Convert.ToInt32(outputDimValue);
+                }
+                catch (Exception)
+                {
+                    // If conversion fails, keep default of 1
+                    _logger.LogWarning("Failed to parse OutputDimension from metadata, defaulting to 1");
+                }
             }
-            catch (Exception)
+
+            // AiModelResult.Predict returns Vector<T> (single output per sample)
+            // Multi-output models are not currently supported in the serving layer
+            if (outputDim > 1)
             {
-                // If conversion fails, keep default of 1
-                _logger.LogWarning("Failed to parse OutputDimension from metadata, defaulting to 1");
+                _logger.LogWarning(
+                    "Multi-output models (outputDim={OutputDim}) are not fully supported in serving layer; using outputDim=1",
+                    outputDim);
+                outputDim = 1;
             }
-        }
 
-        // AiModelResult.Predict returns Vector<T> (single output per sample)
-        // Multi-output models are not currently supported in the serving layer
-        if (outputDim > 1)
-        {
-            _logger.LogWarning(
-                "Multi-output models (outputDim={OutputDim}) are not fully supported in serving layer; using outputDim=1",
-                outputDim);
-            outputDim = 1;
-        }
-
-        // Create predict functions that delegate to AiModelResult
-        // This preserves all facade functionality (LoRA, inference opts, etc.)
-        // Note: AiModelResult<T, Matrix<T>, Vector<T>> has Predict(Matrix<T>) -> Vector<T>
-        // We wrap single vectors in a matrix for prediction
-        Func<Vector<T>, Vector<T>> predictFunc = input =>
-        {
-            // Wrap single vector as single-row matrix
-            var inputMatrix = new Matrix<T>(1, input.Length);
-            for (int i = 0; i < input.Length; i++)
+            // Create predict functions that delegate to AiModelResult
+            // This preserves all facade functionality (LoRA, inference opts, etc.)
+            // Note: AiModelResult<T, Matrix<T>, Vector<T>> has Predict(Matrix<T>) -> Vector<T>
+            // We wrap single vectors in a matrix for prediction
+            Func<Vector<T>, Vector<T>> predictFunc = input =>
             {
-                inputMatrix[0, i] = input[i];
-            }
-            return modelResult.Predict(inputMatrix);
-        };
+                // Wrap single vector as single-row matrix
+                var inputMatrix = new Matrix<T>(1, input.Length);
+                for (int i = 0; i < input.Length; i++)
+                {
+                    inputMatrix[0, i] = input[i];
+                }
+                return modelResult.Predict(inputMatrix);
+            };
 
-        Func<Matrix<T>, Matrix<T>> predictBatchFunc = inputs =>
-        {
-            // Pass entire batch for efficient batch inference
-            // AiModelResult.Predict(Matrix<T>) returns Vector<T> with one value per sample
-            var predictions = modelResult.Predict(inputs);
-
-            // Convert Vector<T> result to Matrix<T> format (single output per sample)
-            var results = new Matrix<T>(inputs.Rows, 1);
-            for (int i = 0; i < predictions.Length && i < inputs.Rows; i++)
+            Func<Matrix<T>, Matrix<T>> predictBatchFunc = inputs =>
             {
-                results[i, 0] = predictions[i];
+                // Pass entire batch for efficient batch inference
+                // AiModelResult.Predict(Matrix<T>) returns Vector<T> with one value per sample
+                var predictions = modelResult.Predict(inputs);
+
+                // Convert Vector<T> result to Matrix<T> format (single output per sample)
+                var results = new Matrix<T>(inputs.Rows, 1);
+                for (int i = 0; i < predictions.Length && i < inputs.Rows; i++)
+                {
+                    results[i, 0] = predictions[i];
+                }
+                return results;
+            };
+
+            // Create a servable wrapper that implements IServableModel
+            var servableModel = new ServableModelWrapper<T>(
+                name,
+                inputDim,
+                outputDim,
+                predictFunc,
+                predictBatchFunc);
+
+            // Register with the repository
+            var success = _modelRepository.LoadModel(name, servableModel, path);
+
+            if (!success)
+            {
+                throw new InvalidOperationException($"A model with name '{name}' already exists");
             }
-            return results;
-        };
 
-        // Create a servable wrapper that implements IServableModel
-        var servableModel = new ServableModelWrapper<T>(
-            name,
-            inputDim,
-            outputDim,
-            predictFunc,
-            predictBatchFunc);
+            _logger.LogDebug("Model '{Name}' registered with {InputDim} input dimensions and {OutputDim} output dimensions",
+                LogSanitizer.Sanitize(name), inputDim, outputDim);
 
-        // Register with the repository
-        var success = _modelRepository.LoadModel(name, servableModel, path);
-
-        if (!success)
-        {
-            throw new InvalidOperationException($"A model with name '{name}' already exists");
-        }
-
-        _logger.LogDebug("Model '{Name}' registered with {InputDim} input dimensions and {OutputDim} output dimensions",
-            LogSanitizer.Sanitize(name), inputDim, outputDim);
-
-        return new ModelInfo
-        {
-            Name = name,
-            SourcePath = path,
-            NumericType = numericType,
-            InputDimension = inputDim,
-            OutputDimension = outputDim,
-            LoadedAt = DateTime.UtcNow
-        };
+            return new ModelInfo
+            {
+                Name = name,
+                SourcePath = path,
+                NumericType = numericType,
+                InputDimension = inputDim,
+                OutputDimension = outputDim,
+                LoadedAt = DateTime.UtcNow
+            };
         } // end InternalOperation scope
     }
 
