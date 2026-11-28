@@ -26955,3 +26955,7 @@ override AiDotNet.ActivationFunctions.ExactGELUActivation<T>.Derivative(AiDotNet
 AiDotNet.NeuralNetworks.Layers.TransformerEncoderBlock<T>.LayerNormEpsilon.get -> double
 *REMOVED*AiDotNet.NeuralNetworks.Layers.TransformerEncoderBlock<T>.TransformerEncoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0, AiDotNet.Interfaces.IActivationFunction<T>? ffnActivation = null, AiDotNet.Enums.TransformerNormPlacement normPlacement = AiDotNet.Enums.TransformerNormPlacement.PreNorm) -> void
 AiDotNet.NeuralNetworks.Layers.TransformerEncoderBlock<T>.TransformerEncoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0, AiDotNet.Interfaces.IActivationFunction<T>? ffnActivation = null, AiDotNet.Enums.TransformerNormPlacement normPlacement = AiDotNet.Enums.TransformerNormPlacement.PreNorm, double layerNormEpsilon = 1E-05) -> void
+override AiDotNet.NeuralNetworks.Layers.AveragePoolingLayer<T>.ReconcileShapeOnlyResolution(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> void
+override AiDotNet.NeuralNetworks.Layers.MaxPool3DLayer<T>.ReconcileShapeOnlyResolution(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> void
+override AiDotNet.NeuralNetworks.Layers.MaxPoolingLayer<T>.ReconcileShapeOnlyResolution(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> void
+override AiDotNet.NeuralNetworks.Layers.PoolingLayer<T>.ReconcileShapeOnlyResolution(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> void
