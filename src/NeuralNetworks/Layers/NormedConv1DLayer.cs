@@ -418,8 +418,13 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         {
             // Eval and non-differentiable inference reuse the same effective weights until their sources change.
             // Keeping their owned storage also lets convolution backends retain a packed/persistent kernel instead of
-            // packing fresh normalization scratch every call.
-            if (CanUseDerivedParameterCache)
+            // packing fresh normalization scratch every call. An evaluation-mode forward keeps the cache under a
+            // graph-capture guard as well (as it did before the shared derived cache): the kernel is a function of
+            // the weights alone, so rebuilding it there only added a normalization launch per forward.
+            bool evalNoGrad = !IsTrainingMode && !GraphMode.IsActive
+                && (GradientTape<T>.Current is null || NoGradScope<T>.IsSuppressed)
+                && DerivedTensorCacheSettings.IsEnabled;
+            if (CanUseDerivedParameterCache || evalNoGrad)
             {
                 return GetOrBuildDerivedParameter(
                     "WeightNormalizedKernel",
