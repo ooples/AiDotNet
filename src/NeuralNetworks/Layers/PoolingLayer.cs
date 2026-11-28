@@ -300,6 +300,20 @@ public partial class PoolingLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
+    /// Rebinds a shape the architecture walk guessed to the first tensor the layer really receives.
+    /// </summary>
+    /// <remarks>
+    /// A pooling layer has no parameters and accepts any spatial extent, so a size written by the shape-only walk is
+    /// an estimate from the architecture's declared input, not a contract. Keeping it made the layer report the
+    /// architecture's size after pooling an image of another size.
+    /// </remarks>
+    protected override void ReconcileShapeOnlyResolution(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank == 3 || rank == 4) OnFirstForward(input);
+    }
+
+    /// <summary>
     /// Calculates the output dimension size based on the input dimension, pool size, and stride.
     /// </summary>
     /// <param name="inputDim">The size of the input dimension (height or width).</param>
