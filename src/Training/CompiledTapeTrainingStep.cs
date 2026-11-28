@@ -121,6 +121,7 @@ public static partial class CompiledTapeTrainingStep<T>
         internal double configuredMaxGradNorm;
         // Mixed precision (FusedMixedPrecision): the configuration the plan was committed with, and the plan whose loss
         // scaling is configured (a new plan for a new shape takes the previous one's scaler state).
+        internal AiDotNet.Tensors.Engines.Compilation.ExternalLrSchedule? externalLrSchedule;
         internal string? mixedPrecisionSignature;
         internal object? lossScaledPlan;
         internal long fusedStepCount;
@@ -631,6 +632,35 @@ public static partial class CompiledTapeTrainingStep<T>
             LayerSlotShapes = LayerSlots?.Select(slots => slots.Select(parameter => parameter._shape.ToArray()).ToArray()).ToArray();
         }
 
+        private OptimizerContract(OptimizerContract source, object? scheduler)
+        {
+            Configuration = source.Configuration;
+            Optimizer = source.Optimizer;
+            Scheduler = scheduler;
+            SchedulerMode = source.SchedulerMode;
+            Scheduled = source.Scheduled;
+            Bf16 = source.Bf16;
+            Int8Block = source.Int8Block;
+            Int8Minimum = source.Int8Minimum;
+            L2 = source.L2;
+            L2AfterClip = source.L2AfterClip;
+            Extras = source.Extras;
+            Parameters = source.Parameters;
+            LayerOwners = source.LayerOwners;
+            LayerSlots = source.LayerSlots;
+            LayerSlotShapes = source.LayerSlotShapes;
+        }
+
+        /// <summary>
+        /// Returns this contract with its schedule replaced by <paramref name="replacement"/> when it currently records
+        /// exactly <paramref name="previous"/> (the internally created external schedule a checkpoint import rebuilt);
+        /// otherwise returns this contract unchanged, so a user-supplied scheduler is never swapped.
+        /// </summary>
+        internal OptimizerContract WithReboundSchedule(object? previous, object replacement)
+            => previous is not null && ReferenceEquals(Scheduler, previous) && !ReferenceEquals(previous, replacement)
+                ? new OptimizerContract(this, replacement)
+                : this;
+
         internal bool Matches(OptimizerContract other, bool compareParameters = true)
             => Configuration.Equals(other.Configuration)
                 && ReferenceEquals(Optimizer, other.Optimizer)
@@ -799,6 +829,32 @@ public static partial class CompiledTapeTrainingStep<T>
         return true;
     }
 
+    private static AiDotNet.Tensors.Engines.Compilation.LrSchedule? ResolveEffectivePlanSchedule(
+        AiDotNet.Tensors.Engines.Compilation.OptimizerType optimizerType,
+        double learningRate,
+        AiDotNet.Tensors.Engines.Compilation.LrSchedule? configuredSchedule)
+    {
+        if (configuredSchedule is not null)
+            return configuredSchedule;
+        // Zero is a valid rate (warmup from zero, a manual pause): it stays on the external schedule so the change from
+        // or to a positive rate keeps the committed plan and its moments. Only a rate the schedule cannot hold (negative
+        // or non-finite) and Rprop, which takes no learning rate, run unscheduled.
+        if (optimizerType == AiDotNet.Tensors.Engines.Compilation.OptimizerType.Rprop
+            || double.IsNaN(learningRate) || double.IsInfinity(learningRate) || learningRate < 0.0)
+            return null;
+        // The external handle exists to keep per-step rate changes off the captured device plan (GPU-resident scalars,
+        // CUDA Graph replay). Off a DirectGpu engine there is nothing to capture, and wrapping a constant rate in a
+        // schedule changes what a fused checkpoint carries: a CPU fused run resumed from its own checkpoint diverged,
+        // and a fused checkpoint no longer resumed on the compiled path (StreamingStepTrainingTests).
+        if (!AiDotNet.Configuration.CompilationRuntimeSettings.GpuResidentOptimizerScalarsEnabled
+            || AiDotNetEngine.Current.Unwrap() is not AiDotNet.Tensors.Engines.DirectGpuTensorEngine)
+            return null;
+        var extSchedule = CurrentState.externalLrSchedule
+            ??= AiDotNet.Tensors.Engines.Compilation.LrSchedule.External(learningRate);
+        extSchedule.LearningRate = learningRate;
+        return extSchedule;
+    }
+
     /// <summary>Runs only a caller-declared graph break through the already configured optimizer.</summary>
     internal static bool TryDeclaredGraphBreak(object owner, object? stateKey, FusedTrainingStepRequest<T> request,
         AiDotNet.Optimizers.Fused.FusedOptimizerConfig config, double l2, bool l2AfterClip, double clip,
@@ -815,8 +871,9 @@ public static partial class CompiledTapeTrainingStep<T>
             _currentState = state;
             _lastFallbackException = null;
             var parameters = CollectDeduplicatedParametersWithExtras(request.Layers, request.ExtraParameters, request.Selection);
+            var effectiveSchedule = ResolveEffectivePlanSchedule(config.Type, (float)config.LearningRate, config.Schedule);
             var contract = new OptimizerContract(parameters, (int)config.Type, config.LearningRate,
-                config.Beta1, config.Beta2, config.Epsilon, config.WeightDecay, config.Schedule, request.Optimizer,
+                config.Beta1, config.Beta2, config.Epsilon, config.WeightDecay, effectiveSchedule, request.Optimizer,
                 config.UseBf16Moments || config.MomentStorage == AiDotNet.Enums.OptimizerMomentStorage.BFloat16,
                 config.MomentStorage == AiDotNet.Enums.OptimizerMomentStorage.Int8Blockwise ? config.Int8MomentBlockSize : 0,
                 config.Int8MinQuantizedLength, config.Extras,
@@ -1273,7 +1330,13 @@ public static partial class CompiledTapeTrainingStep<T>
                 return;
             }
         }
-        if (shapes.Count >= MaxBatchShapesPerLifecycle)
+        int maxShapes = AiDotNet.Configuration.CompilationRuntimeSettings.MultiBucketShapeRoutingEnabled
+            ? System.Math.Max(
+                MaxBatchShapesPerLifecycle,
+                AiDotNet.Configuration.CompilationRuntimeSettings.Current.SequenceLengthBuckets.Length
+                + AiDotNet.Configuration.CompilationRuntimeSettings.Current.BatchSizeBuckets.Length)
+            : MaxBatchShapesPerLifecycle;
+        if (shapes.Count >= maxShapes)
         {
             _retiringCache?.Invalidate();
             _retiringCache = _cache;
@@ -1296,7 +1359,7 @@ public static partial class CompiledTapeTrainingStep<T>
         CurrentState.mixedPrecisionSignature = null;
         CurrentState.lossScaledPlan = null;
         _configuredOptimizerConfig = null;
-            CurrentState.optimizerContract = null;
+        CurrentState.optimizerContract = null;
         _configuredL2 = 0.0;
         _configuredL2AfterClip = false;
         // AiDotNet#1331: drop the persistent input/target tensors so the next
@@ -1893,6 +1956,11 @@ public static partial class CompiledTapeTrainingStep<T>
         _lastFallbackException = null;
         CurrentState.distributedReplayDisagreementReason = null;
         CurrentState.distributedReplayEvaluated = false;
+
+        // Keep constant/externally-adjusted learning rates live on a dynamic ExternalLrSchedule handle so
+        // warmup, cosine annealing, or manual per-step LR updates never invalidate _configuredPlan or break
+        // captured full-step CUDA Graphs. (Rprop takes no learning rate and requires lrSchedule == null.)
+        lrSchedule = ResolveEffectivePlanSchedule(optimizerType, learningRate, lrSchedule);
         CurrentState.lastFallbackUnreplayableClosureStep = false;
         // Declared graph breaks bypass probing and consume their random draws once.
 
@@ -2507,7 +2575,17 @@ public static partial class CompiledTapeTrainingStep<T>
                 foreach (var schedule in withSchedules.LearningRateSchedules)
                 {
                     if (schedule is AiDotNet.Tensors.Engines.Compilation.ExternalLrSchedule external)
+                    {
+                        // The committed contract recorded the external schedule created for this run; the import
+                        // replaced it, and the next call resolves the restored instance. Rebind the contract to it
+                        // (only when it recorded that internal instance, so a user scheduler still has to match),
+                        // or every step after the first resumed one would be rejected as a schedule change.
+                        var previousExternal = CurrentState.externalLrSchedule;
+                        CurrentState.externalLrSchedule = external;
+                        if (CurrentState.optimizerContract is { } committedContract)
+                            CurrentState.optimizerContract = committedContract.WithReboundSchedule(previousExternal, external);
                         optimizer.AdoptRestoredFusedLrSchedule(external);
+                    }
                 }
             }
         }

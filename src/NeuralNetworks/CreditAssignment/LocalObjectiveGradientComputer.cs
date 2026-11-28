@@ -110,6 +110,94 @@ internal static class LocalObjectiveGradientComputer<T>
         return result;
     }
 
+    private sealed class CachedNetworkParameterTopology
+    {
+        public readonly object Gate = new();
+        public int StructureVersion = -1;
+        public int ParameterEpoch = -1;
+        public int ReadoutCount = -1;
+        public List<Tensor<T>>[] LayerParameters = Array.Empty<List<Tensor<T>>>();
+        public List<int> HiddenIndices = new();
+        public List<Tensor<T>> ModelParameterSources = new();
+        public HashSet<Tensor<T>> ModelParameterSet = new(TensorReferenceComparer<Tensor<T>>.Instance);
+        // True when some trainable layer (or sublayer) does not derive from LayerBase<T>. Only LayerBase<T> advances
+        // ParameterSurfaceEpoch when it replaces a parameter tensor; ITrainableLayer<T>.SetTrainableParameters carries no
+        // such obligation, so a topology containing such a layer is never served from the cache.
+        public bool HasUnversionedTrainableLayer;
+    }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<NeuralNetworkBase<T>, CachedNetworkParameterTopology>
+        s_topologyCache = new();
+
+    private static readonly int[][] s_axesByRank = BuildAxesTable();
+
+    private static int[][] BuildAxesTable()
+    {
+        var table = new int[9][];
+        for (int r = 0; r < table.Length; r++)
+        {
+            var axes = new int[r];
+            for (int a = 0; a < r; a++) axes[a] = a;
+            table[r] = axes;
+        }
+        return table;
+    }
+
+    private static (List<Tensor<T>>[] ParamsOf, List<int> HiddenIdx, List<Tensor<T>> ModelSources, HashSet<Tensor<T>> ModelSet)
+        GetOrBuildTopology(NeuralNetworkBase<T> network, int readoutCount)
+    {
+        var holder = s_topologyCache.GetOrCreateValue(network);
+        int structVer = network.LayerStructureVersion;
+        int paramEpoch = LayerBase<T>.ParameterSurfaceEpoch;
+        var layers = network.Layers;
+        int readoutStart = layers.Count - readoutCount;
+
+        lock (holder.Gate)
+        {
+            if (holder.StructureVersion == structVer
+                && holder.ParameterEpoch == paramEpoch
+                && holder.ReadoutCount == readoutCount
+                && holder.LayerParameters.Length == layers.Count
+                && !holder.HasUnversionedTrainableLayer)
+            {
+                return (holder.LayerParameters, holder.HiddenIndices, holder.ModelParameterSources, holder.ModelParameterSet);
+            }
+
+            var paramsOf = new List<Tensor<T>>[layers.Count];
+            bool hasUnversioned = false;
+            for (int i = 0; i < layers.Count; i++)
+            {
+                paramsOf[i] = CollectParameters(layers[i]);
+                hasUnversioned |= ContainsUnversionedTrainableLayer(layers[i]);
+            }
+
+            var hiddenIdx = new List<int>(readoutStart);
+            for (int i = 0; i < readoutStart; i++)
+                if (paramsOf[i].Count > 0) hiddenIdx.Add(i);
+
+            var modelSources = new List<Tensor<T>>();
+            var modelSet = new HashSet<Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+            for (int i = 0; i < paramsOf.Length; i++)
+            {
+                var ps = paramsOf[i];
+                for (int j = 0; j < ps.Count; j++)
+                {
+                    if (modelSet.Add(ps[j])) modelSources.Add(ps[j]);
+                }
+            }
+
+            holder.LayerParameters = paramsOf;
+            holder.HiddenIndices = hiddenIdx;
+            holder.ModelParameterSources = modelSources;
+            holder.ModelParameterSet = modelSet;
+            holder.StructureVersion = structVer;
+            holder.ParameterEpoch = paramEpoch;
+            holder.ReadoutCount = readoutCount;
+            holder.HasUnversionedTrainableLayer = hasUnversioned;
+            return (paramsOf, hiddenIdx, modelSources, modelSet);
+        }
+    }
+
     private static LocalObjectiveGradients<T> ComputeCore(
         NeuralNetworkBase<T> network,
         Tensor<T> input,
@@ -128,16 +216,28 @@ internal static class LocalObjectiveGradientComputer<T>
         }
         int readoutStart = layers.Count - readoutCount;
         int headIndex = layers.Count - 1;
+        int epochBeforeForward = LayerBase<T>.ParameterSurfaceEpoch;
 
-        var paramsOf = new List<Tensor<T>>[layers.Count];
-        for (int i = 0; i < layers.Count; i++)
-            paramsOf[i] = CollectParameters(layers[i]);
+        // A lazy hidden layer has no registered parameters until its first forward. If the recorded hidden pass below
+        // met it uninitialized, the pass would forward it as a parameterless layer (no stop-gradient boundary, no
+        // recorded activation), and the topology refresh after the forward would then list it as a hidden layer with
+        // no output. Materialize such layers first, from a gradient-free inference-mode prefix forward (no tape, no
+        // normalization-statistics update, no dropout draw), so the hidden pass sees the final topology. This runs
+        // once, on the first step of a lazily-shaped network.
+        if (AnyHiddenLayerUninitialized(layers, readoutStart))
+        {
+            MaterializeLazyHiddenLayers(network, layers, readoutStart, input);
+            epochBeforeForward = LayerBase<T>.ParameterSurfaceEpoch;
+        }
 
-        var hiddenIdx = new List<int>();
-        for (int i = 0; i < readoutStart; i++)
-            if (paramsOf[i].Count > 0) hiddenIdx.Add(i);
+        var (paramsOf, hiddenIdx, cachedModelSources, cachedModelSet) = GetOrBuildTopology(network, readoutCount);
         if (hiddenIdx.Count == 0)
-            throw new InvalidOperationException($"Credit rule '{rule.Name}' found no trainable layer before the readout.");
+        {
+            // A lazy hidden layer before first forward can have 0 registered parameters until materialized; fall back to
+            // a live check only when empty.
+            if (!AnyLayerUninitialized(layers))
+                throw new InvalidOperationException($"Credit rule '{rule.Name}' found no trainable layer before the readout.");
+        }
 
         // Everything that outlives the tape (detached activations) must not come from the step arena; see the
         // matching note in CreditAssignmentGradientComputer.
@@ -151,6 +251,7 @@ internal static class LocalObjectiveGradientComputer<T>
             {
                 return ComputeSequentialBlocks(
                     layers, readoutStart, headIndex, paramsOf, hiddenIdx,
+                    cachedModelSources, cachedModelSet,
                     input, target, rule, seqRule, loss, alignTarget);
             }
 
@@ -210,9 +311,11 @@ internal static class LocalObjectiveGradientComputer<T>
             // Evaluate the terminal layer's pre-head activation once. Running PreHeadReadout(current) first also
             // initializes any lazy pre-head layer before we inspect its parameters and detach/batching capabilities.
             var preHeadFinal = PreHeadReadout(current);
-            for (int i = readoutStart; i < headIndex; i++)
-                paramsOf[i] = CollectParameters(layers[i]);
-
+            if (LayerBase<T>.ParameterSurfaceEpoch != epochBeforeForward)
+            {
+                (paramsOf, hiddenIdx, cachedModelSources, cachedModelSet) = GetOrBuildTopology(network, readoutCount);
+                epochBeforeForward = LayerBase<T>.ParameterSurfaceEpoch;
+            }
             bool preHeadAllDetachable = true;
             bool preHeadBatchIndependent = true;
             for (int i = readoutStart; i < headIndex; i++)
@@ -308,7 +411,13 @@ internal static class LocalObjectiveGradientComputer<T>
                         alignedTarget, loss, preHeadFinal.Rank, preHeadFinal.Shape.ToArray(), out preparedVocabSize);
                 }
             }
-            paramsOf[headIndex] = CollectParameters(layers[headIndex]);
+            if (LayerBase<T>.ParameterSurfaceEpoch != epochBeforeForward)
+            {
+                (paramsOf, hiddenIdx, cachedModelSources, cachedModelSet) = GetOrBuildTopology(network, readoutCount);
+                epochBeforeForward = LayerBase<T>.ParameterSurfaceEpoch;
+            }
+            if (hiddenIdx.Count == 0)
+                throw new InvalidOperationException($"Credit rule '{rule.Name}' found no trainable layer before the readout.");
 
             Tensor<T> ReadoutLossCore(Tensor<T> h, Tensor<T> t) => ReadoutLossOn(h, t, ref headPreparedState);
 
@@ -654,26 +763,45 @@ internal static class LocalObjectiveGradientComputer<T>
                 }
             }
 
-            var sources = new List<Tensor<T>>();
-            var seen = new HashSet<Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
-            foreach (var ps in paramsOf)
-                foreach (var p in ps)
-                    if (seen.Add(p)) sources.Add(p);
             var aux = rule.AuxiliaryParameters;
-            foreach (var p in aux)
-                if (seen.Add(p)) sources.Add(p);
+            IReadOnlyList<Tensor<T>> sources;
+            HashSet<Tensor<T>> seen;
+            if (aux.Count == 0)
+            {
+                sources = cachedModelSources;
+                seen = cachedModelSet;
+            }
+            else
+            {
+                var combinedSources = new List<Tensor<T>>(cachedModelSources.Count + aux.Count);
+                combinedSources.AddRange(cachedModelSources);
+                seen = new HashSet<Tensor<T>>(cachedModelSet, TensorReferenceComparer<Tensor<T>>.Instance);
+                foreach (var p in aux)
+                    if (seen.Add(p)) combinedSources.Add(p);
+                sources = combinedSources;
+            }
 
             var all = tape.ComputeGradients(combined, sources: sources);
 
-            var grads = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
-            var auxGrads = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
-            var auxSet = new HashSet<Tensor<T>>(aux, TensorReferenceComparer<Tensor<T>>.Instance);
-            foreach (var kv in all)
+            var grads = new Dictionary<Tensor<T>, Tensor<T>>(all.Count, TensorReferenceComparer<Tensor<T>>.Instance);
+            if (aux.Count == 0)
             {
-                if (auxSet.Contains(kv.Key)) auxGrads[kv.Key] = kv.Value;
-                else if (seen.Contains(kv.Key)) grads[kv.Key] = kv.Value;
+                foreach (var kv in all)
+                {
+                    if (seen.Contains(kv.Key)) grads[kv.Key] = kv.Value;
+                }
             }
-            rule.ApplyAuxiliaryGradients(auxGrads);
+            else
+            {
+                var auxGrads = new Dictionary<Tensor<T>, Tensor<T>>(aux.Count, TensorReferenceComparer<Tensor<T>>.Instance);
+                var auxSet = new HashSet<Tensor<T>>(aux, TensorReferenceComparer<Tensor<T>>.Instance);
+                foreach (var kv in all)
+                {
+                    if (auxSet.Contains(kv.Key)) auxGrads[kv.Key] = kv.Value;
+                    else if (seen.Contains(kv.Key)) grads[kv.Key] = kv.Value;
+                }
+                rule.ApplyAuxiliaryGradients(auxGrads);
+            }
 
             var protectedTensors = new HashSet<Tensor<T>>(seen, TensorReferenceComparer<Tensor<T>>.Instance)
             {
@@ -688,6 +816,54 @@ internal static class LocalObjectiveGradientComputer<T>
             tape.Retain(outputObjective);
             tape.Retain(prediction);
             return new LocalObjectiveGradients<T>(grads, outputObjective, prediction, hiddenIdx.Count, locals, protectedTensors);
+        }
+        finally
+        {
+            network.SetTrainingMode(prevTraining);
+        }
+    }
+
+    private static bool AnyHiddenLayerUninitialized(IList<ILayer<T>> layers, int readoutStart)
+    {
+        for (int i = 0; i < readoutStart; i++)
+        {
+            if (layers[i] is LayerBase<T> { IsInitialized: false })
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Resolves and initializes every uninitialized hidden layer before the recorded hidden pass, forwarding the input
+    /// through the hidden prefix without gradient recording and in inference mode so the extra forward leaves no trace
+    /// on the tape or in running statistics. The caller's training mode is restored afterwards.
+    /// </summary>
+    private static void MaterializeLazyHiddenLayers(
+        NeuralNetworkBase<T> network, IList<ILayer<T>> layers, int readoutStart, Tensor<T> input)
+    {
+        int lastLazy = -1;
+        for (int i = 0; i < readoutStart; i++)
+        {
+            if (layers[i] is LayerBase<T> { IsInitialized: false })
+                lastLazy = i;
+        }
+        if (lastLazy < 0) return;
+
+        bool prevTraining = network.IsTrainingMode;
+        network.SetTrainingMode(false);
+        try
+        {
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var current = input;
+            for (int i = 0; i <= lastLazy; i++)
+            {
+                if (i == lastLazy && layers[i] is LayerBase<T> { IsInitialized: false } lazy)
+                {
+                    lazy.InitializeFromInputWithoutForward(current);
+                    break;
+                }
+                current = layers[i].Forward(current);
+            }
         }
         finally
         {
@@ -727,6 +903,8 @@ internal static class LocalObjectiveGradientComputer<T>
         int headIndex,
         List<Tensor<T>>[] paramsOf,
         List<int> hiddenIdx,
+        List<Tensor<T>> cachedModelSources,
+        HashSet<Tensor<T>> cachedModelSet,
         Tensor<T> input,
         Tensor<T> target,
         ILocalObjectiveCreditRule<T> rule,
@@ -756,17 +934,28 @@ internal static class LocalObjectiveGradientComputer<T>
         bool canTryFuseTerminal = fusedHead is not null
             && rule is IOutputPredictionOptionalRule { UsesOutputPrediction: false };
 
-        var allSources = new List<Tensor<T>>();
-        var allModelSeen = new HashSet<Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
-        foreach (var ps in paramsOf)
-            foreach (var p in ps)
-                if (allModelSeen.Add(p)) allSources.Add(p);
         var aux = rule.AuxiliaryParameters;
-        var auxSet = new HashSet<Tensor<T>>(aux, TensorReferenceComparer<Tensor<T>>.Instance);
-        foreach (var p in aux)
-            if (allModelSeen.Add(p)) allSources.Add(p);
-        var grads = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
-        var auxGrads = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+        IReadOnlyList<Tensor<T>> allSources;
+        HashSet<Tensor<T>> allModelSeen;
+        if (aux.Count == 0)
+        {
+            allSources = cachedModelSources;
+            allModelSeen = cachedModelSet;
+        }
+        else
+        {
+            var combinedSources = new List<Tensor<T>>(cachedModelSources.Count + aux.Count);
+            combinedSources.AddRange(cachedModelSources);
+            allModelSeen = new HashSet<Tensor<T>>(cachedModelSet, TensorReferenceComparer<Tensor<T>>.Instance);
+            foreach (var p in aux)
+            {
+                if (allModelSeen.Add(p)) combinedSources.Add(p);
+            }
+            allSources = combinedSources;
+        }
+        var auxSet = aux.Count == 0 ? null : new HashSet<Tensor<T>>(aux, TensorReferenceComparer<Tensor<T>>.Instance);
+        var grads = new Dictionary<Tensor<T>, Tensor<T>>(cachedModelSources.Count, TensorReferenceComparer<Tensor<T>>.Instance);
+        var auxGrads = new Dictionary<Tensor<T>, Tensor<T>>(aux.Count, TensorReferenceComparer<Tensor<T>>.Instance);
 
         bool targetPrepared = false;
         Tensor<T> alignedTarget = target;
@@ -787,7 +976,7 @@ internal static class LocalObjectiveGradientComputer<T>
             using var noGrad = new NoGradScope<T>();
             var r = engine.StopGradient(sampleHidden);
             for (int i = readoutStart; i < headIndex; i++)
-                r = layers[i].Forward(r);
+                r = SegmentedBlockGraphCache<T>.ForwardDetachedBlock(layers[i], r);
 
             if (canTryFuseTerminal && detachableFusedHead is not null)
             {
@@ -822,7 +1011,7 @@ internal static class LocalObjectiveGradientComputer<T>
         {
             foreach (var kv in blockAll)
             {
-                var targetMap = auxSet.Contains(kv.Key)
+                var targetMap = auxSet is not null && auxSet.Contains(kv.Key)
                     ? auxGrads
                     : (allModelSeen.Contains(kv.Key) ? grads : null);
                 if (targetMap is null) continue;
@@ -1391,8 +1580,7 @@ internal static class LocalObjectiveGradientComputer<T>
         if (count == 1) return ids;
         int rows = ids.Length;
         var tiled = new int[count * rows];
-        for (int r = 0; r < rows; r++)
-            tiled[r] = ids.GetFlat(r);
+        ids.AsSpan().Slice(0, rows).CopyTo(tiled.AsSpan(0, rows));
         for (int c = 1; c < count; c++)
             Array.Copy(tiled, 0, tiled, c * rows, rows);
         return new Tensor<int>(tiled, new[] { count * rows });
@@ -1412,9 +1600,34 @@ internal static class LocalObjectiveGradientComputer<T>
 
     private static Tensor<T> ReduceToScalar(IEngine engine, Tensor<T> t)
     {
-        if (t.Shape.Length == 0) return t;
-        var axes = Enumerable.Range(0, t.Shape.Length).ToArray();
+        int rank = t.Shape.Length;
+        if (rank == 0) return t;
+        int[] axes = rank < s_axesByRank.Length ? s_axesByRank[rank] : BuildFallbackAxes(rank);
         return engine.ReduceSum(t, axes, keepDims: false);
+
+        static int[] BuildFallbackAxes(int r)
+        {
+            var a = new int[r];
+            for (int i = 0; i < r; i++) a[i] = i;
+            return a;
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="layer"/> or any sublayer is an <see cref="ITrainableLayer{T}"/> that does not derive from
+    /// <see cref="LayerBase{T}"/>, i.e. one whose tensor replacement is not tracked by
+    /// <see cref="LayerBase{T}.ParameterSurfaceEpoch"/>.
+    /// </summary>
+    private static bool ContainsUnversionedTrainableLayer(ILayer<T> layer)
+    {
+        if (layer is LayerBase<T> lb)
+        {
+            foreach (var sub in lb.GetSubLayers())
+                if (ContainsUnversionedTrainableLayer(sub)) return true;
+            return false;
+        }
+
+        return layer is ITrainableLayer<T>;
     }
 
     internal static List<Tensor<T>> CollectParameters(ILayer<T> layer)

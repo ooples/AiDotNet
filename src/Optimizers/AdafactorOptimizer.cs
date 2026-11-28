@@ -303,6 +303,8 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
     private Vector<T> _flatState = new Vector<T>(0);
     private Vector<T> _flatMomentum = new Vector<T>(0);
 
+    protected override bool SupportsModelOwnStep => true;
+
     /// <inheritdoc />
     public override OptimizationResult<T, TInput, TOutput> Optimize(
         OptimizationInputData<T, TInput, TOutput> inputData)
@@ -330,8 +332,16 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
 
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
+                // Each accepted batch advances per-batch learning-rate schedules exactly once, on both paths, as
+                // AdamOptimizer does; OnBatchEnd is the only place the scheduler steps.
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch))
+                {
+                    OnBatchEnd();
+                    continue;
+                }
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
                 currentSolution = UpdateSolution(currentSolution, gradient);
+                OnBatchEnd();
             }
 
             var currentStepData = EvaluateSolution(currentSolution, inputData);
@@ -358,6 +368,11 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(
         IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
+        if (currentSolution is AiDotNet.Interfaces.INeuralNetwork<T>)
+        {
+            return base.UpdateSolution(currentSolution, gradient);
+        }
+
         var parameterized = InterfaceGuard.Parameterizable(currentSolution);
         var updated = UpdateParameters(parameterized.GetParameters(), gradient);
         return parameterized.WithParameters(updated);

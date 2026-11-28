@@ -1570,6 +1570,18 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <param name="options">Gradient checkpointing options; when <c>null</c>, enables checkpointing with automatic <c>sqrt(L)</c> segment sizing.</param>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureGradientCheckpointing(GradientCheckpointingOptions? options = null);
+
+    /// <summary>
+    /// Configures compiler graph fusion, multi-bucket CUDA Graph replay, precision tiers (<c>FP32</c>/<c>TF32</c>/<c>BF16</c>/<c>FP16</c>),
+    /// GPU-resident optimizer scalars, <c>LayerBase&lt;T&gt;</c> derived-weight caching, persistent autotuning, and
+    /// self-contained Direct-PTX execution using strongly-typed <see cref="CompilationOptions"/>.
+    /// </summary>
+    /// <param name="options">
+    /// Compilation and execution acceleration options; when <c>null</c>, applies <see cref="CompilationOptions.Default"/>
+    /// (<see cref="ExecutionMode.AutoCompiled"/>, enabled automatically out of the box).
+    /// </param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureCompilation(CompilationOptions? options = null);
     /// <summary>
     /// Configures Float16/Int8 weight streaming so very large models can run without holding all weights in
     /// memory at once.

@@ -257,9 +257,12 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
         // Euclidean limit: when c ≈ 0, Möbius matmul reduces to standard linear + bias
         if (cVal < 1e-12)
         {
-            var euclideanW = IsTrainingMode
-                ? Engine.TensorTranspose(_weights)
-                : (_weightsTCache ??= Engine.TensorTranspose(_weights));
+            var euclideanW = CanUseDerivedParameterCache
+                ? GetOrBuildDerivedParameter(
+                    "WeightsTranspose",
+                    static (eng, srcs) => TensorScope.Detach(eng.TensorTranspose(srcs[0])),
+                    _weights)
+                : Engine.TensorTranspose(_weights);
             var linear = Engine.FusedLinear(inputTensor, euclideanW, _biases, FusedActivationType.None);
             var euclideanOut = ApplyActivation(linear);
             if (_originalInputShape == null || _originalInputShape.Length == 2) return euclideanOut;
@@ -307,11 +310,15 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
         var ballInput = Engine.TensorMultiply(projScale0, scaledInput); // exp_0(v/√d), inside ball, relative scale preserved
 
         // Step 1: Linear projection Mx = x_ball @ W^T
-        // Always derive the transpose inside the current engine graph. A cached
-        // transpose is a detached tensor leaf when a numerical-gradient test (or
-        // user) records a tape while the layer remains in inference mode, which
-        // silently gives every weight a zero gradient.
-        var weightsT = Engine.TensorTranspose(_weights);
+        // Derive W^T inside the current engine graph whenever gradients or graph tracing are active so
+        // differentiable callers always record through _weights; in non-differentiable inference, reuse
+        // LayerBase's version-invalidated derived-parameter cache.
+        var weightsT = CanUseDerivedParameterCache
+            ? GetOrBuildDerivedParameter(
+                "WeightsTranspose",
+                static (eng, srcs) => TensorScope.Detach(eng.TensorTranspose(srcs[0])),
+                _weights)
+            : Engine.TensorTranspose(_weights);
         var mx = Engine.TensorMatMul(ballInput, weightsT); // [batch, outputFeatures]
 
         // Step 2: Compute ||x_ball|| per sample (already inside ball, so √c·||x|| < 1)
@@ -591,6 +598,10 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
             Engine.TensorSlice(Engine.Reshape(_biasesGradient, [_biasesGradient.Length]), [0], [OutputFeatures]), learningRate);
         Engine.TensorCopy(Engine.TensorSubtract(_biases, biasStep), _biases);
 
+        _weights.IncrementVersion();
+        _biases.IncrementVersion();
+        InvalidateTrainableParameter(_weights);
+        InvalidateTrainableParameter(_biases);
         _weightsTCache = null;
     }
 

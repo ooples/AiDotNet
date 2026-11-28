@@ -721,10 +721,16 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         // Step 2: Apply softmax to get routing probabilities
         var routingWeights = ApplySoftmax(routingLogits);
 
+        bool useDevicePredicatedRouting =
+            AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+            || AiDotNet.NeuralNetworks.GraphCaptureCompatibility.IsActive
+            || (AiDotNet.Configuration.CompilationRuntimeSettings.DevicePredicatedDynamicRoutingEnabled
+                && Engine.Unwrap() is AiDotNet.Tensors.Engines.DirectGpuTensorEngine);
+
         // Step 3: Apply Top-K selection if enabled
         if (_topK > 0)
         {
-            (routingWeights, _lastTopKIndices) = ApplyTopK(routingWeights, _topK);
+            (routingWeights, _lastTopKIndices) = ApplyTopKCore(routingWeights, _topK, useDevicePredicatedRouting);
         }
         else
         {
@@ -734,11 +740,11 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
 
         _lastRoutingWeights = routingWeights;
 
-        // Step 4: Get outputs from all experts (or only top-K if sparse)
+        // Step 4: Get outputs from all experts (or only top-K if sparse on host eager CPU)
         var expertOutputs = new List<Tensor<T>>(_experts.Count);
         _activeExpertsDuringBackward = [];
 
-        if (_topK > 0)
+        if (_topK > 0 && !useDevicePredicatedRouting)
         {
             // Sparse: Only compute outputs for top-K experts
             for (int i = 0; i < _experts.Count; i++)
@@ -1032,9 +1038,11 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         T threshold = NumOps.FromDouble(0.01);
 
         Tensor<T> tokenCountsTensor;
-        if (_topK > 0 && _lastTopKIndices != null)
+        if (_topK > 0)
         {
-            // For Top-K, sparse weights are already zero for inactive experts
+            // For Top-K, sparse weights are already zero for inactive experts. Keyed on _topK alone, not on host index
+            // availability: device-predicated routing skips the host index readback, and must count the same
+            // assignments as host routing for identical routing weights.
             // Count non-zero entries per expert (column-wise)
             var isActive = Engine.TensorGreaterThan(_lastRoutingWeights, NumOps.Zero);
             // Convert boolean-like comparison result to counts
@@ -1301,6 +1309,16 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// </remarks>
     private (Tensor<T> sparseWeights, int[,] topKIndices) ApplyTopK(Tensor<T> weights, int k)
     {
+        var (sparseWeights, topKIndices) = ApplyTopKCore(weights, k, skipHostIndexReadback: false);
+        return (sparseWeights, topKIndices ?? throw new InvalidOperationException("Top-K host indices were not read back."));
+    }
+
+    /// <summary>
+    /// <see cref="ApplyTopK"/> with an option to skip the host readback of the selected indices, for
+    /// device-predicated routing, which must not synchronize with the host; the indices are then <c>null</c>.
+    /// </summary>
+    private (Tensor<T> sparseWeights, int[,]? topKIndices) ApplyTopKCore(Tensor<T> weights, int k, bool skipHostIndexReadback)
+    {
         int batchSize = weights.Shape[0];
         int numExperts = weights.Shape[1];
 
@@ -1308,13 +1326,6 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         _ = Engine.TensorTopK(weights, k, axis: 1, out Tensor<int> topKIndicesTensor);
 
         // Step 2: Build binary mask from top-K indices (detached from tape — treated as constant).
-        // Hard top-K masking: forward multiplies softmax weights by 0/1 mask and renormalizes.
-        // Gradients flow through the mask×weight product to the softmax weights for selected experts;
-        // non-selected experts receive zero gradient. This is not a straight-through estimator
-        // (which would use hard - soft.detach() + soft), but standard sparse gating per Shazeer et al.
-        // The mask is built off the tape by scattering a 1 into each row at its K distinct selected
-        // expert indices (torch.scatter_reduce semantics along axis 1): O(batch * experts) storage, with
-        // no [batch, k, experts] one-hot intermediate.
         Tensor<T> mask;
         using (new NoGradScope<T>())
         {
@@ -1337,7 +1348,12 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         var sparseWeights = Engine.TensorDivide(maskedWeights,
             Engine.TensorBroadcastTo(safeSumPerRow, maskedWeights._shape)); // [batchSize, numExperts]
 
-        // Copy the indices into int[,] for the IsExpertActive bookkeeping (bulk copy, no arithmetic).
+        if (skipHostIndexReadback)
+        {
+            return (sparseWeights, null);
+        }
+
+        // Copy the indices into int[,] for the CPU IsExpertActive bookkeeping (bulk copy, no arithmetic).
         var topKIndices = new int[batchSize, k];
         var flatIndices = topKIndicesTensor.Contiguous().AsSpan().ToArray();
         Buffer.BlockCopy(flatIndices, 0, topKIndices, 0, batchSize * k * sizeof(int));

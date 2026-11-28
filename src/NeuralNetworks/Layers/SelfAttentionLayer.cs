@@ -237,7 +237,19 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     private Tensor<T>? _fusedQkvSrcK;
     [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _fusedQkvSrcV;
-
+    private int _fusedQkvSrcQVersion;
+    private int _fusedQkvSrcKVersion;
+    private int _fusedQkvSrcVVersion;
+    private int _fusedQkvSrcQGpuVersion;
+    private int _fusedQkvSrcKGpuVersion;
+    private int _fusedQkvSrcVGpuVersion;
+    private long _fusedQkvGeneration;
+    // The fp16-resident masters the fused weight was last built from (null while a projection is still fp32). Part of
+    // the rebuild signature: once a projection is offloaded its fp32 field is a fixed [0,0] placeholder, so only the
+    // master's identity can show that the authoritative weight changed.
+    private Tensor<Half>? _fusedQkvSrcQHalf;
+    private Tensor<Half>? _fusedQkvSrcKHalf;
+    private Tensor<Half>? _fusedQkvSrcVHalf;
     /// <summary>
     /// Stores the attention score tensor from the most recent forward pass for use in backpropagation.
     /// </summary>
@@ -672,7 +684,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         // output columns [0,E)/[E,2E)/[2E,3E) reproduce the three separate GEMMs bit-identically.
         // The custom backward never runs without a tape, so the unfused weights are not needed here.
         bool qkvTapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>();
-        if (ForwardScratchGate.FusedQkv && !qkvTapeActive)
+        if (ForwardScratchGate.FusedQkv && !qkvTapeActive && CanUseDerivedParameterCache)
         {
             int threeE = 3 * _embeddingDimension;
             Tensor<T> fusedW = GetOrBuildFusedQkvWeights();
@@ -682,25 +694,34 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
             // [rows, 3E] result is bit-identical to the three [rows, E] results column-for-column
             // (same GEMM tier / accumulation order; the wider N does not change per-element math).
             Tensor<T> qkvFlat = Engine.TensorMatMul(input2D, fusedW);
-
-            // Slice the [rows, 3E] fused output into three contiguous [rows, E] tensors. Each fused
-            // row is [q(E) | k(E) | v(E)] (row-major), so a per-row block copy reproduces the three
-            // separate projection outputs exactly. Still one GEMM dispatch; the copy is a cheap memcpy.
-            Q_flat = new Tensor<T>([rows, _embeddingDimension]);
-            K_flat = new Tensor<T>([rows, _embeddingDimension]);
-            V_flat = new Tensor<T>([rows, _embeddingDimension]);
-            var src = qkvFlat.AsSpan();
-            var qDst = Q_flat.AsWritableSpan();
-            var kDst = K_flat.AsWritableSpan();
-            var vDst = V_flat.AsWritableSpan();
             int e = _embeddingDimension;
-            for (int r = 0; r < rows; r++)
+
+            if (Engine.Unwrap() is DirectGpuTensorEngine)
             {
-                int srcRow = r * threeE;
-                int dstRow = r * e;
-                src.Slice(srcRow, e).CopyTo(qDst.Slice(dstRow, e));
-                src.Slice(srcRow + e, e).CopyTo(kDst.Slice(dstRow, e));
-                src.Slice(srcRow + 2 * e, e).CopyTo(vDst.Slice(dstRow, e));
+                Q_flat = Engine.TensorSlice(qkvFlat, [0, 0], [rows, e]);
+                K_flat = Engine.TensorSlice(qkvFlat, [0, e], [rows, e]);
+                V_flat = Engine.TensorSlice(qkvFlat, [0, 2 * e], [rows, e]);
+            }
+            else
+            {
+                // Slice the [rows, 3E] fused output into three contiguous [rows, E] tensors. Each fused
+                // row is [q(E) | k(E) | v(E)] (row-major), so a per-row block copy reproduces the three
+                // separate projection outputs exactly. Still one GEMM dispatch; the copy is a cheap memcpy.
+                Q_flat = new Tensor<T>([rows, e]);
+                K_flat = new Tensor<T>([rows, e]);
+                V_flat = new Tensor<T>([rows, e]);
+                var src = qkvFlat.AsSpan();
+                var qDst = Q_flat.AsWritableSpan();
+                var kDst = K_flat.AsWritableSpan();
+                var vDst = V_flat.AsWritableSpan();
+                for (int r = 0; r < rows; r++)
+                {
+                    int srcRow = r * threeE;
+                    int dstRow = r * e;
+                    src.Slice(srcRow, e).CopyTo(qDst.Slice(dstRow, e));
+                    src.Slice(srcRow + e, e).CopyTo(kDst.Slice(dstRow, e));
+                    src.Slice(srcRow + 2 * e, e).CopyTo(vDst.Slice(dstRow, e));
+                }
             }
         }
         else
@@ -926,35 +947,25 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// element-wise, so the concatenated-then-downcast weight equals the per-projection
     /// downcast-then-concatenated weight — the fused GEMM stays bit-identical to the three separate ones.
     /// </remarks>
-    private Tensor<T> GetOrBuildFusedQkvWeights()
+    private static Tensor<T> BuildFusedQkvMatrix(
+        IEngine engine,
+        Tensor<T> qWeights,
+        Tensor<T> kWeights,
+        Tensor<T> vWeights,
+        int e)
     {
-        // Rebuild when stale: a SetParameters call, an in-place training step, or a Clone replaces the
-        // backing weight tensors, changing their identity. On the fp16-resident path the fp32 weights
-        // are freed to [0,0] after the first build, so identity is pinned by the half master instead
-        // (which only this method ever creates) — the captured-identity guard below still holds.
-        bool needRebuild =
-            !_fusedQkvBuilt
-            || !ReferenceEquals(_fusedQkvSrcQ, _queryWeights)
-            || !ReferenceEquals(_fusedQkvSrcK, _keyWeights)
-            || !ReferenceEquals(_fusedQkvSrcV, _valueWeights);
-
-        if (!needRebuild)
+        if (engine.Unwrap() is DirectGpuTensorEngine)
         {
-            return LowPrecisionResident
-                ? UpcastResidentWeight(ref _fusedQkvWeights, ref _fusedQkvWeightsHalf)
-                : _fusedQkvWeights;
+            return AiDotNet.Tensors.Engines.TensorScope.Detach(
+                engine.TensorConcatenate([qWeights, kWeights, vWeights], axis: 1));
         }
 
-        int e = _embeddingDimension;
         int threeE = 3 * e;
-
-        // Build the fp32 fused [E, 3E] = [qW | kW | vW] column-wise. Each weight is [E, E] row-major;
-        // fused row k holds qW[k,:] then kW[k,:] then vW[k,:].
-        var fused = new Tensor<T>([e, threeE]);
+        var fused = AiDotNet.Tensors.Engines.TensorScope.Detach(new Tensor<T>([e, threeE]));
         var fusedSpan = fused.AsWritableSpan();
-        var qSpan = _queryWeights.AsSpan();
-        var kSpan = _keyWeights.AsSpan();
-        var vSpan = _valueWeights.AsSpan();
+        var qSpan = qWeights.AsSpan();
+        var kSpan = kWeights.AsSpan();
+        var vSpan = vWeights.AsSpan();
         for (int k = 0; k < e; k++)
         {
             int dstRow = k * threeE;
@@ -963,26 +974,91 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
             kSpan.Slice(srcRow, e).CopyTo(fusedSpan.Slice(dstRow + e, e));
             vSpan.Slice(srcRow, e).CopyTo(fusedSpan.Slice(dstRow + 2 * e, e));
         }
+        return fused;
+    }
 
-        // Capture source identities BEFORE UpcastResidentWeight frees the fp32 weights (resident path).
+    /// <summary>
+    /// Returns the authoritative fp32 value of one projection weight: the weight itself while it is still fp32, or a
+    /// fresh upcast of its fp16-resident master once the resident path has offloaded it.
+    /// </summary>
+    private Tensor<T> AuthoritativeProjection(Tensor<T> full, Tensor<Half>? half)
+    {
+        if (half is null)
+            return full;
+
+        int rank = half.Rank;
+        int[] dims = new int[rank];
+        for (int i = 0; i < rank; i++) dims[i] = half.Shape[i];
+        var upcast = new Tensor<T>(dims);
+        NumOps.FromHalfSpan(half.AsSpan(), upcast.AsWritableSpan());
+        return upcast;
+    }
+
+    private Tensor<T> GetOrBuildFusedQkvWeights()
+    {
+        int e = _embeddingDimension;
+        if (!LowPrecisionResident)
+        {
+            return GetOrBuildDerivedParameter(
+                "FusedQkvWeights",
+                (eng, srcs) => BuildFusedQkvMatrix(eng, srcs[0], srcs[1], srcs[2], e),
+                _queryWeights,
+                _keyWeights,
+                _valueWeights);
+        }
+
+        long currentGen = DerivedTensorCacheGeneration.Current;
+        bool needRebuild =
+            !_fusedQkvBuilt
+            || _fusedQkvGeneration != currentGen
+            || !ReferenceEquals(_fusedQkvSrcQ, _queryWeights)
+            || !ReferenceEquals(_fusedQkvSrcK, _keyWeights)
+            || !ReferenceEquals(_fusedQkvSrcV, _valueWeights)
+            || _fusedQkvSrcQVersion != _queryWeights.Version
+            || _fusedQkvSrcKVersion != _keyWeights.Version
+            || _fusedQkvSrcVVersion != _valueWeights.Version
+            || _fusedQkvSrcQGpuVersion != _queryWeights.GpuCacheVersion
+            || _fusedQkvSrcKGpuVersion != _keyWeights.GpuCacheVersion
+            || _fusedQkvSrcVGpuVersion != _valueWeights.GpuCacheVersion
+            || !ReferenceEquals(_fusedQkvSrcQHalf, _queryWeightsHalf)
+            || !ReferenceEquals(_fusedQkvSrcKHalf, _keyWeightsHalf)
+            || !ReferenceEquals(_fusedQkvSrcVHalf, _valueWeightsHalf);
+
+        if (!needRebuild)
+        {
+            return UpcastResidentWeight(ref _fusedQkvWeights, ref _fusedQkvWeightsHalf);
+        }
+
+        // Build from the authoritative weights: a projection the separate (unfused) resident path already offloaded
+        // lives only in its fp16 master, and its fp32 field is a [0,0] placeholder. Each master is upcast into its own
+        // fresh tensor (not the shared upcast scratch, which the next upcast would overwrite) before concatenation.
+        var fused = BuildFusedQkvMatrix(
+            Engine,
+            AuthoritativeProjection(_queryWeights, _queryWeightsHalf),
+            AuthoritativeProjection(_keyWeights, _keyWeightsHalf),
+            AuthoritativeProjection(_valueWeights, _valueWeightsHalf),
+            e);
+
+        // Capture source identities and versions BEFORE UpcastResidentWeight frees the fp32 weights (resident path).
         _fusedQkvSrcQ = _queryWeights;
         _fusedQkvSrcK = _keyWeights;
         _fusedQkvSrcV = _valueWeights;
+        _fusedQkvSrcQVersion = _queryWeights.Version;
+        _fusedQkvSrcKVersion = _keyWeights.Version;
+        _fusedQkvSrcVVersion = _valueWeights.Version;
+        _fusedQkvSrcQGpuVersion = _queryWeights.GpuCacheVersion;
+        _fusedQkvSrcKGpuVersion = _keyWeights.GpuCacheVersion;
+        _fusedQkvSrcVGpuVersion = _valueWeights.GpuCacheVersion;
+        _fusedQkvGeneration = currentGen;
+        _fusedQkvSrcQHalf = _queryWeightsHalf;
+        _fusedQkvSrcKHalf = _keyWeightsHalf;
+        _fusedQkvSrcVHalf = _valueWeightsHalf;
 
         _fusedQkvWeights = fused;
         _fusedQkvWeightsHalf = null;
         _fusedQkvBuilt = true;
 
-        if (LowPrecisionResident)
-        {
-            // Downcast the fused fp32 matrix into the resident half master and free the fp32 fused
-            // copy, matching the per-projection fp16 handling; returns the transient upcast for this
-            // matmul. (The unfused _queryWeights/_keyWeights/_valueWeights stay resident here rather
-            // than being freed, so SetParameters keeps working; their identities pin the rebuild guard.)
-            return UpcastResidentWeight(ref _fusedQkvWeights, ref _fusedQkvWeightsHalf);
-        }
-
-        return fused;
+        return UpcastResidentWeight(ref _fusedQkvWeights, ref _fusedQkvWeightsHalf);
     }
 
     /// <summary>

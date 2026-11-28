@@ -2959,6 +2959,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                         monitorSamplesSeen += inputs.Length;
                     }
 
+                    // Re-assert thread-local compilation & derived-weight caching settings on whichever
+                    // ThreadPool thread resumed after awaiting the streaming batch iterator.
+                    ApplyCompilationSettings(setAsProcessDefault: false);
+
                     TOutput[] processedOutputs = outputs;
                     TInput[] processedInputs = inputs;
                     if (inputs.Length > 0)
@@ -3245,6 +3249,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     && microBatchBuffer is not null
                     && _model is NeuralNetworks.NeuralNetworkBase<T> flushNn)
                 {
+                    // The batch loop's last await can resume on a different ThreadPool thread, so re-assert
+                    // this build's thread-local compilation settings before the tail step reads them.
+                    ApplyCompilationSettings(setAsProcessDefault: false);
                     long stepBeforeFlush = globalStep;
                     (epochLoss, epochBatches, globalStep, lastValidationLoss, hasValidationLoss, lastCheckpointStep, stepBudgetReached) =
                         await FlushRemainingAccumulatedMicroBatchesAsync(
@@ -3509,6 +3516,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             ServingDraftModel = _servingDraftModel,
             JitCompilationConfig = _jitCompilationConfig,
+            CompilationOptions = new CompilationOptions(_compilationOptions),
             AllowNondeterminism = _allowNondeterminism,
             AugmentationConfig = _augmentationConfig,
             SegmentationVisualization = _segmentationVisualizationConfig,
@@ -3577,6 +3585,30 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             && (_mixedPrecisionConfig is not null || _memoryConfig is not null);
     }
 
+    private int ResolveConfiguredDirectBatchSize(int defaultBatchSize)
+    {
+        if (_optimizer?.GetOptions() is { } optOptions
+            && optOptions.GetType().GetProperty("BatchSize")?.GetValue(optOptions) is int optBatch
+            && optBatch > 0)
+        {
+            return optBatch;
+        }
+
+        if (_dataLoader is IStreamingDataLoader<T, TInput, TOutput> streamingLoader && streamingLoader.BatchSize > 0)
+        {
+            return streamingLoader.BatchSize;
+        }
+
+        if (_dataLoader is not null
+            && _dataLoader.GetType().GetProperty("BatchSize")?.GetValue(_dataLoader) is int loaderBatch
+            && loaderBatch > 0)
+        {
+            return loaderBatch;
+        }
+
+        return defaultBatchSize;
+    }
+
     private OptimizationResult<T, TInput, TOutput> TrainTensorNeuralNetworkRows(
         IFullModel<T, TInput, TOutput> model,
         INeuralNetwork<T> neuralNetwork,
@@ -3599,7 +3631,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // realistic corpus it issued one Train call PER ROW (tens of thousands per epoch), whose
         // accumulated per-call state crashed the training host. Batching fixes both and matches how
         // the streaming path trains. `Train` handles a [B, …] batch natively via NormalizeBatchDim.
-        int batchSize = Math.Min(32, Math.Max(1, rows));
+        int configuredBatchSize = ResolveConfiguredDirectBatchSize(defaultBatchSize: 32);
+        int batchSize = Math.Min(Math.Max(1, configuredBatchSize), Math.Max(1, rows));
         int iterations = 0;
         for (int epoch = 0; epoch < epochs; epoch++)
         {
@@ -5858,6 +5891,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             ServingDraftModel = _servingDraftModel,
             JitCompilationConfig = _jitCompilationConfig,
+            CompilationOptions = new CompilationOptions(_compilationOptions),
             AllowNondeterminism = _allowNondeterminism,
             AugmentationConfig = _augmentationConfig,
             SegmentationVisualization = _segmentationVisualizationConfig,

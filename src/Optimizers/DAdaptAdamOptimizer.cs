@@ -149,6 +149,8 @@ public class DAdaptAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBas
         return true;
     }
 
+    protected override bool SupportsModelOwnStep => true;
+
     /// <inheritdoc />
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
@@ -163,7 +165,10 @@ public class DAdaptAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBas
             NotifyEpochStart(epoch);
             var batcher = CreateBatcher(inputData, _options.BatchSize, epoch);
             foreach (var (xBatch, yBatch, _) in batcher.GetBatches())
+            {
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;
                 currentSolution = UpdateSolution(currentSolution, CalculateGradient(currentSolution, xBatch, yBatch));
+            }
             var currentStepData = EvaluateSolution(currentSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
             UpdateAdaptiveParameters(currentStepData, previousStepData);

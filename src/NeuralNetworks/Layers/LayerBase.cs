@@ -6519,7 +6519,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     private static int s_parameterEpoch;
 
-    private static void BumpParameterEpoch() => System.Threading.Interlocked.Increment(ref s_parameterEpoch);
+    private static void BumpParameterEpoch()
+    {
+        System.Threading.Interlocked.Increment(ref s_parameterEpoch);
+        DerivedTensorCacheGeneration.Advance();
+    }
 
     /// <summary>
     /// Process-wide cold-path epoch for parameter storage identity changes. Model snapshots use one
@@ -8595,6 +8599,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         }
 
         // Bumped per layer, as it was when each child went through its own SetParameters.
+        InvalidateDerivedParameterCaches();
         BumpParameterEpoch();
         return offset;
     }
@@ -9039,6 +9044,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 _registeredTensors.RemoveAt(i);
                 _registeredTensorRoles.RemoveAt(i);
                 _cachedParameterCount = -1;
+                InvalidateDerivedParameterCaches();
                 BumpParameterEpoch();
                 return;
             }
@@ -9090,6 +9096,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             _registeredTensors[i] = replacement;
             _registeredTensorRoles[i] = role;
             _cachedParameterCount = -1;
+            InvalidateDerivedParameterCaches();
             BumpParameterEpoch();
             return true;
         }
@@ -9605,6 +9612,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     public virtual IReadOnlyList<Tensor<T>> GetTrainableParameters() => _registeredTensors;
 
+    private static long s_learningRatePolicyEpoch;
+
+    /// <summary>
+    /// Process-wide epoch incremented whenever any layer changes <see cref="LearningRateScale"/> or
+    /// <see cref="MaxLearningRate"/>, letting <c>GradientBasedOptimizerBase</c> skip recursive layer-group
+    /// walks in O(1) when no per-layer learning-rate policy has changed.
+    /// </summary>
+    internal static long LearningRatePolicyEpoch =>
+        System.Threading.Interlocked.Read(ref s_learningRatePolicyEpoch);
+
     /// <summary>
     /// Multiplies the optimizer's learning rate for this layer's own trainable parameters.
     /// </summary>
@@ -9621,7 +9638,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         {
             if (!(value > 0) || double.IsInfinity(value))
                 throw new ArgumentOutOfRangeException(nameof(value), "A learning rate scale must be positive and finite.");
-            _learningRateScale = value;
+            if (_learningRateScale != value)
+            {
+                _learningRateScale = value;
+                System.Threading.Interlocked.Increment(ref s_learningRatePolicyEpoch);
+            }
         }
     }
 
@@ -9638,7 +9659,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         {
             if (value is { } cap && (!(cap > 0) || double.IsInfinity(cap)))
                 throw new ArgumentOutOfRangeException(nameof(value), "A maximum learning rate must be positive and finite.");
-            _maxLearningRate = value;
+            if (_maxLearningRate != value)
+            {
+                _maxLearningRate = value;
+                System.Threading.Interlocked.Increment(ref s_learningRatePolicyEpoch);
+            }
         }
     }
 
@@ -9785,6 +9810,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
                 AdoptTrainableParameterTensors(parameters);
                 _cachedParameterCount = -1;
+                InvalidateDerivedParameterCaches();
                 BumpParameterEpoch();
                 return;
             }
@@ -9816,6 +9842,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // declaration-driven path a chance to update those handles after the registry is rebound.
         AdoptTrainableParameterTensors(parameters);
         _cachedParameterCount = -1;
+        InvalidateDerivedParameterCaches();
         BumpParameterEpoch();
     }
 
@@ -10054,6 +10081,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         var snapshot = AiDotNet.Training.TensorCheckpoint<T>.Capture(sources);
         for (int i = 0; i < destinations.Length; i++)
             AiDotNet.Training.TensorCheckpoint<T>.CopyValues(snapshot[i], destinations[i].Tensor);
+        InvalidateDerivedParameterCaches();
         BumpParameterEpoch();
         return true;
     }
@@ -10081,6 +10109,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                     $"{GetType().Name} trainable tensor {i} has length {dst[i].Length} but received {sources[i].Length}.");
             AiDotNet.Training.TensorCheckpoint<T>.CopyValues(sources[i], dst[i]);
         }
+        InvalidateDerivedParameterCaches();
+        DerivedTensorCacheGeneration.Advance();
     }
 
     /// <summary>
@@ -10100,6 +10130,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         _registeredTensors.Clear();
         _registeredTensorRoles.Clear();
         _cachedParameterCount = -1;
+        InvalidateDerivedParameterCaches();
         BumpParameterEpoch();
     }
 
@@ -10196,7 +10227,221 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             throw new ArgumentNullException(nameof(tensor));
 
         Engine.InvalidatePersistentTensor(tensor);
+        InvalidateDerivedParameterCaches();
+        DerivedTensorCacheGeneration.Advance();
     }
+
+    #region Derived Parameter Caching
+
+    private readonly object _derivedParameterCacheLock = new();
+    private List<(string Key, IDerivedParameterCache Cache)>? _derivedParameterCaches;
+
+    /// <summary>
+    /// Gets whether the current execution context is a non-differentiable, non-tracing pass eligible to serve
+    /// cached derived parameter tensors.
+    /// </summary>
+    private protected bool CanUseDerivedParameterCache
+        => DerivedTensorCache<T>.CanUse(Engine, requireEvalMode: false, isTrainingMode: IsTrainingMode);
+
+    /// <summary>
+    /// Gets whether the current execution context is both in evaluation mode (<c>IsTrainingMode == false</c>) and
+    /// eligible to serve cached derived parameter tensors (for layers whose training pass mutates auxiliary state,
+    /// such as power-iteration vectors in spectral normalization).
+    /// </summary>
+    private protected bool CanUseEvalDerivedParameterCache
+        => DerivedTensorCache<T>.CanUse(Engine, requireEvalMode: true, isTrainingMode: IsTrainingMode);
+
+    /// <summary>
+    /// Returns a thread-safe cached parameter derivation keyed by <paramref name="cacheKey"/>, execution
+    /// <see cref="IEngine"/>, source tensor storage identities, <c>Version</c>, <c>GpuCacheVersion</c>, training
+    /// generation, and <paramref name="variantKey"/>, building it once under <c>TensorScope.Suspend()</c> +
+    /// <c>NoGradScope</c> and optionally registering the result as a persistent device tensor.
+    /// </summary>
+    private protected Tensor<T> GetOrBuildDerivedParameter(
+        string cacheKey,
+        Func<IEngine, Tensor<T>[], Tensor<T>> build,
+        Tensor<T> source0,
+        Tensor<T>? source1 = null,
+        Tensor<T>? source2 = null,
+        Tensor<T>? source3 = null,
+        long variantKey = 0,
+        PersistentTensorRole persistentRole = PersistentTensorRole.Weights,
+        bool registerPersistent = true,
+        bool disposeReplacedValues = false)
+    {
+        if (string.IsNullOrWhiteSpace(cacheKey))
+            throw new ArgumentException("Derived parameter cache key must not be empty.", nameof(cacheKey));
+        if (build is null)
+            throw new ArgumentNullException(nameof(build));
+        if (source0 is null)
+            throw new ArgumentNullException(nameof(source0));
+
+        DerivedTensorCache<T> slot = GetOrCreateDerivedSingleSlot(
+            cacheKey,
+            persistentRole,
+            registerPersistent,
+            disposeReplacedValues);
+        return slot.GetOrBuild(Engine, build, source0, source1, source2, source3, variantKey);
+    }
+
+    /// <summary>
+    /// Returns a thread-safe cached pair of derived parameter tensors (or a single tensor with <c>Second == null</c>)
+    /// keyed by <paramref name="cacheKey"/>, execution <see cref="IEngine"/>, source tensor storage identities,
+    /// <c>Version</c>, <c>GpuCacheVersion</c>, training generation, and <paramref name="variantKey"/>.
+    /// </summary>
+    private protected (Tensor<T> First, Tensor<T>? Second) GetOrBuildDerivedParameterPair(
+        string cacheKey,
+        Func<IEngine, Tensor<T>[], (Tensor<T> First, Tensor<T>? Second)> build,
+        Tensor<T> source0,
+        Tensor<T>? source1 = null,
+        Tensor<T>? source2 = null,
+        Tensor<T>? source3 = null,
+        long variantKey = 0,
+        PersistentTensorRole persistentRole = PersistentTensorRole.Weights,
+        bool registerPersistent = true,
+        bool disposeReplacedValues = false)
+    {
+        if (string.IsNullOrWhiteSpace(cacheKey))
+            throw new ArgumentException("Derived parameter cache key must not be empty.", nameof(cacheKey));
+        if (build is null)
+            throw new ArgumentNullException(nameof(build));
+        if (source0 is null)
+            throw new ArgumentNullException(nameof(source0));
+
+        DerivedTensorPairCache<T> slot = GetOrCreateDerivedPairSlot(
+            cacheKey,
+            persistentRole,
+            registerPersistent,
+            disposeReplacedValues);
+        return slot.GetOrBuild(Engine, build, source0, source1, source2, source3, variantKey);
+    }
+
+    /// <summary>
+    /// Invalidates all derived-parameter caches owned by this layer so subsequent inference passes rebuild from
+    /// updated weights. Fast no-op when no derived caches have been registered on this layer.
+    /// </summary>
+    private protected void InvalidateDerivedParameterCaches()
+    {
+        if (System.Threading.Volatile.Read(ref _derivedParameterCaches) is null)
+            return;
+
+        IDerivedParameterCache[] snapshot;
+        lock (_derivedParameterCacheLock)
+        {
+            if (_derivedParameterCaches is null || _derivedParameterCaches.Count == 0)
+                return;
+
+            snapshot = new IDerivedParameterCache[_derivedParameterCaches.Count];
+            for (int i = 0; i < _derivedParameterCaches.Count; i++)
+                snapshot[i] = _derivedParameterCaches[i].Cache;
+        }
+
+        for (int i = 0; i < snapshot.Length; i++)
+            snapshot[i].Invalidate();
+    }
+
+    private void ReleaseDerivedParameterCaches()
+    {
+        if (System.Threading.Volatile.Read(ref _derivedParameterCaches) is null)
+            return;
+
+        IDerivedParameterCache[] snapshot;
+        lock (_derivedParameterCacheLock)
+        {
+            if (_derivedParameterCaches is null || _derivedParameterCaches.Count == 0)
+            {
+                _derivedParameterCaches = null;
+                return;
+            }
+
+            snapshot = new IDerivedParameterCache[_derivedParameterCaches.Count];
+            for (int i = 0; i < _derivedParameterCaches.Count; i++)
+                snapshot[i] = _derivedParameterCaches[i].Cache;
+            _derivedParameterCaches.Clear();
+            _derivedParameterCaches = null;
+        }
+
+        for (int i = 0; i < snapshot.Length; i++)
+            snapshot[i].Release();
+    }
+
+    private DerivedTensorCache<T> GetOrCreateDerivedSingleSlot(
+        string cacheKey,
+        PersistentTensorRole persistentRole,
+        bool registerPersistent,
+        bool disposeReplacedValues)
+    {
+        lock (_derivedParameterCacheLock)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(GetType().Name);
+
+            var list = _derivedParameterCaches;
+            if (list is not null)
+            {
+                for (int i = 0; i < list.Count; i++)
+                {
+                    if (!string.Equals(list[i].Key, cacheKey, StringComparison.Ordinal))
+                        continue;
+
+                    if (list[i].Cache is DerivedTensorCache<T> existing)
+                        return existing;
+
+                    throw new InvalidOperationException(
+                        $"Derived parameter cache slot '{cacheKey}' is already registered with a pair cache.");
+                }
+            }
+            else
+            {
+                list = new List<(string Key, IDerivedParameterCache Cache)>(2);
+                System.Threading.Volatile.Write(ref _derivedParameterCaches, list);
+            }
+
+            var created = new DerivedTensorCache<T>(disposeReplacedValues, registerPersistent, persistentRole);
+            list.Add((cacheKey, created));
+            return created;
+        }
+    }
+
+    private DerivedTensorPairCache<T> GetOrCreateDerivedPairSlot(
+        string cacheKey,
+        PersistentTensorRole persistentRole,
+        bool registerPersistent,
+        bool disposeReplacedValues)
+    {
+        lock (_derivedParameterCacheLock)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(GetType().Name);
+
+            var list = _derivedParameterCaches;
+            if (list is not null)
+            {
+                for (int i = 0; i < list.Count; i++)
+                {
+                    if (!string.Equals(list[i].Key, cacheKey, StringComparison.Ordinal))
+                        continue;
+
+                    if (list[i].Cache is DerivedTensorPairCache<T> existing)
+                        return existing;
+
+                    throw new InvalidOperationException(
+                        $"Derived parameter cache slot '{cacheKey}' is already registered with a single-tensor cache.");
+                }
+            }
+            else
+            {
+                list = new List<(string Key, IDerivedParameterCache Cache)>(2);
+                System.Threading.Volatile.Write(ref _derivedParameterCaches, list);
+            }
+
+            var created = new DerivedTensorPairCache<T>(disposeReplacedValues, registerPersistent, persistentRole);
+            list.Add((cacheKey, created));
+            return created;
+        }
+    }
+
+    #endregion
 
     #region OCP-Compliant Activation GPU Methods
 
@@ -10554,6 +10799,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 if (IsSparseTensor(tensor)) continue;
                 Engine.UnregisterPersistentTensor(tensor);
             }
+
+            ReleaseDerivedParameterCaches();
 
             if (_publishedDeviceGradBuffers is not null)
             {

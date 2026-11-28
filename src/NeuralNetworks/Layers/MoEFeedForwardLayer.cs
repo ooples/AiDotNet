@@ -234,33 +234,65 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>, IShapeContract
         var output = new Tensor<T>(new[] { n, _hidden });
         output.Fill(Ops.Zero);
 
-        T zero = Ops.Zero;
-        for (int e = 0; e < _numExperts; e++)
+        bool useDevicePredicated =
+            AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+            || AiDotNet.NeuralNetworks.GraphCaptureCompatibility.IsActive
+            || (AiDotNet.Configuration.CompilationRuntimeSettings.DevicePredicatedDynamicRoutingEnabled
+                && Engine.Unwrap() is AiDotNet.Tensors.Engines.DirectGpuTensorEngine);
+
+        if (useDevicePredicated)
         {
-            // Gather the tokens routed to expert e (with their weights), in token order.
-            Tensor<T> column;
-            Tensor<int> rows;
-            using (new NoGradScope<T>())
+            // Static-shape device-predicated expert mixing: zero TensorNonzero / host shape syncs so the entire
+            // sparse Top-K MoE block traces into compiled plans and static-shape CUDA Graphs seamlessly.
+            T zero = Ops.Zero;
+            for (int e = 0; e < _numExperts; e++)
             {
-                column = Engine.Reshape(Engine.TensorNarrow(weightPerExpert, 1, e, 1), new[] { n });
-                var selected = Engine.TensorNonzero(Engine.TensorGreaterThan(column, zero)); // [m, 1]
-                rows = Engine.Reshape(selected, new[] { selected.Shape[0] });
+                var g = _gate[e].Forward(flat);
+                var u = _up[e].Forward(flat);
+                var prod = Engine.TensorMultiply(g, u);
+                var d = _down[e].Forward(prod);
+                using (new NoGradScope<T>())
+                {
+                    var weightCol = Engine.TensorNarrow(weightPerExpert, 1, e, 1); // [n, 1]
+                    // Select zero for tokens not routed to expert e before weighting: a zero routing weight does not
+                    // neutralize a non-finite expert output (0 * Inf = NaN), and the sparse host path never evaluates
+                    // an unselected expert at all. Selected outputs pass through unchanged.
+                    var selected = Engine.TensorBroadcastTo(Engine.TensorGreaterThan(weightCol, zero), d._shape);
+                    var routed = Engine.TensorWhere(selected, d, Engine.TensorZerosLike(d));
+                    output = Engine.TensorAdd(output, Engine.TensorMultiply(routed, weightCol));
+                }
             }
-            int m = rows.Shape[0];
-            if (m == 0) continue;
-
-            var gathered = Engine.TensorIndexSelect(flat, rows, 0); // [m, hidden]
-
-            var g = _gate[e].Forward(gathered);          // act(gate(x)) : [m, ffn]
-            var u = _up[e].Forward(gathered);            // up(x)        : [m, ffn]
-            var prod = Engine.TensorMultiply(g, u);      // gated hidden : [m, ffn]
-            var d = _down[e].Forward(prod);              // down(...)    : [m, hidden]
-
-            // Scatter-add the weighted expert output back onto its tokens.
-            using (new NoGradScope<T>())
+        }
+        else
+        {
+            T zero = Ops.Zero;
+            for (int e = 0; e < _numExperts; e++)
             {
-                var weight = Engine.Reshape(Engine.TensorIndexSelect(column, rows, 0), new[] { m, 1 });
-                output = Engine.TensorIndexAdd(output, 0, rows, Engine.TensorMultiply(d, weight));
+                // Gather the tokens routed to expert e (with their weights), in token order.
+                Tensor<T> column;
+                Tensor<int> rows;
+                using (new NoGradScope<T>())
+                {
+                    column = Engine.Reshape(Engine.TensorNarrow(weightPerExpert, 1, e, 1), new[] { n });
+                    var selected = Engine.TensorNonzero(Engine.TensorGreaterThan(column, zero)); // [m, 1]
+                    rows = Engine.Reshape(selected, new[] { selected.Shape[0] });
+                }
+                int m = rows.Shape[0];
+                if (m == 0) continue;
+
+                var gathered = Engine.TensorIndexSelect(flat, rows, 0); // [m, hidden]
+
+                var g = _gate[e].Forward(gathered);          // act(gate(x)) : [m, ffn]
+                var u = _up[e].Forward(gathered);            // up(x)        : [m, ffn]
+                var prod = Engine.TensorMultiply(g, u);      // gated hidden : [m, ffn]
+                var d = _down[e].Forward(prod);              // down(...)    : [m, hidden]
+
+                // Scatter-add the weighted expert output back onto its tokens.
+                using (new NoGradScope<T>())
+                {
+                    var weight = Engine.Reshape(Engine.TensorIndexSelect(column, rows, 0), new[] { m, 1 });
+                    output = Engine.TensorIndexAdd(output, 0, rows, Engine.TensorMultiply(d, weight));
+                }
             }
         }
 

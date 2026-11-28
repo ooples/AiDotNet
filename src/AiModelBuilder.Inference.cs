@@ -73,6 +73,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 "trained on before calling this, or drop the ConfigureDataPreprocessor call.");
         }
 
+        ApplyCompilationSettings(setAsProcessDefault: true);
+
         var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             // The result reads its model from the optimization result rather than from a Model
@@ -96,6 +98,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             TokenizationConfig = _tokenizationConfig,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             JitCompilationConfig = _jitCompilationConfig,
+            CompilationOptions = new CompilationOptions(_compilationOptions),
             AllowNondeterminism = _allowNondeterminism,
             BenchmarkingOptions = _benchmarkingOptions,
         };

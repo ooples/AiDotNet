@@ -98,6 +98,7 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
         // Equal-weighted averaging: c = 1/t makes x the running mean of every z so far.
         double c = 1.0 / _step;
 
+        _lastTapeParameters.Clear();
         foreach (var param in context.Parameters)
         {
             if (SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(
@@ -105,9 +106,15 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
             {
                 StepParameter(
                     param, gradient, beta, beta2, epsilon, decay, applyWeightDecay, gamma, c);
+                if (param.Length > 0) _lastTapeParameters.Add(param);
             }
         }
     }
+
+    // The parameter tensors the most recent tape step updated (each has an entry in _x), and the model whose
+    // parameters they are, so AveragedParameters can express the tape average in that model's flat order.
+    private readonly List<Tensor<T>> _lastTapeParameters = new();
+    private IFullModel<T, TInput, TOutput>? _tapeModel;
 
     private void StepParameter(
         Tensor<T> parameter,
@@ -232,13 +239,49 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
 
     /// <summary>The running average, which is the point the method converges on.</summary>
     /// <remarks>
+    /// <para>
     /// Exposed because it is what a paper means by "the model": the parameters hold y, the point
     /// gradients are taken at, and x is what should be evaluated and saved.
+    /// </para>
+    /// <para>
+    /// A neural network trained through the tape path keeps its average per parameter tensor rather than in the flat
+    /// vector. In that case the average is returned in the model's own <c>GetParameters()</c> order: each updated
+    /// tensor temporarily holds its average while the model's flat vector is read, then gets its value back. Entries
+    /// the optimizer does not update (normalization buffers, frozen parameters) keep their current values.
+    /// </para>
     /// </remarks>
     public Vector<T> AveragedParameters()
     {
+        if (_lastTapeParameters.Count > 0 && (_tapeModel ?? Model) is { } model)
+        {
+            var engine = Engine;
+            var saved = new Tensor<T>?[_lastTapeParameters.Count];
+            try
+            {
+                for (int i = 0; i < _lastTapeParameters.Count; i++)
+                {
+                    var parameter = _lastTapeParameters[i];
+                    if (!_x.TryGetValue(parameter, out var average)) continue;
+                    saved[i] = parameter.Clone();
+                    engine.TensorCopy(average, parameter);
+                }
+
+                return model.GetParameters().Clone();
+            }
+            finally
+            {
+                for (int i = 0; i < saved.Length; i++)
+                {
+                    if (saved[i] is { } original)
+                        engine.TensorCopy(original, _lastTapeParameters[i]);
+                }
+            }
+        }
+
         return _flatX.Clone();
     }
+
+    protected override bool SupportsModelOwnStep => true;
 
     /// <inheritdoc />
     public override OptimizationResult<T, TInput, TOutput> Optimize(
@@ -253,6 +296,8 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
         _z.Clear();
         _x.Clear();
         _v.Clear();
+        _lastTapeParameters.Clear();
+        _tapeModel = null;
         _flatZ = new Vector<T>(0);
         _flatX = new Vector<T>(0);
         _flatV = new Vector<T>(0);
@@ -267,8 +312,14 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
 
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch))
+                {
+                    _tapeModel = currentSolution;
+                    continue;
+                }
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
                 currentSolution = UpdateSolution(currentSolution, gradient);
+                if (_lastTapeParameters.Count > 0) _tapeModel = currentSolution;
             }
 
             var currentStepData = EvaluateSolution(currentSolution, inputData);
@@ -295,6 +346,11 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(
         IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
+        if (currentSolution is AiDotNet.Interfaces.INeuralNetwork<T>)
+        {
+            return base.UpdateSolution(currentSolution, gradient);
+        }
+
         var parameterized = InterfaceGuard.Parameterizable(currentSolution);
         var updated = UpdateParameters(parameterized.GetParameters(), gradient);
         return parameterized.WithParameters(updated);

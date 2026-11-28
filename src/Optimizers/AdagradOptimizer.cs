@@ -199,6 +199,8 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.NotifyEpochStart"/>.
     /// </para>
     /// </remarks>
+    protected override bool SupportsModelOwnStep => true;
+
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
@@ -220,6 +222,7 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
 
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
                 UpdateAccumulatedSquaredGradients(gradient);
                 var newSolution = UpdateSolution(currentSolution, gradient);

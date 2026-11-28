@@ -16862,31 +16862,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 MarkTrainMutationStarted();
                 opt.Step(context);
 
-                // GPU RESIDENT-WEIGHT COHERENCE: the eager tape optimizer mutates each weight
-                // tensor's CPU backing in place (Adam SIMD via GetLiveBackingArrayOrNull) and bumps
-                // Tensor.Version (#1810). But in a GPU resident/capture scope the forward's upload
-                // fast-path returns the cached device buffer WITHOUT consulting Version (the
-                // ResidentStepActive bypass in DirectGpuTensorEngine.GetOrAllocateBuffer), so the
-                // version bump alone does NOT force a re-upload — the next forward keeps reading the
-                // STALE pre-step device weights and the model trains against frozen weights (drift
-                // without descent → held-out accuracy pinned at chance on GPU while CPU learns).
-                // Fully invalidate each updated weight's resident device buffer so the next forward
-                // re-uploads the current CPU weights.
-                if (Engine is DirectGpuTensorEngine residentGpuEngine)
-                {
-                    foreach (var wtensor in trainableParams)
-                    {
-                        // A device-resident optimizer step (GpuOptimizer) leaves the parameter's device copy
-                        // authoritative, with a pending lazy host download. InvalidateResidentWeightBuffer's contract
-                        // is the opposite case -- the HOST copy was just written -- and it drops both the device buffer
-                        // and that pending download, so calling it here threw the update away: the next forward
-                        // re-uploaded the pre-step host weights and the loss stayed flat. Same predicate as the fused
-                        // path's invalidation below.
-                        if (wtensor.HasPendingGpuData)
-                            continue;
-                        residentGpuEngine.InvalidateResidentWeightBuffer(wtensor);
-                    }
-                }
+                // GPU RESIDENT-WEIGHT COHERENCE is handled once below via
+                // InvalidateWeightCachesAfterSuccessfulWeightUpdate() after both opt.Step
+                // and any extraTrainableTensors updates commit.
             }
 
             // Apply gradient updates to network-level RAW trainable
@@ -16902,24 +16880,31 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // TRAINED — the previous behaviour left them frozen at
             // their initial random values forever, which was the
             // actual review concern.
-            if (extraTrainableTensors.Count > 0 && !mpSkipOptimizerStep)
+            //
+            // GPU weight-cache coherence after the opt.Step + extras-update: see
+            // InvalidateWeightCachesAfterSuccessfulWeightUpdate for the full rationale (cache keys by
+            // array reference → stale GPU weights → model never learns). It runs from a finally because
+            // opt.Step has already written the host weights: if an extras update throws, the device
+            // copies of those weights must still be dropped, or the next forward reads pre-step weights.
+            try
             {
-                T extrasLr = NumOps.FromDouble(GetOptimizerLearningRate(opt));
-                foreach (var extra in extraTrainableTensors)
+                if (extraTrainableTensors.Count > 0 && !mpSkipOptimizerStep)
                 {
-                    if (!allGrads.TryGetValue(extra, out var extraGrad)) continue;
-                    if (extraGrad is null || extraGrad.Length != extra.Length) continue;
-                    var update = Engine.TensorMultiplyScalar(extraGrad, extrasLr);
-                    Engine.TensorSubtractInPlace(extra, update);
+                    T extrasLr = NumOps.FromDouble(GetOptimizerLearningRate(opt));
+                    foreach (var extra in extraTrainableTensors)
+                    {
+                        if (!allGrads.TryGetValue(extra, out var extraGrad)) continue;
+                        if (extraGrad is null || extraGrad.Length != extra.Length) continue;
+                        var update = Engine.TensorMultiplyScalar(extraGrad, extrasLr);
+                        Engine.TensorSubtractInPlace(extra, update);
+                    }
                 }
             }
-
-            // GPU weight-cache coherence after the opt.Step + extras-update above.
-            // See InvalidateWeightCachesAfterSuccessfulWeightUpdate for the full
-            // rationale (cache keys by array reference → stale GPU weights → model
-            // never learns).
-            if (!mpSkipOptimizerStep)
-                InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+            finally
+            {
+                if (!mpSkipOptimizerStep)
+                    InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+            }
 
             // Advance the optimizer's learning-rate scheduler at the
             // tape-batch boundary via the shared helper. Without this,
@@ -19797,6 +19782,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // probe failure: two models with bit-identical parameters predicted
         // differently because one carried packs from its pre-load init).
         AiDotNet.Tensors.Engines.InferenceWeightCache.InvalidateAll();
+        AiDotNet.NeuralNetworks.Layers.DerivedTensorCacheGeneration.Advance();
     }
 
     /// <summary>
@@ -20288,8 +20274,29 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         SaveOriginalParameters(Layers, _savedOriginalParameters, new HashSet<ILayer<T>>());
 
         // Replace each layer's parameters with their buffer-backed views.
+        // If any layer holds a readonly [TrainableParameter] field whose generated SetTrainableParameters
+        // copies values instead of rebinding the tensor reference, roll back all layers to their standalone
+        // tensors and return null so TapeStepContext.ValidateBufferAlignment never encounters a split network.
         var seenLayers = new HashSet<ILayer<T>>();
-        ReplaceParametersFromMap(Layers, paramToView, seenLayers);
+        if (!ReplaceParametersFromMap(Layers, paramToView, seenLayers))
+        {
+            foreach (var kv in _savedOriginalParameters)
+            {
+                if (kv.Key is ITrainableLayer<T> restoreLayer)
+                {
+                    restoreLayer.SetTrainableParameters(kv.Value);
+                }
+            }
+            _savedOriginalParameters = null;
+            _parameterBuffer = null;
+            // A layer that copies values instead of rebinding its tensor reference does so on every attempt for the
+            // same layer structure, so remember the rejection: without it every step would allocate the full buffer,
+            // copy every weight, attempt the replacement and roll it back again. A structure change (which bumps
+            // _layerStructureVersion) re-tests from scratch. Failures that throw (shape mismatches) are not memoized.
+            _skipParameterBuffer = true;
+            _skipParameterBufferVersion = _layerStructureVersion;
+            return null;
+        }
 
         _parameterBuffer = buffer;
         return buffer;
@@ -20300,7 +20307,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// using a pre-built parameter→view map. This avoids walk-order sensitivity
     /// by looking up each layer's parameters in the map by reference identity.
     /// </summary>
-    private static void ReplaceParametersFromMap(
+    private static bool ReplaceParametersFromMap(
         IEnumerable<ILayer<T>> layers,
         Dictionary<Tensor<T>, Tensor<T>> paramToView,
         HashSet<ILayer<T>> seenLayers)
@@ -20327,13 +20334,25 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     }
                 }
                 if (anyReplaced)
+                {
                     trainable.SetTrainableParameters(layerViews);
+                    var afterSet = trainable.GetTrainableParameters();
+                    if (afterSet.Count != layerViews.Length)
+                        return false;
+                    for (int i = 0; i < layerViews.Length; i++)
+                    {
+                        if (!ReferenceEquals(afterSet[i], layerViews[i]))
+                            return false;
+                    }
+                }
             }
 
             var subLayers = layer.GetSubLayers();
-            if (subLayers.Count > 0)
-                ReplaceParametersFromMap(subLayers, paramToView, seenLayers);
+            if (subLayers.Count > 0 && !ReplaceParametersFromMap(subLayers, paramToView, seenLayers))
+                return false;
         }
+
+        return true;
     }
 
     /// <summary>

@@ -76,9 +76,6 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     [Buffer]
     private Tensor<T> _v;
 
-    private readonly DerivedTensorCache<T> _inferenceWeightKernel = new(disposeReplacedValues:
-        Environment.GetEnvironmentVariable("AIDOTNET_DERIVED_WEIGHT_LIFETIMES") == "1");
-
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
@@ -259,7 +256,7 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     {
         for (int i = 0; i < _bias.Length; i++) _bias[i] = NumOps.Zero;
         _bias.IncrementVersion();
-        _inferenceWeightKernel.Invalidate();
+        InvalidateDerivedParameterCaches();
         Engine.InvalidatePersistentTensor(_bias);
     }
 
@@ -315,7 +312,7 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         _direction.IncrementVersion();
         _gain.IncrementVersion();
         _bias.IncrementVersion();
-        _inferenceWeightKernel.Invalidate();
+        InvalidateDerivedParameterCaches();
         Engine.InvalidatePersistentTensor(_direction);
         Engine.InvalidatePersistentTensor(_gain);
         Engine.InvalidatePersistentTensor(_bias);
@@ -364,7 +361,7 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         _direction.IncrementVersion();
         _gain.IncrementVersion();
         _bias.IncrementVersion();
-        _inferenceWeightKernel.Invalidate();
+        InvalidateDerivedParameterCaches();
         Engine.InvalidatePersistentTensor(_direction);
         Engine.InvalidatePersistentTensor(_gain);
         Engine.InvalidatePersistentTensor(_bias);
@@ -395,7 +392,7 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         _direction.IncrementVersion();
         _gain.IncrementVersion();
         _bias.IncrementVersion();
-        _inferenceWeightKernel.Invalidate();
+        InvalidateDerivedParameterCaches();
         Engine.InvalidatePersistentTensor(_direction);
         Engine.InvalidatePersistentTensor(_gain);
         Engine.InvalidatePersistentTensor(_bias);
@@ -405,20 +402,51 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     /// group for a transposed convolution).</summary>
     internal int FanIn => (_transposed ? _out : _in / _groups) * _kernel;
 
+    /// <summary>
+    /// Whether derived-kernel cache slots dispose the kernels they replace (<c>AIDOTNET_DERIVED_WEIGHT_LIFETIMES=1</c>).
+    /// A slot fixes this policy when it is created, so the variable is read once per process rather than on every
+    /// forward.
+    /// </summary>
+    private static readonly bool DisposeReplacedDerivedKernels =
+        Environment.GetEnvironmentVariable("AIDOTNET_DERIVED_WEIGHT_LIFETIMES") == "1";
+
     /// <summary>The effective kernel W.</summary>
     internal Tensor<T> Kernel()
     {
         if (_normalization == ConvolutionNormalization.None) return _direction;
         if (_normalization == ConvolutionNormalization.Weight)
         {
-            // Eval reuses the same effective weights until their sources change. Keeping their owned storage also
-            // lets convolution backends retain a packed kernel instead of packing fresh normalization scratch.
-            if (!IsTrainingMode && !GraphMode.IsActive
-                && (GradientTape<T>.Current is null || NoGradScope<T>.IsSuppressed))
-                return _inferenceWeightKernel.GetOrBuild(Engine,
-                    static (engine, sources) => WeightNormalizedKernel(engine, sources[0], sources[1]), _direction, _gain);
+            // Eval and non-differentiable inference reuse the same effective weights until their sources change.
+            // Keeping their owned storage also lets convolution backends retain a packed/persistent kernel instead of
+            // packing fresh normalization scratch every call. An evaluation-mode forward keeps the cache under a
+            // graph-capture guard as well (as it did before the shared derived cache): the kernel is a function of
+            // the weights alone, so rebuilding it there only added a normalization launch per forward.
+            bool evalNoGrad = !IsTrainingMode && !GraphMode.IsActive
+                && (GradientTape<T>.Current is null || NoGradScope<T>.IsSuppressed)
+                && DerivedTensorCacheSettings.IsEnabled;
+            if (CanUseDerivedParameterCache || evalNoGrad)
+            {
+                return GetOrBuildDerivedParameter(
+                    "WeightNormalizedKernel",
+                    static (engine, sources) => TensorScope.Detach(WeightNormalizedKernel(engine, sources[0], sources[1])),
+                    _direction,
+                    _gain,
+                    disposeReplacedValues: DisposeReplacedDerivedKernels);
+            }
             return WeightNormalizedKernel(Engine, _direction, _gain);
         }
+
+        if (CanUseEvalDerivedParameterCache)
+        {
+            return GetOrBuildDerivedParameter(
+                "SpectralNormalizedKernel",
+                static (engine, sources) => TensorScope.Detach(SpectralNormalizedEvalKernel(engine, sources[0], sources[1], sources[2])),
+                _direction,
+                _u,
+                _v,
+                disposeReplacedValues: DisposeReplacedDerivedKernels);
+        }
+
         int rows = _direction.Shape[0], per = _direction.Length / rows;
         var v = Engine.Reshape(_direction, new[] { rows, per });
 
@@ -506,6 +534,22 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
             kernel = engine.Reshape(engine.TensorMultiply(matrix, scale), direction._shape);
         }
         // A rebuilt kernel may reuse scratch whose array still keys an older packed/transpose cache.
+        engine.InvalidatePersistentTensor(kernel);
+        return kernel;
+    }
+
+    private static Tensor<T> SpectralNormalizedEvalKernel(IEngine engine, Tensor<T> direction, Tensor<T> u, Tensor<T> vState)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        int rows = direction.Shape[0], per = direction.Length / rows;
+        var vMat = engine.Reshape(direction, new[] { rows, per });
+        var uT = engine.Reshape(u, new[] { 1, rows });
+        var vT = engine.Reshape(vState, new[] { per, 1 });
+        var sigma = engine.TensorMatMul(engine.TensorMatMul(uT, vMat), vT);
+        var unitShape = new int[direction.Rank];
+        for (int i = 0; i < unitShape.Length; i++) unitShape[i] = 1;
+        var inverse = engine.Reshape(engine.TensorPow(sigma, ops.FromDouble(-1)), unitShape);
+        var kernel = engine.TensorMultiply(direction, inverse);
         engine.InvalidatePersistentTensor(kernel);
         return kernel;
     }
@@ -694,7 +738,7 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         for (int i = 0; i < _direction.Length; i++)
             if (NumOps.ToDouble(mask[i]) == 0) _direction[i] = NumOps.Zero;
         _direction.IncrementVersion();
-        _inferenceWeightKernel.Invalidate();
+        InvalidateDerivedParameterCaches();
         Engine.InvalidatePersistentTensor(_direction);
     }
 

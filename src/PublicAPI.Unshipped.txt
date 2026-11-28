@@ -26764,6 +26764,76 @@ AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.CurrentTrueLabelBatch.
 AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.Strategy.get -> AiDotNet.Interfaces.IDistillationStrategy<T>!
 AiDotNet.Interfaces.LarsGpuConfig.Epsilon.get -> float
 AiDotNet.Interfaces.LarsGpuConfig.Epsilon.init -> void
+
+AiDotNet.AiModelBuilder<T, TInput, TOutput>.ConfigureCompilation(AiDotNet.Models.Options.CompilationOptions? options = null) -> AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>!
+AiDotNet.Configuration.YamlModelConfig.Compilation.get -> AiDotNet.Models.Options.CompilationOptions?
+AiDotNet.Configuration.YamlModelConfig.Compilation.set -> void
+AiDotNet.Enums.ComputePrecisionTier
+AiDotNet.Enums.ComputePrecisionTier.BF16 = 2 -> AiDotNet.Enums.ComputePrecisionTier
+AiDotNet.Enums.ComputePrecisionTier.FP16 = 3 -> AiDotNet.Enums.ComputePrecisionTier
+AiDotNet.Enums.ComputePrecisionTier.FP32 = 0 -> AiDotNet.Enums.ComputePrecisionTier
+AiDotNet.Enums.ComputePrecisionTier.TF32 = 1 -> AiDotNet.Enums.ComputePrecisionTier
+AiDotNet.Enums.ExecutionMode
+AiDotNet.Enums.ExecutionMode.AutoCompiled = 0 -> AiDotNet.Enums.ExecutionMode
+AiDotNet.Enums.ExecutionMode.Eager = 1 -> AiDotNet.Enums.ExecutionMode
+AiDotNet.Enums.ExecutionMode.StrictCompiled = 2 -> AiDotNet.Enums.ExecutionMode
+AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>.ConfigureCompilation(AiDotNet.Models.Options.CompilationOptions? options = null) -> AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>!
+AiDotNet.Models.Options.AiModelResultOptions<T, TInput, TOutput>.CompilationOptions.get -> AiDotNet.Models.Options.CompilationOptions?
+AiDotNet.Models.Options.AiModelResultOptions<T, TInput, TOutput>.CompilationOptions.set -> void
+AiDotNet.Models.Options.CompilationOptions
+AiDotNet.Models.Options.CompilationOptions.AllowExternalVendorLibraries.get -> bool
+AiDotNet.Models.Options.CompilationOptions.AllowExternalVendorLibraries.set -> void
+AiDotNet.Models.Options.CompilationOptions.AutotuneCacheDirectory.get -> string?
+AiDotNet.Models.Options.CompilationOptions.AutotuneCacheDirectory.set -> void
+AiDotNet.Models.Options.CompilationOptions.BatchSizeBuckets.get -> int[]!
+AiDotNet.Models.Options.CompilationOptions.BatchSizeBuckets.set -> void
+AiDotNet.Models.Options.CompilationOptions.CompilationOptions() -> void
+AiDotNet.Models.Options.CompilationOptions.CompilationOptions(AiDotNet.Models.Options.CompilationOptions! other) -> void
+AiDotNet.Models.Options.CompilationOptions.CudaGraphWarmupIterations.get -> int
+AiDotNet.Models.Options.CompilationOptions.CudaGraphWarmupIterations.set -> void
+static AiDotNet.Models.Options.CompilationOptions.Default.get -> AiDotNet.Models.Options.CompilationOptions!
+static AiDotNet.Models.Options.CompilationOptions.Eager.get -> AiDotNet.Models.Options.CompilationOptions!
+AiDotNet.Models.Options.CompilationOptions.EnableCudaGraphTrees.get -> bool
+AiDotNet.Models.Options.CompilationOptions.EnableCudaGraphTrees.set -> void
+AiDotNet.Models.Options.CompilationOptions.EnableDerivedWeightCaching.get -> bool
+AiDotNet.Models.Options.CompilationOptions.EnableDerivedWeightCaching.set -> void
+AiDotNet.Models.Options.CompilationOptions.EnableDevicePredicatedDynamicRouting.get -> bool
+AiDotNet.Models.Options.CompilationOptions.EnableDevicePredicatedDynamicRouting.set -> void
+AiDotNet.Models.Options.CompilationOptions.EnableGpuResidentOptimizerScalars.get -> bool
+AiDotNet.Models.Options.CompilationOptions.EnableGpuResidentOptimizerScalars.set -> void
+AiDotNet.Models.Options.CompilationOptions.EnableHybridFusionTileIr.get -> bool
+AiDotNet.Models.Options.CompilationOptions.EnableHybridFusionTileIr.set -> void
+AiDotNet.Models.Options.CompilationOptions.EnableMaxAutotune.get -> bool
+AiDotNet.Models.Options.CompilationOptions.EnableMaxAutotune.set -> void
+AiDotNet.Models.Options.CompilationOptions.EnableMultiBucketShapeRouting.get -> bool
+AiDotNet.Models.Options.CompilationOptions.EnableMultiBucketShapeRouting.set -> void
+AiDotNet.Models.Options.CompilationOptions.EnableSegmentedBlockGraphs.get -> bool
+AiDotNet.Models.Options.CompilationOptions.EnableSegmentedBlockGraphs.set -> void
+static AiDotNet.Models.Options.CompilationOptions.MaxAutotune.get -> AiDotNet.Models.Options.CompilationOptions!
+AiDotNet.Models.Options.CompilationOptions.Mode.get -> AiDotNet.Enums.ExecutionMode
+AiDotNet.Models.Options.CompilationOptions.Mode.set -> void
+AiDotNet.Models.Options.CompilationOptions.PersistCompiledProgram.get -> bool
+AiDotNet.Models.Options.CompilationOptions.PersistCompiledProgram.set -> void
+AiDotNet.Models.Options.CompilationOptions.PrecisionTier.get -> AiDotNet.Enums.ComputePrecisionTier
+AiDotNet.Models.Options.CompilationOptions.PrecisionTier.set -> void
+AiDotNet.Models.Options.CompilationOptions.PreferSelfContainedDirectPtx.get -> bool
+AiDotNet.Models.Options.CompilationOptions.PreferSelfContainedDirectPtx.set -> void
+static AiDotNet.Models.Options.CompilationOptions.PureDirectPtx.get -> AiDotNet.Models.Options.CompilationOptions!
+AiDotNet.Models.Options.CompilationOptions.ResolveBatchBucket(int batchSize) -> int
+AiDotNet.Models.Options.CompilationOptions.ResolveEffectiveAutotuneCacheDirectory() -> string!
+AiDotNet.Models.Options.CompilationOptions.ResolveSequenceBucket(int sequenceLength) -> int
+AiDotNet.Models.Options.CompilationOptions.SequenceLengthBuckets.get -> int[]!
+AiDotNet.Models.Options.CompilationOptions.SequenceLengthBuckets.set -> void
+AiDotNet.Models.Options.CompilationOptions.Validate() -> void
+AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.CompilationOptions.get -> AiDotNet.Models.Options.CompilationOptions!
+override AiDotNet.Optimizers.AdafactorOptimizer<T, TInput, TOutput>.SupportsModelOwnStep.get -> bool
+override AiDotNet.Optimizers.AdagradOptimizer<T, TInput, TOutput>.SupportsModelOwnStep.get -> bool
+override AiDotNet.Optimizers.DAdaptAdamOptimizer<T, TInput, TOutput>.SupportsModelOwnStep.get -> bool
+override AiDotNet.Optimizers.RootMeanSquarePropagationOptimizer<T, TInput, TOutput>.SupportsModelOwnStep.get -> bool
+override AiDotNet.Optimizers.RpropOptimizer<T, TInput, TOutput>.SupportsModelOwnStep.get -> bool
+override AiDotNet.Optimizers.ScaledAdamOptimizer<T, TInput, TOutput>.SupportsModelOwnStep.get -> bool
+override AiDotNet.Optimizers.ScheduleFreeAdamWOptimizer<T, TInput, TOutput>.SupportsModelOwnStep.get -> bool
+override AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, TInput, TOutput>.SupportsModelOwnStep.get -> bool
 *REMOVED*override AiDotNet.Finance.NLP.FinBERT<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.Finance.Base.FinancialModelBase<T>.ForecastChecked(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, double[]? quantiles) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*AiDotNet.Finance.Base.FinancialNLPModelBase<T>.FinancialNLPModelBase(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, double maxGradNorm = 1) -> void

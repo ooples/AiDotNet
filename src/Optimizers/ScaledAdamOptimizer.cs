@@ -67,7 +67,11 @@ public class ScaledAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBas
     protected override void StepCore(TapeStepContext<T> context)
     {
         PrepareTapeState(context);
-        if (HasAnomalousTapeGradients(context)) return;
+        // During graph capture HasAnomalousTapeGradients cannot read device-pending gradients without a blocking sync,
+        // but this optimizer's update is host arithmetic that materializes every gradient on host anyway, so it checks
+        // the materialized values itself: a non-finite gradient must not reach the parameters or the Delta/ExpAvgSq
+        // state, exactly as the eager check guarantees.
+        if (HasAnomalousTapeGradients(context) || (IsGraphCaptureActive && HasNonFiniteHostGradient(context))) return;
         int period = Math.Max(1, _options.GradientAccumulationPeriod);
         int call = _calls++;
         if (period > 1)
@@ -112,6 +116,22 @@ public class ScaledAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBas
             var values = groups[k].Values;
             for (int i = 0; i < span.Length; i++) span[i] = NumOps.FromDouble(values[i]);
         }
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("Graph-capture-only finiteness check on the host gradients this host-arithmetic optimizer converts element by element to double anyway.")]
+    private bool HasNonFiniteHostGradient(TapeStepContext<T> context)
+    {
+        foreach (var parameter in context.Parameters)
+        {
+            if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, parameter, Engine, out var gradient)) continue;
+            var span = gradient.AsSpan();
+            for (int i = 0; i < span.Length; i++)
+            {
+                double value = NumOps.ToDouble(span[i]);
+                if (double.IsNaN(value) || double.IsInfinity(value)) return true;
+            }
+        }
+        return false;
     }
 
     /// <inheritdoc />
@@ -246,6 +266,8 @@ public class ScaledAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBas
         for (int i = 0; i < values.Length; i++) state.Delta[i] += values[i] * scaleStep * (1 - o.Beta1);
     }
 
+    protected override bool SupportsModelOwnStep => true;
+
     /// <inheritdoc />
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
@@ -260,7 +282,10 @@ public class ScaledAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBas
             NotifyEpochStart(epoch);
             var batcher = CreateBatcher(inputData, _options.BatchSize, epoch);
             foreach (var (xBatch, yBatch, _) in batcher.GetBatches())
+            {
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;
                 currentSolution = UpdateSolution(currentSolution, CalculateGradient(currentSolution, xBatch, yBatch));
+            }
             var currentStepData = EvaluateSolution(currentSolution, inputData);
             UpdateBestSolution(currentStepData, ref bestStepData);
             UpdateAdaptiveParameters(currentStepData, previousStepData);

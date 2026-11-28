@@ -2131,7 +2131,7 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
             pf._gpuBuffer is { } shardBuf &&
             shardBuf.Handle != IntPtr.Zero &&
             pf._gpuBackend is { } gpuBack &&
-            pf._gpuBufferVersion == pf.Version)
+            pf._gpuBufferVersion == pf.GpuCacheVersion)
         {
             int srcOffset = pf._storageOffset;
             int required = Math.Max(srcOffset + validLength, shardBuf.Size);
@@ -2255,7 +2255,7 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
 
         if (gradFloat.TryGetGpuBuffer() is not null &&
             ReferenceEquals(gradFloat._gpuBackend, gpuBackend) &&
-            gradFloat._gpuBufferVersion == gradFloat.Version)
+            gradFloat._gpuBufferVersion == gradFloat.GpuCacheVersion)
         {
             return;
         }
