@@ -266,13 +266,9 @@ public abstract partial class PortfolioOptimizerBase<T> : FinancialModelBase<T>,
         // Uses Forward directly to avoid recursion with OptimizePortfolio
         // (OptimizePortfolio may call Predict which calls Forecast which calls ForecastNative)
         //
-        // Inference mode is REQUIRED: neural portfolio optimizers contain
-        // BatchNormalizationLayers, which in training mode normalize across the
-        // batch axis. A single-instance prediction (batch = 1) then normalizes
-        // each feature to its own value (~0 output) regardless of input, so every
-        // constant input collapses to the same allocation. Inference mode uses
-        // the running statistics instead, keeping BatchNorm affine.
-        SetTrainingMode(false);
+        // No training-mode switch here: Forecast already runs in inference mode (running batch-norm statistics,
+        // no dropout), and the training forward reaches this method too, where batch normalization has to use
+        // the batch's statistics and update its running ones.
 
         var current = input;
         foreach (var layer in Layers)

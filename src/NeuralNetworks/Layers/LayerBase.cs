@@ -5741,6 +5741,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             SoftSignActivation<T> => ActivationFunction.SoftSign,
             SwishActivation<T> => ActivationFunction.Swish,
             GELUActivation<T> => ActivationFunction.GELU,
+            ActivationFunctions.ExactGELUActivation<T> => ActivationFunction.GELU,
             LiSHTActivation<T> => ActivationFunction.LiSHT,
             _ => ActivationFunction.Identity
         };

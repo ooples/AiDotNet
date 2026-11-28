@@ -948,7 +948,6 @@ public partial class PatchTST<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
     {
-        SetTrainingMode(false);
         return Forward(input);
     }
 

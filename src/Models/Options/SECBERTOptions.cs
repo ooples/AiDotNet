@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using System;
 using AiDotNet.Finance.Enums;
 
@@ -36,7 +37,7 @@ namespace AiDotNet.Models.Options;
 /// <b>Reference:</b> Loukas et al., "SEC-BERT: A Domain-Specific Language Model for SEC Filings", 2022.
 /// </para>
 /// </remarks>
-public class SECBERTOptions<T> : ModelOptions
+public class SECBERTOptions<T> : FinancialBertEncoderOptions<T>
 {
     /// <summary>
     /// Initializes a new instance with default SEC-BERT configuration.
@@ -47,6 +48,7 @@ public class SECBERTOptions<T> : ModelOptions
     /// Initializes a new instance by copying from another instance.
     /// </summary>
     public SECBERTOptions(SECBERTOptions<T> other)
+        : base(other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
         // Seed is declared on ModelOptions rather than in this file, so a copy constructor
@@ -62,14 +64,14 @@ public class SECBERTOptions<T> : ModelOptions
         NumClasses = other.NumClasses;
         DropoutRate = other.DropoutRate;
         LearningRate = other.LearningRate;
-        TaskType = other.TaskType;
     }
 
     /// <summary>Maximum sequence length in tokens (default: 512).</summary>
     public int MaxSequenceLength { get; set; } = 512;
 
-    /// <summary>Vocabulary size (default: 30522 for BERT-base).</summary>
-    public int VocabularySize { get; set; } = 30522;
+    /// <summary>Vocabulary size (default: 30000, the released checkpoint's vocabulary).</summary>
+    [PaperDefault(30000, Source = "Loukas et al. 2022 and the released nlpaueb/sec-bert-base config: a 30,000-subword vocabulary")]
+    public int VocabularySize { get; set; } = 30000;
 
     /// <summary>Hidden dimension (default: 768 for BERT-base).</summary>
     public int HiddenDimension { get; set; } = 768;
@@ -99,18 +101,6 @@ public class SECBERTOptions<T> : ModelOptions
     public double LearningRate { get; set; } = 1e-5;
 
     /// <summary>
-    /// Task type for the SEC-BERT model (default: Classification).
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Different tasks require different output heads:
-    /// - Classification: Document-level labels (sentiment, type)
-    /// - NamedEntityRecognition: Token-level entity labels
-    /// - QuestionAnswering: Extract answer spans from context
-    /// </para>
-    /// </remarks>
-    public FinancialNLPTaskType TaskType { get; set; } = FinancialNLPTaskType.Classification;
-
-    /// <summary>
     /// Validates the SEC-BERT options.
     /// </summary>
     /// <remarks>
@@ -121,6 +111,7 @@ public class SECBERTOptions<T> : ModelOptions
     /// </remarks>
     public void Validate()
     {
+        ValidateBertEncoderOptions(MaxSequenceLength);
         if (MaxSequenceLength < 1)
             throw new ArgumentException("MaxSequenceLength must be at least 1.", nameof(MaxSequenceLength));
         if (VocabularySize < 1)
@@ -129,6 +120,8 @@ public class SECBERTOptions<T> : ModelOptions
             throw new ArgumentException("HiddenDimension must be at least 1.", nameof(HiddenDimension));
         if (NumAttentionHeads < 1)
             throw new ArgumentException("NumAttentionHeads must be at least 1.", nameof(NumAttentionHeads));
+        if (NumAttentionHeads >= 1 && HiddenDimension % NumAttentionHeads != 0)
+            throw new ArgumentException("HiddenDimension must be divisible by NumAttentionHeads.", nameof(NumAttentionHeads));
         if (IntermediateDimension < 1)
             throw new ArgumentException("IntermediateDimension must be at least 1.", nameof(IntermediateDimension));
         if (NumLayers < 1)
@@ -139,7 +132,5 @@ public class SECBERTOptions<T> : ModelOptions
             throw new ArgumentException("DropoutRate must be between 0 (inclusive) and 1 (exclusive).", nameof(DropoutRate));
         if (double.IsNaN(LearningRate) || double.IsInfinity(LearningRate) || LearningRate <= 0)
             throw new ArgumentException("LearningRate must be finite and positive.", nameof(LearningRate));
-        if (!Enum.IsDefined(typeof(FinancialNLPTaskType), TaskType))
-            throw new ArgumentException("TaskType must be a valid FinancialNLPTaskType value.", nameof(TaskType));
     }
 }

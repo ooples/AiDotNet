@@ -1,25 +1,13 @@
-using AiDotNet.LearningRateSchedulers;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Finance.Interfaces;
+using AiDotNet.Finance.Base;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LossFunctions;
-using AiDotNet.Models;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models.Options;
-using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
-using AiDotNet.Tensors;
-using AiDotNet.Tensors.Helpers;
-using Microsoft.ML.OnnxRuntime;
-using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
-
-using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.NLP;
 
 /// <summary>
@@ -99,749 +87,71 @@ namespace AiDotNet.Finance.NLP;
                 PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear, MinLearningRate = 0,
                 ReferenceBatchSize = 64,
                 Source = "Araci 2019, Sec. 4.3.3: learning rate 2e-5, warm-up proportion 0.2, mini-batch size 64, 6 epochs, with the slanted triangular schedule of Howard and Ruder 2018 -- linear warmup then linear decay. The optimizer is not named there; FinBERT fine-tunes BERT, and Devlin et al. 2019 state Adam for fine-tuning (Sec. A.3).")]
-public partial class FinBERT<T> : FinancialNLPModelBase<T>
+public partial class FinBERT<T> : FinancialBertModelBase<T>
 {
-    #region Execution Mode
-    private readonly bool _useNativeMode;
-    #endregion
-
-    #region Tokenizer Fields
-    /// <summary>
-    /// Simple vocabulary mapping for demonstration.
-    /// In production, use a proper WordPiece tokenizer.
-    /// </summary>
-    private readonly Dictionary<string, int> _vocabulary;
-    private readonly Dictionary<int, string> _reverseVocabulary;
-    private readonly string[] _sentimentClasses;
-    private readonly Random _random;
-    #endregion
-
-    #region Shared Fields
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-    private readonly ILossFunction<T> _lossFunction;
     private readonly FinBERTOptions<T> _options;
-
-    private int _maxSequenceLength;
-    private int _vocabularySize;
-    private int _hiddenDimension;
-    private int _numAttentionHeads;
-    private int _intermediateDimension;
-    private int _numLayers;
-    private int _numSentimentClasses;
-    private double _dropoutRate;
-    #endregion
-
-    #region IFinancialNLPModel Properties
-
-    /// <inheritdoc/>
-    public override bool UseNativeMode => _useNativeMode;
-
-    /// <inheritdoc/>
-    public override bool SupportsTraining => _useNativeMode;
-
-    /// <inheritdoc/>
-    public override int MaxSequenceLength => _maxSequenceLength;
-
-    /// <inheritdoc/>
-    public override int VocabularySize => _vocabularySize;
-
-    /// <inheritdoc/>
-    public override int HiddenDimension => _hiddenDimension;
-
-    /// <inheritdoc/>
-    public override int NumSentimentClasses => _numSentimentClasses;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <summary>
-    /// Gets the number of transformer layers.
+    /// Creates a FinBERT that runs a pretrained ONNX model.
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> BERT-base has 12 layers, BERT-large has 24.
-    /// More layers can capture more complex patterns but require more computation.
-    /// </para>
-    /// </remarks>
-    public int NumLayers => _numLayers;
-
-    /// <summary>
-    /// Gets the number of attention heads.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Multi-head attention allows the model to attend to
-    /// information from different representation subspaces at different positions.
-    /// </para>
-    /// </remarks>
-    public int NumAttentionHeads => _numAttentionHeads;
-
-    #endregion
-
-    #region Constructors
-
-    /// <summary>
-    /// Initializes a new instance of the FinBERT model in ONNX mode for inference.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="onnxModelPath">Path to a pretrained ONNX model file.</param>
-    /// <param name="options">FinBERT-specific options.</param>
-    /// <param name="optimizer">Optional optimizer for fine-tuning.</param>
-    /// <param name="lossFunction">Optional loss function.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Use this constructor to load a pretrained FinBERT model
-    /// in ONNX format. This is the recommended approach for production deployment as it
-    /// leverages optimized inference from pretrained weights.
-    /// </para>
-    /// </remarks>
+    /// <param name="architecture">The neural network architecture.</param>
+    /// <param name="onnxModelPath">Path to the ONNX model.</param>
+    /// <param name="options">The model options; the paper's defaults when null.</param>
+    /// <param name="optimizer">The optimizer; the paper's when null.</param>
+    // Both constructors carry optional parameters, as their shipped forms did; the required onnxModelPath string keeps
+    // every call unambiguous.
+#pragma warning disable RS0026
     public FinBERT(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         FinBERTOptions<T>? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, onnxModelPath, OrDefault(options).MaxSequenceLength, OrDefault(options).VocabularySize,
+            OrDefault(options).HiddenDimension, ResolveClassCount(architecture, OrDefault(options).NumSentimentClasses))
+#pragma warning restore RS0026
     {
-        if (string.IsNullOrWhiteSpace(onnxModelPath))
-            throw new ArgumentNullException(nameof(onnxModelPath));
-        if (!File.Exists(onnxModelPath))
-            throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
-
-        _useNativeMode = false;
-        OnnxModelPath = onnxModelPath;
-        OnnxSession = new InferenceSession(onnxModelPath);
         _options = options ?? new FinBERTOptions<T>();
         Options = _options;
-        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
+        _options.Validate();
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
-        _maxSequenceLength = _options.MaxSequenceLength;
-        _vocabularySize = _options.VocabularySize;
-        _hiddenDimension = _options.HiddenDimension;
-        _numAttentionHeads = _options.NumAttentionHeads;
-        _intermediateDimension = _options.IntermediateDimension;
-        _numLayers = _options.NumLayers;
-        _numSentimentClasses = _options.NumSentimentClasses;
-        _dropoutRate = _options.DropoutRate;
-
-        _vocabulary = InitializeBasicVocabulary();
-        _reverseVocabulary = _vocabulary.ToDictionary(kv => kv.Value, kv => kv.Key);
-        _sentimentClasses = new[] { "negative", "neutral", "positive" };
-        _random = RandomHelper.CreateSecureRandom();
-
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
     /// <summary>
-    /// Initializes a new instance of the FinBERT model in native mode for training.
+    /// Creates a FinBERT built from native layers, which can be trained.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="options">FinBERT-specific options.</param>
-    /// <param name="optimizer">Optional optimizer for training.</param>
-    /// <param name="lossFunction">Optional loss function.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Use this constructor to create a FinBERT model for
-    /// training or fine-tuning on your financial data. Native mode enables gradient
-    /// computation and parameter updates.
-    /// </para>
-    /// </remarks>
+    /// <param name="architecture">The neural network architecture; custom layers replace the encoder.</param>
+    /// <param name="options">The model options; the paper's defaults when null.</param>
+    /// <param name="optimizer">The optimizer; the paper's when null.</param>
+    /// <param name="lossFunction">The loss; cross-entropy on logits when null.</param>
     public FinBERT(
         NeuralNetworkArchitecture<T> architecture,
         FinBERTOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        : base(architecture, OrDefault(options).MaxSequenceLength, OrDefault(options).VocabularySize,
+            OrDefault(options).HiddenDimension, ResolveClassCount(architecture, OrDefault(options).NumSentimentClasses), lossFunction)
     {
-        _useNativeMode = true;
         _options = options ?? new FinBERTOptions<T>();
         Options = _options;
-        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
+        _options.Validate();
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
-        _maxSequenceLength = _options.MaxSequenceLength;
-        _vocabularySize = _options.VocabularySize;
-        _hiddenDimension = _options.HiddenDimension;
-        _numAttentionHeads = _options.NumAttentionHeads;
-        _intermediateDimension = _options.IntermediateDimension;
-        _numLayers = _options.NumLayers;
-        _numSentimentClasses = _options.NumSentimentClasses;
-        _dropoutRate = _options.DropoutRate;
-
-        _vocabulary = InitializeBasicVocabulary();
-        _reverseVocabulary = _vocabulary.ToDictionary(kv => kv.Value, kv => kv.Key);
-        _sentimentClasses = new[] { "negative", "neutral", "positive" };
-        _random = RandomHelper.CreateSecureRandom();
-
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
-    #endregion
+    private static FinBERTOptions<T> OrDefault(FinBERTOptions<T>? options) => options ?? new FinBERTOptions<T>();
 
-    #region Initialization
+    /// <inheritdoc/>
+    protected override FinancialBertEncoderOptions<T> BertOptions => _options;
 
-    /// <summary>
-    /// Initializes the neural network layers for FinBERT.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Sets up the BERT architecture with:
-    /// - Token and position embeddings
-    /// - Multiple transformer layers with self-attention
-    /// - Pooler and classification head
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc/>
     protected override void InitializeLayers()
-    {
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayersWithOwnershipRollback(Layers);
-        }
-        else if (_useNativeMode)
-        {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultFinBERTLayers(
-                _vocabularySize,
-                _maxSequenceLength,
-                _hiddenDimension,
-                _numAttentionHeads,
-                _intermediateDimension,
-                _numLayers,
-                _numSentimentClasses,
-                _dropoutRate));
-        }
-
-    }
-
-    /// <summary>
-    /// Initializes a basic vocabulary for demonstration purposes.
-    /// </summary>
-    /// <returns>Dictionary mapping tokens to IDs.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This creates a simplified vocabulary.
-    /// In production, you would load the actual BERT WordPiece vocabulary (30,522 tokens)
-    /// which handles subword tokenization properly.
-    /// </para>
-    /// </remarks>
-    private Dictionary<string, int> InitializeBasicVocabulary()
-    {
-        var vocab = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["[PAD]"] = 0,
-            ["[UNK]"] = 1,
-            ["[CLS]"] = 2,
-            ["[SEP]"] = 3,
-            ["[MASK]"] = 4
-        };
-
-        // Add common financial terms
-        string[] financialTerms =
-        {
-            "stock", "shares", "price", "market", "earnings", "revenue", "profit", "loss",
-            "growth", "decline", "increase", "decrease", "rise", "fall", "drop", "surge",
-            "buy", "sell", "hold", "upgrade", "downgrade", "bullish", "bearish",
-            "positive", "negative", "neutral", "strong", "weak", "beat", "miss",
-            "quarter", "year", "annual", "quarterly", "fiscal", "outlook", "guidance",
-            "forecast", "estimate", "analyst", "investor", "company", "corporation",
-            "business", "industry", "sector", "economy", "recession", "inflation"
-        };
-
-        int id = 5;
-        foreach (var term in financialTerms)
-        {
-            if (!vocab.ContainsKey(term))
-            {
-                vocab[term] = id++;
-            }
-        }
-
-        return vocab;
-    }
-
-    /// <summary>
-    /// Validates custom layers provided by the user.
-    /// </summary>
-    /// <param name="layers">The list of custom layers.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Ensures custom layers form a valid FinBERT architecture
-    /// with embeddings, transformer layers, and classification head.
-    /// </para>
-    /// </remarks>
-    protected override void ValidateCustomLayers(List<ILayer<T>> layers)
-    {
-        base.ValidateCustomLayers(layers);
-
-        if (layers.Count < 4)
-            throw new ArgumentException("FinBERT requires at least 4 layers (embeddings, transformer, pooler, classifier).");
-    }
-
-    #endregion
-
-    #region NeuralNetworkBase Overrides
-
-    /// <summary>
-    /// Performs forward prediction on the input tensor.
-    /// </summary>
-    /// <param name="input">Input tensor with token IDs.</param>
-    /// <returns>Output tensor with sentiment logits.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Takes tokenized input and produces sentiment scores.
-    /// The output has shape [batch_size, num_sentiment_classes] where each row contains
-    /// logits for [negative, neutral, positive].
-    /// </para>
-    /// </remarks>
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        return _useNativeMode ? ForwardNative(input) : ForwardOnnx(input);
-    }
-
-    /// <summary>
-    /// Tape-aware training forward. FinBERT is an NLP model, not a forecaster,
-    /// so the base <see cref="FinancialModelBase{T}.ForwardForTraining"/> (which
-    /// routes through <c>Forecast → ForecastNative</c>) throws "ForecastNative
-    /// is not implemented for this model". Route through <see cref="Predict"/>'s
-    /// native path directly instead — it hits the same Layers stack the smoke
-    /// test already validated under inference.
-    /// </summary>
-    public override Tensor<T> ForwardForTraining(Tensor<T> input)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-        return ForwardNative(input);
-    }
-
-    // UpdateParameters was an empty override, silently dropping every restore. The base
-    // distributes the vector over the declared enumeration.
-    /// <summary>
-    /// Gets metadata about the FinBERT model.
-    /// </summary>
-    /// <returns>ModelMetadata containing model information.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Returns a dictionary of model configuration values
-    /// for logging and debugging purposes.
-    /// </para>
-    /// </remarks>
-    public override ModelMetadata<T> GetModelMetadata()
-    {
-        return new ModelMetadata<T>
-        {
-            AdditionalInfo = new Dictionary<string, object>
-            {
-                { "NetworkType", "FinBERT" },
-                { "MaxSequenceLength", _maxSequenceLength },
-                { "VocabularySize", _vocabularySize },
-                { "HiddenDimension", _hiddenDimension },
-                { "NumAttentionHeads", _numAttentionHeads },
-                { "IntermediateDimension", _intermediateDimension },
-                { "NumLayers", _numLayers },
-                { "NumSentimentClasses", _numSentimentClasses },
-                { "DropoutRate", _dropoutRate },
-                { "UseNativeMode", _useNativeMode }
-            }
-        };
-    }
-
-    /// <summary>
-    /// Serializes FinBERT-specific data.
-    /// </summary>
-    /// <param name="writer">The binary writer.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Saves model configuration and vocabulary
-    /// for later loading.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Deserializes FinBERT-specific data.
-    /// </summary>
-    /// <param name="reader">The binary reader.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Loads model configuration and vocabulary
-    /// from disk.
-    /// </para>
-    /// </remarks>
-
-
-    #endregion
-
-    #region IFinancialNLPModel Implementation
-
-    /// <summary>
-    /// Analyzes sentiment from tokenized input.
-    /// </summary>
-    /// <param name="tokenIds">Tensor of token IDs [batch_size, sequence_length].</param>
-    /// <returns>Sentiment probabilities [batch_size, num_sentiment_classes].</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Takes tokenized text and returns sentiment probabilities.
-    /// For a 3-class model: [P(negative), P(neutral), P(positive)].
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> AnalyzeSentiment(Tensor<T> tokenIds)
-    {
-        var logits = Predict(tokenIds);
-        return ApplySoftmax(logits);
-    }
-
-    /// <summary>
-    /// Analyzes sentiment from raw text strings.
-    /// </summary>
-    /// <param name="texts">Array of text strings to analyze.</param>
-    /// <returns>Sentiment results with class probabilities for each text.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Convenient method that handles tokenization internally.
-    /// Returns structured results with predicted class, confidence, and all class probabilities.
-    /// </para>
-    /// </remarks>
-    public override SentimentResult<T>[] AnalyzeSentiment(string[] texts)
-    {
-        var results = new SentimentResult<T>[texts.Length];
-
-        for (int i = 0; i < texts.Length; i++)
-        {
-            var tokenIds = Tokenize(texts[i], _maxSequenceLength);
-            var tensor = TokenIdsToTensor(tokenIds);
-            var probs = AnalyzeSentiment(tensor);
-
-            var probVector = probs.ToVector();
-            int classCount = Math.Min(_numSentimentClasses, probVector.Length);
-            var probValues = probVector.AsSpan();
-
-            // First maximum among the leading class probabilities (strict >, starting from index 0).
-            int maxIdx = classCount > 0
-                ? Engine.TensorArgMax(Engine.TensorNarrow(Tensor<T>.FromVector(probVector), 0, 0, classCount), 0).AsSpan()[0]
-                : 0;
-            T maxProb = probValues[maxIdx];
-            var classProbabilities = new Dictionary<string, T>();
-
-            for (int j = 0; j < classCount; j++)
-            {
-                string className = j < _sentimentClasses.Length ? _sentimentClasses[j] : $"class_{j}";
-                classProbabilities[className] = probValues[j];
-            }
-
-            results[i] = new SentimentResult<T>
-            {
-                OriginalText = texts[i],
-                PredictedClass = maxIdx < _sentimentClasses.Length ? _sentimentClasses[maxIdx] : $"class_{maxIdx}",
-                Confidence = maxProb,
-                ClassProbabilities = classProbabilities
-            };
-        }
-
-        return results;
-    }
-
-    /// <summary>
-    /// Gets embeddings (vector representations) for input tokens.
-    /// </summary>
-    /// <param name="tokenIds">Tensor of token IDs [batch_size, sequence_length].</param>
-    /// <returns>Token embeddings [batch_size, sequence_length, hidden_dim].</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Embeddings are dense vector representations of tokens.
-    /// These can be used for similarity search, clustering, or as features for downstream tasks.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> GetEmbeddings(Tensor<T> tokenIds)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("GetEmbeddings requires native mode.");
-
-        SetTrainingMode(false);
-
-        return Layers.Count > 0 ? Layers[0].Forward(tokenIds) : tokenIds;
-    }
-
-    /// <summary>
-    /// Gets the [CLS] token embedding representing the entire input sequence.
-    /// </summary>
-    /// <param name="tokenIds">Tensor of token IDs [batch_size, sequence_length].</param>
-    /// <returns>Sequence embeddings [batch_size, hidden_dim].</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> In BERT, the [CLS] token is a special token at the beginning
-    /// whose embedding represents the entire sequence. This is commonly used for classification
-    /// tasks and document similarity.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> GetSequenceEmbedding(Tensor<T> tokenIds)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("GetSequenceEmbedding requires native mode.");
-
-        SetTrainingMode(false);
-
-        // Forward through most of the network but stop before classifier
-        var hidden = Forward(tokenIds);
-
-        // Pooler output is the [CLS] representation
-        return hidden;
-    }
-
-    /// <summary>
-    /// Tokenizes raw text into token IDs.
-    /// </summary>
-    /// <param name="text">The text to tokenize.</param>
-    /// <param name="maxLength">Maximum sequence length (will pad or truncate).</param>
-    /// <returns>Array of token IDs.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Tokenization converts text to numbers that the model understands.
-    /// This simplified version does word-level tokenization. Production implementations should
-    /// use WordPiece tokenization for proper subword handling.
-    /// </para>
-    /// </remarks>
-    public override int[] Tokenize(string text, int? maxLength = null)
-    {
-        int maxLen = maxLength ?? _maxSequenceLength;
-        var tokens = new List<int> { _vocabulary["[CLS]"] };
-
-        // Simple word tokenization (production should use WordPiece)
-        var words = text.ToLowerInvariant()
-            .Split(new[] { ' ', '\t', '\n', '\r', '.', ',', '!', '?', ';', ':', '"', '\'', '(', ')', '[', ']' },
-                   StringSplitOptions.RemoveEmptyEntries);
-
-        foreach (var word in words)
-        {
-            if (tokens.Count >= maxLen - 1) break;
-
-            int tokenId = _vocabulary.TryGetValue(word, out int id) ? id : _vocabulary["[UNK]"];
-            tokens.Add(tokenId);
-        }
-
-        tokens.Add(_vocabulary["[SEP]"]);
-
-        // Pad to max length
-        while (tokens.Count < maxLen)
-        {
-            tokens.Add(_vocabulary["[PAD]"]);
-        }
-
-        return tokens.Take(maxLen).ToArray();
-    }
-
-    /// <summary>
-    /// Converts token IDs back to text.
-    /// </summary>
-    /// <param name="tokenIds">Array of token IDs.</param>
-    /// <returns>Reconstructed text string.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Converts the numeric token IDs back into human-readable text.
-    /// Useful for debugging and understanding what the model sees.
-    /// </para>
-    /// </remarks>
-    public override string Detokenize(int[] tokenIds)
-    {
-        var words = new List<string>();
-
-        foreach (var id in tokenIds)
-        {
-            if (_reverseVocabulary.TryGetValue(id, out string? token))
-            {
-                if (token != "[PAD]" && token != "[CLS]" && token != "[SEP]")
-                {
-                    words.Add(token);
-                }
-            }
-            else
-            {
-                words.Add("[UNK]");
-            }
-        }
-
-        return string.Join(" ", words);
-    }
-
-    /// <summary>
-    /// Gets financial-specific NLP metrics from the model.
-    /// </summary>
-    /// <returns>Dictionary containing NLP metrics.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Returns metrics relevant to financial NLP performance
-    /// including model configuration and training status.
-    /// </para>
-    /// </remarks>
-    public override Dictionary<string, T> GetFinancialMetrics()
-    {
-        T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero;
-
-        return new Dictionary<string, T>
-        {
-            ["LastLoss"] = lastLoss,
-            ["MaxSequenceLength"] = NumOps.FromDouble(_maxSequenceLength),
-            ["VocabularySize"] = NumOps.FromDouble(_vocabularySize),
-            ["HiddenDimension"] = NumOps.FromDouble(_hiddenDimension),
-            ["NumLayers"] = NumOps.FromDouble(_numLayers),
-            ["NumAttentionHeads"] = NumOps.FromDouble(_numAttentionHeads),
-            ["NumSentimentClasses"] = NumOps.FromDouble(_numSentimentClasses)
-        };
-    }
-
-    #endregion
-
-    #region Forward/Backward Pass
-
-    /// <summary>
-    /// Performs the forward pass through all layers.
-    /// </summary>
-    /// <param name="input">Input tensor.</param>
-    /// <returns>Output tensor.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The forward pass:
-    /// 1. Embeds tokens and positions
-    /// 2. Passes through transformer layers
-    /// 3. Pools the [CLS] token representation
-    /// 4. Projects to sentiment classes
-    /// </para>
-    /// </remarks>
-    public Tensor<T> Forward(Tensor<T> input)
-    {
-        var current = input;
-
-        // Apply layers
-        foreach (var layer in Layers)
-        {
-            current = layer.Forward(current);
-        }
-
-        return current;
-    }
-
-    /// <summary>
-    /// Performs native mode forward pass.
-    /// </summary>
-    /// <param name="input">Input tensor.</param>
-    /// <returns>Output logits.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Runs the full BERT forward pass using native C# layers.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ForwardNative(Tensor<T> input)
-    {
-        SetTrainingMode(false);
-        return Forward(input);
-    }
-
-    /// <summary>
-    /// Performs ONNX mode forward pass.
-    /// </summary>
-    /// <param name="input">Input tensor.</param>
-    /// <returns>Output logits.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Uses ONNX runtime for optimized inference with
-    /// pretrained weights.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ForwardOnnx(Tensor<T> input)
-    {
-        if (OnnxSession is null)
-            throw new InvalidOperationException("ONNX session not initialized.");
-
-        // Token ids are integral; convert the whole buffer to the int64 the model expects.
-        var inputData = Engine.Reshape(input.Contiguous(), new[] { input.Length }).Cast<long>().ToArray();
-
-        var tensorShape = new[] { 1, _maxSequenceLength };
-        var inputTensor = new OnnxTensors.DenseTensor<long>(
-            inputData,
-            tensorShape);
-
-        var inputs = new List<NamedOnnxValue>
-        {
-            NamedOnnxValue.CreateFromTensor("input_ids", inputTensor)
-        };
-
-        // Standard exported BERT ONNX graphs (e.g. ProsusAI/finbert via optimum)
-        // require attention_mask and token_type_ids in addition to input_ids.
-        // Only add the inputs the loaded session actually declares so that
-        // models exported without them continue to work unchanged.
-        var declaredInputs = OnnxSession.InputMetadata;
-
-        if (declaredInputs.ContainsKey("attention_mask"))
-        {
-            // attention_mask: 1 for real (non-pad) token positions, 0 for padding.
-            long padTokenId = _vocabulary.TryGetValue("[PAD]", out int padId) ? padId : 0L;
-            var attentionData = new long[inputData.Length];
-            for (int i = 0; i < inputData.Length; i++)
-            {
-                attentionData[i] = inputData[i] == padTokenId ? 0L : 1L;
-            }
-
-            var attentionTensor = new OnnxTensors.DenseTensor<long>(
-                attentionData,
-                tensorShape);
-            inputs.Add(NamedOnnxValue.CreateFromTensor("attention_mask", attentionTensor));
-        }
-
-        if (declaredInputs.ContainsKey("token_type_ids"))
-        {
-            // token_type_ids: all 0s for single-sentence classification.
-            var tokenTypeData = new long[inputData.Length];
-            var tokenTypeTensor = new OnnxTensors.DenseTensor<long>(
-                tokenTypeData,
-                tensorShape);
-            inputs.Add(NamedOnnxValue.CreateFromTensor("token_type_ids", tokenTypeTensor));
-        }
-
-        using var results = OnnxSession.Run(inputs);
-        var outputTensor = results.First().AsTensor<float>();
-
-        var outputData = new T[outputTensor.Length];
-        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, (int)outputTensor.Length), outputData.AsSpan(0, (int)outputTensor.Length));
-
-        return new Tensor<T>(new[] { _numSentimentClasses }, new Vector<T>(outputData));
-    }
-
-    #endregion
-
-    #region Helper Methods
-
-    /// <summary>
-    /// Converts token ID array to tensor.
-    /// </summary>
-    /// <param name="tokenIds">Array of token IDs.</param>
-    /// <returns>Tensor with token IDs.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Wraps a token ID array in a tensor for model input.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> TokenIdsToTensor(int[] tokenIds)
-    {
-        return new Tensor<int>(new[] { 1, tokenIds.Length }, new Vector<int>(tokenIds)).Cast<T>();
-    }
-
-    /// <summary>
-    /// Applies softmax to convert logits to probabilities.
-    /// </summary>
-    /// <param name="logits">Input logits tensor.</param>
-    /// <returns>Probability tensor.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Softmax converts raw model outputs (logits) to probabilities
-    /// that sum to 1. Higher logits become higher probabilities.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ApplySoftmax(Tensor<T> logits)
-    {
-        return Engine.Softmax(logits, -1);
-    }
-
-    #endregion
-
-    #region IDisposable
-
-    /// <summary>
-    /// Disposes managed resources.
-    /// </summary>
-    /// <param name="disposing">Whether to dispose managed resources.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Cleans up resources when the model is no longer needed,
-    /// particularly the ONNX session which holds native resources.
-    /// </para>
-    /// </remarks>
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
-        {
-            OnnxSession?.Dispose();
-        }
-
-        base.Dispose(disposing);
-    }
-
-    #endregion
+        => InitializeBertLayers(
+            _options.NumAttentionHeads, _options.IntermediateDimension, _options.NumLayers, NumSentimentClasses,
+            _options.DropoutRate);
 }
-

@@ -2845,6 +2845,8 @@ public static class DeserializationHelper
             int ffTeb = TryGetInt(additionalParams, "FfnDim")
                 ?? throw new InvalidOperationException($"{genericDef.Name} requires 'FfnDim' metadata.");
             double drTeb = TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
+            // A block saved before LayerNormEpsilon was persisted used the LayerNorm default.
+            double epsTeb = TryGetDouble(additionalParams, "LayerNormEpsilon") ?? NumericalStabilityHelper.LargeEpsilon;
             // A block saved before NormPlacement was persisted was always Pre-LN. A value that is present but not a
             // placement is corrupt metadata: rebuilding it with the other placement would compute a different function.
             var placementTeb = AiDotNet.Enums.TransformerNormPlacement.PreNorm;
@@ -2888,6 +2890,7 @@ public static class DeserializationHelper
                     // not persist one.
                     (_, "ffnactivation") => ffnActivationTeb,
                     (_, "normplacement") => placementTeb,
+                    (Type t, _) when t == typeof(double) && n == "layernormepsilon" => epsTeb,
                     _ => p.HasDefaultValue ? p.DefaultValue : null,
                 };
             }

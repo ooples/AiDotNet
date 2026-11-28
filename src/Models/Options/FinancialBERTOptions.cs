@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using System;
 
 namespace AiDotNet.Models.Options;
@@ -35,7 +36,7 @@ namespace AiDotNet.Models.Options;
 /// <b>Reference:</b> Huang et al., "FinancialBERT: A Pre-trained Language Model for Financial Text Mining", 2023.
 /// </para>
 /// </remarks>
-public class FinancialBERTOptions<T> : ModelOptions
+public class FinancialBERTOptions<T> : FinancialBertEncoderOptions<T>
 {
     /// <summary>
     /// Initializes a new instance with default FinancialBERT configuration.
@@ -46,6 +47,7 @@ public class FinancialBERTOptions<T> : ModelOptions
     /// Initializes a new instance by copying from another instance.
     /// </summary>
     public FinancialBERTOptions(FinancialBERTOptions<T> other)
+        : base(other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
         // Seed is declared on ModelOptions rather than in this file, so a copy constructor
@@ -60,15 +62,14 @@ public class FinancialBERTOptions<T> : ModelOptions
         NumLayers = other.NumLayers;
         NumClasses = other.NumClasses;
         DropoutRate = other.DropoutRate;
-        TaskType = other.TaskType;
-        UseMultiTask = other.UseMultiTask;
     }
 
     /// <summary>Maximum sequence length in tokens (default: 512).</summary>
     public int MaxSequenceLength { get; set; } = 512;
 
-    /// <summary>Vocabulary size (default: 30522 for BERT-base).</summary>
-    public int VocabularySize { get; set; } = 30522;
+    /// <summary>Vocabulary size (default: 30873, the released checkpoint's vocabulary).</summary>
+    [PaperDefault(30873, Source = "Released ahmedrachid/FinancialBERT config: vocab_size 30873")]
+    public int VocabularySize { get; set; } = 30873;
 
     /// <summary>Hidden dimension (default: 768 for BERT-base).</summary>
     public int HiddenDimension { get; set; } = 768;
@@ -89,30 +90,6 @@ public class FinancialBERTOptions<T> : ModelOptions
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>
-    /// Task type: "sentiment", "topic", "entity", "multi" (default: "sentiment").
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Different financial NLP tasks:
-    /// - sentiment: Positive/negative/neutral classification
-    /// - topic: Categorize by financial topic (M&amp;A, earnings, etc.)
-    /// - entity: Named entity recognition for financial entities
-    /// - multi: Multi-task learning across multiple objectives
-    /// </para>
-    /// </remarks>
-    public string TaskType { get; set; } = "sentiment";
-
-    /// <summary>
-    /// Whether to use multi-task learning (default: false).
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Multi-task learning trains the model on multiple
-    /// objectives simultaneously (sentiment + topic + entity), which can improve
-    /// overall performance through shared representations.
-    /// </para>
-    /// </remarks>
-    public bool UseMultiTask { get; set; } = false;
-
-    /// <summary>
     /// Validates the FinancialBERT options.
     /// </summary>
     /// <remarks>
@@ -123,6 +100,7 @@ public class FinancialBERTOptions<T> : ModelOptions
     /// </remarks>
     public void Validate()
     {
+        ValidateBertEncoderOptions(MaxSequenceLength);
         if (MaxSequenceLength < 1)
             throw new ArgumentException("MaxSequenceLength must be at least 1.", nameof(MaxSequenceLength));
         if (VocabularySize < 1)
@@ -131,6 +109,8 @@ public class FinancialBERTOptions<T> : ModelOptions
             throw new ArgumentException("HiddenDimension must be at least 1.", nameof(HiddenDimension));
         if (NumAttentionHeads < 1)
             throw new ArgumentException("NumAttentionHeads must be at least 1.", nameof(NumAttentionHeads));
+        if (NumAttentionHeads >= 1 && HiddenDimension % NumAttentionHeads != 0)
+            throw new ArgumentException("HiddenDimension must be divisible by NumAttentionHeads.", nameof(NumAttentionHeads));
         if (IntermediateDimension < 1)
             throw new ArgumentException("IntermediateDimension must be at least 1.", nameof(IntermediateDimension));
         if (NumLayers < 1)
@@ -139,7 +119,5 @@ public class FinancialBERTOptions<T> : ModelOptions
             throw new ArgumentException("NumClasses must be at least 1.", nameof(NumClasses));
         if (DropoutRate < 0 || DropoutRate >= 1)
             throw new ArgumentException("DropoutRate must be between 0 (inclusive) and 1 (exclusive).", nameof(DropoutRate));
-        if (string.IsNullOrWhiteSpace(TaskType))
-            throw new ArgumentException("TaskType cannot be null or empty.", nameof(TaskType));
     }
 }

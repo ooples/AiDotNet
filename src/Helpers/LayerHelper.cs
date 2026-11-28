@@ -1,3 +1,4 @@
+using AiDotNet.Finance.Enums;
 ﻿using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
@@ -250,11 +251,7 @@ public static partial class LayerHelper<T>
         int numAttentionHeads = 12,
         int numHiddenLayers = 12,
         double dropoutProbability = 0.1)
-    {
-        // Follows the GPT/LLaMA-style decoder-only pattern
-        return CreateDefaultFinGPTLayers(maxSequenceLength, vocabularySize, 
-            hiddenSize, numAttentionHeads, numHiddenLayers, dropoutProbability);
-    }
+    => CreateDefaultInvestLMLayers(vocabularySize: vocabularySize, maxSequenceLength: maxSequenceLength, hiddenDimension: hiddenSize, numAttentionHeads: numAttentionHeads, intermediateDimension: SwiGLUHiddenDim(hiddenSize, 256), numLayers: numHiddenLayers, numClasses: 3, dropoutRate: dropoutProbability);
 
     /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
     /// factory never read: the layers are sized from the other arguments (#2147).</summary>
@@ -268,53 +265,6 @@ public static partial class LayerHelper<T>
         int numHiddenLayers = 12,
         double dropoutProbability = 0.1)
         => CreateDefaultInvestLMLayers(maxSequenceLength: maxSequenceLength, vocabularySize: vocabularySize, hiddenSize: hiddenSize, numAttentionHeads: numAttentionHeads, numHiddenLayers: numHiddenLayers, dropoutProbability: dropoutProbability);
-
-    /// <summary>
-    /// Creates the default layer configuration for FinMA.
-    /// </summary>
-    /// <param name="maxSequenceLength">Maximum sequence length.</param>
-    /// <param name="vocabularySize">Size of the vocabulary.</param>
-    /// <param name="numAgents">Number of specialized agents.</param>
-    /// <param name="hiddenSize">Hidden layer size.</param>
-    /// <param name="numAttentionHeads">Number of attention heads.</param>
-    /// <param name="numHiddenLayers">Number of transformer layers.</param>
-    /// <param name="dropoutProbability">Dropout probability.</param>
-    /// <returns>A collection of layers forming FinMA.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> FinMA (Financial Multi-Agent) uses a set of specialized
-    /// transformer models that collaborate. This method initializes the base
-    /// transformer architecture used by the agents.
-    /// </para>
-    /// </remarks>
-    public static IEnumerable<ILayer<T>> CreateDefaultFinMALayers(
-        int maxSequenceLength = 512,
-        int vocabularySize = 32000,
-        int numAgents = 4,
-        int hiddenSize = 768,
-        int numAttentionHeads = 12,
-        int numHiddenLayers = 12,
-        double dropoutProbability = 0.1)
-    {
-        // Follows a LLaMA-style decoder-only pattern for each agent
-        // In this implementation, we return the layers for a single representative agent
-        return CreateDefaultFinGPTLayers(maxSequenceLength, vocabularySize, 
-            hiddenSize, numAttentionHeads, numHiddenLayers, dropoutProbability);
-    }
-
-    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
-    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
-    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
-    public static IEnumerable<ILayer<T>> CreateDefaultFinMALayers(
-        NeuralNetworkArchitecture<T> architecture,
-        int maxSequenceLength = 512,
-        int vocabularySize = 32000,
-        int numAgents = 4,
-        int hiddenSize = 768,
-        int numAttentionHeads = 12,
-        int numHiddenLayers = 12,
-        double dropoutProbability = 0.1)
-        => CreateDefaultFinMALayers(maxSequenceLength: maxSequenceLength, vocabularySize: vocabularySize, numAgents: numAgents, hiddenSize: hiddenSize, numAttentionHeads: numAttentionHeads, numHiddenLayers: numHiddenLayers, dropoutProbability: dropoutProbability);
 
     /// <summary>
     /// Creates the default layer configuration for BloombergGPT.
@@ -340,12 +290,7 @@ public static partial class LayerHelper<T>
         int numAttentionHeads = 12,
         int numHiddenLayers = 12,
         double dropoutProbability = 0.1)
-    {
-        // Follows standard GPT pattern but with ALiBi or Rotary positional embeddings usually
-        // For simplicity in the library, we'll use learned positional embeddings
-        return CreateDefaultFinGPTLayers(maxSequenceLength, vocabularySize, 
-            hiddenSize, numAttentionHeads, numHiddenLayers, dropoutProbability);
-    }
+    => CreateDefaultBloombergGPTLayers(vocabularySize: vocabularySize, maxSequenceLength: maxSequenceLength, hiddenDimension: hiddenSize, numAttentionHeads: numAttentionHeads, intermediateDimension: 4 * hiddenSize, numLayers: numHiddenLayers, numClasses: 3, dropoutRate: dropoutProbability);
 
     /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
     /// factory never read: the layers are sized from the other arguments (#2147).</summary>
@@ -385,33 +330,8 @@ public static partial class LayerHelper<T>
         int numAttentionHeads = 12,
         int numHiddenLayers = 12,
         double dropoutProbability = 0.1)
-    {
-        // 1. Embedding Layers
-        yield return new EmbeddingLayer<T>(vocabularySize, hiddenSize);
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenSize);
-        
-        yield return new DropoutLayer<T>(dropoutProbability);
-
-        // 2. Transformer Decoder Blocks
-        for (int i = 0; i < numHiddenLayers; i++)
-        {
-            // Masked self-attention (standard MultiHeadAttention handles masking via causal mask)
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenSize) / (numAttentionHeads), (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>();
-
-            // Feed-forward
-            yield return new DenseLayer<T>(hiddenSize * 4, new GELUActivation<T>() as IActivationFunction<T>);
-            yield return new DenseLayer<T>(hiddenSize);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DropoutLayer<T>(dropoutProbability);
-        }
-
-        // 3. Final Norm
-        yield return new LayerNormalizationLayer<T>();
-
-        // 4. Output Head (predict next token from vocabulary)
-        yield return new DenseLayer<T>(vocabularySize);
-    }
+    => CreateLlamaDecoderLayers(vocabularySize, maxSequenceLength, hiddenSize, numAttentionHeads, SwiGLUHiddenDim(hiddenSize, 256), numHiddenLayers, pool: false)
+            .Concat(CreateFinancialClassificationHeadLayers(vocabularySize, dropoutProbability));
 
     /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
     /// factory never read: the layers are sized from the other arguments (#2147).</summary>
@@ -479,92 +399,6 @@ public static partial class LayerHelper<T>
         int numHiddenLayers = 12,
         double dropoutProbability = 0.1)
         => CreateDefaultFinBERTToneLayers(maxSequenceLength: maxSequenceLength, vocabularySize: vocabularySize, numClasses: numClasses, hiddenSize: hiddenSize, numAttentionHeads: numAttentionHeads, numHiddenLayers: numHiddenLayers, dropoutProbability: dropoutProbability);
-
-    /// <summary>
-    /// Creates the default layer configuration for FinancialBERT.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="maxSequenceLength">Maximum sequence length.</param>
-    /// <param name="vocabularySize">Size of the vocabulary.</param>
-    /// <param name="hiddenSize">Hidden layer size.</param>
-    /// <param name="numAttentionHeads">Number of attention heads.</param>
-    /// <param name="numHiddenLayers">Number of transformer layers.</param>
-    /// <param name="dropoutProbability">Dropout probability.</param>
-    /// <returns>A collection of layers forming FinancialBERT.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> FinancialBERT uses the standard BERT architecture but is
-    /// domain-adapted through training on a large corpus of financial text.
-    /// </para>
-    /// </remarks>
-    public static IEnumerable<ILayer<T>> CreateDefaultFinancialBERTLayers(
-        NeuralNetworkArchitecture<T> architecture,
-        int maxSequenceLength = 512,
-        int vocabularySize = 30522,
-        int hiddenSize = 768,
-        int numAttentionHeads = 12,
-        int numHiddenLayers = 12,
-        double dropoutProbability = 0.1)
-    {
-        return CreateDefaultFinancialBERTLayers(
-            vocabularySize: vocabularySize,
-            maxSequenceLength: maxSequenceLength,
-            hiddenDimension: hiddenSize,
-            numAttentionHeads: numAttentionHeads,
-            intermediateDimension: hiddenSize * 4,
-            numLayers: numHiddenLayers,
-            numClasses: Math.Max(1, architecture.OutputSize),
-            dropoutRate: dropoutProbability,
-            taskType: "sentiment");
-    }
-
-    /// <summary>
-    /// Creates the default layer configuration for SEC-BERT.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="maxSequenceLength">Maximum sequence length.</param>
-    /// <param name="vocabularySize">Size of the vocabulary.</param>
-    /// <param name="hiddenSize">Hidden layer size.</param>
-    /// <param name="numAttentionHeads">Number of attention heads.</param>
-    /// <param name="numHiddenLayers">Number of transformer layers.</param>
-    /// <param name="dropoutProbability">Dropout probability.</param>
-    /// <returns>A collection of layers forming SEC-BERT.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> SEC-BERT is based on the BERT (Bidirectional Encoder
-    /// Representations from Transformers) architecture. It works by:
-    /// </para>
-    /// <para>
-    /// <list type="number">
-    /// <item><b>Embeddings:</b> Converting words into numerical vectors that
-    /// capture their financial meaning from SEC filings.</item>
-    /// <item><b>Transformer Layers:</b> Using attention mechanisms to understand
-    /// the relationships between words in a sentence, regardless of their position.</item>
-    /// <item><b>Task Head:</b> Converting the final representations into predictions
-    /// for specific financial tasks like sentiment analysis or risk classification.</item>
-    /// </list>
-    /// </para>
-    /// </remarks>
-    public static IEnumerable<ILayer<T>> CreateDefaultSECBERTLayers(
-        NeuralNetworkArchitecture<T> architecture,
-        int maxSequenceLength = 512,
-        int vocabularySize = 30522,
-        int hiddenSize = 768,
-        int numAttentionHeads = 12,
-        int numHiddenLayers = 12,
-        double dropoutProbability = 0.1)
-    {
-        return CreateDefaultSECBERTLayers(
-            vocabularySize: vocabularySize,
-            maxSequenceLength: maxSequenceLength,
-            hiddenDimension: hiddenSize,
-            numAttentionHeads: numAttentionHeads,
-            intermediateDimension: hiddenSize * 4,
-            numLayers: numHiddenLayers,
-            numClasses: Math.Max(1, architecture.OutputSize),
-            dropoutRate: dropoutProbability,
-            taskType: "classification");
-    }
 
     /// <summary>
     /// Creates a standard feed-forward neural network with configurable hidden layers.
@@ -16497,6 +16331,242 @@ public static partial class LayerHelper<T>
         int forecastHorizon = 12)
         => CreateDefaultRelationalGCNLayers(numNodes: numNodes, numFeatures: numFeatures, numRelations: numRelations, hiddenDimension: hiddenDimension, numLayers: numLayers, numBases: numBases, forecastHorizon: forecastHorizon);
 
+    /// <summary>BERT's LayerNorm epsilon (the released config's <c>layer_norm_eps</c>).</summary>
+    private const double BertLayerNormEpsilon = 1e-12;
+
+    /// <summary>
+    /// Builds a BERT encoder (Devlin et al. 2019): token, position and segment embeddings, a stack of transformer
+    /// blocks and, for sequence-level tasks, BERT's pooler.
+    /// </summary>
+    /// <param name="vocabularySize">Token vocabulary size.</param>
+    /// <param name="maxPositionEmbeddings">Rows in the position table; the longest sequence the encoder reads.</param>
+    /// <param name="typeVocabularySize">Segment types the segment embedding distinguishes.</param>
+    /// <param name="hiddenDimension">Hidden width.</param>
+    /// <param name="numAttentionHeads">Attention heads per block; must divide <paramref name="hiddenDimension"/>.</param>
+    /// <param name="intermediateDimension">Feed-forward width.</param>
+    /// <param name="numLayers">Number of transformer blocks.</param>
+    /// <param name="hiddenDropoutRate">Dropout on the embeddings and on every sublayer's output (hidden_dropout_prob).</param>
+    /// <param name="attentionDropoutRate">Dropout on the attention probabilities (attention_probs_dropout_prob).</param>
+    /// <param name="normPlacement">Where each block normalizes. BERT is Post-LN; Pre-LN adds a final LayerNorm.</param>
+    /// <param name="pool">True to end with BERT's pooler, the [CLS] position through a tanh linear layer, so the
+    /// output is <c>[batch, hidden]</c>; false to return every position's hidden state, <c>[batch, seq, hidden]</c>.</param>
+    /// <returns>The encoder's layers in order.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the part of BERT that understands text. Put a classification head on top
+    /// of it (see <see cref="CreateFinancialClassificationHeadLayers"/>) to get class scores.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateFinancialBertEncoderLayers(
+        int vocabularySize,
+        int maxPositionEmbeddings,
+        int typeVocabularySize,
+        int hiddenDimension,
+        int numAttentionHeads,
+        int intermediateDimension,
+        int numLayers,
+        double hiddenDropoutRate,
+        double attentionDropoutRate,
+        TransformerNormPlacement normPlacement,
+        bool pool)
+    {
+        if (numAttentionHeads < 1 || hiddenDimension % numAttentionHeads != 0)
+            throw new ArgumentException(
+                $"hiddenDimension ({hiddenDimension}) must be divisible by numAttentionHeads ({numAttentionHeads}).",
+                nameof(numAttentionHeads));
+        return Build();
+
+        IEnumerable<ILayer<T>> Build()
+        {
+            // BERT's embedding: token + learned position + segment embeddings, LayerNorm, dropout (Devlin et al. 2019,
+            // Sec. 3, Figure 2).
+            yield return new BertEmbeddingLayer<T>(
+                vocabularySize,
+                hiddenDimension,
+                maxPositionEmbeddings,
+                tokenTypeVocabularySize: typeVocabularySize,
+                dropoutProbability: hiddenDropoutRate);
+
+            for (int i = 0; i < numLayers; i++)
+            {
+                // BERT's feed-forward uses the exact (erf) GELU and its LayerNorms an epsilon of 1e-12 (the released
+                // config's hidden_act = "gelu" and layer_norm_eps), so a loaded checkpoint reproduces its outputs.
+                var block = new TransformerEncoderBlock<T>(
+                    hiddenDimension, numAttentionHeads, intermediateDimension, hiddenDropoutRate,
+                    new ExactGELUActivation<T>(), normPlacement, BertLayerNormEpsilon);
+                if (block.AttentionLayer is MultiHeadAttentionLayer<T> attention)
+                {
+                    // BERT's query, key and value projections have biases (the released BertSelfAttention); the key
+                    // bias adds one score to every key of a query and cancels in the softmax, so it is not kept.
+                    attention.ConfigureProjectionBiases(query: true, value: true);
+                    if (attentionDropoutRate > 0)
+                        attention.ConfigureAttentionDropout(attentionDropoutRate);
+                }
+                yield return block;
+            }
+
+            // Pre-LN leaves the residual stream unnormalized after the last block; Post-LN already normalized it.
+            if (normPlacement == TransformerNormPlacement.PreNorm)
+                yield return new LayerNormalizationLayer<T>(hiddenDimension, BertLayerNormEpsilon);
+
+            if (pool)
+            {
+                // BERT's pooler: the first ([CLS]) position through a linear layer and tanh (Devlin et al. 2019,
+                // Sec. 3; the released BertPooler).
+                yield return new SequenceTokenSliceLayer<T>(SequenceTokenSliceLayer<T>.Position.First);
+                yield return new DenseLayer<T>(hiddenDimension, new TanhActivation<T>() as IActivationFunction<T>);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Builds the classification head of a financial language model: dropout, then a linear layer producing raw class
+    /// scores (logits).
+    /// </summary>
+    /// <param name="numClasses">Number of classes.</param>
+    /// <param name="dropoutRate">Dropout before the linear layer; 0 omits the dropout layer.</param>
+    /// <returns>The head's layers in order.</returns>
+    /// <remarks>
+    /// <para>
+    /// The linear layer is an identity-activated projection (Devlin et al. 2019, Sec. 4): softmax belongs to the loss
+    /// and to the probabilities a caller asks for, not to the network. It reads whatever the encoder hands it, so the
+    /// same head serves a pooled <c>[batch, hidden]</c> output and a per-token <c>[batch, seq, hidden]</c> one.
+    /// </para>
+    /// <para><b>For Beginners:</b> This turns the encoder's summary of the text into one score per class.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateFinancialClassificationHeadLayers(int numClasses, double dropoutRate)
+    {
+        if (numClasses < 1)
+            throw new ArgumentOutOfRangeException(nameof(numClasses), "Must be at least 1.");
+        var layers = new List<ILayer<T>>();
+        if (dropoutRate > 0)
+            layers.Add(new DropoutLayer<T>(dropoutRate));
+        layers.Add(new DenseLayer<T>(numClasses, new IdentityActivation<T>() as IActivationFunction<T>));
+        return layers;
+    }
+
+    /// <summary>
+    /// Builds a LLaMA decoder (Touvron et al. 2023): token embedding, pre-RMSNorm blocks with rotary-position causal
+    /// self-attention and a SwiGLU feed-forward network, and a final RMSNorm.
+    /// </summary>
+    /// <param name="vocabularySize">Token vocabulary size.</param>
+    /// <param name="maxSequenceLength">Longest sequence the rotary tables cover.</param>
+    /// <param name="hiddenDimension">Hidden width.</param>
+    /// <param name="numAttentionHeads">Attention heads per block; must divide <paramref name="hiddenDimension"/>.</param>
+    /// <param name="intermediateDimension">SwiGLU width (11008 for LLaMA-7B).</param>
+    /// <param name="numLayers">Number of decoder blocks.</param>
+    /// <param name="pool">True to end with the last position's hidden state, <c>[batch, hidden]</c>, which under the
+    /// causal mask has read the whole input; false to return every position, <c>[batch, seq, hidden]</c>.</param>
+    /// <returns>The decoder's layers in order.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is the text-understanding part of a LLaMA-style language model. Each position
+    /// only looks at the positions before it, so the last position summarizes the whole input.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateLlamaDecoderLayers(
+        int vocabularySize,
+        int maxSequenceLength,
+        int hiddenDimension,
+        int numAttentionHeads,
+        int intermediateDimension,
+        int numLayers,
+        bool pool)
+    {
+        if (numAttentionHeads < 1 || hiddenDimension % numAttentionHeads != 0)
+            throw new ArgumentException(
+                $"hiddenDimension ({hiddenDimension}) must be divisible by numAttentionHeads ({numAttentionHeads}).",
+                nameof(numAttentionHeads));
+        return Build();
+
+        IEnumerable<ILayer<T>> Build()
+        {
+            // LLaMA has no absolute position embedding: positions enter through RoPE inside attention (Sec. 2.2).
+            yield return new EmbeddingLayer<T>(vocabularySize, hiddenDimension);
+            for (int i = 0; i < numLayers; i++)
+            {
+                var attention = new MultiHeadAttentionLayer<T>(
+                    headCount: numAttentionHeads,
+                    headDimension: hiddenDimension / numAttentionHeads);
+                attention.ConfigurePositionalEncoding(
+                    PositionalEncodingType.Rotary,
+                    ropeTheta: 10000.0,
+                    maxSequenceLength: maxSequenceLength);
+                attention.UseCausalMask = true;
+                // Pre-normalization with RMSNorm and the SwiGLU feed-forward network (Touvron et al. 2023, Sec. 2.2).
+                yield return new PreLNTransformerBlock<T>(
+                    hiddenSize: hiddenDimension,
+                    ffnDim: intermediateDimension,
+                    attention: attention,
+                    ffnActivation: new SiLUActivation<T>(),
+                    gated: true);
+            }
+
+            yield return new RMSNormalizationLayer<T>(hiddenDimension);
+            if (pool)
+                yield return new SequenceTokenSliceLayer<T>(SequenceTokenSliceLayer<T>.Position.Last);
+        }
+    }
+
+    /// <summary>
+    /// Builds a BLOOM-style decoder as BloombergGPT uses it (Wu et al. 2023, Sec. 2.4): token embedding followed by a
+    /// LayerNorm, pre-LayerNorm blocks with ALiBi causal self-attention and a GELU feed-forward network, and a final
+    /// LayerNorm.
+    /// </summary>
+    /// <param name="vocabularySize">Token vocabulary size.</param>
+    /// <param name="maxSequenceLength">Longest sequence the ALiBi bias tables cover.</param>
+    /// <param name="hiddenDimension">Hidden width.</param>
+    /// <param name="numAttentionHeads">Attention heads per block; must divide <paramref name="hiddenDimension"/>.</param>
+    /// <param name="intermediateDimension">Feed-forward width (four times the hidden width in BloombergGPT).</param>
+    /// <param name="numLayers">Number of decoder blocks.</param>
+    /// <param name="dropoutRate">Dropout on every sublayer's output; BloombergGPT trains without it.</param>
+    /// <param name="pool">True to end with the last position's hidden state, <c>[batch, hidden]</c>; false to return
+    /// every position, <c>[batch, seq, hidden]</c>.</param>
+    /// <returns>The decoder's layers in order.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> ALiBi tells attention how far apart two tokens are by penalizing distant ones,
+    /// instead of adding a position vector to each token, so the model has no position table to outgrow.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateBloomDecoderLayers(
+        int vocabularySize,
+        int maxSequenceLength,
+        int hiddenDimension,
+        int numAttentionHeads,
+        int intermediateDimension,
+        int numLayers,
+        double dropoutRate,
+        bool pool)
+    {
+        if (numAttentionHeads < 1 || hiddenDimension % numAttentionHeads != 0)
+            throw new ArgumentException(
+                $"hiddenDimension ({hiddenDimension}) must be divisible by numAttentionHeads ({numAttentionHeads}).",
+                nameof(numAttentionHeads));
+        return Build();
+
+        IEnumerable<ILayer<T>> Build()
+        {
+            yield return new EmbeddingLayer<T>(vocabularySize, hiddenDimension);
+            // BLOOM and BloombergGPT normalize the token embeddings before the first block.
+            yield return new LayerNormalizationLayer<T>(hiddenDimension);
+            for (int i = 0; i < numLayers; i++)
+            {
+                var block = new TransformerEncoderBlock<T>(
+                    hiddenDimension, numAttentionHeads, intermediateDimension, dropoutRate,
+                    new GELUActivation<T>(), TransformerNormPlacement.PreNorm);
+                if (block.AttentionLayer is MultiHeadAttentionLayer<T> attention)
+                {
+                    attention.ConfigurePositionalEncoding(PositionalEncodingType.ALiBi, maxSequenceLength: maxSequenceLength);
+                    attention.UseCausalMask = true;
+                }
+                yield return block;
+            }
+
+            yield return new LayerNormalizationLayer<T>(hiddenDimension);
+            if (pool)
+                yield return new SequenceTokenSliceLayer<T>(SequenceTokenSliceLayer<T>.Position.Last);
+        }
+    }
+
     /// <summary>
     /// Creates default layers for FinBERT (Financial BERT) model.
     /// </summary>
@@ -16537,47 +16607,8 @@ public static partial class LayerHelper<T>
         int numLayers = 12,
         int numSentimentClasses = 3,
         double dropoutRate = 0.1)
-    {
-        yield return new BertEmbeddingLayer<T>(
-            vocabularySize,
-            hiddenDimension,
-            maxSequenceLength,
-            dropoutProbability: dropoutRate);
-
-        // === Transformer Layers ===
-        // Each block is a RESIDUAL self-attention sublayer + RESIDUAL GELU-FFN sublayer with
-        // per-sublayer LayerNorm (Vaswani et al. 2017 §3.1; Devlin et al. 2019). The residual
-        // (skip) connections are ESSENTIAL — a plain sequential MHA -> LN -> FFN -> LN stack with
-        // no residual leaves a deep encoder without a gradient highway, so the embedding barely
-        // trains and the model collapses to a uniform, input-insensitive output after a few
-        // optimizer steps. TransformerEncoderBlock supplies the residual adds + linear FFN output.
-        for (int i = 0; i < numLayers; i++)
-        {
-            yield return new TransformerEncoderBlock<T>(
-                hiddenDimension, numAttentionHeads, intermediateDimension, dropoutRate,
-                new GELUActivation<T>());
-        }
-
-        // === Pooler ===
-        // Takes [CLS] token representation for classification
-        yield return new DenseLayer<T>(
-            outputSize: hiddenDimension,
-            activationFunction: new TanhActivation<T>());
-
-        // === Classification Head ===
-        // Final dropout before classification
-        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-
-        // Classification layer. Emits raw class logits — a LINEAR projection (Devlin et al.
-        // 2019 §4); softmax is applied downstream. activationFunction: null would fall back to
-        // DenseLayer's ReLU default and clamp negative logits to 0 (dead-ReLU collapse), so an
-        // explicit IdentityActivation is required.
-        yield return new DenseLayer<T>(
-            outputSize: numSentimentClasses,
-            activationFunction: new IdentityActivation<T>());
-
-        // Softmax for class probabilities (applied in model's forward pass)
-    }
+    => CreateFinancialBertEncoderLayers(vocabularySize, maxSequenceLength, 2, hiddenDimension, numAttentionHeads, intermediateDimension, numLayers, dropoutRate, dropoutRate, TransformerNormPlacement.PostNorm, pool: true)
+            .Concat(CreateFinancialClassificationHeadLayers(numSentimentClasses, dropoutRate));
 
     /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
     /// factory never read: the layers are sized from the other arguments (#2147).</summary>
@@ -16637,84 +16668,10 @@ public static partial class LayerHelper<T>
         int numLayers = 12,
         int numClasses = 2,
         double dropoutRate = 0.1,
-        string taskType = "classification")
-    {
-        yield return new BertEmbeddingLayer<T>(
-            vocabularySize, hiddenDimension, maxSequenceLength,
-            tokenTypeVocabularySize: 2, dropoutProbability: dropoutRate);
-
-        for (int i = 0; i < numLayers; i++)
-        {
-            yield return new TransformerEncoderBlock<T>(
-                hiddenDimension, numAttentionHeads, intermediateDimension, dropoutRate,
-                new GELUActivation<T>());
-        }
-
-        // === Task-Specific Output Head ===
-        // Different heads based on task type
-        if (taskType == "classification")
-        {
-            // Classification: [CLS] token pooling then classification
-            yield return new DenseLayer<T>(
-                outputSize: hiddenDimension,
-                activationFunction: new TanhActivation<T>());
-
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-
-            yield return new DenseLayer<T>(
-                outputSize: numClasses,
-                activationFunction: new IdentityActivation<T>());
-        }
-        else if (taskType == "ner")
-        {
-            // NER: Token-level classification for each position
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-
-            // Output for each token position
-            yield return new DenseLayer<T>(
-                outputSize: numClasses,  // Entity types (B-ORG, I-ORG, B-MONEY, etc.)
-                activationFunction: new IdentityActivation<T>());
-        }
-        else if (taskType == "qa")
-        {
-            // QA: Start and end position prediction
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-
-            // Combined start/end position prediction
-            yield return new DenseLayer<T>(
-                outputSize: 2,  // Start and end logits
-                activationFunction: new IdentityActivation<T>());
-        }
-        else
-        {
-            // Default to classification
-            yield return new DenseLayer<T>(
-                outputSize: hiddenDimension,
-                activationFunction: new TanhActivation<T>());
-
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-
-            yield return new DenseLayer<T>(
-                outputSize: numClasses,
-                activationFunction: new IdentityActivation<T>());
-        }
-    }
-
-    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
-    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
-    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
-    public static IEnumerable<ILayer<T>> CreateDefaultSECBERTLayers(
-        NeuralNetworkArchitecture<T> architecture,
-        int vocabularySize = 30522,
-        int maxSequenceLength = 512,
-        int hiddenDimension = 768,
-        int numAttentionHeads = 12,
-        int intermediateDimension = 3072,
-        int numLayers = 12,
-        int numClasses = 2,
-        double dropoutRate = 0.1,
-        string taskType = "classification")
-        => CreateDefaultSECBERTLayers(vocabularySize: vocabularySize, maxSequenceLength: maxSequenceLength, hiddenDimension: hiddenDimension, numAttentionHeads: numAttentionHeads, intermediateDimension: intermediateDimension, numLayers: numLayers, numClasses: numClasses, dropoutRate: dropoutRate, taskType: taskType);
+        FinancialNLPTaskType taskType = FinancialNLPTaskType.Classification)
+    => CreateFinancialBertEncoderLayers(vocabularySize, maxSequenceLength, 2, hiddenDimension, numAttentionHeads, intermediateDimension, numLayers, dropoutRate, dropoutRate, TransformerNormPlacement.PostNorm,
+            pool: taskType == FinancialNLPTaskType.Classification)
+            .Concat(CreateFinancialClassificationHeadLayers(numClasses, dropoutRate));
 
     /// <summary>
     /// Creates the default layer configuration for FinancialBERT (domain-adapted financial BERT).
@@ -16752,48 +16709,10 @@ public static partial class LayerHelper<T>
         int numLayers = 12,
         int numClasses = 3,
         double dropoutRate = 0.1,
-        string taskType = "sentiment")
-    {
-        yield return new BertEmbeddingLayer<T>(
-            vocabularySize, hiddenDimension, maxSequenceLength,
-            tokenTypeVocabularySize: 2, dropoutProbability: dropoutRate);
-
-        for (int i = 0; i < numLayers; i++)
-        {
-            yield return new TransformerEncoderBlock<T>(
-                hiddenDimension, numAttentionHeads, intermediateDimension, dropoutRate,
-                new GELUActivation<T>());
-        }
-
-        // === Task-Specific Output Head ===
-        // Pooler
-        yield return new DenseLayer<T>(
-            outputSize: hiddenDimension,
-            activationFunction: new TanhActivation<T>());
-
-        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-
-        // Classification head
-        yield return new DenseLayer<T>(
-            outputSize: numClasses,
-            activationFunction: new IdentityActivation<T>());
-    }
-
-    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
-    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
-    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
-    public static IEnumerable<ILayer<T>> CreateDefaultFinancialBERTLayers(
-        NeuralNetworkArchitecture<T> architecture,
-        int vocabularySize = 30522,
-        int maxSequenceLength = 512,
-        int hiddenDimension = 768,
-        int numAttentionHeads = 12,
-        int intermediateDimension = 3072,
-        int numLayers = 12,
-        int numClasses = 3,
-        double dropoutRate = 0.1,
-        string taskType = "sentiment")
-        => CreateDefaultFinancialBERTLayers(vocabularySize: vocabularySize, maxSequenceLength: maxSequenceLength, hiddenDimension: hiddenDimension, numAttentionHeads: numAttentionHeads, intermediateDimension: intermediateDimension, numLayers: numLayers, numClasses: numClasses, dropoutRate: dropoutRate, taskType: taskType);
+        FinancialNLPTaskType taskType = FinancialNLPTaskType.Classification)
+    => CreateFinancialBertEncoderLayers(vocabularySize, maxSequenceLength, 2, hiddenDimension, numAttentionHeads, intermediateDimension, numLayers, dropoutRate, dropoutRate, TransformerNormPlacement.PostNorm,
+            pool: taskType == FinancialNLPTaskType.Classification)
+            .Concat(CreateFinancialClassificationHeadLayers(numClasses, dropoutRate));
 
     /// <summary>
     /// Creates the default layer configuration for FinBERT-Tone (sentiment-focused FinBERT).
@@ -16830,36 +16749,8 @@ public static partial class LayerHelper<T>
         int numLayers = 12,
         int numToneClasses = 5,
         double dropoutRate = 0.1)
-    {
-        // Word, learned-position, and token-type embeddings are parallel lookup branches.
-        // The generated composite owns their addition, normalization, dropout, parameters,
-        // serialization, and shape/domain contracts.
-        yield return new BertEmbeddingLayer<T>(
-            vocabularySize, hiddenDimension, maxSequenceLength,
-            tokenTypeVocabularySize: 2, dropoutProbability: dropoutRate);
-
-        // Canonical residual BERT encoder blocks. Keeping attention/FFN internals inside the
-        // block prevents a residual-free sequential layer list from masquerading as BERT.
-        for (int i = 0; i < numLayers; i++)
-        {
-            yield return new TransformerEncoderBlock<T>(
-                hiddenDimension, numAttentionHeads, intermediateDimension, dropoutRate,
-                new GELUActivation<T>());
-        }
-
-        // === Tone Classification Head ===
-        // Pooler with tanh
-        yield return new DenseLayer<T>(
-            outputSize: hiddenDimension,
-            activationFunction: new TanhActivation<T>());
-
-        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-
-        // 5-class tone classifier
-        yield return new DenseLayer<T>(
-            outputSize: numToneClasses,
-            activationFunction: null);
-    }
+    => CreateFinancialBertEncoderLayers(vocabularySize, maxSequenceLength, 2, hiddenDimension, numAttentionHeads, intermediateDimension, numLayers, dropoutRate, dropoutRate, TransformerNormPlacement.PostNorm, pool: true)
+            .Concat(CreateFinancialClassificationHeadLayers(numToneClasses, dropoutRate));
 
     /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
     /// factory never read: the layers are sized from the other arguments (#2147).</summary>
@@ -16896,30 +16787,8 @@ public static partial class LayerHelper<T>
         int numLayers = 12,
         int numClasses = 3,
         double dropoutRate = 0.1)
-    {
-        // Token embeddings
-        yield return new EmbeddingLayer<T>(vocabularySize, hiddenDimension);
-        yield return LayerGraphContract.FromDerivedInput(
-            new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension), "token_ids");
-
-        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-
-        // GPT transformer blocks
-        for (int i = 0; i < numLayers; i++)
-        {
-            yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDimension) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(intermediateDimension, (IActivationFunction<T>)new GELUActivation<T>());
-            yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>?)null);
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-        }
-
-        yield return new LayerNormalizationLayer<T>();
-
-        // Classification head
-        yield return new DenseLayer<T>(architecture.OutputSize > 0 ? architecture.OutputSize : numClasses, (IActivationFunction<T>?)null);
-    }
+    => CreateLlamaDecoderLayers(vocabularySize, maxSequenceLength, hiddenDimension, numAttentionHeads, intermediateDimension, numLayers, pool: true)
+            .Concat(CreateFinancialClassificationHeadLayers(architecture.OutputSize > 0 ? architecture.OutputSize : numClasses, dropoutRate));
 
     /// <summary>
     /// Creates the default layer configuration for BloombergGPT-style model.
@@ -16940,30 +16809,8 @@ public static partial class LayerHelper<T>
         int numLayers = 24,
         int numClasses = 3,
         double dropoutRate = 0.1)
-    {
-        // Token and position embeddings
-        yield return new EmbeddingLayer<T>(vocabularySize, hiddenDimension);
-        yield return LayerGraphContract.FromDerivedInput(
-            new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension), "token_ids");
-
-        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-
-        // Transformer blocks
-        for (int i = 0; i < numLayers; i++)
-        {
-            yield return new LayerNormalizationLayer<T>();
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDimension) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(intermediateDimension, (IActivationFunction<T>)new GELUActivation<T>());
-            yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>?)null);
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-        }
-
-        yield return new LayerNormalizationLayer<T>();
-
-        // Classification head
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>?)null);
-    }
+    => CreateBloomDecoderLayers(vocabularySize, maxSequenceLength, hiddenDimension, numAttentionHeads, intermediateDimension, numLayers, dropoutRate, pool: true)
+            .Concat(CreateFinancialClassificationHeadLayers(numClasses, dropoutRate));
 
     /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
     /// factory never read: the layers are sized from the other arguments (#2147).</summary>
@@ -17000,44 +16847,8 @@ public static partial class LayerHelper<T>
         int numLayers = 12,
         int numClasses = 3,
         double dropoutRate = 0.1)
-    {
-        yield return new BertEmbeddingLayer<T>(
-            vocabularySize,
-            hiddenDimension,
-            maxSequenceLength,
-            dropoutProbability: dropoutRate);
-
-        // Shared transformer backbone
-        for (int i = 0; i < numLayers; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDimension) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(intermediateDimension, (IActivationFunction<T>)new GELUActivation<T>());
-            yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>?)null);
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            yield return new LayerNormalizationLayer<T>();
-        }
-
-        // Multi-agent classification head (primary output)
-        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new TanhActivation<T>());
-        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>?)null);
-    }
-
-    /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
-    /// factory never read: the layers are sized from the other arguments (#2147).</summary>
-    [Obsolete("The architecture is not read: the layers are sized from the other arguments. Call the overload without it (#2147).")]
-    public static IEnumerable<ILayer<T>> CreateDefaultFinMALayers(
-        NeuralNetworkArchitecture<T> architecture,
-        int vocabularySize = 32000,
-        int maxSequenceLength = 2048,
-        int hiddenDimension = 768,
-        int numAttentionHeads = 12,
-        int intermediateDimension = 3072,
-        int numLayers = 12,
-        int numClasses = 3,
-        double dropoutRate = 0.1)
-        => CreateDefaultFinMALayers(vocabularySize: vocabularySize, maxSequenceLength: maxSequenceLength, hiddenDimension: hiddenDimension, numAttentionHeads: numAttentionHeads, intermediateDimension: intermediateDimension, numLayers: numLayers, numClasses: numClasses, dropoutRate: dropoutRate);
+    => CreateLlamaDecoderLayers(vocabularySize, maxSequenceLength, hiddenDimension, numAttentionHeads, intermediateDimension, numLayers, pool: true)
+            .Concat(CreateFinancialClassificationHeadLayers(numClasses, dropoutRate));
 
     /// <summary>
     /// Creates the default layer configuration for InvestLM (Investment Language Model).
@@ -17058,31 +16869,8 @@ public static partial class LayerHelper<T>
         int numLayers = 12,
         int numClasses = 3,
         double dropoutRate = 0.1)
-    {
-        // Token and position embeddings
-        yield return new EmbeddingLayer<T>(vocabularySize, hiddenDimension);
-        yield return LayerGraphContract.FromDerivedInput(
-            new EmbeddingLayer<T>(maxSequenceLength, hiddenDimension), "token_ids");
-
-        yield return new LayerNormalizationLayer<T>();
-        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-
-        // Transformer blocks
-        for (int i = 0; i < numLayers; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (hiddenDimension) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(intermediateDimension, (IActivationFunction<T>)new GELUActivation<T>());
-            yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>?)null);
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            yield return new LayerNormalizationLayer<T>();
-        }
-
-        // Investment recommendation head
-        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new TanhActivation<T>());
-        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>?)null);
-    }
+    => CreateLlamaDecoderLayers(vocabularySize, maxSequenceLength, hiddenDimension, numAttentionHeads, intermediateDimension, numLayers, pool: true)
+            .Concat(CreateFinancialClassificationHeadLayers(numClasses, dropoutRate));
 
     /// <summary>Builds the same layers as the overload without <paramref name="architecture"/>, which this
     /// factory never read: the layers are sized from the other arguments (#2147).</summary>

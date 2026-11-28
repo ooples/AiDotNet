@@ -1,16 +1,11 @@
-using AiDotNet.LearningRateSchedulers;
-using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Finance.Interfaces;
-using ModelOptions = AiDotNet.Models.Options;
 using AiDotNet.Finance.Base;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LossFunctions;
-using AiDotNet.Models;
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 
 namespace AiDotNet.Finance.NLP;
@@ -46,7 +41,7 @@ namespace AiDotNet.Finance.NLP;
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("BloombergGPT: A Large Language Model for Finance", "https://arxiv.org/abs/2303.17564", Year = 2023, Authors = "Shijie Wu, Ozan Irsoy, Steven Lu, Vadim Dabravolski, Mark Dredze, Sebastian Gehrmann, Prabhanjan Kambadur, David Rosenberg, Gideon Mann")]
@@ -58,231 +53,73 @@ namespace AiDotNet.Finance.NLP;
                         + "first 1800 steps, reaching a final learning rate of 6e-6, which the paper "
                         + "gives as 0.1x the maximum. No batch size is declared because the run employs "
                         + "batch size warmup, so no single value holds.")]
-public partial class BloombergGPT<T> : FinancialNLPModelBase<T>
+public partial class BloombergGPT<T> : FinancialDecoderModelBase<T>
 {
-    #region Native Mode Fields
-
-    private ILayer<T>? _tokenEmbedding;
-    private ILayer<T>? _positionEmbedding;
-    private readonly List<ILayer<T>> _decoderLayers = [];
-    private ILayer<T>? _finalNorm;
-    private ILayer<T>? _outputHead;
-
-    #endregion
-
-    #region Shared Fields
-
-    private readonly ModelOptions.BloombergGPTOptions<T> _options;
+    private readonly BloombergGPTOptions<T> _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-    private double _dropout;
-
-    #endregion
-
-    #region Interface Properties
-
-    /// <inheritdoc/>
-
-    #endregion
-
-    #region Constructors
 
     /// <summary>
-    /// Creates a BloombergGPT network using a pretrained ONNX model.
+    /// Creates a BloombergGPT that runs a pretrained ONNX model.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the BloombergGPT model, BloombergGPT sets up the architecture and options. This prepares the model for training or inference.
-    /// </para>
-    /// </remarks>
+    /// <param name="architecture">The neural network architecture.</param>
+    /// <param name="onnxModelPath">Path to the ONNX model.</param>
+    /// <param name="options">The model options; the paper's defaults when null.</param>
+    /// <param name="optimizer">The optimizer; the paper's when null.</param>
     public BloombergGPT(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        ModelOptions.BloombergGPTOptions<T>? options = null,
+        BloombergGPTOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture, onnxModelPath, 
-               options?.MaxSequenceLength ?? 2048, 
-               options?.VocabularySize ?? 50257,
-               options?.HiddenDimension ?? 1024)
+        : base(architecture, onnxModelPath, OrDefault(options).MaxSequenceLength, OrDefault(options).VocabularySize,
+            OrDefault(options).HiddenDimension, ResolveClassCount(architecture, OrDefault(options).NumClasses))
     {
-        options ??= new ModelOptions.BloombergGPTOptions<T>();
-        _options = options;
+        _options = options ?? new BloombergGPTOptions<T>();
         Options = _options;
-        options.Validate();
-
-        _dropout = options.DropoutRate;
+        _options.Validate();
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
     /// <summary>
-    /// Creates a BloombergGPT network in native mode for training.
+    /// Creates a BloombergGPT built from native layers, which can be trained.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the BloombergGPT model, BloombergGPT sets up the architecture and options. This prepares the model for training or inference.
-    /// </para>
-    /// </remarks>
+    /// <param name="architecture">The neural network architecture; custom layers replace the encoder.</param>
+    /// <param name="options">The model options; the paper's defaults when null.</param>
+    /// <param name="optimizer">The optimizer; the paper's when null.</param>
+    /// <param name="lossFunction">The loss; cross-entropy on logits when null.</param>
     public BloombergGPT(
         NeuralNetworkArchitecture<T> architecture,
-        ModelOptions.BloombergGPTOptions<T>? options = null,
+        BloombergGPTOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture,
-               options?.MaxSequenceLength ?? 2048,
-               options?.VocabularySize ?? 50257,
-               options?.HiddenDimension ?? 1024,
-               3,
-               lossFunction)
+        : base(architecture, OrDefault(options).MaxSequenceLength, OrDefault(options).VocabularySize,
+            OrDefault(options).HiddenDimension, ResolveClassCount(architecture, OrDefault(options).NumClasses), lossFunction)
     {
-        options ??= new ModelOptions.BloombergGPTOptions<T>();
-        _options = options;
+        _options = options ?? new BloombergGPTOptions<T>();
         Options = _options;
-        options.Validate();
-
-        _dropout = options.DropoutRate;
+        _options.Validate();
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
-    #endregion
+    private static BloombergGPTOptions<T> OrDefault(BloombergGPTOptions<T>? options) => options ?? new BloombergGPTOptions<T>();
 
-    #region Initialization
+    /// <inheritdoc/>
+    protected override FinancialLanguageModelOptions<T> LanguageModelOptions => _options;
 
-    /// <summary>
-    /// Executes InitializeLayers for the BloombergGPT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the BloombergGPT model, InitializeLayers builds and wires up model components. This sets up the BloombergGPT architecture before use.
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc/>
+    protected override string ReleasedTokenizerDescription => "BloombergGPT's unigram tokenizer (131,072 tokens)";
+
+    /// <inheritdoc/>
     protected override void InitializeLayers()
-    {
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
-        }
-        else if (UseNativeMode)
-        {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultBloombergGPTLayers(
-                MaxSequenceLength, VocabularySize, 
-                HiddenDimension, _options.NumAttentionHeads, _options.NumLayers, _dropout));
-
-            ExtractLayerReferences();
-        }
-    }
-
-    /// <summary>
-    /// Executes ExtractLayerReferences for the BloombergGPT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the BloombergGPT model, ExtractLayerReferences performs a supporting step in the workflow. It keeps the BloombergGPT architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private void ExtractLayerReferences()
-    {
-        int idx = 0;
-        if (Layers.Count > idx) _tokenEmbedding = Layers[idx++];
-        if (Layers.Count > idx) _positionEmbedding = Layers[idx++];
-        idx++; // skip dropout
-
-        _decoderLayers.Clear();
-        for (int i = 0; i < _options.NumLayers; i++)
-        {
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-        }
-
-        if (idx < Layers.Count) _finalNorm = Layers[idx++];
-        if (idx < Layers.Count) _outputHead = Layers[idx];
-    }
-
-    #endregion
-
-    #region NeuralNetworkBase Overrides
-
-    /// <summary>
-    /// Executes TrainCore for the BloombergGPT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the BloombergGPT model, TrainCore performs a training step. This updates the BloombergGPT architecture so it learns from data.
-    /// </para>
-    /// </remarks>
-    protected override void TrainCore(Tensor<T> input, Tensor<T> target, Tensor<T> output)
-    {
-        SetTrainingMode(true);
-        _optimizer.UpdateParameters(Layers);
-        SetTrainingMode(false);
-    }
-
-    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
-    // exactly the same enumeration, so this said nothing the base does not already say.
-
-    /// <summary>
-    /// Executes SerializeModelSpecificData for the BloombergGPT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the BloombergGPT model, SerializeModelSpecificData saves or restores model-specific settings. This lets the BloombergGPT architecture be reused later.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Executes DeserializeModelSpecificData for the BloombergGPT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the BloombergGPT model, DeserializeModelSpecificData saves or restores model-specific settings. This lets the BloombergGPT architecture be reused later.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Executes ForecastNative for the BloombergGPT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the BloombergGPT model, ForecastNative produces predictions from input data. This is the main inference step of the BloombergGPT architecture.
-    /// </para>
-    /// </remarks>
-    protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
-    {
-        SetTrainingMode(false);
-        // FinancialModelBase dispatches prediction through ForecastNative rather than
-        // NeuralNetworkBase.PredictCore, so BloombergGPT must enter the canonical eager
-        // executor explicitly. Besides preserving the ordinary sequential loop, this
-        // activates per-layer materialize/release and post-forward registration when
-        // weight streaming was explicitly configured or auto-detected.
-        TryAutoEnableWeightStreaming(isTrainingOverride: false);
-        return PredictEager(input);
-    }
-
-    /// <summary>
-    /// Executes ValidateInputShape for the BloombergGPT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the BloombergGPT model, ValidateInputShape checks inputs and configuration. This protects the BloombergGPT architecture from mismatches and errors.
-    /// </para>
-    /// </remarks>
-    protected override void ValidateInputShape(Tensor<T> input)
-    {
-        if (input.Rank < 2) throw new ArgumentException("Input must be at least 2D.");
-    }
-
-    #endregion
+        => InitializeDecoderLayers(
+            pool => LayerHelper<T>.CreateBloomDecoderLayers(
+                VocabularySize, MaxSequenceLength, HiddenDimension, _options.NumAttentionHeads,
+                _options.IntermediateDimension, _options.NumLayers, _options.DropoutRate, pool),
+            NumSentimentClasses,
+            _options.DropoutRate);
 }
