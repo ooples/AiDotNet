@@ -61,7 +61,7 @@ public class StreamingValidationReleasesDeviceResultsTests
     /// <summary>
     /// The CPU half of the same leak. A scope frees device results only, so on the CPU each batch's prediction and loss
     /// buffers were fresh arrays left to the garbage collector. An LM head's are large-object-heap arrays (402 MB at
-    /// 2048 x 49152), collected only by a full GC: a 400-step HreLm run validating 8 batches every 5 steps held 22.5 GB of
+    /// 2048 x 49152), collected only by a full GC: a 400-step downstream LM run validating 8 batches every 5 steps held 22.5 GB of
     /// heap of which 0.36 GB was live. Validation now runs the forward and the loss in one arena with no output copy
     /// (Predict copied its output out of its own arena), and the arena hands every array back to the pool, so after the
     /// first batch the next ones reuse them: 67,502,904 bytes for 8 batches before, 373,152 after.

@@ -41,7 +41,7 @@ public sealed class ConfigureMethodCoverageCollection : Xunit.ICollectionFixture
 /// <remarks>
 /// <para>
 /// Why this exists: several "drop-in" Configure* methods on AiModelBuilder were found
-/// in HarmonicEngine field-testing to produce broken behavior with zero existing test
+/// in downstream field-testing to produce broken behavior with zero existing test
 /// coverage (BuildAsync+Adam top-1=0% uniform, GradientCheckpointing wrong chain rule,
 /// Int8Quantizer 0.36× speedup, FlashAttention top1=0% top5=100%). Each of those would
 /// have been caught by "train tiny model, assert top-1 > random chance".

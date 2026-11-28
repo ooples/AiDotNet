@@ -77,13 +77,7 @@ internal static class IndexTtsOps
     }
 
     /// <summary>Token ids as the float index tensor the embedding lookup takes.</summary>
-    public static Tensor<T> Ids<T>(IReadOnlyList<int> ids)
-    {
-        var ops = MathHelper.GetNumericOperations<T>();
-        var t = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) t[i] = ops.FromDouble(ids[i]);
-        return t;
-    }
+    public static Tensor<T> Ids<T>(IReadOnlyList<int> ids) => TtsIdTensors.From<T>(ids);
 
     /// <summary>GPT-2's <c>gelu_new</c>: <c>0.5 x (1 + tanh(√(2/π) (x + 0.044715 x³)))</c>.</summary>
     public static Tensor<T> NewGelu<T>(IEngine engine, Tensor<T> x)

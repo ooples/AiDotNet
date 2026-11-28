@@ -729,7 +729,7 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
     }
 
     private Vector<T> CreateStandardNormalVector(int length)
-        => SyntheticTensorOps<T>.StandardNormalVector(length, _random, BoxMullerGuard.FlooredComplement);
+        => SeededNoiseTensors.StandardNormalVector<T>(length, _random, guard: BoxMullerGuard.FlooredComplement);
 
     private static Vector<T> GetRow(Matrix<T> matrix, int row)
         => matrix.GetRow(row);

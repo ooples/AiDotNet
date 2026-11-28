@@ -6,7 +6,7 @@ import { type ProductSlug } from "../_shared/products.ts";
 import { checkoutOwner, rememberCheckoutOwner } from "../_shared/checkout-ownership.ts";
 
 // Product this webhook issues licenses for. All Stripe products created
-// for aidotnet.dev route through here; Harmonic Engine (and any future
+// for aidotnet.dev route through here; other products (and any future
 // products) will get their own webhook + edge function path.
 const WEBHOOK_PRODUCT: ProductSlug = "aidotnet";
 // Key prefix that the AiDotNet client library parses for online-validated

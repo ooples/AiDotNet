@@ -44,13 +44,7 @@ internal sealed class SeedTTSSpeechTokenizer<T>
     {
         var features = AnalyzeChannels(audio);
         var codes = Quantizer.Encode(features);
-        int frames = codes.GetLength(1);
-        var tokens = new Tensor<T>(new[] { frames });
-        for (int frame = 0; frame < frames; frame++)
-        {
-            tokens[frame] = NumOps.FromDouble(codes[0, frame]);
-        }
-        return tokens;
+        return TtsIdTensors.FromGridRow<T>(codes, 0);
     }
 
     public Tensor<T> Embed(Tensor<T> tokens)
@@ -232,12 +226,7 @@ internal sealed class SeedTTSTokenLanguageModel<T>
         return best;
     }
 
-    private Tensor<T> IdTensor(IReadOnlyList<int> ids)
-    {
-        var tensor = new Tensor<T>(new[] { 1, ids.Count });
-        for (int i = 0; i < ids.Count; i++) tensor[0, i] = NumOps.FromDouble(ids[i]);
-        return tensor;
-    }
+    private Tensor<T> IdTensor(IReadOnlyList<int> ids) => TtsIdTensors.From<T>(ids, new[] { 1, ids.Count });
 
     private int CheckedSpeech(int id) => MathPolyfill.Clamp(id, 0, _options.CodebookSize - 1);
     private int CheckedSpecialSpeech(int id) => MathPolyfill.Clamp(id, 0, _options.CodebookSize + 1);

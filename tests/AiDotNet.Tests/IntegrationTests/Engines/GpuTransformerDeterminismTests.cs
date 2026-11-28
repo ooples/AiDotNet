@@ -21,7 +21,7 @@ namespace AiDotNet.Tests.IntegrationTests.Engines;
 /// <c>architecture.RandomSeed</c> pinned (layer init fully deterministic),
 /// two back-to-back trainings of the same model on the same data in the
 /// same process produce DIFFERENT trained weights. Initial finding from
-/// the HarmonicEngine byte-LM consumer (Phase_PAPER_A_PathB_Int8_Sanity)
+/// a downstream byte-LM consumer (its int8 sanity run)
 /// where FP32 baseline top-1 oscillated 0%/3%/5%/6.5% across separate
 /// process invocations on GPU; on CPU within the same process, the
 /// parameter L2 norm differs by ~0.08 between Run A and Run B with

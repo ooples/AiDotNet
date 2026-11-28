@@ -943,7 +943,7 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
     #region Helpers
 
     private Vector<T> CreateStandardNormalVector(int size)
-        => SyntheticTensorOps<T>.StandardNormalVector(size, _random, BoxMullerGuard.Floored);
+        => SeededNoiseTensors.StandardNormalVector<T>(size, _random, guard: BoxMullerGuard.Floored);
 
     private static Tensor<T> VectorToTensor(Vector<T> v) => Tensor<T>.FromVector(v);
 

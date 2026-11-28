@@ -1192,7 +1192,7 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         int noiseDim = NoiseDimension;
         // Box-Muller from the seeded _random, both outputs of each pair, so the options seed makes the
         // draw reproducible (an engine random fill would bypass _random).
-        return SyntheticTensorOps<T>.StandardNormalPairTensor([batchSize, noiseDim], _random);
+        return SeededNoiseTensors.StandardNormalPairs<T>([batchSize, noiseDim], _random);
     }
 
     /// <summary>

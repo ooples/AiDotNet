@@ -174,6 +174,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         SampleObjectiveTrainingOptions options,
         CancellationToken cancellationToken)
     {
+        // The state snapshot, the restore and the result all act on the object that trains, not on whatever _model
+        // holds by the time this deferred build runs.
+        if (trainable is not IFullModel<T, TInput, TOutput> model)
+        {
+            throw new InvalidOperationException(
+                $"{trainable.GetType().Name} trains on samples but is not a full model of this builder's types, so its " +
+                "state cannot be saved or restored.");
+        }
         RejectBuildTimeAdversarialTraining(RobustnessBuildPath.SampleObjective);
         if (_preprocessingPipeline is not null || _targetPipeline is not null)
         {
@@ -203,6 +211,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         var trainLosses = new List<double>(options.Epochs);
         var validationLosses = new List<double>(options.Epochs);
         double bestValidation = double.PositiveInfinity;
+        byte[]? bestState = null;
+        bool lastEpochIsBest = true;
         int epochsWithoutImprovement = 0;
         bool earlyStop = false;
         string? stopReason = null;
@@ -254,6 +264,21 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     }
                     monitored = held / validation.Length;
                     validationLosses.Add(monitored);
+
+                    if (monitored < bestValidation)
+                    {
+                        bestValidation = monitored;
+                        epochsWithoutImprovement = 0;
+                        lastEpochIsBest = true;
+                        // The whole serialized state, not GetParameters: running statistics and other buffers
+                        // change in training too, and the input/target path keeps a DeepCopy of its best model.
+                        if (options.RestoreBestModel) bestState = SnapshotModelState(model);
+                    }
+                    else
+                    {
+                        epochsWithoutImprovement++;
+                        lastEpochIsBest = false;
+                    }
                 }
 
                 if (epochBridge is not null && !epochBridge.OnEpoch(epoch + 1, options.Epochs, numOps.FromDouble(monitored)))
@@ -263,19 +288,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     break;
                 }
 
-                if (validation.Length > 0 && options.EarlyStoppingPatience > 0)
+                if (validation.Length > 0 && options.EarlyStoppingPatience > 0
+                    && epochsWithoutImprovement >= options.EarlyStoppingPatience)
                 {
-                    if (monitored < bestValidation)
-                    {
-                        bestValidation = monitored;
-                        epochsWithoutImprovement = 0;
-                    }
-                    else if (++epochsWithoutImprovement >= options.EarlyStoppingPatience)
-                    {
-                        earlyStop = true;
-                        stopReason = $"The held-out objective did not improve for {options.EarlyStoppingPatience} epochs.";
-                        break;
-                    }
+                    earlyStop = true;
+                    stopReason = $"The held-out objective did not improve for {options.EarlyStoppingPatience} epochs.";
+                    break;
                 }
             }
         }
@@ -287,12 +305,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
         }
 
+        // As the input/target path returns its best step's model: the epoch with the lowest held-out objective.
+        if (bestState is not null && !lastEpochIsBest) RestoreModelState(model, bestState);
+
         var history = new Dictionary<string, List<double>> { ["train_loss"] = trainLosses };
         if (validationLosses.Count > 0) history["validation_loss"] = validationLosses;
 
         var optimizationResult = new OptimizationResult<T, TInput, TOutput>
         {
-            BestSolution = _model,
+            BestSolution = model,
             Iterations = steps,
             FitnessHistory = new Vector<T>(trainLosses.Select(numOps.FromDouble)),
             BestFitnessScore = numOps.FromDouble(validationLosses.Count > 0
@@ -303,5 +324,29 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return CreateOwnObjectiveResult(
             optimizationResult, preprocessingInfo: null, quantizationInfo: null, profilerSession,
             history, earlyStop, stopReason);
+    }
+
+    // The model's full state, taken and restored in place inside an internal persistence scope: a snapshot for early
+    // stopping is not a user save, so it does not need the ModelSave capability.
+    private static byte[] SnapshotModelState(IFullModel<T, TInput, TOutput> model)
+    {
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            return model.Serialize();
+        }
+    }
+
+    private static void RestoreModelState(IFullModel<T, TInput, TOutput> model, byte[] state)
+    {
+        // Deserialize may leave a network in inference mode; training ends in the mode it was in.
+        bool? wasTraining = (model as NeuralNetworks.NeuralNetworkBase<T>)?.IsTrainingMode;
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            model.Deserialize(state);
+        }
+        if (wasTraining is bool mode && model is NeuralNetworks.NeuralNetworkBase<T> network && network.IsTrainingMode != mode)
+        {
+            network.SetTrainingMode(mode);
+        }
     }
 }

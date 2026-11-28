@@ -26728,6 +26728,8 @@ AiDotNet.Models.Options.SampleObjectiveTrainingOptions.Epochs.get -> int
 AiDotNet.Models.Options.SampleObjectiveTrainingOptions.Epochs.set -> void
 AiDotNet.Models.Options.SampleObjectiveTrainingOptions.SampleObjectiveTrainingOptions() -> void
 AiDotNet.Models.Options.SampleObjectiveTrainingOptions.SampleObjectiveTrainingOptions(AiDotNet.Models.Options.SampleObjectiveTrainingOptions! other) -> void
+AiDotNet.Models.Options.SampleObjectiveTrainingOptions.RestoreBestModel.get -> bool
+AiDotNet.Models.Options.SampleObjectiveTrainingOptions.RestoreBestModel.set -> void
 AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ShuffleEachEpoch.get -> bool
 AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ShuffleEachEpoch.set -> void
 AiDotNet.Models.Options.SampleObjectiveTrainingOptions.ValidationFraction.get -> double

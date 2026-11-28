@@ -23,13 +23,7 @@ internal static class XttsOps<T>
         return layer;
     }
 
-    internal static Tensor<T> Ids(IEnumerable<int> values)
-    {
-        int[] ids = values.ToArray();
-        var result = new Tensor<T>(new[] { ids.Length });
-        for (int i = 0; i < ids.Length; i++) result[i] = NumOps.FromDouble(ids[i]);
-        return result;
-    }
+    internal static Tensor<T> Ids(IEnumerable<int> values) => TtsIdTensors.From<T>(values.ToArray());
 
     internal static int[] IdsOf(Tensor<T> values) => values.ToArray()
         .Select(value => (int)Math.Round(NumOps.ToDouble(value))).ToArray();

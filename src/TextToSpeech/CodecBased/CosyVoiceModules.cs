@@ -91,7 +91,7 @@ internal sealed class CosyVoiceFlow<T>
             return layer;
         }
         InputEmbedding = Add(new TiedEmbeddingLayer<T>(c.VocabSize, c.InputSize));
-        InputEmbedding.Reinitialize(() => Math.Sqrt(-2.0 * Math.Log(1.0 - initialization.NextDouble())) * Math.Cos(2.0 * Math.PI * initialization.NextDouble()));
+        InputEmbedding.Reinitialize(() => SeededNoiseTensors.NextStandardNormal(initialization));
         SpeakerProjection = Linear(c.SpeakerDim, c.OutputSize);
         if (c.Causal)
             UpsampleEncoder = new UpsampleConformerEncoder<T>(engine, layers, c.Encoder, c.Lookahead, initialization);
@@ -305,9 +305,7 @@ internal sealed class CosyVoiceFlow<T>
         var condition = TrainingPrompt(mel, random);
         double t = random.NextDouble();
         if (c.CosineTrainingTime) t = 1 - Math.Cos(t * 0.5 * Math.PI);
-        var noise = new Tensor<T>(new[] { 1, c.OutputSize, frames });
-        for (int i = 0; i < noise.Length; i++)
-            noise[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble()));
+        var noise = SeededNoiseTensors.StandardNormal<T>(new[] { 1, c.OutputSize, frames }, random);
         bool drop = !(random.NextDouble() > c.TrainingCfgRate);
         return Loss(mel, mu, ProjectSpeaker(xvector), condition, t, noise, drop, streaming);
     }
@@ -373,9 +371,7 @@ internal sealed class CosyVoiceFlow<T>
         double a = random.NextDouble(), b = random.NextDouble();
         double t = Math.Min(a, b), r = Math.Max(a, b);
         if (r - t < 1e-6) r = Math.Min(1.0, t + 1e-6);
-        var noise = new Tensor<T>(new[] { 1, c.OutputSize, frames });
-        for (int i = 0; i < noise.Length; i++)
-            noise[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble()));
+        var noise = SeededNoiseTensors.StandardNormal<T>(new[] { 1, c.OutputSize, frames }, random);
         double sigma = c.SigmaMin;
         var z = _engine.TensorAdd(_engine.TensorMultiplyScalar(noise, NumOps.FromDouble(1 - (1 - sigma) * t)),
             _engine.TensorMultiplyScalar(mel, NumOps.FromDouble(t)));
@@ -602,7 +598,7 @@ internal sealed class CosyVoiceLm<T>
         var c = configuration;
         TLayer Add<TLayer>(TLayer layer) where TLayer : LayerBase<T> { layers.Add(layer); return layer; }
         double Uniform(int fanIn) => (2 * initialization.NextDouble() - 1) / Math.Sqrt(fanIn);
-        Func<double> normal = () => Math.Sqrt(-2.0 * Math.Log(1.0 - initialization.NextDouble())) * Math.Cos(2.0 * Math.PI * initialization.NextDouble());
+        Func<double> normal = () => SeededNoiseTensors.NextStandardNormal(initialization);
         DenseLayer<T> Linear(int inputs, int outputs)
         {
             var layer = Add(new DenseLayer<T>(outputs, (IActivationFunction<T>)new IdentityActivation<T>()));

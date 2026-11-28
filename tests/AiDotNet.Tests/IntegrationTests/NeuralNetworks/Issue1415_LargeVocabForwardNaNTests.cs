@@ -19,7 +19,7 @@ namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 /// Repro + regression test for #1415 — MultiHeadAttentionLayer.Forward
 /// produces all-NaN output for specific inputs at large vocab (V=50,257).
 ///
-/// <para>Consumer-side diagnostic (HarmonicEngine) localized the bug to
+/// <para>A consumer-side diagnostic localized the bug to
 /// MHA[10] in a 2-layer Transformer trained at V=50,257. ~25% of input
 /// contexts produce all-NaN attention output even though:</para>
 /// <list type="bullet">

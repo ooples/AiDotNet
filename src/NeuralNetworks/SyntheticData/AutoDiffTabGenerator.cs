@@ -984,7 +984,7 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
     }
 
     private Vector<T> CreateStandardNormalVector(int length)
-        => SyntheticTensorOps<T>.StandardNormalVector(length, _random);
+        => SeededNoiseTensors.StandardNormalVector<T>(length, _random);
 
     #endregion
 

@@ -4681,7 +4681,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         //
         // exercised by NeuralNetworkBase.DeepCopy → Transformer..ctor →
         // ValidateCustomLayers re-running on an already-forwarded chain
-        // (HarmonicEngine PR #149 / #1333 repro).
+        // (a downstream report / #1333 repro).
         //
         // Crucially, the shorter side MUST explicitly declare a wildcard (-1)
         // leading dim. Otherwise we'd bless unrelated shapes — e.g.
@@ -4721,7 +4721,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // per-sample shape while the upstream layer keeps its batch-agnostic declaration. Neither
         // block fires -- one needs the longer side's leading dim >= 1, and it is -1 -- so DeepCopy
         // re-running the validator on an already-forwarded chain rejected a chain it had accepted at
-        // construction time (HarmonicEngine PR #149).
+        // construction time (a downstream report).
         //
         // Stripping a leading dim that is ITSELF a wildcard is the safest form of this strip, not a
         // looser one: "-1" IS the declaration that any batch is accepted. It cannot bless the

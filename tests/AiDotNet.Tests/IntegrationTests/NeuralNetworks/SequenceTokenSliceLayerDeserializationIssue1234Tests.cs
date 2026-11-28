@@ -19,7 +19,7 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks;
 /// or CLS-token pooling.
 ///
 /// <para>
-/// The reporter's specific impact (HarmonicEngine PR #105) was that
+/// The reporter's specific impact was that
 /// <c>OptimizerBase.InitializeRandomSolution</c> internally calls
 /// <c>Clone()</c> on the architecture every random restart, so even users
 /// who never explicitly serialized the network hit this on the first

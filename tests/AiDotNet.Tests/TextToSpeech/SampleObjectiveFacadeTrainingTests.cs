@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet.Audio.MusicGen;
@@ -25,9 +26,18 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </remarks>
 public class SampleObjectiveFacadeTrainingTests
 {
-    private static FastSpeech2<double> CreateModel()
+    private static FastSpeech2<double> CreateModel() =>
+        new FastSpeech2<double>(Architecture(), SmallOptions(), Adam());
+
+    private static NeuralNetworkArchitecture<double> Architecture() =>
+        new(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 16, outputSize: 80);
+
+    // Plain Adam at 1e-3: the paper's Noam schedule warms up over 4000 steps and would barely move in a test.
+    private static AiDotNet.Optimizers.AdamOptimizer<double, Tensor<double>, Tensor<double>> Adam() => new(null);
+
+    private static FastSpeech2Options SmallOptions()
     {
-        var options = new FastSpeech2Options
+        return new FastSpeech2Options
         {
             EncoderDim = 32,
             HiddenDim = 32,
@@ -41,11 +51,99 @@ public class SampleObjectiveFacadeTrainingTests
             // The energy target is raw frame energy whose MSE needs thousands of steps; ablated as in FastSpeech2PaperTests.
             UseEnergyPredictor = false,
         };
-        var arch = new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
-            inputSize: 16, outputSize: 80);
-        // Plain Adam at 1e-3: the paper's Noam schedule warms up over 4000 steps and would barely move in a test.
-        return new FastSpeech2<double>(arch, options,
-            new AiDotNet.Optimizers.AdamOptimizer<double, Tensor<double>, Tensor<double>>(null));
+    }
+
+    /// <summary>
+    /// FastSpeech 2 whose held-out objective follows a script, one value per epoch, and which records its parameters
+    /// at each epoch's evaluation (after that epoch's training steps).
+    /// </summary>
+    private sealed class ScriptedObjectiveFastSpeech2 : FastSpeech2<double>
+    {
+        private readonly double[] _script;
+        private int _evaluations;
+
+        public ScriptedObjectiveFastSpeech2(double[] script)
+            : base(Architecture(), SmallOptions(), Adam()) => _script = script;
+
+        public List<Vector<double>> ParametersAtEvaluation { get; } = new();
+
+        // State outside the parameters that training changes, as running statistics do: it travels only through the
+        // serialized model, so a parameters-only restore would leave it at the last epoch's value.
+        public int Buffer { get; private set; }
+
+        public override double EvaluateTrainingObjective(TtsTrainingSample<double> sample)
+        {
+            Buffer++;
+            ParametersAtEvaluation.Add(GetParameters().Clone());
+            return _script[_evaluations++];
+        }
+
+        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+        {
+            base.SerializeNetworkSpecificData(writer);
+            writer.Write(Buffer);
+        }
+
+        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+        {
+            base.DeserializeNetworkSpecificData(reader);
+            Buffer = reader.ReadInt32();
+        }
+    }
+
+    [Theory(Timeout = 180000)]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Build_EarlyStopping_ReturnsTheBestHeldOutEpochsModel(bool restoreBestModel)
+    {
+        await Task.Yield();
+        // Ten samples hold one out, so each epoch evaluates once. The objective is best at epoch 2 (1.0) and does
+        // not improve for the next two, so patience 2 stops after epoch 4.
+        var model = new ScriptedObjectiveFastSpeech2(new[] { 3.0, 1.0, 2.0, 2.0, 2.0, 2.0 });
+        var samples = Enumerable.Range(0, 10).Select(Sample).ToList();
+
+        var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+            .ConfigureModel(model)
+            .ConfigureSampleObjectiveTraining(new SampleObjectiveTrainingOptions
+            {
+                Epochs = 6,
+                EarlyStoppingPatience = 2,
+                RestoreBestModel = restoreBestModel,
+            })
+            .BuildAsync(samples);
+
+        Assert.Equal(new[] { 3.0, 1.0, 2.0, 2.0 }, result.GetTrainingMetricsHistory()!["validation_loss"]);
+        Assert.Equal(4, model.ParametersAtEvaluation.Count);
+        var best = model.ParametersAtEvaluation[1].ToArray();
+        var last = model.ParametersAtEvaluation[3].ToArray();
+        Assert.NotEqual(best, last);   // training moved the parameters, so the check below can tell them apart
+        Assert.Equal(restoreBestModel ? best : last, model.GetParameters().ToArray());
+        Assert.Equal(restoreBestModel ? 2 : 4, model.Buffer);
+        Assert.Same(model, result.Model);
+    }
+
+    [Fact(Timeout = 180000)]
+    public async Task Build_EarlyStopping_RestoringTheBestEpoch_KeepsTheTrainingMode()
+    {
+        await Task.Yield();
+        async Task<bool> TrainingModeAfterBuild(bool restoreBestModel)
+        {
+            var model = new ScriptedObjectiveFastSpeech2(new[] { 3.0, 1.0, 2.0, 2.0, 2.0, 2.0 });
+            await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+                .ConfigureModel(model)
+                .ConfigureSampleObjectiveTraining(new SampleObjectiveTrainingOptions
+                {
+                    Epochs = 6,
+                    EarlyStoppingPatience = 2,
+                    RestoreBestModel = restoreBestModel,
+                })
+                .BuildAsync(Enumerable.Range(0, 10).Select(Sample).ToList());
+            return model.IsTrainingMode;
+        }
+
+        // Restoring deserializes the model, which can leave a network in inference mode; the restored model ends in
+        // the mode a build without the restore ends in.
+        Assert.Equal(await TrainingModeAfterBuild(false), await TrainingModeAfterBuild(true));
     }
 
     private static Tensor<double> Recording(double baseHz)
