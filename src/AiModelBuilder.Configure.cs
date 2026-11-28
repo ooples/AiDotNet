@@ -886,13 +886,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureJitCompilation(
         AiDotNet.Configuration.JitCompilationConfig? config = null)
     {
-        _jitCompilationConfig = config ?? AiDotNet.Configuration.JitCompilationConfig.Default;
-        _jitCompilationConfig.Validate();
-        _jitCompilationExplicitlyConfigured = true;
-        if (!_jitCompilationConfig.Enabled)
-        {
-            _compilationOptions.Mode = Enums.ExecutionMode.Eager;
-        }
+        var explicitConfig = config ?? AiDotNet.Configuration.JitCompilationConfig.Default;
+        explicitConfig.Validate();
+        _explicitJitCompilationConfig = explicitConfig;
+        RecomputeEffectiveCompilationSettings();
         return this;
     }
 
@@ -907,23 +904,39 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     {
         var resolved = options is not null ? new CompilationOptions(options) : CompilationOptions.Default;
         resolved.Validate();
-        _compilationOptions = resolved;
-        _jitCompilationConfig = AiDotNet.Configuration.CompilationRuntimeSettings.ToJitCompilationConfig(
-            resolved,
-            _jitCompilationExplicitlyConfigured ? _jitCompilationConfig : null);
+        _requestedCompilationOptions = resolved;
+        RecomputeEffectiveCompilationSettings();
         return this;
+    }
+
+    /// <summary>
+    /// Re-derives the effective <see cref="CompilationOptions"/> and <see cref="AiDotNet.Configuration.JitCompilationConfig"/>
+    /// from the two caller-supplied sources. Neither source is ever overwritten by the other, so the order of
+    /// <c>ConfigureJitCompilation</c> / <c>ConfigureCompilation</c> calls cannot leave a stale opt-out behind: an
+    /// explicitly disabled JIT configuration forces Eager only while it is the active JIT configuration, and an Eager
+    /// compilation request disables the projected JIT view only while it is the active compilation request.
+    /// </summary>
+    private void RecomputeEffectiveCompilationSettings()
+    {
+        var effective = new CompilationOptions(_requestedCompilationOptions);
+        if (_explicitJitCompilationConfig is { Enabled: false })
+        {
+            effective.Mode = Enums.ExecutionMode.Eager;
+        }
+
+        _compilationOptions = effective;
+        _jitCompilationConfig = AiDotNet.Configuration.CompilationRuntimeSettings.ToJitCompilationConfig(
+            effective,
+            _explicitJitCompilationConfig);
     }
 
     private void ApplyCompilationSettings(bool setAsProcessDefault = true)
     {
-        _compilationOptions.Validate();
-        var effectiveJit = AiDotNet.Configuration.CompilationRuntimeSettings.ToJitCompilationConfig(
-            _compilationOptions,
-            _jitCompilationExplicitlyConfigured ? _jitCompilationConfig : null);
-        _jitCompilationConfig = effectiveJit;
+        _requestedCompilationOptions.Validate();
+        RecomputeEffectiveCompilationSettings();
         AiDotNet.Configuration.CompilationRuntimeSettings.Apply(
             _compilationOptions,
-            _jitCompilationExplicitlyConfigured ? effectiveJit : null,
+            _explicitJitCompilationConfig is not null ? _jitCompilationConfig : null,
             setAsProcessDefault: setAsProcessDefault);
     }
 

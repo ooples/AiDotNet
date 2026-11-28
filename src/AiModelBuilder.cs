@@ -270,8 +270,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     // Opt out with ConfigureJitCompilation(JitCompilationConfig.Disabled).
     private AiDotNet.Configuration.JitCompilationConfig? _jitCompilationConfig
         = AiDotNet.Configuration.JitCompilationConfig.Default;
-    private bool _jitCompilationExplicitlyConfigured;
-    // Unified compilation, CUDA-Graph, derived-weight caching, precision-tier, and Direct-PTX options (on by default).
+    // The JitCompilationConfig the caller passed to ConfigureJitCompilation, kept verbatim (null when never called).
+    // _jitCompilationConfig is always re-derived from this plus the requested CompilationOptions, so a temporary
+    // Eager or fusion opt-out never overwrites the caller's original explicit settings.
+    private AiDotNet.Configuration.JitCompilationConfig? _explicitJitCompilationConfig;
+    // The CompilationOptions the caller requested through ConfigureCompilation (on by default).
+    private CompilationOptions _requestedCompilationOptions = CompilationOptions.Default;
+    // Effective unified compilation, CUDA-Graph, derived-weight caching, precision-tier, and Direct-PTX options:
+    // the requested options, forced to Eager while an explicit JIT configuration disables compilation.
     private CompilationOptions _compilationOptions = CompilationOptions.Default;
     private bool _reportAccelerationAtBuild;
     private Action<string>? _accelerationLogger;

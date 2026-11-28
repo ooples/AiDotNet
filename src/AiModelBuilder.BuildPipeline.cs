@@ -3249,6 +3249,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     && microBatchBuffer is not null
                     && _model is NeuralNetworks.NeuralNetworkBase<T> flushNn)
                 {
+                    // The batch loop's last await can resume on a different ThreadPool thread, so re-assert
+                    // this build's thread-local compilation settings before the tail step reads them.
+                    ApplyCompilationSettings(setAsProcessDefault: false);
                     long stepBeforeFlush = globalStep;
                     (epochLoss, epochBatches, globalStep, lastValidationLoss, hasValidationLoss, lastCheckpointStep, stepBudgetReached) =
                         await FlushRemainingAccumulatedMicroBatchesAsync(

@@ -174,9 +174,13 @@ internal static class CompilationRuntimeSettings
                 SetInferenceCudaGraphOverride(openPlanType.MakeGenericType(typeof(double)), enableInferCudaGraph);
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Optional cross-assembly runtime hints never fail model construction on older Tensors packages.
+            // Optional cross-assembly runtime hints never fail model construction on older Tensors packages, but a
+            // throwing setter can leave the backend policy partially updated, so record it rather than discard it.
+            System.Diagnostics.Trace.TraceWarning(
+                "CompilationRuntimeSettings: applying the Tensors backend runtime policy failed; remaining policy " +
+                $"updates were skipped and the package defaults stay in effect for them. {ex.GetType().Name}: {ex.Message}");
         }
     }
 

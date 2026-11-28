@@ -43,12 +43,10 @@ public class CompilationOptions : ModelOptions
         EnableHybridFusionTileIr = other.EnableHybridFusionTileIr;
         EnableCudaGraphTrees = other.EnableCudaGraphTrees;
         EnableMultiBucketShapeRouting = other.EnableMultiBucketShapeRouting;
-        SequenceLengthBuckets = other.SequenceLengthBuckets is { Length: > 0 } seq
-            ? (int[])seq.Clone()
-            : (int[])DefaultSequenceBuckets.Clone();
-        BatchSizeBuckets = other.BatchSizeBuckets is { Length: > 0 } batch
-            ? (int[])batch.Clone()
-            : (int[])DefaultBatchBuckets.Clone();
+        // Copy the caller's buckets verbatim (independent arrays, no default substitution) so Validate() still
+        // rejects an empty or null bucket list on the copy exactly as it would on the original.
+        SequenceLengthBuckets = other.SequenceLengthBuckets is { } seq ? (int[])seq.Clone() : Array.Empty<int>();
+        BatchSizeBuckets = other.BatchSizeBuckets is { } batch ? (int[])batch.Clone() : Array.Empty<int>();
         EnableSegmentedBlockGraphs = other.EnableSegmentedBlockGraphs;
         EnableGpuResidentOptimizerScalars = other.EnableGpuResidentOptimizerScalars;
         EnableDevicePredicatedDynamicRouting = other.EnableDevicePredicatedDynamicRouting;

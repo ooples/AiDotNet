@@ -1071,9 +1071,20 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Unified compilation, CUDA-Graph, derived-weight caching, precision-tier, and Direct-PTX options carried from
     /// <c>AiModelBuilder.ConfigureCompilation</c>.
     /// </summary>
-    [JsonProperty]
-    public AiDotNet.Models.Options.CompilationOptions CompilationOptions { get; private set; }
-        = AiDotNet.Models.Options.CompilationOptions.Default;
+    [JsonIgnore]
+    public AiDotNet.Models.Options.CompilationOptions CompilationOptions
+    {
+        get => _compilationOptions ??= AiDotNet.Models.Options.CompilationOptions.Default;
+        private set => _compilationOptions = value;
+    }
+
+    /// <summary>
+    /// Serialized backing store for <see cref="CompilationOptions"/>. It has no initializer, so after deserialization a
+    /// null value means the payload predates the member, which lets <see cref="Deserialize"/> migrate a legacy
+    /// compilation opt-out (a saved <c>JitCompilationConfig</c> with <c>Enabled = false</c>) to <c>Eager</c>.
+    /// </summary>
+    [JsonProperty("CompilationOptions")]
+    private AiDotNet.Models.Options.CompilationOptions? _compilationOptions;
     /// <summary>Builder's determinism policy, re-asserted on every Predict.</summary>
     [JsonProperty]
     private bool AllowNondeterminism { get; set; }
@@ -6071,8 +6082,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 // Files saved before compilation was on by default carry no config: they get today's default, as a
                 // freshly built model does. An explicit opt-out was saved as a config with Enabled = false.
                 JitCompilationConfig = deserializedObject.JitCompilationConfig ?? AiDotNet.Configuration.JitCompilationConfig.Default;
-                CompilationOptions = deserializedObject.CompilationOptions is not null
-                    ? new AiDotNet.Models.Options.CompilationOptions(deserializedObject.CompilationOptions)
+                CompilationOptions = deserializedObject._compilationOptions is not null
+                    ? new AiDotNet.Models.Options.CompilationOptions(deserializedObject._compilationOptions)
                     : (JitCompilationConfig is { Enabled: false }
                         ? AiDotNet.Models.Options.CompilationOptions.Eager
                         : AiDotNet.Models.Options.CompilationOptions.Default);
