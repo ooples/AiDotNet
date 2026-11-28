@@ -1,15 +1,11 @@
-using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Finance.Interfaces;
-using ModelOptions = AiDotNet.Models.Options;
 using AiDotNet.Finance.Base;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LossFunctions;
-using AiDotNet.Models;
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 
 namespace AiDotNet.Finance.NLP;
@@ -57,13 +53,10 @@ namespace AiDotNet.Finance.NLP;
 // markets from data as a World Agent" (ICAIF'22) — an unrelated paper. SEC-BERT is introduced in
 // Loukas et al., "FiNER: Financial Numeric Entity Recognition for XBRL Tagging" (ACL 2022).
 [ResearchPaper("FiNER: Financial Numeric Entity Recognition for XBRL Tagging (introduces SEC-BERT)", "https://doi.org/10.18653/v1/2022.acl-long.303", Year = 2022, Authors = "Lefteris Loukas, Manos Fergadiotis, Ion Androutsopoulos, Prodromos Malakasiotis")]
-public partial class SECBERT<T> : FinancialNLPModelBase<T>, ITrainingObjectiveProvider<T>
+public partial class SECBERT<T> : FinancialBertModelBase<T>, ITrainingObjectiveProvider<T>
 {
-    #region Shared Fields
-
-    private readonly ModelOptions.SECBERTOptions<T> _options;
+    private readonly SECBERTOptions<T> _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-    private double _dropout;
 
     /// <inheritdoc/>
     public TrainingObjectiveKind TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
@@ -78,193 +71,67 @@ public partial class SECBERT<T> : FinancialNLPModelBase<T>, ITrainingObjectivePr
     /// <inheritdoc/>
     protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
-    #endregion
-
-    #region Interface Properties
-
-    /// <inheritdoc/>
-
-    #endregion
-
-    #region Constructors
-
     /// <summary>
-    /// Creates a SEC-BERT network using a pretrained ONNX model.
+    /// Creates a SECBERT that runs a pretrained ONNX model.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the SECBERT model, SECBERT sets up the architecture and options. This prepares the model for training or inference.
-    /// </para>
-    /// </remarks>
+    /// <param name="architecture">The neural network architecture.</param>
+    /// <param name="onnxModelPath">Path to the ONNX model.</param>
+    /// <param name="options">The model options; the paper's defaults when null.</param>
+    /// <param name="optimizer">The optimizer; the paper's when null.</param>
     public SECBERT(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        ModelOptions.SECBERTOptions<T>? options = null,
+        SECBERTOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture, onnxModelPath, 
-               options?.MaxSequenceLength ?? 512, 
-               options?.VocabularySize ?? 30522,
-               options?.HiddenDimension ?? 768)
+        : base(architecture, onnxModelPath, OrDefault(options).MaxSequenceLength, OrDefault(options).VocabularySize,
+            OrDefault(options).HiddenDimension, ResolveClassCount(architecture, OrDefault(options).NumClasses))
     {
-        options ??= new ModelOptions.SECBERTOptions<T>();
-        _options = options;
+        _options = options ?? new SECBERTOptions<T>();
         Options = _options;
-        options.Validate();
-
-        _dropout = options.DropoutRate;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
+        _options.Validate();
+        _optimizer = optimizer ?? CreatePaperOptimizer();
         InitializeLayers();
     }
 
     /// <summary>
-    /// Creates a SEC-BERT network in native mode for training.
+    /// Creates a SECBERT built from native layers, which can be trained.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the SECBERT model, SECBERT sets up the architecture and options. This prepares the model for training or inference.
-    /// </para>
-    /// </remarks>
+    /// <param name="architecture">The neural network architecture; custom layers replace the encoder.</param>
+    /// <param name="options">The model options; the paper's defaults when null.</param>
+    /// <param name="optimizer">The optimizer; the paper's when null.</param>
+    /// <param name="lossFunction">The loss; cross-entropy on logits when null.</param>
     public SECBERT(
         NeuralNetworkArchitecture<T> architecture,
-        ModelOptions.SECBERTOptions<T>? options = null,
+        SECBERTOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture,
-               options?.MaxSequenceLength ?? 512,
-               options?.VocabularySize ?? 30522,
-               options?.HiddenDimension ?? 768,
-               3, // numSentimentClasses
-               lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, OrDefault(options).MaxSequenceLength, OrDefault(options).VocabularySize,
+            OrDefault(options).HiddenDimension, ResolveClassCount(architecture, OrDefault(options).NumClasses), lossFunction)
     {
-        options ??= new ModelOptions.SECBERTOptions<T>();
-        _options = options;
+        _options = options ?? new SECBERTOptions<T>();
         Options = _options;
-        options.Validate();
-
-        _dropout = options.DropoutRate;
+        _options.Validate();
         _optimizer = optimizer ?? CreatePaperOptimizer();
-
         InitializeLayers();
     }
+
+    private static SECBERTOptions<T> OrDefault(SECBERTOptions<T>? options) => options ?? new SECBERTOptions<T>();
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
         => new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
-            new ModelOptions.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = _options.LearningRate,
                 UseAMSGrad = false,
             });
 
-    #endregion
+    /// <inheritdoc/>
+    protected override FinancialBertEncoderOptions<T> BertOptions => _options;
 
-    #region Initialization
-
-    /// <summary>
-    /// Executes InitializeLayers for the SECBERT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the SECBERT model, InitializeLayers builds and wires up model components. This sets up the SECBERT architecture before use.
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc/>
     protected override void InitializeLayers()
-    {
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
-        }
-        else if (UseNativeMode)
-        {
-            // The class count is the architecture's stated output size or, when it states none, the options'
-            // NumClasses. Reading only the architecture built a one-class head for an architecture that left its
-            // output unstated (as #2147 allows), and a one-class softmax has no gradient to train on.
-            Layers.AddRange(LayerHelper<T>.CreateDefaultSECBERTLayers(
-                vocabularySize: VocabularySize,
-                maxSequenceLength: MaxSequenceLength,
-                hiddenDimension: HiddenDimension,
-                numAttentionHeads: 12, // Default heads/layers
-                intermediateDimension: HiddenDimension * 4,
-                numLayers: 12,
-                numClasses: Architecture.OutputSize > 0 ? Architecture.OutputSize : _options.NumClasses,
-                dropoutRate: _dropout,
-                taskType: "classification"));
-
-        }
-    }
-
-    #endregion
-
-    #region NeuralNetworkBase Overrides
-
-    /// <summary>
-    /// Executes TrainCore for the SECBERT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the SECBERT model, TrainCore performs a training step. This updates the SECBERT architecture so it learns from data.
-    /// </para>
-    /// </remarks>
-    protected override void TrainCore(Tensor<T> input, Tensor<T> target, Tensor<T> output)
-    {
-        SetTrainingMode(true);
-        _optimizer.UpdateParameters(Layers);
-        SetTrainingMode(false);
-    }
-
-    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
-    // exactly the same enumeration, so this said nothing the base does not already say.
-
-    /// <summary>
-    /// Executes SerializeModelSpecificData for the SECBERT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the SECBERT model, SerializeModelSpecificData saves or restores model-specific settings. This lets the SECBERT architecture be reused later.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Executes DeserializeModelSpecificData for the SECBERT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the SECBERT model, DeserializeModelSpecificData saves or restores model-specific settings. This lets the SECBERT architecture be reused later.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Executes ForecastNative for the SECBERT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the SECBERT model, ForecastNative produces predictions from input data. This is the main inference step of the SECBERT architecture.
-    /// </para>
-    /// </remarks>
-    protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
-    {
-        SetTrainingMode(false);
-        var current = input;
-        foreach (var layer in Layers) current = layer.Forward(current);
-        return current;
-    }
-
-    /// <summary>
-    /// Executes ValidateInputShape for the SECBERT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the SECBERT model, ValidateInputShape checks inputs and configuration. This protects the SECBERT architecture from mismatches and errors.
-    /// </para>
-    /// </remarks>
-    protected override void ValidateInputShape(Tensor<T> input)
-    {
-        if (input.Rank < 2) throw new ArgumentException("Input must be at least 2D.");
-    }
-
-    #endregion
+        => InitializeBertLayers(
+            _options.NumAttentionHeads, _options.IntermediateDimension, _options.NumLayers, NumSentimentClasses,
+            _options.DropoutRate);
 }

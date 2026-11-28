@@ -1,16 +1,11 @@
-using AiDotNet.LearningRateSchedulers;
-using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Finance.Interfaces;
-using ModelOptions = AiDotNet.Models.Options;
 using AiDotNet.Finance.Base;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LossFunctions;
-using AiDotNet.Models;
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 
 namespace AiDotNet.Finance.NLP;
@@ -46,7 +41,7 @@ namespace AiDotNet.Finance.NLP;
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FinGPT: Open-Source Financial Large Language Models", "https://arxiv.org/abs/2306.06031", Year = 2023, Authors = "Hongyang Yang, Xiao-Yang Liu, Christina Dan Wang")]
@@ -54,223 +49,73 @@ namespace AiDotNet.Finance.NLP;
                 Source = "Yang et al. 2023, Sec. 4: the fine-tuning configuration gives a batch size of "
                         + "64, a learning rate of 2e-4 and 3 training epochs over a LoRA adapter of rank "
                         + "8. The optimizer is left unspecified because the paper names none.")]
-public partial class FinGPT<T> : FinancialNLPModelBase<T>
+public partial class FinGPT<T> : FinancialDecoderModelBase<T>
 {
-    #region Native Mode Fields
-
-    private ILayer<T>? _tokenEmbedding;
-    private ILayer<T>? _positionEmbedding;
-    private readonly List<ILayer<T>> _decoderLayers = [];
-    private ILayer<T>? _finalNorm;
-    private ILayer<T>? _outputHead;
-
-    #endregion
-
-    #region Shared Fields
-
-    private readonly ModelOptions.FinGPTOptions<T> _options;
+    private readonly FinGPTOptions<T> _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-    private double _dropout;
-
-    #endregion
-
-    #region Interface Properties
-
-    /// <inheritdoc/>
-
-    #endregion
-
-    #region Constructors
 
     /// <summary>
-    /// Creates a FinGPT network using a pretrained ONNX model.
+    /// Creates a FinGPT that runs a pretrained ONNX model.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinGPT model, FinGPT sets up the architecture and options. This prepares the model for training or inference.
-    /// </para>
-    /// </remarks>
+    /// <param name="architecture">The neural network architecture.</param>
+    /// <param name="onnxModelPath">Path to the ONNX model.</param>
+    /// <param name="options">The model options; the paper's defaults when null.</param>
+    /// <param name="optimizer">The optimizer; the paper's when null.</param>
     public FinGPT(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        ModelOptions.FinGPTOptions<T>? options = null,
+        FinGPTOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture, onnxModelPath, 
-               options?.MaxSequenceLength ?? 1024, 
-               options?.VocabularySize ?? 50257,
-               options?.HiddenDimension ?? 768)
+        : base(architecture, onnxModelPath, OrDefault(options).MaxSequenceLength, OrDefault(options).VocabularySize,
+            OrDefault(options).HiddenDimension, ResolveClassCount(architecture, OrDefault(options).NumClasses))
     {
-        options ??= new ModelOptions.FinGPTOptions<T>();
-        _options = options;
+        _options = options ?? new FinGPTOptions<T>();
         Options = _options;
-        options.Validate();
-
-        _dropout = options.DropoutRate;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
+        _options.Validate();
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
     /// <summary>
-    /// Creates a FinGPT network in native mode for training.
+    /// Creates a FinGPT built from native layers, which can be trained.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinGPT model, FinGPT sets up the architecture and options. This prepares the model for training or inference.
-    /// </para>
-    /// </remarks>
+    /// <param name="architecture">The neural network architecture; custom layers replace the encoder.</param>
+    /// <param name="options">The model options; the paper's defaults when null.</param>
+    /// <param name="optimizer">The optimizer; the paper's when null.</param>
+    /// <param name="lossFunction">The loss; cross-entropy on logits when null.</param>
     public FinGPT(
         NeuralNetworkArchitecture<T> architecture,
-        ModelOptions.FinGPTOptions<T>? options = null,
+        FinGPTOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture,
-               options?.MaxSequenceLength ?? 1024,
-               options?.VocabularySize ?? 50257,
-               options?.HiddenDimension ?? 768,
-               3,
-               lossFunction)
+        : base(architecture, OrDefault(options).MaxSequenceLength, OrDefault(options).VocabularySize,
+            OrDefault(options).HiddenDimension, ResolveClassCount(architecture, OrDefault(options).NumClasses), lossFunction)
     {
-        options ??= new ModelOptions.FinGPTOptions<T>();
-        _options = options;
+        _options = options ?? new FinGPTOptions<T>();
         Options = _options;
-        options.Validate();
-
-        _dropout = options.DropoutRate;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
+        _options.Validate();
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
-    #endregion
+    private static FinGPTOptions<T> OrDefault(FinGPTOptions<T>? options) => options ?? new FinGPTOptions<T>();
 
-    #region Initialization
+    /// <inheritdoc/>
+    protected override FinancialLanguageModelOptions<T> LanguageModelOptions => _options;
 
-    /// <summary>
-    /// Executes InitializeLayers for the FinGPT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinGPT model, InitializeLayers builds and wires up model components. This sets up the FinGPT architecture before use.
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc/>
+    protected override string ReleasedTokenizerDescription => "the Llama-2 SentencePiece tokenizer (32,000 pieces)";
+
+    /// <inheritdoc/>
     protected override void InitializeLayers()
-    {
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
-        }
-        else if (UseNativeMode)
-        {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultFinGPTLayers(
-                MaxSequenceLength, VocabularySize, 
-                HiddenDimension, 12, 12, _dropout));
-
-            ExtractLayerReferences();
-        }
-    }
-
-    /// <summary>
-    /// Executes ExtractLayerReferences for the FinGPT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinGPT model, ExtractLayerReferences performs a supporting step in the workflow. It keeps the FinGPT architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private void ExtractLayerReferences()
-    {
-        int idx = 0;
-        if (Layers.Count > idx) _tokenEmbedding = Layers[idx++];
-        if (Layers.Count > idx) _positionEmbedding = Layers[idx++];
-        idx++; // skip dropout
-
-        _decoderLayers.Clear();
-        for (int i = 0; i < 12; i++)
-        {
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-        }
-
-        if (idx < Layers.Count) _finalNorm = Layers[idx++];
-        if (idx < Layers.Count) _outputHead = Layers[idx];
-    }
-
-    #endregion
-
-    #region NeuralNetworkBase Overrides
-
-    /// <summary>
-    /// Executes TrainCore for the FinGPT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinGPT model, TrainCore performs a training step. This updates the FinGPT architecture so it learns from data.
-    /// </para>
-    /// </remarks>
-    protected override void TrainCore(Tensor<T> input, Tensor<T> target, Tensor<T> output)
-    {
-        SetTrainingMode(true);
-        _optimizer.UpdateParameters(Layers);
-        SetTrainingMode(false);
-    }
-
-    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
-    // exactly the same enumeration, so this said nothing the base does not already say.
-
-    /// <summary>
-    /// Executes SerializeModelSpecificData for the FinGPT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinGPT model, SerializeModelSpecificData saves or restores model-specific settings. This lets the FinGPT architecture be reused later.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Executes DeserializeModelSpecificData for the FinGPT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinGPT model, DeserializeModelSpecificData saves or restores model-specific settings. This lets the FinGPT architecture be reused later.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Executes ForecastNative for the FinGPT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinGPT model, ForecastNative produces predictions from input data. This is the main inference step of the FinGPT architecture.
-    /// </para>
-    /// </remarks>
-    protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
-    {
-        SetTrainingMode(false);
-        var current = input;
-        foreach (var layer in Layers) current = layer.Forward(current);
-        return current;
-    }
-
-    /// <summary>
-    /// Executes ValidateInputShape for the FinGPT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinGPT model, ValidateInputShape checks inputs and configuration. This protects the FinGPT architecture from mismatches and errors.
-    /// </para>
-    /// </remarks>
-    protected override void ValidateInputShape(Tensor<T> input)
-    {
-        if (input.Rank < 2) throw new ArgumentException("Input must be at least 2D.");
-    }
-
-    #endregion
+        => InitializeDecoderLayers(
+            pool => LayerHelper<T>.CreateLlamaDecoderLayers(
+                VocabularySize, MaxSequenceLength, HiddenDimension, _options.NumAttentionHeads,
+                _options.IntermediateDimension, _options.NumLayers, pool),
+            NumSentimentClasses,
+            _options.DropoutRate);
 }

@@ -547,6 +547,27 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         return _outputWeights;
     }
 
+    /// <summary>The output projection's bias, allocated if the layer has not run yet. Exposed for weight import.</summary>
+    internal Tensor<T> GetOutputBias()
+    {
+        EnsureWeightsAllocated();
+        return _outputBias;
+    }
+
+    /// <summary>The query projection's bias, or null when it has none. Exposed for weight import.</summary>
+    internal Tensor<T>? GetQueryBias()
+    {
+        EnsureWeightsAllocated();
+        return _queryBias;
+    }
+
+    /// <summary>The value projection's bias, or null when it has none. Exposed for weight import.</summary>
+    internal Tensor<T>? GetValueBias()
+    {
+        EnsureWeightsAllocated();
+        return _valueBias;
+    }
+
     /// <summary>
     /// Creates a new multi-head attention layer with the specified dimensions and head count.
     /// </summary>

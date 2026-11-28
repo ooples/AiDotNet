@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using System;
 
 namespace AiDotNet.Models.Options;
@@ -35,7 +36,7 @@ namespace AiDotNet.Models.Options;
 /// <b>Reference:</b> Yang et al., "FinGPT: Open-Source Financial Large Language Models", 2023.
 /// </para>
 /// </remarks>
-public class FinGPTOptions<T> : ModelOptions
+public class FinGPTOptions<T> : FinancialLanguageModelOptions<T>
 {
     /// <summary>
     /// Initializes a new instance with default FinGPT configuration.
@@ -46,6 +47,7 @@ public class FinGPTOptions<T> : ModelOptions
     /// Initializes a new instance by copying from another instance.
     /// </summary>
     public FinGPTOptions(FinGPTOptions<T> other)
+        : base(other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
         // Seed is declared on ModelOptions rather than in this file, so a copy constructor
@@ -60,37 +62,38 @@ public class FinGPTOptions<T> : ModelOptions
         NumLayers = other.NumLayers;
         NumClasses = other.NumClasses;
         DropoutRate = other.DropoutRate;
-        TaskType = other.TaskType;
     }
 
-    /// <summary>Maximum sequence length in tokens (default: 2048 for GPT-style).</summary>
-    public int MaxSequenceLength { get; set; } = 2048;
+    /// <summary>Maximum sequence length in tokens (default: 4096, Llama-2-7B's context).</summary>
+    [PaperDefault(4096, Source = "Touvron et al. 2023 (Llama 2), Table 1 and the released Llama-2-7b config: 4k context")]
+    public int MaxSequenceLength { get; set; } = 4096;
 
-    /// <summary>Vocabulary size (default: 50257 for GPT-2 tokenizer).</summary>
-    public int VocabularySize { get; set; } = 50257;
+    /// <summary>Vocabulary size (default: 32000, the Llama-2 SentencePiece vocabulary).</summary>
+    [PaperDefault(32000, Source = "Touvron et al. 2023 (Llama 2), Table 1 and the released Llama-2-7b config")]
+    public int VocabularySize { get; set; } = 32000;
 
-    /// <summary>Hidden dimension (default: 768 for GPT-2 small).</summary>
-    public int HiddenDimension { get; set; } = 768;
+    /// <summary>Hidden dimension (default: 4096, Llama-2-7B).</summary>
+    [PaperDefault(4096, Source = "Touvron et al. 2023 (Llama 2), Table 1 and the released Llama-2-7b config")]
+    public int HiddenDimension { get; set; } = 4096;
 
-    /// <summary>Number of attention heads (default: 12).</summary>
-    public int NumAttentionHeads { get; set; } = 12;
+    /// <summary>Number of attention heads (default: 32, Llama-2-7B).</summary>
+    [PaperDefault(32, Source = "Touvron et al. 2023 (Llama 2), Table 1 and the released Llama-2-7b config")]
+    public int NumAttentionHeads { get; set; } = 32;
 
-    /// <summary>Intermediate feed-forward dimension (default: 3072).</summary>
-    public int IntermediateDimension { get; set; } = 3072;
+    /// <summary>SwiGLU feed-forward width (default: 11008, Llama-2-7B).</summary>
+    [PaperDefault(11008, Source = "Touvron et al. 2023 (Llama 2), Table 1 and the released Llama-2-7b config: SwiGLU width")]
+    public int IntermediateDimension { get; set; } = 11008;
 
-    /// <summary>Number of transformer layers (default: 12).</summary>
-    public int NumLayers { get; set; } = 12;
+    /// <summary>Number of decoder blocks (default: 32, Llama-2-7B).</summary>
+    [PaperDefault(32, Source = "Touvron et al. 2023 (Llama 2), Table 1 and the released Llama-2-7b config")]
+    public int NumLayers { get; set; } = 32;
 
     /// <summary>Number of output classes for classification tasks (default: 3).</summary>
     public int NumClasses { get; set; } = 3;
 
-    /// <summary>Dropout rate (default: 0.1).</summary>
-    public double DropoutRate { get; set; } = 0.1;
-
-    /// <summary>
-    /// Task type: "classification", "generation", "qa" (default: "classification").
-    /// </summary>
-    public string TaskType { get; set; } = "classification";
+    /// <summary>Dropout rate (default: 0.0; Llama 2 is trained without dropout).</summary>
+    [PaperDefault(0.0, Source = "Touvron et al. 2023 (Llama 2), Table 1 and the released Llama-2-7b config: no dropout")]
+    public double DropoutRate { get; set; } = 0.0;
 
     /// <summary>
     /// Validates the FinGPT options.
@@ -103,6 +106,7 @@ public class FinGPTOptions<T> : ModelOptions
     /// </remarks>
     public void Validate()
     {
+        ValidateNLPOptions();
         if (MaxSequenceLength < 1)
             throw new ArgumentException("MaxSequenceLength must be at least 1.", nameof(MaxSequenceLength));
         if (VocabularySize < 1)
@@ -111,6 +115,8 @@ public class FinGPTOptions<T> : ModelOptions
             throw new ArgumentException("HiddenDimension must be at least 1.", nameof(HiddenDimension));
         if (NumAttentionHeads < 1)
             throw new ArgumentException("NumAttentionHeads must be at least 1.", nameof(NumAttentionHeads));
+        if (NumAttentionHeads >= 1 && HiddenDimension % NumAttentionHeads != 0)
+            throw new ArgumentException("HiddenDimension must be divisible by NumAttentionHeads.", nameof(NumAttentionHeads));
         if (IntermediateDimension < 1)
             throw new ArgumentException("IntermediateDimension must be at least 1.", nameof(IntermediateDimension));
         if (NumLayers < 1)
@@ -119,7 +125,5 @@ public class FinGPTOptions<T> : ModelOptions
             throw new ArgumentException("NumClasses must be at least 1.", nameof(NumClasses));
         if (DropoutRate < 0 || DropoutRate >= 1)
             throw new ArgumentException("DropoutRate must be between 0 (inclusive) and 1 (exclusive).", nameof(DropoutRate));
-        if (string.IsNullOrWhiteSpace(TaskType))
-            throw new ArgumentException("TaskType cannot be null or empty.", nameof(TaskType));
     }
 }

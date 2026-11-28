@@ -555,6 +555,22 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
+        // A forecast is inference: dropout off, batch normalization on its running statistics. The models used to switch
+        // to evaluation mode inside ForecastNative, which the training forward also reaches, so they trained in evaluation
+        // mode (dropout never applied, batch-norm running statistics never updated). The switch lives here instead, and
+        // the training forward calls ForecastChecked, which leaves the mode alone.
+        return InInferenceMode(() => ForecastChecked(input, quantiles));
+    }
+
+    /// <summary>
+    /// Computes the forecast <see cref="Forecast"/> returns, with the architecture checks, in whatever training mode the
+    /// model is in. The training forward uses it so dropout and batch normalization keep their training behaviour.
+    /// </summary>
+    /// <param name="input">The history, already checked to be non-null.</param>
+    /// <param name="quantiles">Quantiles to forecast, or null for a point forecast.</param>
+    /// <returns>The forecast.</returns>
+    protected Tensor<T> ForecastChecked(Tensor<T> input, double[]? quantiles)
+    {
         // Every forecast passes this check, whichever model computes it: the models override ForecastCore, not
         // Forecast, so none can return without it (#2147).
         RequireArchitectureAgreesWithInput();
@@ -981,8 +997,8 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
 
     /// <summary>
     /// Tape-aware forward pass used by <c>NeuralNetworkBase.TrainWithTape</c>.
-    /// Delegates to <see cref="Forecast(Tensor{T}, double[])"/> — the same
-    /// entry point <see cref="Predict"/> uses — so the training-path output
+    /// Runs the forecast pipeline <see cref="Forecast(Tensor{T}, double[])"/> uses — the same
+    /// one <see cref="Predict"/> reaches — so the training-path output
     /// shape matches the inference-path output shape by construction, at a
     /// single point in the Finance hierarchy.
     /// </summary>
@@ -997,8 +1013,8 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
     /// those steps inside its own <c>ForecastNative</c> / <c>ForwardNative</c>
     /// / <c>Forward</c> override, so flat iteration produces a wrong
     /// intermediate shape and the loss dies with <c>"Tensor shapes must
-    /// match"</c>. Delegating to <see cref="Forecast"/> uses the same
-    /// dispatch each model has already wired up for inference.
+    /// match"</c>. Running the forecast pipeline (without <see cref="Forecast"/>'s switch to
+    /// inference mode) uses the same dispatch each model has already wired up for inference.
     /// </para>
     /// <para>
     /// A model whose forward contains non-tape-aware ops (raw
@@ -1031,14 +1047,14 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The default implementation delegates to <see cref="Forecast"/> — which
-    /// works for models whose forecast path is a plain forward pass that
-    /// honors the current training-mode state.
+    /// The default implementation runs <see cref="ForecastChecked"/>, the forecast pipeline without
+    /// <see cref="Forecast"/>'s switch to inference mode. That works for models whose forecast path is a
+    /// plain forward pass. <c>ForecastNative</c> must not change the training mode itself:
+    /// <see cref="Forecast"/> already runs it in inference mode.
     /// </para>
     /// <para>
-    /// Subclasses whose <c>Forecast</c> calls <c>SetTrainingMode(false)</c>
-    /// (e.g. because inference does greedy decoding / no-dropout / no-noise
-    /// sampling), or whose <c>Forecast</c> runs a reverse-diffusion sampler
+    /// Subclasses whose inference path differs from the training forward (e.g. greedy
+    /// decoding), or whose <c>Forecast</c> runs a reverse-diffusion sampler
     /// instead of the denoiser training target, MUST override this method
     /// and route through the model's genuine forward-in-training pass
     /// (typically <c>ForwardNative</c> / <c>Forward</c>). The bug this seam
@@ -1052,7 +1068,8 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
     /// <returns>The model's output under training mode.</returns>
     protected virtual Tensor<T> ForwardNativeForTraining(Tensor<T> input)
     {
-        return Forecast(input, quantiles: null);
+        // Not Forecast: that runs in inference mode, which would turn dropout off for the training step.
+        return ForecastChecked(input, quantiles: null);
     }
 
     #endregion

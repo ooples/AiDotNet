@@ -1,16 +1,11 @@
-using AiDotNet.LearningRateSchedulers;
-using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Finance.Interfaces;
-using ModelOptions = AiDotNet.Models.Options;
 using AiDotNet.Finance.Base;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LossFunctions;
-using AiDotNet.Models;
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 
 namespace AiDotNet.Finance.NLP;
@@ -46,7 +41,7 @@ namespace AiDotNet.Finance.NLP;
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("PIXIU: A Large Language Model, Instruction Data and Evaluation Benchmark for Finance", "https://arxiv.org/abs/2306.05443", Year = 2023, Authors = "Qianqian Xie, Weiguang Han, Xiao Zhang, Yanzhao Lai, Min Peng, Alejandro Lopez-Lira, Jimin Huang")]
@@ -56,195 +51,73 @@ namespace AiDotNet.Finance.NLP;
                         + "batch size of 32, an initial learning rate of 8e-6 and a weight decay of "
                         + "1e-5. The two variants differ only in epoch count, so those shared values "
                         + "apply to both.")]
-public partial class FinMA<T> : FinancialNLPModelBase<T>
+public partial class FinMA<T> : FinancialDecoderModelBase<T>
 {
-    #region Shared Fields
-
-    private readonly ModelOptions.FinMAOptions<T> _options;
+    private readonly FinMAOptions<T> _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-    private double _dropout;
-    private int _numAgents;
-
-    #endregion
-
-    #region Interface Properties
-
-    /// <inheritdoc/>
-
-    #endregion
-
-    #region Constructors
 
     /// <summary>
-    /// Creates a FinMA network using a pretrained ONNX model.
+    /// Creates a FinMA that runs a pretrained ONNX model.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinMA model, FinMA sets up the architecture and options. This prepares the model for training or inference.
-    /// </para>
-    /// </remarks>
+    /// <param name="architecture">The neural network architecture.</param>
+    /// <param name="onnxModelPath">Path to the ONNX model.</param>
+    /// <param name="options">The model options; the paper's defaults when null.</param>
+    /// <param name="optimizer">The optimizer; the paper's when null.</param>
     public FinMA(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        ModelOptions.FinMAOptions<T>? options = null,
+        FinMAOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture, onnxModelPath, 
-               options?.MaxSequenceLength ?? 512, 
-               options?.VocabularySize ?? 32000,
-               options?.HiddenDimension ?? 768)
+        : base(architecture, onnxModelPath, OrDefault(options).MaxSequenceLength, OrDefault(options).VocabularySize,
+            OrDefault(options).HiddenDimension, ResolveClassCount(architecture, OrDefault(options).NumClasses))
     {
-        options ??= new ModelOptions.FinMAOptions<T>();
-        _options = options;
+        _options = options ?? new FinMAOptions<T>();
         Options = _options;
-        options.Validate();
-
-        _dropout = options.DropoutRate;
-        _numAgents = options.NumAgents;
+        _options.Validate();
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
     /// <summary>
-    /// Creates a FinMA network in native mode for training.
+    /// Creates a FinMA built from native layers, which can be trained.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinMA model, FinMA sets up the architecture and options. This prepares the model for training or inference.
-    /// </para>
-    /// </remarks>
+    /// <param name="architecture">The neural network architecture; custom layers replace the encoder.</param>
+    /// <param name="options">The model options; the paper's defaults when null.</param>
+    /// <param name="optimizer">The optimizer; the paper's when null.</param>
+    /// <param name="lossFunction">The loss; cross-entropy on logits when null.</param>
     public FinMA(
         NeuralNetworkArchitecture<T> architecture,
-        ModelOptions.FinMAOptions<T>? options = null,
+        FinMAOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture,
-               options?.MaxSequenceLength ?? 512,
-               options?.VocabularySize ?? 32000,
-               options?.HiddenDimension ?? 768,
-               3,
-               lossFunction)
+        : base(architecture, OrDefault(options).MaxSequenceLength, OrDefault(options).VocabularySize,
+            OrDefault(options).HiddenDimension, ResolveClassCount(architecture, OrDefault(options).NumClasses), lossFunction)
     {
-        options ??= new ModelOptions.FinMAOptions<T>();
-        _options = options;
+        _options = options ?? new FinMAOptions<T>();
         Options = _options;
-        options.Validate();
-
-        _dropout = options.DropoutRate;
-        _numAgents = options.NumAgents;
+        _options.Validate();
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
-    #endregion
+    private static FinMAOptions<T> OrDefault(FinMAOptions<T>? options) => options ?? new FinMAOptions<T>();
 
-    #region Initialization
+    /// <inheritdoc/>
+    protected override FinancialLanguageModelOptions<T> LanguageModelOptions => _options;
 
-    /// <summary>
-    /// Executes InitializeLayers for the FinMA.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinMA model, InitializeLayers builds and wires up model components. This sets up the FinMA architecture before use.
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc/>
+    protected override string ReleasedTokenizerDescription => "the LLaMA SentencePiece tokenizer (32,000 pieces)";
+
+    /// <inheritdoc/>
     protected override void InitializeLayers()
-    {
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
-        }
-        else if (UseNativeMode)
-        {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultFinMALayers(
-                vocabularySize: VocabularySize,
-                maxSequenceLength: MaxSequenceLength,
-                hiddenDimension: HiddenDimension,
-                numAttentionHeads: _options.NumAttentionHeads,
-                intermediateDimension: _options.IntermediateDimension,
-                numLayers: _options.NumLayers,
-                numClasses: _options.NumClasses,
-                dropoutRate: _dropout));
-
-        }
-    }
-
-    #endregion
-
-    #region NeuralNetworkBase Overrides
-
-    /// <summary>
-    /// Executes TrainCore for the FinMA.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinMA model, TrainCore performs a training step. This updates the FinMA architecture so it learns from data.
-    /// </para>
-    /// </remarks>
-    protected override void TrainCore(Tensor<T> input, Tensor<T> target, Tensor<T> output)
-    {
-        SetTrainingMode(true);
-        _optimizer.UpdateParameters(Layers);
-        SetTrainingMode(false);
-    }
-
-    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
-    // exactly the same enumeration, so this said nothing the base does not already say.
-
-    /// <summary>
-    /// Executes SerializeModelSpecificData for the FinMA.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinMA model, SerializeModelSpecificData saves or restores model-specific settings. This lets the FinMA architecture be reused later.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Executes DeserializeModelSpecificData for the FinMA.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinMA model, DeserializeModelSpecificData saves or restores model-specific settings. This lets the FinMA architecture be reused later.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Executes ForecastNative for the FinMA.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinMA model, ForecastNative produces predictions from input data. This is the main inference step of the FinMA architecture.
-    /// </para>
-    /// </remarks>
-    protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
-    {
-        SetTrainingMode(false);
-        var current = input;
-        foreach (var layer in Layers) current = layer.Forward(current);
-        return current;
-    }
-
-    /// <summary>
-    /// Executes ValidateInputShape for the FinMA.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinMA model, ValidateInputShape checks inputs and configuration. This protects the FinMA architecture from mismatches and errors.
-    /// </para>
-    /// </remarks>
-    protected override void ValidateInputShape(Tensor<T> input)
-    {
-        if (input.Rank < 2) throw new ArgumentException("Input must be at least 2D.");
-    }
-
-    #endregion
+        => InitializeDecoderLayers(
+            pool => LayerHelper<T>.CreateLlamaDecoderLayers(
+                VocabularySize, MaxSequenceLength, HiddenDimension, _options.NumAttentionHeads,
+                _options.IntermediateDimension, _options.NumLayers, pool),
+            NumSentimentClasses,
+            _options.DropoutRate);
 }

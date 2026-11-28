@@ -26764,3 +26764,194 @@ AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.CurrentTrueLabelBatch.
 AiDotNet.KnowledgeDistillation.DistillationLossAdapter<T>.Strategy.get -> AiDotNet.Interfaces.IDistillationStrategy<T>!
 AiDotNet.Interfaces.LarsGpuConfig.Epsilon.get -> float
 AiDotNet.Interfaces.LarsGpuConfig.Epsilon.init -> void
+*REMOVED*override AiDotNet.Finance.NLP.FinBERT<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Finance.Base.FinancialModelBase<T>.ForecastChecked(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, double[]? quantiles) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Finance.Base.FinancialNLPModelBase<T>.FinancialNLPModelBase(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, double maxGradNorm = 1) -> void
+*REMOVED*AiDotNet.Finance.NLP.FinBERT<T>.FinBERT(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.Models.Options.FinBERTOptions<T>? options = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null) -> void
+*REMOVED*AiDotNet.Finance.NLP.FinBERT<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Finance.NLP.FinBERT<T>.NumAttentionHeads.get -> int
+*REMOVED*AiDotNet.Finance.NLP.FinBERT<T>.NumLayers.get -> int
+*REMOVED*AiDotNet.Models.Options.BloombergGPTOptions<T>.TaskType.get -> string!
+*REMOVED*AiDotNet.Models.Options.BloombergGPTOptions<T>.TaskType.set -> void
+*REMOVED*AiDotNet.Models.Options.FinancialBERTOptions<T>.TaskType.get -> string!
+*REMOVED*AiDotNet.Models.Options.FinancialBERTOptions<T>.TaskType.set -> void
+*REMOVED*AiDotNet.Models.Options.FinancialBERTOptions<T>.UseMultiTask.get -> bool
+*REMOVED*AiDotNet.Models.Options.FinancialBERTOptions<T>.UseMultiTask.set -> void
+*REMOVED*AiDotNet.Models.Options.FinBERTOptions<T>.AttentionDropoutRate.get -> double
+*REMOVED*AiDotNet.Models.Options.FinBERTOptions<T>.AttentionDropoutRate.set -> void
+*REMOVED*AiDotNet.Models.Options.FinBERTOptions<T>.FreezeBaseModel.get -> bool
+*REMOVED*AiDotNet.Models.Options.FinBERTOptions<T>.FreezeBaseModel.set -> void
+*REMOVED*AiDotNet.Models.Options.FinBERTOptions<T>.HiddenDropoutRate.get -> double
+*REMOVED*AiDotNet.Models.Options.FinBERTOptions<T>.HiddenDropoutRate.set -> void
+*REMOVED*AiDotNet.Models.Options.FinBERTOptions<T>.MaxPositionEmbeddings.get -> int
+*REMOVED*AiDotNet.Models.Options.FinBERTOptions<T>.MaxPositionEmbeddings.set -> void
+*REMOVED*AiDotNet.Models.Options.FinBERTOptions<T>.NumFineTuneLayers.get -> int
+*REMOVED*AiDotNet.Models.Options.FinBERTOptions<T>.NumFineTuneLayers.set -> void
+*REMOVED*AiDotNet.Models.Options.FinBERTOptions<T>.PretrainedModelPath.get -> string!
+*REMOVED*AiDotNet.Models.Options.FinBERTOptions<T>.PretrainedModelPath.set -> void
+*REMOVED*AiDotNet.Models.Options.FinBERTOptions<T>.TypeVocabSize.get -> int
+*REMOVED*AiDotNet.Models.Options.FinBERTOptions<T>.TypeVocabSize.set -> void
+*REMOVED*AiDotNet.Models.Options.FinBERTOptions<T>.UsePretrainedWeights.get -> bool
+*REMOVED*AiDotNet.Models.Options.FinBERTOptions<T>.UsePretrainedWeights.set -> void
+*REMOVED*AiDotNet.Models.Options.FinBERTToneOptions<T>.UseFinegrainedTone.get -> bool
+*REMOVED*AiDotNet.Models.Options.FinBERTToneOptions<T>.UseFinegrainedTone.set -> void
+*REMOVED*AiDotNet.Models.Options.FinGPTOptions<T>.TaskType.get -> string!
+*REMOVED*AiDotNet.Models.Options.FinGPTOptions<T>.TaskType.set -> void
+*REMOVED*AiDotNet.Models.Options.FinMAOptions<T>.NumAgents.get -> int
+*REMOVED*AiDotNet.Models.Options.FinMAOptions<T>.NumAgents.set -> void
+*REMOVED*AiDotNet.Models.Options.InvestLMOptions<T>.TaskType.get -> string!
+*REMOVED*AiDotNet.Models.Options.InvestLMOptions<T>.TaskType.set -> void
+*REMOVED*AiDotNet.Models.Options.SECBERTOptions<T>.TaskType.get -> AiDotNet.Finance.Enums.FinancialNLPTaskType
+*REMOVED*AiDotNet.Models.Options.SECBERTOptions<T>.TaskType.set -> void
+*REMOVED*override AiDotNet.Finance.NLP.BloombergGPT<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+*REMOVED*override AiDotNet.Finance.NLP.BloombergGPT<T>.ForecastNative(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, double[]? quantiles) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.Finance.NLP.BloombergGPT<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+*REMOVED*override AiDotNet.Finance.NLP.BloombergGPT<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+*REMOVED*override AiDotNet.Finance.NLP.BloombergGPT<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
+*REMOVED*override AiDotNet.Finance.NLP.BloombergGPT<T>.ValidateInputShape(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> void
+*REMOVED*override AiDotNet.Finance.NLP.FinancialBERT<T>.ForecastNative(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, double[]? quantiles) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.Finance.NLP.FinancialBERT<T>.ValidateInputShape(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> void
+*REMOVED*override AiDotNet.Finance.NLP.FinBERT<T>.AnalyzeSentiment(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokenIds) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.Finance.NLP.FinBERT<T>.AnalyzeSentiment(string![]! texts) -> AiDotNet.Finance.Interfaces.SentimentResult<T>![]!
+*REMOVED*override AiDotNet.Finance.NLP.FinBERT<T>.Detokenize(int[]! tokenIds) -> string!
+*REMOVED*override AiDotNet.Finance.NLP.FinBERT<T>.Dispose(bool disposing) -> void
+*REMOVED*override AiDotNet.Finance.NLP.FinBERT<T>.GetEmbeddings(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokenIds) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.Finance.NLP.FinBERT<T>.GetFinancialMetrics() -> System.Collections.Generic.Dictionary<string!, T>!
+*REMOVED*override AiDotNet.Finance.NLP.FinBERT<T>.GetModelMetadata() -> AiDotNet.Models.ModelMetadata<T>!
+*REMOVED*override AiDotNet.Finance.NLP.FinBERT<T>.GetSequenceEmbedding(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokenIds) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.Finance.NLP.FinBERT<T>.HiddenDimension.get -> int
+*REMOVED*override AiDotNet.Finance.NLP.FinBERT<T>.MaxSequenceLength.get -> int
+*REMOVED*override AiDotNet.Finance.NLP.FinBERT<T>.NumSentimentClasses.get -> int
+*REMOVED*override AiDotNet.Finance.NLP.FinBERT<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.Finance.NLP.FinBERT<T>.SupportsTraining.get -> bool
+*REMOVED*override AiDotNet.Finance.NLP.FinBERT<T>.Tokenize(string! text, int? maxLength = null) -> int[]!
+*REMOVED*override AiDotNet.Finance.NLP.FinBERT<T>.TrainingUnavailableReason.get -> string?
+*REMOVED*override AiDotNet.Finance.NLP.FinBERT<T>.UseNativeMode.get -> bool
+*REMOVED*override AiDotNet.Finance.NLP.FinBERT<T>.ValidateCustomLayers(System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<T>!>! layers) -> void
+*REMOVED*override AiDotNet.Finance.NLP.FinBERT<T>.VocabularySize.get -> int
+*REMOVED*override AiDotNet.Finance.NLP.FinBERTTone<T>.ForecastNative(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, double[]? quantiles) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.Finance.NLP.FinBERTTone<T>.ValidateInputShape(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> void
+*REMOVED*override AiDotNet.Finance.NLP.FinGPT<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+*REMOVED*override AiDotNet.Finance.NLP.FinGPT<T>.ForecastNative(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, double[]? quantiles) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.Finance.NLP.FinGPT<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+*REMOVED*override AiDotNet.Finance.NLP.FinGPT<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+*REMOVED*override AiDotNet.Finance.NLP.FinGPT<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
+*REMOVED*override AiDotNet.Finance.NLP.FinGPT<T>.ValidateInputShape(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> void
+*REMOVED*override AiDotNet.Finance.NLP.FinMA<T>.ForecastNative(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, double[]? quantiles) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.Finance.NLP.FinMA<T>.ValidateInputShape(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> void
+*REMOVED*override AiDotNet.Finance.NLP.InvestLM<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+*REMOVED*override AiDotNet.Finance.NLP.InvestLM<T>.ForecastNative(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, double[]? quantiles) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.Finance.NLP.InvestLM<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+*REMOVED*override AiDotNet.Finance.NLP.InvestLM<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+*REMOVED*override AiDotNet.Finance.NLP.InvestLM<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
+*REMOVED*override AiDotNet.Finance.NLP.InvestLM<T>.ValidateInputShape(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> void
+*REMOVED*override AiDotNet.Finance.NLP.SECBERT<T>.ForecastNative(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, double[]? quantiles) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.Finance.NLP.SECBERT<T>.ValidateInputShape(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> void
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultFinancialBERTLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int vocabularySize = 30522, int maxSequenceLength = 512, int hiddenDimension = 768, int numAttentionHeads = 12, int intermediateDimension = 3072, int numLayers = 12, int numClasses = 3, double dropoutRate = 0.1, string! taskType = "sentiment") -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultFinancialBERTLayers(int vocabularySize = 30522, int maxSequenceLength = 512, int hiddenDimension = 768, int numAttentionHeads = 12, int intermediateDimension = 3072, int numLayers = 12, int numClasses = 3, double dropoutRate = 0.1, string! taskType = "sentiment") -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultFinMALayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int maxSequenceLength = 512, int vocabularySize = 32000, int numAgents = 4, int hiddenSize = 768, int numAttentionHeads = 12, int numHiddenLayers = 12, double dropoutProbability = 0.1) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultFinMALayers(int maxSequenceLength = 512, int vocabularySize = 32000, int numAgents = 4, int hiddenSize = 768, int numAttentionHeads = 12, int numHiddenLayers = 12, double dropoutProbability = 0.1) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultSECBERTLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int vocabularySize = 30522, int maxSequenceLength = 512, int hiddenDimension = 768, int numAttentionHeads = 12, int intermediateDimension = 3072, int numLayers = 12, int numClasses = 2, double dropoutRate = 0.1, string! taskType = "classification") -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultSECBERTLayers(int vocabularySize = 30522, int maxSequenceLength = 512, int hiddenDimension = 768, int numAttentionHeads = 12, int intermediateDimension = 3072, int numLayers = 12, int numClasses = 2, double dropoutRate = 0.1, string! taskType = "classification") -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+AiDotNet.Finance.Base.FinancialDecoderModelBase<T>
+AiDotNet.Finance.Base.FinancialBertModelBase<T>
+AiDotNet.Models.Options.FinancialBertEncoderOptions<T>
+AiDotNet.Models.Options.FinancialLanguageModelOptions<T>
+AiDotNet.Finance.Base.FinancialDecoderModelBase<T>.FinancialDecoderModelBase(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int maxSequenceLength, int vocabularySize, int hiddenDimension, int numClasses, AiDotNet.Interfaces.ILossFunction<T>? lossFunction) -> void
+AiDotNet.Finance.Base.FinancialDecoderModelBase<T>.InitializeDecoderLayers(System.Func<bool, System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!>! decoder, int numClasses, double dropoutRate) -> void
+abstract AiDotNet.Finance.Base.FinancialDecoderModelBase<T>.ReleasedTokenizerDescription.get -> string!
+override sealed AiDotNet.Finance.Base.FinancialDecoderModelBase<T>.SequencePoolingPosition.get -> AiDotNet.NeuralNetworks.Layers.SequenceTokenSliceLayer<T>.Position
+override AiDotNet.Finance.Base.FinancialDecoderModelBase<T>.ValidateInputShape(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> void
+AiDotNet.Finance.Base.FinancialDecoderModelBase<T>.FinancialDecoderModelBase(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, int maxSequenceLength, int vocabularySize, int hiddenDimension, int numClasses) -> void
+override AiDotNet.Finance.Base.FinancialDecoderModelBase<T>.CreateDefaultTokenizer() -> AiDotNet.Tokenization.Interfaces.ITokenizer!
+abstract AiDotNet.Finance.Base.FinancialNLPModelBase<T>.SequencePoolingPosition.get -> AiDotNet.NeuralNetworks.Layers.SequenceTokenSliceLayer<T>.Position
+AiDotNet.Finance.Base.FinancialNLPModelBase<T>.EncoderLayerCount.get -> int
+abstract AiDotNet.Finance.Base.FinancialNLPModelBase<T>.CreateDefaultTokenizer() -> AiDotNet.Tokenization.Interfaces.ITokenizer!
+abstract AiDotNet.Finance.Base.FinancialNLPModelBase<T>.LanguageModelOptions.get -> AiDotNet.Models.Options.FinancialLanguageModelOptions<T>!
+AiDotNet.Finance.Base.FinancialNLPModelBase<T>.IsSequenceLevelTask.get -> bool
+static AiDotNet.Finance.Base.FinancialNLPModelBase<T>.ResolveClassCount(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int optionsClassCount) -> int
+AiDotNet.Finance.Base.FinancialBertModelBase<T>.FinancialBertModelBase(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, int maxSequenceLength, int vocabularySize, int hiddenDimension, int numClasses) -> void
+override AiDotNet.Finance.Base.FinancialNLPModelBase<T>.ForecastNative(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, double[]? quantiles) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Finance.Base.FinancialBertModelBase<T>.FinancialBertModelBase(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int maxSequenceLength, int vocabularySize, int hiddenDimension, int numClasses, AiDotNet.Interfaces.ILossFunction<T>? lossFunction) -> void
+override sealed AiDotNet.Finance.Base.FinancialBertModelBase<T>.LanguageModelOptions.get -> AiDotNet.Models.Options.FinancialLanguageModelOptions<T>!
+AiDotNet.Finance.Base.FinancialNLPModelBase<T>.InitializeEncoderAndHead(System.Func<System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!>! defaultEncoder, System.Func<System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!>! defaultHead) -> void
+abstract AiDotNet.Finance.Base.FinancialBertModelBase<T>.BertOptions.get -> AiDotNet.Models.Options.FinancialBertEncoderOptions<T>!
+AiDotNet.Finance.Base.FinancialBertModelBase<T>.InitializeBertLayers(int numAttentionHeads, int intermediateDimension, int numLayers, int numClasses, double hiddenDropoutRate) -> void
+override AiDotNet.Finance.Base.FinancialBertModelBase<T>.ForecastOnnx(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Finance.Base.FinancialBertModelBase<T>.CreateDefaultTokenizer() -> AiDotNet.Tokenization.Interfaces.ITokenizer!
+override sealed AiDotNet.Finance.Base.FinancialBertModelBase<T>.SequencePoolingPosition.get -> AiDotNet.NeuralNetworks.Layers.SequenceTokenSliceLayer<T>.Position
+AiDotNet.Finance.Base.FinancialNLPModelBase<T>.SetClassLabels(System.Collections.Generic.IReadOnlyList<string!>! labels) -> void
+override AiDotNet.Finance.Base.FinancialBertModelBase<T>.ValidateInputShape(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> void
+AiDotNet.Finance.Base.FinancialNLPModelBase<T>.Tokenizer.get -> AiDotNet.Tokenization.Interfaces.ITokenizer!
+override AiDotNet.Finance.Base.FinancialNLPModelBase<T>.ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared) -> AiDotNet.Models.Parameters.ParameterSlotRole
+override AiDotNet.Finance.Base.FinancialNLPModelBase<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Finance.Base.FinancialNLPModelBase<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
+override AiDotNet.Finance.NLP.SECBERT<T>.BertOptions.get -> AiDotNet.Models.Options.FinancialBertEncoderOptions<T>!
+override AiDotNet.Finance.NLP.InvestLM<T>.ReleasedTokenizerDescription.get -> string!
+override AiDotNet.Finance.NLP.InvestLM<T>.LanguageModelOptions.get -> AiDotNet.Models.Options.FinancialLanguageModelOptions<T>!
+override AiDotNet.Finance.NLP.FinMA<T>.LanguageModelOptions.get -> AiDotNet.Models.Options.FinancialLanguageModelOptions<T>!
+override AiDotNet.Finance.NLP.FinGPT<T>.ReleasedTokenizerDescription.get -> string!
+override AiDotNet.Finance.NLP.FinGPT<T>.LanguageModelOptions.get -> AiDotNet.Models.Options.FinancialLanguageModelOptions<T>!
+override AiDotNet.Finance.NLP.FinMA<T>.ReleasedTokenizerDescription.get -> string!
+override AiDotNet.Finance.NLP.FinBERTTone<T>.BertOptions.get -> AiDotNet.Models.Options.FinancialBertEncoderOptions<T>!
+AiDotNet.Finance.NLP.FinBERT<T>.FinBERT(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.Models.Options.FinBERTOptions<T>? options = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null) -> void
+override AiDotNet.Finance.NLP.FinBERT<T>.BertOptions.get -> AiDotNet.Models.Options.FinancialBertEncoderOptions<T>!
+override AiDotNet.Finance.NLP.FinancialBERT<T>.BertOptions.get -> AiDotNet.Models.Options.FinancialBertEncoderOptions<T>!
+override AiDotNet.Finance.NLP.BloombergGPT<T>.ReleasedTokenizerDescription.get -> string!
+override AiDotNet.Finance.NLP.BloombergGPT<T>.LanguageModelOptions.get -> AiDotNet.Models.Options.FinancialLanguageModelOptions<T>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateLlamaDecoderLayers(int vocabularySize, int maxSequenceLength, int hiddenDimension, int numAttentionHeads, int intermediateDimension, int numLayers, bool pool) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateFinancialBertEncoderLayers(int vocabularySize, int maxPositionEmbeddings, int typeVocabularySize, int hiddenDimension, int numAttentionHeads, int intermediateDimension, int numLayers, double hiddenDropoutRate, double attentionDropoutRate, AiDotNet.Enums.TransformerNormPlacement normPlacement, bool pool) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateBloomDecoderLayers(int vocabularySize, int maxSequenceLength, int hiddenDimension, int numAttentionHeads, int intermediateDimension, int numLayers, double dropoutRate, bool pool) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultFinancialBERTLayers(int vocabularySize = 30522, int maxSequenceLength = 512, int hiddenDimension = 768, int numAttentionHeads = 12, int intermediateDimension = 3072, int numLayers = 12, int numClasses = 3, double dropoutRate = 0.1, AiDotNet.Finance.Enums.FinancialNLPTaskType taskType = AiDotNet.Finance.Enums.FinancialNLPTaskType.Classification) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultSECBERTLayers(int vocabularySize = 30522, int maxSequenceLength = 512, int hiddenDimension = 768, int numAttentionHeads = 12, int intermediateDimension = 3072, int numLayers = 12, int numClasses = 2, double dropoutRate = 0.1, AiDotNet.Finance.Enums.FinancialNLPTaskType taskType = AiDotNet.Finance.Enums.FinancialNLPTaskType.Classification) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateFinancialClassificationHeadLayers(int numClasses, double dropoutRate) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+AiDotNet.Models.Options.FinancialLanguageModelOptions<T>.FinancialLanguageModelOptions() -> void
+AiDotNet.Models.Options.FinancialLanguageModelOptions<T>.UseDefaultClassificationHead.get -> bool
+AiDotNet.Models.Options.FinancialLanguageModelOptions<T>.FinancialLanguageModelOptions(AiDotNet.Models.Options.FinancialLanguageModelOptions<T>! other) -> void
+AiDotNet.Models.Options.FinBERTOptions<T>.Validate() -> void
+AiDotNet.Models.Options.FinancialLanguageModelOptions<T>.ClassificationHeadFactory.get -> System.Func<System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!>?
+AiDotNet.Models.Options.FinancialLanguageModelOptions<T>.TaskType.set -> void
+AiDotNet.Models.Options.FinancialBertEncoderOptions<T>.FinancialBertEncoderOptions() -> void
+AiDotNet.Models.Options.FinancialLanguageModelOptions<T>.TaskType.get -> AiDotNet.Finance.Enums.FinancialNLPTaskType
+AiDotNet.Models.Options.FinancialLanguageModelOptions<T>.ClassificationHeadFactory.set -> void
+AiDotNet.Models.Options.FinancialLanguageModelOptions<T>.NumFineTuneLayers.get -> int
+AiDotNet.Models.Options.FinancialLanguageModelOptions<T>.Tokenizer.get -> AiDotNet.Tokenization.Interfaces.ITokenizer?
+AiDotNet.Models.Options.FinancialLanguageModelOptions<T>.Tokenizer.set -> void
+AiDotNet.Models.Options.FinancialLanguageModelOptions<T>.FreezeBaseModel.set -> void
+AiDotNet.Models.Options.FinancialLanguageModelOptions<T>.UseDefaultClassificationHead.set -> void
+AiDotNet.Models.Options.FinancialBertEncoderOptions<T>.FinancialBertEncoderOptions(AiDotNet.Models.Options.FinancialBertEncoderOptions<T>! other) -> void
+AiDotNet.Models.Options.FinancialLanguageModelOptions<T>.NumFineTuneLayers.set -> void
+AiDotNet.Models.Options.FinancialBertEncoderOptions<T>.AttentionDropoutRate.set -> void
+AiDotNet.Models.Options.FinancialLanguageModelOptions<T>.FreezeBaseModel.get -> bool
+AiDotNet.Models.Options.FinancialBertEncoderOptions<T>.NormPlacement.set -> void
+AiDotNet.Models.Options.FinancialBertEncoderOptions<T>.TypeVocabSize.set -> void
+AiDotNet.Models.Options.FinancialBertEncoderOptions<T>.TypeVocabSize.get -> int
+AiDotNet.Models.Options.FinancialBertEncoderOptions<T>.MaxPositionEmbeddings.set -> void
+AiDotNet.Models.Options.FinancialBertEncoderOptions<T>.AttentionDropoutRate.get -> double
+AiDotNet.Models.Options.FinancialBertEncoderOptions<T>.UsePretrainedWeights.get -> bool
+AiDotNet.Models.Options.FinancialBertEncoderOptions<T>.NormPlacement.get -> AiDotNet.Enums.TransformerNormPlacement
+AiDotNet.Models.Options.FinancialBertEncoderOptions<T>.PretrainedModelPath.set -> void
+AiDotNet.Models.Options.FinancialBertEncoderOptions<T>.PretrainedModelPath.get -> string!
+AiDotNet.Models.Options.FinancialBertEncoderOptions<T>.MaxPositionEmbeddings.get -> int
+AiDotNet.Models.Options.FinancialBertEncoderOptions<T>.ValidateBertEncoderOptions(int maxSequenceLength) -> void
+AiDotNet.Models.Options.FinancialBertEncoderOptions<T>.UsePretrainedWeights.set -> void
+AiDotNet.Models.Options.FinancialLanguageModelOptions<T>.ValidateNLPOptions() -> void
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultFinancialBERTLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int maxSequenceLength = 512, int vocabularySize = 30522, int hiddenSize = 768, int numAttentionHeads = 12, int numHiddenLayers = 12, double dropoutProbability = 0.1) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultFinMALayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int vocabularySize = 32000, int maxSequenceLength = 2048, int hiddenDimension = 768, int numAttentionHeads = 12, int intermediateDimension = 3072, int numLayers = 12, int numClasses = 3, double dropoutRate = 0.1) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultSECBERTLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int maxSequenceLength = 512, int vocabularySize = 30522, int hiddenSize = 768, int numAttentionHeads = 12, int numHiddenLayers = 12, double dropoutProbability = 0.1) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*override AiDotNet.Finance.NLP.BloombergGPT<T>.TrainCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> void
+*REMOVED*override AiDotNet.Finance.NLP.FinancialBERT<T>.TrainCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> void
+*REMOVED*override AiDotNet.Finance.NLP.FinBERTTone<T>.TrainCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> void
+*REMOVED*override AiDotNet.Finance.NLP.FinGPT<T>.TrainCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> void
+*REMOVED*override AiDotNet.Finance.NLP.FinMA<T>.TrainCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> void
+*REMOVED*override AiDotNet.Finance.NLP.SECBERT<T>.TrainCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> void
+AiDotNet.ActivationFunctions.ExactGELUActivation<T>
+AiDotNet.ActivationFunctions.ExactGELUActivation<T>.ExactGELUActivation() -> void
+override AiDotNet.ActivationFunctions.ExactGELUActivation<T>.SupportsScalarOperations() -> bool
+override AiDotNet.ActivationFunctions.ExactGELUActivation<T>.Activate(T input) -> T
+override AiDotNet.ActivationFunctions.ExactGELUActivation<T>.Derivative(T input) -> T
+override AiDotNet.ActivationFunctions.ExactGELUActivation<T>.Activate(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.ActivationFunctions.ExactGELUActivation<T>.Derivative(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.NeuralNetworks.Layers.TransformerEncoderBlock<T>.LayerNormEpsilon.get -> double
+*REMOVED*AiDotNet.NeuralNetworks.Layers.TransformerEncoderBlock<T>.TransformerEncoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0, AiDotNet.Interfaces.IActivationFunction<T>? ffnActivation = null, AiDotNet.Enums.TransformerNormPlacement normPlacement = AiDotNet.Enums.TransformerNormPlacement.PreNorm) -> void
+AiDotNet.NeuralNetworks.Layers.TransformerEncoderBlock<T>.TransformerEncoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0, AiDotNet.Interfaces.IActivationFunction<T>? ffnActivation = null, AiDotNet.Enums.TransformerNormPlacement normPlacement = AiDotNet.Enums.TransformerNormPlacement.PreNorm, double layerNormEpsilon = 1E-05) -> void

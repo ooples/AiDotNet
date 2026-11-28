@@ -1,16 +1,11 @@
-using AiDotNet.LearningRateSchedulers;
-using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Finance.Interfaces;
-using ModelOptions = AiDotNet.Models.Options;
 using AiDotNet.Finance.Base;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LossFunctions;
-using AiDotNet.Models;
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 
 namespace AiDotNet.Finance.NLP;
@@ -46,7 +41,7 @@ namespace AiDotNet.Finance.NLP;
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
-[ModelTask(ModelTask.Generation)]
+[ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("InvestLM: A Large Language Model for Investment using Financial Domain Instruction Tuning", "https://arxiv.org/abs/2309.13064", Year = 2023, Authors = "Yi Yang, Yixuan Tang, Kar Yan Tam")]
@@ -56,212 +51,73 @@ namespace AiDotNet.Finance.NLP;
                         + "and batch of 32 in the same passage belong to a LLaMA-7B model tuned for "
                         + "subsequent analysis, not to InvestLM. The optimizer is left unspecified "
                         + "because the paper names none.")]
-public partial class InvestLM<T> : FinancialNLPModelBase<T>
+public partial class InvestLM<T> : FinancialDecoderModelBase<T>
 {
-    #region Native Mode Fields
-
-    private ILayer<T>? _tokenEmbedding;
-    private ILayer<T>? _positionEmbedding;
-    private readonly List<ILayer<T>> _decoderLayers = [];
-    private ILayer<T>? _finalNorm;
-    private ILayer<T>? _outputHead;
-
-    #endregion
-
-    #region Shared Fields
-
-    private readonly ModelOptions.InvestLMOptions<T> _options;
+    private readonly InvestLMOptions<T> _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-    private double _dropout;
-
-    #endregion
-
-    #region Interface Properties
-
-    /// <inheritdoc/>
-
-    #endregion
-
-    #region Constructors
 
     /// <summary>
-    /// Creates an InvestLM network using a pretrained ONNX model.
+    /// Creates a InvestLM that runs a pretrained ONNX model.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the InvestLM model, InvestLM sets up the architecture and options. This prepares the model for training or inference.
-    /// </para>
-    /// </remarks>
+    /// <param name="architecture">The neural network architecture.</param>
+    /// <param name="onnxModelPath">Path to the ONNX model.</param>
+    /// <param name="options">The model options; the paper's defaults when null.</param>
+    /// <param name="optimizer">The optimizer; the paper's when null.</param>
     public InvestLM(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        ModelOptions.InvestLMOptions<T>? options = null,
+        InvestLMOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture, onnxModelPath, 
-               options?.MaxSequenceLength ?? 1024, 
-               options?.VocabularySize ?? 32000,
-               options?.HiddenDimension ?? 768)
+        : base(architecture, onnxModelPath, OrDefault(options).MaxSequenceLength, OrDefault(options).VocabularySize,
+            OrDefault(options).HiddenDimension, ResolveClassCount(architecture, OrDefault(options).NumClasses))
     {
-        options ??= new ModelOptions.InvestLMOptions<T>();
-        _options = options;
+        _options = options ?? new InvestLMOptions<T>();
         Options = _options;
-        options.Validate();
-
-        _dropout = options.DropoutRate;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = 0.0002, EnableGradientClipping = true, MaxGradientNorm = 1.0 });
-
+        _options.Validate();
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
     /// <summary>
-    /// Creates an InvestLM network in native mode for training.
+    /// Creates a InvestLM built from native layers, which can be trained.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the InvestLM model, InvestLM sets up the architecture and options. This prepares the model for training or inference.
-    /// </para>
-    /// </remarks>
+    /// <param name="architecture">The neural network architecture; custom layers replace the encoder.</param>
+    /// <param name="options">The model options; the paper's defaults when null.</param>
+    /// <param name="optimizer">The optimizer; the paper's when null.</param>
+    /// <param name="lossFunction">The loss; cross-entropy on logits when null.</param>
     public InvestLM(
         NeuralNetworkArchitecture<T> architecture,
-        ModelOptions.InvestLMOptions<T>? options = null,
+        InvestLMOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture,
-               options?.MaxSequenceLength ?? 1024,
-               options?.VocabularySize ?? 32000,
-               options?.HiddenDimension ?? 768,
-               3,
-               lossFunction)
+        : base(architecture, OrDefault(options).MaxSequenceLength, OrDefault(options).VocabularySize,
+            OrDefault(options).HiddenDimension, ResolveClassCount(architecture, OrDefault(options).NumClasses), lossFunction)
     {
-        options ??= new ModelOptions.InvestLMOptions<T>();
-        _options = options;
+        _options = options ?? new InvestLMOptions<T>();
         Options = _options;
-        options.Validate();
-
-        _dropout = options.DropoutRate;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = 0.0002, EnableGradientClipping = true, MaxGradientNorm = 1.0 });
-
+        _options.Validate();
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
-    #endregion
+    private static InvestLMOptions<T> OrDefault(InvestLMOptions<T>? options) => options ?? new InvestLMOptions<T>();
 
-    #region Initialization
+    /// <inheritdoc/>
+    protected override FinancialLanguageModelOptions<T> LanguageModelOptions => _options;
 
-    /// <summary>
-    /// Executes InitializeLayers for the InvestLM.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the InvestLM model, InitializeLayers builds and wires up model components. This sets up the InvestLM architecture before use.
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc/>
+    protected override string ReleasedTokenizerDescription => "the LLaMA SentencePiece tokenizer (32,000 pieces)";
+
+    /// <inheritdoc/>
     protected override void InitializeLayers()
-    {
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
-        }
-        else if (UseNativeMode)
-        {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultInvestLMLayers(
-                MaxSequenceLength, VocabularySize, 
-                HiddenDimension, _options.NumAttentionHeads, _options.NumLayers, _dropout));
-
-            ExtractLayerReferences();
-        }
-    }
-
-    /// <summary>
-    /// Executes ExtractLayerReferences for the InvestLM.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the InvestLM model, ExtractLayerReferences performs a supporting step in the workflow. It keeps the InvestLM architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private void ExtractLayerReferences()
-    {
-        int idx = 0;
-        if (Layers.Count > idx) _tokenEmbedding = Layers[idx++];
-        if (Layers.Count > idx) _positionEmbedding = Layers[idx++];
-        idx++; // skip dropout
-
-        _decoderLayers.Clear();
-        for (int i = 0; i < 12; i++)
-        {
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-            if (idx < Layers.Count) _decoderLayers.Add(Layers[idx++]);
-        }
-
-        if (idx < Layers.Count) _finalNorm = Layers[idx++];
-        if (idx < Layers.Count) _outputHead = Layers[idx];
-    }
-
-    #endregion
-
-    #region NeuralNetworkBase Overrides
-
-    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
-    // exactly the same enumeration, so this said nothing the base does not already say.
-
-    /// <summary>
-    /// Executes SerializeModelSpecificData for the InvestLM.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the InvestLM model, SerializeModelSpecificData saves or restores model-specific settings. This lets the InvestLM architecture be reused later.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Executes DeserializeModelSpecificData for the InvestLM.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the InvestLM model, DeserializeModelSpecificData saves or restores model-specific settings. This lets the InvestLM architecture be reused later.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Executes ForecastNative for the InvestLM.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the InvestLM model, ForecastNative produces predictions from input data. This is the main inference step of the InvestLM architecture.
-    /// </para>
-    /// </remarks>
-    protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
-    {
-        SetTrainingMode(false);
-        var current = input;
-        foreach (var layer in Layers) current = layer.Forward(current);
-        return current;
-    }
-
-    /// <summary>
-    /// Executes ValidateInputShape for the InvestLM.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the InvestLM model, ValidateInputShape checks inputs and configuration. This protects the InvestLM architecture from mismatches and errors.
-    /// </para>
-    /// </remarks>
-    protected override void ValidateInputShape(Tensor<T> input)
-    {
-        if (input.Rank < 2) throw new ArgumentException("Input must be at least 2D.");
-    }
-
-    #endregion
+        => InitializeDecoderLayers(
+            pool => LayerHelper<T>.CreateLlamaDecoderLayers(
+                VocabularySize, MaxSequenceLength, HiddenDimension, _options.NumAttentionHeads,
+                _options.IntermediateDimension, _options.NumLayers, pool),
+            NumSentimentClasses,
+            _options.DropoutRate);
 }

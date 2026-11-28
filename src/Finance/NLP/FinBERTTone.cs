@@ -1,16 +1,11 @@
-using AiDotNet.LearningRateSchedulers;
-using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Finance.Interfaces;
-using ModelOptions = AiDotNet.Models.Options;
 using AiDotNet.Finance.Base;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LossFunctions;
-using AiDotNet.Models;
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 
 namespace AiDotNet.Finance.NLP;
@@ -48,199 +43,72 @@ namespace AiDotNet.Finance.NLP;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("FinBERT: Financial Sentiment Analysis with Pre-trained Language Models", "https://arxiv.org/abs/1908.10063", Year = 2019, Authors = "Dogu Araci")]
-[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-5,
-                Schedule = LearningRateSchedulerType.LinearWarmup, WarmupFraction = 0.2,
-                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear, MinLearningRate = 0,
-                ReferenceBatchSize = 64,
-                Source = "Araci 2019, Sec. 4.3.3: learning rate 2e-5, warm-up proportion 0.2, mini-batch size 64, 6 epochs, with the slanted triangular schedule of Howard and Ruder 2018 -- linear warmup then linear decay. The optimizer is not named there; FinBERT fine-tunes BERT, and Devlin et al. 2019 state Adam for fine-tuning (Sec. A.3).")]
-public partial class FinBERTTone<T> : FinancialNLPModelBase<T>
+[ResearchPaper("FinBERT: A Pretrained Language Model for Financial Communications", "https://arxiv.org/abs/2006.08097", Year = 2020, Authors = "Yi Yang, Mark Christopher Siy UY, Allen Huang")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-5, ReferenceBatchSize = 32,
+                Source = "Yang, Uy and Huang 2020, Sec. 5.2: fine-tuning follows the optimization choices of Devlin et al. 2019; Devlin et al. 2019, Sec. A.3, fine-tune BERT with Adam at a learning "
+                        + "rate chosen from 5e-5, 3e-5 and 2e-5 with a batch size of 16 or 32; the smallest "
+                        + "rate and the larger batch are taken here.")]
+public partial class FinBERTTone<T> : FinancialBertModelBase<T>
 {
-    #region Shared Fields
-
-    private readonly ModelOptions.FinBERTToneOptions<T> _options;
+    private readonly FinBERTToneOptions<T> _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-    private double _dropout;
-
-    #endregion
-
-    #region Interface Properties
-
-    /// <inheritdoc/>
-
-    #endregion
-
-    #region Constructors
 
     /// <summary>
-    /// Creates a FinBERT-tone network using a pretrained ONNX model.
+    /// Creates a FinBERTTone that runs a pretrained ONNX model.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinBERTTone model, FinBERTTone sets up the architecture and options. This prepares the model for training or inference.
-    /// </para>
-    /// </remarks>
+    /// <param name="architecture">The neural network architecture.</param>
+    /// <param name="onnxModelPath">Path to the ONNX model.</param>
+    /// <param name="options">The model options; the paper's defaults when null.</param>
+    /// <param name="optimizer">The optimizer; the paper's when null.</param>
     public FinBERTTone(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        ModelOptions.FinBERTToneOptions<T>? options = null,
+        FinBERTToneOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture, onnxModelPath, 
-               options?.MaxSequenceLength ?? 512, 
-               options?.VocabularySize ?? 30522,
-               options?.HiddenDimension ?? 768,
-               options?.NumToneClasses ?? 5)
+        : base(architecture, onnxModelPath, OrDefault(options).MaxSequenceLength, OrDefault(options).VocabularySize,
+            OrDefault(options).HiddenDimension, ResolveClassCount(architecture, OrDefault(options).NumToneClasses))
     {
-        options ??= new ModelOptions.FinBERTToneOptions<T>();
-        _options = options;
+        _options = options ?? new FinBERTToneOptions<T>();
         Options = _options;
-        options.Validate();
-
-        _dropout = options.DropoutRate;
+        _options.Validate();
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
     /// <summary>
-    /// Creates a FinBERT-tone network in native mode for training.
+    /// Creates a FinBERTTone built from native layers, which can be trained.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinBERTTone model, FinBERTTone sets up the architecture and options. This prepares the model for training or inference.
-    /// </para>
-    /// </remarks>
+    /// <param name="architecture">The neural network architecture; custom layers replace the encoder.</param>
+    /// <param name="options">The model options; the paper's defaults when null.</param>
+    /// <param name="optimizer">The optimizer; the paper's when null.</param>
+    /// <param name="lossFunction">The loss; cross-entropy on logits when null.</param>
     public FinBERTTone(
         NeuralNetworkArchitecture<T> architecture,
-        ModelOptions.FinBERTToneOptions<T>? options = null,
+        FinBERTToneOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture,
-               options?.MaxSequenceLength ?? 512,
-               options?.VocabularySize ?? 30522,
-               options?.HiddenDimension ?? 768,
-               options?.NumToneClasses ?? 5,
-               lossFunction)
+        : base(architecture, OrDefault(options).MaxSequenceLength, OrDefault(options).VocabularySize,
+            OrDefault(options).HiddenDimension, ResolveClassCount(architecture, OrDefault(options).NumToneClasses), lossFunction)
     {
-        options ??= new ModelOptions.FinBERTToneOptions<T>();
-        _options = options;
+        _options = options ?? new FinBERTToneOptions<T>();
         Options = _options;
-        options.Validate();
-
-        _dropout = options.DropoutRate;
+        _options.Validate();
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
 
-    #endregion
+    private static FinBERTToneOptions<T> OrDefault(FinBERTToneOptions<T>? options) => options ?? new FinBERTToneOptions<T>();
 
-    #region Initialization
+    /// <inheritdoc/>
+    protected override FinancialBertEncoderOptions<T> BertOptions => _options;
 
-    /// <summary>
-    /// Executes InitializeLayers for the FinBERTTone.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinBERTTone model, InitializeLayers builds and wires up model components. This sets up the FinBERTTone architecture before use.
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc/>
     protected override void InitializeLayers()
-    {
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
-        }
-        else if (UseNativeMode)
-        {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultFinBERTToneLayers(
-                vocabularySize: _options.VocabularySize,
-                maxSequenceLength: _options.MaxSequenceLength,
-                hiddenDimension: _options.HiddenDimension,
-                numAttentionHeads: _options.NumAttentionHeads,
-                intermediateDimension: _options.IntermediateDimension,
-                numLayers: _options.NumLayers,
-                numToneClasses: _options.NumToneClasses,
-                dropoutRate: _dropout));
-
-        }
-    }
-
-    #endregion
-
-    #region NeuralNetworkBase Overrides
-
-    /// <summary>
-    /// Executes TrainCore for the FinBERTTone.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinBERTTone model, TrainCore performs a training step. This updates the FinBERTTone architecture so it learns from data.
-    /// </para>
-    /// </remarks>
-    protected override void TrainCore(Tensor<T> input, Tensor<T> target, Tensor<T> output)
-    {
-        SetTrainingMode(true);
-        _optimizer.UpdateParameters(Layers);
-        SetTrainingMode(false);
-    }
-
-    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
-    // exactly the same enumeration, so this said nothing the base does not already say.
-
-    /// <summary>
-    /// Executes SerializeModelSpecificData for the FinBERTTone.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinBERTTone model, SerializeModelSpecificData saves or restores model-specific settings. This lets the FinBERTTone architecture be reused later.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Executes DeserializeModelSpecificData for the FinBERTTone.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinBERTTone model, DeserializeModelSpecificData saves or restores model-specific settings. This lets the FinBERTTone architecture be reused later.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Executes ForecastNative for the FinBERTTone.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinBERTTone model, ForecastNative produces predictions from input data. This is the main inference step of the FinBERTTone architecture.
-    /// </para>
-    /// </remarks>
-    protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
-    {
-        SetTrainingMode(false);
-        var current = input;
-        foreach (var layer in Layers) current = layer.Forward(current);
-        return current;
-    }
-
-    /// <summary>
-    /// Executes ValidateInputShape for the FinBERTTone.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinBERTTone model, ValidateInputShape checks inputs and configuration. This protects the FinBERTTone architecture from mismatches and errors.
-    /// </para>
-    /// </remarks>
-    protected override void ValidateInputShape(Tensor<T> input)
-    {
-        if (input.Rank < 2) throw new ArgumentException("Input must be at least 2D.");
-    }
-
-    #endregion
+        => InitializeBertLayers(
+            _options.NumAttentionHeads, _options.IntermediateDimension, _options.NumLayers, NumSentimentClasses,
+            _options.DropoutRate);
 }

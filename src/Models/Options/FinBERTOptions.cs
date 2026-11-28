@@ -50,7 +50,7 @@ namespace AiDotNet.Models.Options;
 /// https://arxiv.org/abs/1908.10063
 /// </para>
 /// </remarks>
-public class FinBERTOptions<T> : ModelOptions
+public class FinBERTOptions<T> : FinancialBertEncoderOptions<T>
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="FinBERTOptions{T}"/> class with default values.
@@ -70,6 +70,7 @@ public class FinBERTOptions<T> : ModelOptions
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public FinBERTOptions(FinBERTOptions<T> other)
+        : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
@@ -86,14 +87,6 @@ public class FinBERTOptions<T> : ModelOptions
         NumLayers = other.NumLayers;
         NumSentimentClasses = other.NumSentimentClasses;
         DropoutRate = other.DropoutRate;
-        AttentionDropoutRate = other.AttentionDropoutRate;
-        HiddenDropoutRate = other.HiddenDropoutRate;
-        TypeVocabSize = other.TypeVocabSize;
-        MaxPositionEmbeddings = other.MaxPositionEmbeddings;
-        UsePretrainedWeights = other.UsePretrainedWeights;
-        PretrainedModelPath = other.PretrainedModelPath;
-        FreezeBaseModel = other.FreezeBaseModel;
-        NumFineTuneLayers = other.NumFineTuneLayers;
     }
 
     /// <summary>
@@ -193,93 +186,35 @@ public class FinBERTOptions<T> : ModelOptions
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>
-    /// Gets or sets the attention-specific dropout rate.
+    /// Validates the FinBERT options.
     /// </summary>
-    /// <value>The attention dropout rate, defaulting to 0.1.</value>
+    /// <exception cref="ArgumentException">Thrown when a setting is out of range or the settings contradict each
+    /// other.</exception>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Dropout applied to attention weights.
-    /// Helps prevent the model from over-relying on specific attention patterns.
+    /// <para><b>For Beginners:</b> This checks the sizes and rates before the model is built, so a typo fails here
+    /// with a clear message instead of deep inside a layer.
     /// </para>
     /// </remarks>
-    public double AttentionDropoutRate { get; set; } = 0.1;
-
-    /// <summary>
-    /// Gets or sets the hidden layer dropout rate.
-    /// </summary>
-    /// <value>The hidden dropout rate, defaulting to 0.1.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Dropout applied to hidden layer outputs.
-    /// </para>
-    /// </remarks>
-    public double HiddenDropoutRate { get; set; } = 0.1;
-
-    /// <summary>
-    /// Gets or sets the type vocabulary size (for sentence pairs).
-    /// </summary>
-    /// <value>The type vocabulary size, defaulting to 2.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> BERT can process sentence pairs with segment embeddings.
-    /// Type vocab size of 2 means there are two segment types (sentence A and B).
-    /// For single-sentence classification, only segment 0 is used.
-    /// </para>
-    /// </remarks>
-    public int TypeVocabSize { get; set; } = 2;
-
-    /// <summary>
-    /// Gets or sets the maximum position embeddings.
-    /// </summary>
-    /// <value>The maximum positions, defaulting to 512.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Positional embeddings encode where each token appears
-    /// in the sequence. This must be at least MaxSequenceLength.
-    /// </para>
-    /// </remarks>
-    public int MaxPositionEmbeddings { get; set; } = 512;
-
-    /// <summary>
-    /// Gets or sets whether to use pretrained weights.
-    /// </summary>
-    /// <value>True to use pretrained weights; false otherwise. Default: true.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Pretrained weights from large-scale pretraining significantly
-    /// improve performance. Set to false only if you want to train from scratch (not recommended).
-    /// </para>
-    /// </remarks>
-    public bool UsePretrainedWeights { get; set; } = true;
-
-    /// <summary>
-    /// Gets or sets the path to pretrained model weights.
-    /// </summary>
-    /// <value>The pretrained model path, defaulting to empty string.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Path to ONNX file or checkpoint with pretrained FinBERT weights.
-    /// Leave empty to train from scratch or use built-in initialization.
-    /// </para>
-    /// </remarks>
-    public string PretrainedModelPath { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Gets or sets whether to freeze the base model during fine-tuning.
-    /// </summary>
-    /// <value>True to freeze base model; false otherwise. Default: false.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Freezing prevents the base BERT weights from updating
-    /// during training, only training the classification head. This is faster but may
-    /// result in lower performance than fine-tuning all layers.
-    /// </para>
-    /// </remarks>
-    public bool FreezeBaseModel { get; set; } = false;
-
-    /// <summary>
-    /// Gets or sets the number of layers to fine-tune (from the top).
-    /// </summary>
-    /// <value>The number of layers to fine-tune, defaulting to -1 (all layers).</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Instead of fine-tuning all layers or freezing all,
-    /// you can fine-tune only the top N layers. -1 means fine-tune all layers.
-    /// Setting to 2 means only the last 2 transformer layers plus the classification head
-    /// will be updated during training.
-    /// </para>
-    /// </remarks>
-    public int NumFineTuneLayers { get; set; } = -1;
+    public void Validate()
+    {
+        ValidateBertEncoderOptions(MaxSequenceLength);
+        if (MaxSequenceLength < 1)
+            throw new ArgumentException("MaxSequenceLength must be at least 1.", nameof(MaxSequenceLength));
+        if (VocabularySize < 1)
+            throw new ArgumentException("VocabularySize must be at least 1.", nameof(VocabularySize));
+        if (HiddenDimension < 1)
+            throw new ArgumentException("HiddenDimension must be at least 1.", nameof(HiddenDimension));
+        if (NumAttentionHeads < 1)
+            throw new ArgumentException("NumAttentionHeads must be at least 1.", nameof(NumAttentionHeads));
+        if (HiddenDimension % NumAttentionHeads != 0)
+            throw new ArgumentException("HiddenDimension must be divisible by NumAttentionHeads.", nameof(NumAttentionHeads));
+        if (IntermediateDimension < 1)
+            throw new ArgumentException("IntermediateDimension must be at least 1.", nameof(IntermediateDimension));
+        if (NumLayers < 1)
+            throw new ArgumentException("NumLayers must be at least 1.", nameof(NumLayers));
+        if (NumSentimentClasses < 1)
+            throw new ArgumentException("NumSentimentClasses must be at least 1.", nameof(NumSentimentClasses));
+        if (DropoutRate < 0 || DropoutRate >= 1)
+            throw new ArgumentException("DropoutRate must be between 0 (inclusive) and 1 (exclusive).", nameof(DropoutRate));
+    }
 }
